@@ -95,7 +95,7 @@ import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
 import type { ClubName } from '../store/clubStatsStore';
 // 2026-09-06 — the golfbertApi / golfbertCourses imports are gone with those modules; this screen
 // renders course-engine geometry over Mapbox for every course, with no per-course provider branch.
-import { fetchHoleImagery, computeFitView, getCenteredImageryUrl, getHoleImageryUrl } from '../services/mapboxImagery';
+import { fetchHoleImagery, getCenteredImageryUrl, centeredFrame, displayFrame, frameForHole, urlForFrame, rememberTileSize, type TileFrame } from '../services/mapboxImagery';
 import { useCaddieBarReserve } from '../components/GlobalCaddieBar';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
@@ -647,7 +647,20 @@ export default function SmartVisionScreen() {
     : fullW;
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageUri, setImageUriState] = useState<string | null>(null);
+  /**
+   * 2026-09-23 (Tim — "I get SmartVision images correctly every time") — the frame of the tile ON
+   * SCREEN. Every marker, the player's dot and every tapped yardage project with it (see
+   * `projection`), so they can only ever be drawn on the picture that is actually there.
+   */
+  const [tileFrame, setTileFrame] = useState<TileFrame | null>(null);
+  /** A cached tile of this hole, with its own frame, for when the live one fails to load. */
+  const tileFallbackRef = useRef<{ uri: string; frame: TileFrame } | null>(null);
+  const showTile = useCallback((uri: string | null, frame: TileFrame | null, fallback: { uri: string; frame: TileFrame } | null = null) => {
+    setImageUriState(uri);
+    setTileFrame(uri ? frame : null);
+    tileFallbackRef.current = uri ? fallback : null;
+  }, []);
   const [loading, setLoading] = useState(true);
 
   // Per-hole yellow target marker offset (relative to image center, in pixels).
@@ -702,7 +715,7 @@ export default function SmartVisionScreen() {
     // 2026-08-11 — the satellite tile is now the target for every hole, so the previous-hole tile
     // must always be cleared; leaving it up while the new one resolves is exactly the wrong-hole
     // flash this guard was written to prevent.
-    setImageUri(null);
+    showTile(null, null);
     setGeometry(null);
 
     /**
@@ -766,10 +779,11 @@ export default function SmartVisionScreen() {
           w = Math.floor(w * k);
           h = Math.floor(h * k);
         }
-        const warmUri = getCenteredImageryUrl({ lat: warmGreen.lat, lng: warmGreen.lng, zoom: 16, width: w, height: h });
+        const warmIn = { lat: warmGreen.lat, lng: warmGreen.lng, zoom: 16, width: w, height: h };
+        const warmUri = getCenteredImageryUrl(warmIn);
         if (warmUri) {
           setImagerySource('satellite');
-          setImageUri(warmUri);
+          showTile(warmUri, centeredFrame(warmIn));
           setLoading(false);
         }
       }
@@ -1083,25 +1097,31 @@ export default function SmartVisionScreen() {
           green: effectiveGreen,
         };
         setImagerySource('satellite');
-        const framedUrl = getHoleImageryUrl(holeInput, { width: reqW, height: reqH });
-        const greenTileUrl = framedUrl ?? getCenteredImageryUrl({ lat: effectiveGreen.lat, lng: effectiveGreen.lng, zoom: 16, width: reqW, height: reqH });
+        rememberTileSize(reqW, reqH);
+        const framed = frameForHole(holeInput, { width: reqW, height: reqH });
+        const greenIn = { lat: effectiveGreen.lat, lng: effectiveGreen.lng, zoom: 16, width: reqW, height: reqH };
+        const floor = framed
+          ? { uri: urlForFrame(framed), frame: framed }
+          : { uri: getCenteredImageryUrl(greenIn), frame: centeredFrame(greenIn) };
         try {
-          const uri = await fetchHoleImagery(holeInput, { width: reqW, height: reqH });
+          const tile = await fetchHoleImagery(holeInput, { width: reqW, height: reqH });
           if (cancelled) return;
-          setImageUri(uri ?? greenTileUrl); // cached framed tile if we got one, else the direct framed URL
+          // The exact cached file, else the live framed URL — each WITH its frame.
+          if (tile) showTile(tile.uri, tile.frame, tile.fallback);
+          else showTile(floor.uri, floor.frame);
         } catch (e) {
           // 2026-06-08 (audit #2) — imagery fetch failure must not crash the hole view.
           // 2026-07-24 — and it must NOT leave a green screen: fall back to the client tile.
           console.log('[smartvision] imagery fetch failed (non-fatal, using green tile)', e);
           if (cancelled) return;
-          setImageUri(greenTileUrl);
+          showTile(floor.uri, floor.frame);
         }
       } else if (curatedAvailable) {
         // No coordinates for this hole, but we have a bundled aerial of it — better than a course-
         // wide centroid tile, and it works with no signal. imageUri stays null so the render picks
         // up `curatedImage`.
         setImagerySource('curated');
-        setImageUri(null);
+        showTile(null, null);
       } else {
         // Centroid / live-GPS fallback tile for a hole we have neither coordinates nor a photo for.
         const hasCurated = false;
@@ -1164,20 +1184,15 @@ export default function SmartVisionScreen() {
             // whole-course centroid → wider.
             const onSpecificPoint = okc(effectiveGreen) || okc(effectiveTee) || !!playerPt;
             const zoom = onSpecificPoint ? 16 : 15;
-            const uri = getCenteredImageryUrl({
-              lat: center.lat,
-              lng: center.lng,
-              zoom,
-              width: reqW,
-              height: reqH,
-            });
+            const centredIn = { lat: center.lat, lng: center.lng, zoom, width: reqW, height: reqH };
+            const uri = getCenteredImageryUrl(centredIn);
             if (cancelled) return;
             setImagerySource('satellite');
-            setImageUri(uri);
+            showTile(uri, centeredFrame(centredIn));
           } else {
             // No coordinate of any kind — the render falls to the honest "waiting on location" card.
             setImagerySource('none');
-            setImageUri(null);
+            showTile(null, null);
           }
         }
       }
@@ -1192,7 +1207,7 @@ export default function SmartVisionScreen() {
      * while the screen stayed on the same view never re-evaluated it: the live derive stayed off for
      * the hole he had just walked onto, or stayed on for one he had left.
      */
-  }, [courseId, courseName, holeIndex, imageW, imageH, isRoundActive, courseHoles, currentHole]);
+  }, [courseId, courseName, holeIndex, imageW, imageH, isRoundActive, courseHoles, currentHole, showTile]);
 
   // ── Derived projection ──────────────────────────────────────────
   // Phase 401 — single source of truth for center/zoom/bearing, shared
@@ -1234,17 +1249,22 @@ export default function SmartVisionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- markBumpTick is the recompute trigger; the two lines above say what goes stale without it
   }, [geometry, holeIndex, markBumpTick]);
 
-  const projection = useMemo(() => {
-    if (!teeCoord || !greenCoord) return null;
-    const fit = computeFitView({
-      tee: teeCoord,
-      green: greenCoord,
-      width: imageW,
-      height: imageH,
-    });
-    if (!fit) return null;
-    return fit;
-  }, [teeCoord, greenCoord, imageW, imageH]);
+  // 2026-09-23 — the frame of the tile on screen, scaled to how it is drawn (cover). Never
+  // recomputed from coordinates: a marked green moves the PIN on this picture, not the picture's
+  // frame underneath the markers.
+  const projection = useMemo(
+    () => (tileFrame && imageW > 0 && imageH > 0 ? displayFrame(tileFrame, imageW, imageH) : null),
+    [tileFrame, imageW, imageH],
+  );
+  /**
+   * The live tile did not load (no signal, a dropped request): the cached tile of this hole, with
+   * its own frame, before giving up to the "waiting" card.
+   */
+  const onTileError = useCallback(() => {
+    const fb = tileFallbackRef.current;
+    if (fb && fb.uri !== imageUri) showTile(fb.uri, fb.frame);
+    else showTile(null, null);
+  }, [imageUri, showTile]);
   void autoZoom; // legacy helper retained for future use
 
   // Marker positions in CANVAS-LOCAL pixel coordinates (top-left origin,
@@ -2391,7 +2411,7 @@ export default function SmartVisionScreen() {
         {preferCurated ? (
           <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="cover" />
         ) : imageUri ? (
-          <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={() => setImageUri(null)} />
+          <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={onTileError} />
         ) : loading ? (
           <View style={styles.canvasFallback}>
             <ActivityIndicator color="#00C896" />

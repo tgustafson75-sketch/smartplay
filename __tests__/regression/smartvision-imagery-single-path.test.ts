@@ -102,7 +102,7 @@ describe('the live tile leads and the photo is the fallback', () => {
   it('clears the previous hole tile so no wrong-hole image can flash', () => {
     const start = src.indexOf('setLoading(true);');
     const head = src.slice(start, src.indexOf('void (async () => {', start));
-    expect(head).toContain('setImageUri(null);');
+    expect(head).toContain('showTile(null, null);');
     expect(head).toContain('setGeometry(null);');
   });
 });

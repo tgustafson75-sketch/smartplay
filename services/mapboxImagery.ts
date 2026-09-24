@@ -176,11 +176,19 @@ export function computeFitView(input: {
  * client-side via SVG (services/smartVisionOverlay.ts) so they're
  * interactive and don't burn imagery requests on every change.
  */
-export function getHoleImageryUrl(
-  input: HoleImageryInput,
-  options: HoleImageryOptions = {},
-): string | null {
-  if (!MAPBOX_TOKEN) return null;
+/**
+ * 2026-09-23 (Tim — "I get SmartVision images correctly every time") — THE FRAME OF A TILE.
+ *
+ * Everything SmartVision draws on a tile (tee, pin, the player's dot, a tapped target's yardage) is
+ * projected with a centre, zoom and bearing. Those have to be the ones the tile ON SCREEN was
+ * rendered with. They were recomputed separately, from a different tee source, at a different
+ * size, and re-centred when the green was marked — while a cached tile of another framing could
+ * be the one displayed. A tile now carries its frame, and the screen projects with that.
+ */
+export type TileFrame = { center: { lat: number; lng: number }; zoom: number; bearing: number; width: number; height: number };
+
+/** The frame getHoleImageryUrl renders for this hole at this size (null: no valid green). */
+export function frameForHole(input: HoleImageryInput, options: HoleImageryOptions = {}): TileFrame | null {
   // 2026-06-14 — coord-guard the inputs. Several bundled courses carry 0,0
   // placeholder hole coords; the old `!input.green` check let those through and
   // built a satellite tile centered on 0°,0° (ocean off West Africa) — the
@@ -190,145 +198,206 @@ export function getHoleImageryUrl(
   const green = input.green && isValidGolfCoord(input.green.lat, input.green.lng) ? input.green : null;
   if (!green) return null;
   const tee = input.tee && isValidGolfCoord(input.tee.lat, input.tee.lng) ? input.tee : null;
-
   const width = Math.min(options.width ?? 600, 1280);
   const height = Math.min(options.height ?? 500, 1280);
-
   // Phase 401 — single source of truth for center/zoom/bearing.
-  // computeFitView() picks the zoom that guarantees the entire hole +
-  // 15% margin fits the requested container height, centers at the
-  // tee→green midpoint (symmetric margin), and bearing-rotates so the
-  // hole renders vertically. Caller can still override any of the three
-  // via options.{centerOverride, zoomOverride, bearingOverride}.
   const fit = computeFitView({ tee, green, width, height });
-  const center = options.centerOverride ?? fit?.center ?? green;
-  const bearing = options.bearingOverride ?? fit?.bearing ?? 0;
-  const zoom = options.zoom ?? fit?.zoom ?? autoZoom(input.yardage, input.par);
+  return {
+    center: options.centerOverride ?? fit?.center ?? green,
+    bearing: Math.round((options.bearingOverride ?? fit?.bearing ?? 0) * 10) / 10,
+    zoom: options.zoom ?? fit?.zoom ?? autoZoom(input.yardage, input.par),
+    width,
+    height,
+  };
+}
 
+/** The Static Images URL for exactly this frame. */
+export function urlForFrame(frame: TileFrame): string | null {
+  if (!MAPBOX_TOKEN) return null;
   return (
     `https://api.mapbox.com/styles/v1/${MAPBOX_STYLE}/static/` +
-    `${center.lng.toFixed(6)},${center.lat.toFixed(6)},` +
-    `${zoom},${bearing.toFixed(1)}/` +
-    `${width}x${height}` +
+    `${frame.center.lng.toFixed(6)},${frame.center.lat.toFixed(6)},` +
+    `${frame.zoom},${frame.bearing.toFixed(1)}/` +
+    `${frame.width}x${frame.height}` +
     `?access_token=${MAPBOX_TOKEN}` +
     `&attribution=false&logo=false`
   );
+}
+
+/**
+ * The frame to PROJECT with when a tile of `frame` is drawn `resizeMode="cover"` into a
+ * containerW x containerH box: cover scales by the larger ratio and crops about the centre, so the
+ * centre and bearing hold and the zoom rises by log2 of that scale.
+ */
+export function displayFrame(frame: TileFrame, containerW: number, containerH: number): { center: { lat: number; lng: number }; zoom: number; bearing: number } {
+  const scale = Math.max(containerW / frame.width, containerH / frame.height);
+  return { center: frame.center, bearing: frame.bearing, zoom: frame.zoom + Math.log2(scale > 0 && Number.isFinite(scale) ? scale : 1) };
+}
+
+/**
+ * Build the Mapbox Static Images URL for a hole. Returns null if Mapbox
+ * is not configured or geometry is insufficient.
+ *
+ * Endpoint shape:
+ *   /styles/v1/{username}/{style_id}/static/{lon},{lat},{zoom},{bearing}/{width}x{height}
+ *
+ * We don't draw overlays via Mapbox query parameters — overlays render
+ * client-side via SVG (services/smartVisionOverlay.ts) so they're
+ * interactive and don't burn imagery requests on every change.
+ */
+export function getHoleImageryUrl(
+  input: HoleImageryInput,
+  options: HoleImageryOptions = {},
+): string | null {
+  if (!MAPBOX_TOKEN) return null;
+  const frame = frameForHole(input, options);
+  return frame ? urlForFrame(frame) : null;
 }
 
 function safeCourseKey(courseId: string | null): string {
   return (courseId ?? 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
-function cacheFileFor(courseId: string | null, holeNumber: number, zoom: number, w: number, h: number): File {
-  return new File(Paths.cache, `${CACHE_DIR_NAME}_${safeCourseKey(courseId)}_h${holeNumber}_z${zoom}_${w}x${h}.png`);
+/**
+ * The tile's file name IS its frame: course, hole, centre, zoom, bearing, size. Two consequences,
+ * both the point: a hole whose geometry changed (an engine rebuild, a corrected green, a layout
+ * switch) can never be served its old picture under the new frame, and any cached tile can be
+ * projected correctly because its frame is read back from its name.
+ */
+const FRAME_TAG = 'f2';
+function holePrefix(courseId: string | null, holeNumber: number): string {
+  return `${CACHE_DIR_NAME}_${FRAME_TAG}_${safeCourseKey(courseId)}_h${holeNumber}_`;
+}
+export function tileFileName(courseId: string | null, holeNumber: number, f: TileFrame): string {
+  return `${holePrefix(courseId, holeNumber)}${f.center.lat.toFixed(6)}_${f.center.lng.toFixed(6)}_z${f.zoom}_b${f.bearing.toFixed(1)}_${f.width}x${f.height}.png`;
+}
+export function frameFromFileName(name: string): TileFrame | null {
+  const m = /_(-?\d+\.\d{6})_(-?\d+\.\d{6})_z(\d+(?:\.\d+)?)_b(-?\d+\.\d)_(\d+)x(\d+)\.png$/.exec(name);
+  if (!m) return null;
+  const f = { center: { lat: Number(m[1]), lng: Number(m[2]) }, zoom: Number(m[3]), bearing: Number(m[4]), width: Number(m[5]), height: Number(m[6]) };
+  return isValidGolfCoord(f.center.lat, f.center.lng) && f.width > 0 && f.height > 0 ? f : null;
 }
 
-/**
- * 2026-09-20 (found while triple-checking the Echo Hills fix) — THE PREFETCH WAS WRITING TILES
- * NOBODY COULD READ.
- *
- * The cache key embeds the requested WIDTH and HEIGHT, and a zoom that is itself computed from
- * them. roundPrefetch calls `prefetchHoles(tileInputs)` with NO options, so every prefetched tile
- * landed at the 600x500 default. app/smartvision asks for the CONTAINER size — screen width by
- * available height, capped at 1280 — which is never 600x500 on a real handset.
- *
- * So the keys could not match, and the entire offline imagery story was inert: tiles were
- * downloaded during round prep, written to disk, and then looked for under a different name. Every
- * hole view was a live fetch. That is why a weak signal meant a blank canvas even on a course whose
- * tiles had "already been cached", and it is the larger half of Tim's Echo Hills report — the
- * green-only fix earlier today was necessary and, on its own, still would not have put a tile on
- * screen.
- *
- * The fix is deliberately in the CACHE LOOKUP and not in what either side requests. smartvision is
- * under a layout freeze and its request size is what keeps the tile's aspect equal to the
- * container's (Phase 401 — so `cover` cannot crop the hole). Changing that to match the prefetch
- * would trade a real bug for a visual one.
- *
- * So: on an exact miss, accept any cached tile OF THE SAME HOLE. It is a picture of the right
- * place at a slightly different framing, which beats a blank canvas with no signal, and the
- * exact-size write still happens in the background so the next view is pixel-right.
- * [[overstrict-gate-lens]] [[two-owners-is-the-root-cause]]
- */
 let cacheListing: { at: number; names: string[] } | null = null;
 const CACHE_LISTING_TTL_MS = 30_000;
 
-function cachedTileForHole(courseId: string | null, holeNumber: number): string | null {
-  const prefix = `${CACHE_DIR_NAME}_${safeCourseKey(courseId)}_h${holeNumber}_z`;
-  try {
-    const now = Date.now();
-    if (!cacheListing || now - cacheListing.at > CACHE_LISTING_TTL_MS) {
-      // Listing the cache directory is not free, so it is memoized briefly — a hole view flicks
-      // through several holes in a few seconds and must not re-walk the directory each time.
-      const entries = new Directory(Paths.cache).list();
-      cacheListing = {
-        at: now,
-        names: entries.map((e) => {
-          const uri = e.uri;
-          return uri.slice(uri.lastIndexOf('/') + 1);
-        }),
-      };
-    }
-    const hit = cacheListing.names.find((n) => n.startsWith(prefix));
-    return hit ? new File(Paths.cache, hit).uri : null;
-  } catch {
-    return null; // a cache miss is never worth an exception
+function listCache(): string[] {
+  const now = Date.now();
+  if (!cacheListing || now - cacheListing.at > CACHE_LISTING_TTL_MS) {
+    // Listing the cache directory is not free, so it is memoized briefly — a hole view flicks
+    // through several holes in a few seconds and must not re-walk the directory each time.
+    const entries = new Directory(Paths.cache).list();
+    cacheListing = { at: now, names: entries.map((e) => e.uri.slice(e.uri.lastIndexOf('/') + 1)) };
   }
+  return cacheListing.names;
 }
 
 /**
- * Fetch + cache the hole imagery. Returns a local file:// URI when cached,
- * the remote URL on first request (caller renders it; we lazy-write to
- * cache in the background for next time).
+ * The cached tiles of this hole, closest in frame to `want` first: same centre and bearing (the
+ * same geometry) before anything else. A tile of stale geometry is still a picture of the right
+ * hole, and with its frame read back it is projected correctly — it is only ever the fallback.
+ */
+function cachedTilesForHole(courseId: string | null, holeNumber: number, want: TileFrame): { uri: string; frame: TileFrame }[] {
+  try {
+    const prefix = holePrefix(courseId, holeNumber);
+    const out: { uri: string; frame: TileFrame; score: number }[] = [];
+    for (const n of listCache()) {
+      if (!n.startsWith(prefix)) continue;
+      const frame = frameFromFileName(n);
+      if (!frame) continue;
+      const sameGeometry = sameSpot(frame, want) ? 0 : 1;
+      const aspect = Math.abs(frame.width / frame.height - want.width / want.height);
+      out.push({ uri: new File(Paths.cache, n).uri, frame, score: sameGeometry * 10 + aspect });
+    }
+    return out.sort((a, b) => a.score - b.score).map(({ uri, frame }) => ({ uri, frame }));
+  } catch {
+    return []; // a cache miss is never worth an exception
+  }
+}
+
+function sameSpot(a: TileFrame, b: TileFrame): boolean {
+  return a.center.lat.toFixed(6) === b.center.lat.toFixed(6) && a.center.lng.toFixed(6) === b.center.lng.toFixed(6)
+    && a.bearing.toFixed(1) === b.bearing.toFixed(1);
+}
+
+/** Tiles of this hole drawn for geometry it no longer has — superseded, so removed on a fresh write. */
+function evictStale(courseId: string | null, holeNumber: number, current: TileFrame): void {
+  try {
+    const prefix = holePrefix(courseId, holeNumber);
+    for (const n of listCache()) {
+      if (!n.startsWith(prefix)) continue;
+      const f = frameFromFileName(n);
+      if (f && !sameSpot(f, current)) {
+        try { new File(Paths.cache, n).delete(); } catch { /* already gone */ }
+      }
+    }
+  } catch { /* eviction is housekeeping; never an error */ }
+}
+
+export type HoleTile = {
+  /** What to draw now: the exact cached file, else the live URL. */
+  uri: string;
+  frame: TileFrame;
+  /** A cached tile of this hole to draw if `uri` fails to load (no signal), with ITS frame. */
+  fallback: { uri: string; frame: TileFrame } | null;
+};
+
+const writesInFlight = new Set<string>();
+
+/**
+ * The tile for this hole at this size, with the frame it is rendered in.
  *
- * Returns null if Mapbox isn't configured — caller falls through to a
- * secondary provider or shows the "no imagery" state.
+ * Exact file on disk → that. Otherwise the live URL — never a cached tile of another framing in
+ * its place while there may be signal — plus that cached tile as the fallback for when the live
+ * load fails. The exact file is written in the background for next time.
  */
 export async function fetchHoleImagery(
   input: HoleImageryInput,
   options: HoleImageryOptions = {},
-): Promise<string | null> {
-  const url = getHoleImageryUrl(input, options);
-  if (!url) return null;
+): Promise<HoleTile | null> {
+  const frame = frameForHole(input, options);
+  const url = frame ? urlForFrame(frame) : null;
+  if (!frame || !url) return null;
+  const name = tileFileName(input.courseId, input.holeNumber, frame);
+  const cacheFile = new File(Paths.cache, name);
+  if (cacheFile.exists) return { uri: cacheFile.uri, frame, fallback: null };
 
-  // Phase 401 — cache key must match the URL's actual zoom. We derive
-  // it from computeFitView() the same way getHoleImageryUrl does, so
-  // the cache lookup hits the file getHoleImageryUrl will eventually
-  // produce. Falling back to autoZoom only when fit cannot be computed.
-  const w = Math.min(options.width ?? 600, 1280);
-  const h = Math.min(options.height ?? 500, 1280);
-  // Mirror getHoleImageryUrl's coord-guard so the cache-key zoom matches the
-  // URL's actual zoom (an invalid 0,0 tee degrades to null → green-centered
-  // default zoom — otherwise the cache key would never match and we'd re-fetch).
-  const green = input.green && isValidGolfCoord(input.green.lat, input.green.lng) ? input.green : null;
-  const tee = input.tee && isValidGolfCoord(input.tee.lat, input.tee.lng) ? input.tee : null;
-  const fit = green ? computeFitView({ tee, green, width: w, height: h }) : null;
-  const zoom = options.zoom ?? fit?.zoom ?? autoZoom(input.yardage, input.par);
-  const cacheFile = cacheFileFor(input.courseId, input.holeNumber, zoom, w, h);
+  const fallback = cachedTilesForHole(input.courseId, input.holeNumber, frame)[0] ?? null;
 
-  if (cacheFile.exists) return cacheFile.uri;
+  if (!writesInFlight.has(name)) {
+    writesInFlight.add(name);
+    void (async () => {
+      try {
+        // 2026-07-06 (audit) — bound the wait; a stalled download abandons the write, never hangs.
+        const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+        if (!res.ok) return;
+        const buf = await res.arrayBuffer();
+        cacheFile.write(new Uint8Array(buf));
+        cacheListing = null; // a new file exists; do not serve a stale listing
+        evictStale(input.courseId, input.holeNumber, frame);
+        cacheListing = null;
+      } catch (e) {
+        console.log('[mapboxImagery] cache write failed:', e);
+      } finally {
+        writesInFlight.delete(name);
+      }
+    })();
+  }
 
-  // Exact size not cached. A tile of this hole at ANOTHER size almost certainly IS (the prefetch
-  // writes 600x500), and showing the right hole slightly reframed beats showing nothing when there
-  // is no signal. The background write below still lands the exact-size copy for next time.
-  const alt = cachedTileForHole(input.courseId, input.holeNumber);
+  return { uri: url, frame, fallback };
+}
 
-  // Lazy background cache write — return remote URL immediately so the
-  // image renders without waiting for disk I/O.
-  void (async () => {
-    try {
-      // 2026-07-06 (audit) — bound the wait; a stalled Mapbox download should
-      // abandon the cache write (remote URL already returned), not hang forever.
-      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-      if (!res.ok) return;
-      const buf = await res.arrayBuffer();
-      cacheFile.write(new Uint8Array(buf));
-      cacheListing = null; // a new file exists; do not serve a stale listing
-    } catch (e) {
-      console.log('[mapboxImagery] cache write failed:', e);
-    }
-  })();
-
-  return alt ?? url;
+/**
+ * 2026-09-23 — the size SmartVision actually draws at, so round prep caches the tile it will ask
+ * for, not a 600x500 nobody requests. Remembered for the session once SmartVision has measured its
+ * container; before that, the default.
+ */
+let preferredTileSize: { width: number; height: number } | null = null;
+export function rememberTileSize(width: number, height: number): void {
+  if (width > 0 && height > 0) preferredTileSize = { width: Math.min(Math.round(width), 1280), height: Math.min(Math.round(height), 1280) };
+}
+export function tileSizeForPrefetch(): { width: number; height: number } | undefined {
+  return preferredTileSize ?? undefined;
 }
 
 /**
@@ -339,7 +408,8 @@ export async function prefetchHoles(
   inputs: HoleImageryInput[],
   options: HoleImageryOptions = {},
 ): Promise<void> {
-  await Promise.all(inputs.map(i => fetchHoleImagery(i, options).catch(() => null)));
+  const size = options.width || options.height ? {} : tileSizeForPrefetch() ?? {};
+  await Promise.all(inputs.map(i => fetchHoleImagery(i, { ...size, ...options }).catch(() => null)));
 }
 
 /**
@@ -413,6 +483,14 @@ export type CenteredImageryInput = {
   width?: number;
   height?: number;
 };
+
+/** The frame a centred, north-up tile is rendered in. */
+export function centeredFrame(input: CenteredImageryInput): TileFrame {
+  return {
+    center: { lat: input.lat, lng: input.lng }, zoom: input.zoom ?? 16, bearing: 0,
+    width: Math.min(input.width ?? 800, 1280), height: Math.min(input.height ?? 600, 1280),
+  };
+}
 
 export function getCenteredImageryUrl(input: CenteredImageryInput): string | null {
   if (!MAPBOX_TOKEN) return null;

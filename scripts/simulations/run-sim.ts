@@ -7193,8 +7193,8 @@ check('Course book: hole imagery rejects 0,0 placeholder coords (no garbage thum
       /const green = input\.green && isValidGolfCoord\(input\.green\.lat, input\.green\.lng\) \? input\.green : null;/.test(m) &&
       /if \(!green\) return null;/.test(m) &&
       /const tee = input\.tee && isValidGolfCoord\(input\.tee\.lat, input\.tee\.lng\) \? input\.tee : null;/.test(m) &&
-      // the cache-key path mirrors the same guard (no permanent cache miss)
-      /const green = input\.green && isValidGolfCoord[\s\S]{0,200}const fit = green \? computeFitView/.test(m) &&
+      // 2026-09-23 — the cache key IS the frame (frameForHole), so it can no longer disagree with the URL
+      /const frame = frameForHole\(input, options\);[\s\S]{0,200}tileFileName\(input\.courseId, input\.holeNumber, frame\)/.test(m) &&
       // coordGuard rejects 0,0 + near-zero
       /**
        * 2026-09-10 — this pinned `lat === 0 && lng === 0`. coordGuard now rejects EITHER axis being
