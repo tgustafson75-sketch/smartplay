@@ -54,11 +54,11 @@ import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
 import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
+import { composeYourCourses } from '../../services/yourCourses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
-import { fetchCourseGeometry, getHoleGeometry , getCachedGeometry } from '../../services/courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, resolveLocalCourseId } from '../../services/courseGeometryService';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
-import { prefetchCourseImagery } from '../../services/roundPrefetch';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { isValidGolfCoord } from '../../utils/coordGuard';
 // 2026-09-06 — the eleven bundled-image thumbnail imports are gone. Every one of those maps has
@@ -119,7 +119,7 @@ const isSatelliteThumb = (t: CourseSummary['thumbnail']): boolean =>
  * 2026-08-10 (Tim — "make sure my thumbnails in the Play tab ALWAYS work and populate when we add a
  * new course, and that you get CORRECT thumbnails").
  *
- * ROOT CAUSE of the blank cards: `thumbnail` was a HAND-AUTHORED field on the bundled LOCAL_COURSES
+ * ROOT CAUSE of the blank cards: `thumbnail` was a HAND-AUTHORED field on the bundled SURVEYED_COURSES
  * literals only. Every dynamically-sourced course — the GPS "Courses near you" rows, golfcourseapi
  * search results, scorecard-photo customs, recents — had no such field, so those rows rendered the
  * generic golf-outline placeholder no matter how good their coordinates were. The hero card had
@@ -587,7 +587,17 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
  * The thumbnail is rebuilt from the derived point too. A course whose centroid was wrong was showing
  * an aerial of the wrong place, and fixing the coordinate without the image would leave that behind.
  */
-const LOCAL_COURSES: CourseSummary[] = LOCAL_COURSES_RAW.map(c => {
+/**
+ * 2026-09-23 (Tim — "We shouldn't have old bundled courses. Unify the pipeline.") — an INDEX, not a
+ * list. These rows used to be spread into "Your courses" for every player, so a first-time user in
+ * Ohio opened the Play tab to 38 courses in California and Florida. A surveyed course is now found by
+ * search, and listed only once it is his (played, downloaded or home) like every other course.
+ *
+ * isLocal means "has a surveyed card". The three marquee rows have none: they are database courses
+ * wearing a local id, and taking the local branch gave them an invented "Par 72 · 6,527 yds" card.
+ */
+const SURVEYED_COURSES: CourseSummary[] = LOCAL_COURSES_RAW.map(raw => {
+  const c = { ...raw, isLocal: getBundledHoles(raw.id).length > 0 };
   const derived = getBundledCourseCentroid(c.id);
   if (!derived) return c;
   const moved = c.lat == null || c.lng == null ||
@@ -1067,9 +1077,9 @@ export default function PlayTab() {
       const out: CourseSummary[] = [];
       for (const id of recentCourseIds.slice(0, 4)) {
         // B3 — local: IDs return null from the external API. Resolve them
-        // from the bundled LOCAL_COURSES catalog instead; skip the network call.
+        // from the bundled SURVEYED_COURSES catalog instead; skip the network call.
         if (id.startsWith('local:')) {
-          const local = LOCAL_COURSES.find(l => l.id === id);
+          const local = SURVEYED_COURSES.find(l => l.id === id);
           if (local) out.push(local);
           continue;
         }
@@ -1182,13 +1192,14 @@ export default function PlayTab() {
          * compete with the round's own calls or spend someone's data plan.
          */
         void prefetchFoundCourses(near, 3);
-        const bundledNames = new Set([
-          ...LOCAL_COURSES.map(c => c.club_name.toLowerCase()),
-          ...customSummaries.map(c => c.club_name.toLowerCase()),
-        ]);
+        // A custom course is already in the list above. A surveyed one is NOT any more (it is listed
+        // only once it is his), so a nearby course with a surveyed card shows as that card — its
+        // verified holes — rather than as a place row that has to be looked up again.
+        const customNames = new Set(customSummaries.map(c => c.club_name.toLowerCase()));
+        const surveyedByName = new Map(SURVEYED_COURSES.map(c => [c.club_name.toLowerCase(), c] as const));
         const mapped: CourseSummary[] = near
-          .filter(n => n.name && !bundledNames.has(n.name.toLowerCase()))
-          .map(n => ({
+          .filter(n => n.name && !customNames.has(n.name.toLowerCase()))
+          .map(n => surveyedByName.get(n.name.toLowerCase()) ?? ({
             id: n.place_id ? `place:${n.place_id}` : `near:${n.name}`,
             club_name: n.name,
             location: n.vicinity ?? '',
@@ -1197,7 +1208,7 @@ export default function PlayTab() {
             isLocal: false,
             lat: n.lat,
             lng: n.lng,
-          }));
+          } as CourseSummary));
         if (!cancelled) setNearbyApiCourses(mapped);
         // 2026-08-09 (Tim — the download engine was half-wired: locate live, downloadCourse ZERO
         // callers). The engine's whole point is the Arccos flow: ARRIVE at a course → its full data
@@ -1272,19 +1283,17 @@ export default function PlayTab() {
   }, [userPosition, customSummaries]);
 
   const closestLocal: CourseSummary[] = useMemo(() => {
-    const already = (id: string): boolean =>
-      LOCAL_COURSES.some(l => l.id === id) || customSummaries.some(cs => cs.id === id);
-    const recentRows = recentCourses.filter(r => !already(r.id));
-    // A caddie-fetched course joins the same list. Deduped against every other source by id, so a
-    // course he has also played shows once, as its richer recent row (rating/slope already resolved).
-    const downloadedRows = downloadedCourseSummaries(downloadedCourses, recentCourseMeta)
-      .filter(d => !already(d.id) && !recentRows.some(r => r.id === d.id));
-    const combined: CourseSummary[] = [
-      ...customSummaries,
-      ...LOCAL_COURSES,
-      ...recentRows,
-      ...downloadedRows,
-    ];
+    // Only courses that are HIS — services/yourCourses owns the rule.
+    const combined: CourseSummary[] = composeYourCourses<CourseSummary>({
+      custom: customSummaries,
+      recent: recentCourses,
+      surveyed: SURVEYED_COURSES,
+      downloaded: downloadedCourseSummaries(downloadedCourses, recentCourseMeta),
+      ownedIds: [
+        ...Object.values(downloadedCourses ?? {}).map(d => d?.courseId ?? ''),
+        ...(homeCourses ?? []).map(h => h.id ?? ''),
+      ],
+    });
     if (!userPosition) return combined;
     const YARDS_PER_MILE = 1760;
     type Annotated = { course: CourseSummary; miles: number | null };
@@ -1301,7 +1310,7 @@ export default function PlayTab() {
       return a.miles - b.miles;
     });
     return annotated.map(a => a.course);
-  }, [recentCourses, userPosition, customSummaries, downloadedCourses, recentCourseMeta]);
+  }, [recentCourses, userPosition, customSummaries, downloadedCourses, recentCourseMeta, homeCourses]);
 
   // Phase 407 — per-course distance label keyed by id. Computed once
   // alongside the sort so the row renderer just looks up.
@@ -1395,14 +1404,14 @@ export default function PlayTab() {
   // the screen a meaningful default rather than an empty selected card.
   // Only seeds once per session: if the user has already picked a
   // course or a round is active, leave it alone.
+  const hasOwnCourses = closestLocal.length > 0;
   useEffect(() => {
     if (selected) return;
+    const findById = (id: string | null | undefined): CourseSummary | null =>
+      (id ? closestLocal.find(l => l.id === id) ?? SURVEYED_COURSES.find(l => l.id === id) : null) ?? null;
     if (isRoundActive && activeCourseId) {
       // Round in progress — surface the active course as selected.
-      const match = LOCAL_COURSES.find(l =>
-        l.id === activeCourseId ||
-        (activeCourse && l.club_name.toLowerCase().includes(activeCourse.toLowerCase()))
-      );
+      const match = findById(activeCourseId);
       if (match) { void selectSummary(match); return; }
     }
     /**
@@ -1414,32 +1423,22 @@ export default function PlayTab() {
      */
     const homeMatch = (() => {
       for (const hc of homeCourses ?? []) {
-        if (hc.id) {
-          const byId = LOCAL_COURSES.find(l => l.id === hc.id);
-          if (byId) return byId;
-        }
+        // An id matches exactly. A name-only entry (the old free-text field) matches only a course
+        // already in his list — never a guess across a catalog he did not pick from.
+        const byId = hc.id ? findById(hc.id) : null;
+        if (byId) return byId;
         const nm = (hc.name ?? '').trim().toLowerCase();
         if (!nm) continue;
-        const byName = LOCAL_COURSES.find(l => l.club_name.toLowerCase().includes(nm) || l.id.toLowerCase().includes(nm));
+        const byName = closestLocal.find(l => l.club_name.toLowerCase() === nm);
         if (byName) return byName;
       }
       return null;
     })();
-    // Phase 407 — default to the NEAREST course (closestLocal[0]) when
-    // the GPS sort has run. Falls through to the configured home
-    // course (if set) and then to the static catalog top when GPS
-    // hasn't resolved yet. Honest about which it's using: when
-    // userPosition is null, the sort hasn't run so closestLocal[0]
-    // still equals LOCAL_COURSES[0] (Palms) — no regression.
-    const gpsNearest = userPosition ? closestLocal[0] : null;
-    // 2026-06-08 — Fix sticky-Menifee: on tab remount `selected` resets to
-    // null and we used to fall straight back to LOCAL_COURSES[0] (Menifee
-    // Palms), clobbering the user's actual pick. Restore their last
-    // explicit selection (previewCourseId) before the hardcoded default.
-    // Priority: live GPS-nearest → last picked → home → catalog top.
-    const previewMatch = previewCourseId
-      ? LOCAL_COURSES.find(l => l.id === previewCourseId) ?? null
-      : null;
+    // Phase 407 — default to the NEAREST of his courses (closestLocal[0]) once the GPS sort has run.
+    const gpsNearest = userPosition ? closestLocal[0] ?? null : null;
+    // 2026-06-08 — Fix sticky-Menifee: on tab remount `selected` resets to null; restore his last
+    // explicit selection (previewCourseId) before anything else.
+    const previewMatch = previewCourseId ? findById(previewCourseId) : null;
     /**
      * 2026-08-20 — precedence made EXPLICIT rather than decided by a race.
      *
@@ -1455,12 +1454,15 @@ export default function PlayTab() {
      * (Worth revisiting with Tim — driving to a new course arguably should re-default to it — but
      * that is a deliberate change to make on purpose, not a side effect of a location fix.)
      */
-    const defaultPick = previewMatch ?? gpsNearest ?? homeMatch ?? LOCAL_COURSES[0];
+    // No invented default: a player with no course of his own sees an empty card and the search.
+    const defaultPick = previewMatch ?? gpsNearest ?? homeMatch ?? closestLocal[0] ?? null;
     if (defaultPick) void selectSummary(defaultPick);
     // selectSummary is intentionally not in deps — it'd retrigger on every
     // closure refresh. We only want this once per mount + once GPS resolves.
+    // hasOwnCourses: his list fills in after mount (recents resolve, stores rehydrate); an empty list
+    // at mount must not be the last word. It flips once, so this still runs a handful of times.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeCourses, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId]);
+  }, [homeCourses, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId, hasOwnCourses]);
 
   /**
    * 2026-09-14 (Tim) — "When user selects up to 3 home courses, logic should spool those to the play
@@ -1538,13 +1540,16 @@ export default function PlayTab() {
     const key = ids.join(',');
     if (spooledHomeRef.current === key) return;   // once per set, not once per render
     spooledHomeRef.current = key;
-    for (const id of ids) {
-      const c = LOCAL_COURSES.find((l) => l.id === id);
-      if (!c) continue;
-      const lat = typeof c.lat === 'number' ? c.lat : null;
-      const lng = typeof c.lng === 'number' ? c.lng : null;
+    // Every home course, not only the surveyed ones: a database course set as home never spooled.
+    // The engine resolves any id through the one course card (services/courseCard).
+    for (const hc of homeCourses ?? []) {
+      if (!hc.id) continue;
+      const c = SURVEYED_COURSES.find((l) => l.id === hc.id);
+      const lat = typeof c?.lat === 'number' ? c.lat : null;
+      const lng = typeof c?.lng === 'number' ? c.lng : null;
+      const id = hc.id;
       void import('../../services/courseDownloadEngine')
-        .then((eng) => eng.downloadCourse({ name: c.club_name, courseId: c.id, lat, lng }))
+        .then((eng) => eng.downloadCourse({ name: c?.club_name ?? hc.name ?? '', courseId: id, lat, lng }))
         .catch(() => undefined);   // a home course that will not build is not a reason to break the tab
     }
   }, [homeCourses]);
@@ -1582,7 +1587,7 @@ export default function PlayTab() {
     // ("Killian", "Highland", "Miccosukee") always resolves — even offline or on an API error. These
     // show immediately (before/without the network round-trip); API results merge in, deduped by id.
     const ql = trimmed.toLowerCase();
-    const localMatches: CourseSummary[] = LOCAL_COURSES.filter(c =>
+    const localMatches: CourseSummary[] = SURVEYED_COURSES.filter(c =>
       c.club_name.toLowerCase().includes(ql) || c.location.toLowerCase().includes(ql),
     );
     setResults(localMatches);
@@ -1749,17 +1754,15 @@ export default function PlayTab() {
         s.id,
         s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null,
       );
-      // 2026-07-23 (Tim) — build SmartVision hole imagery on selection: warm course
-      // geometry + per-hole satellite tiles now so the maps are instant (and offline)
-      // before the round starts. Fire-and-forget, once-per-session per course.
-      if (bundledHoles.length > 0) {
-        void prefetchCourseImagery({
-          courseId: s.id,
-          courseName: s.club_name,
-          courseLocation: s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null,
-          holes: bundledHoles,
-        });
-      }
+      // 2026-09-23 (Tim — "Unify the pipeline") — the SAME build every other course gets: map, hole
+      // imagery, notes, with live progress on this card. This used to run its own imagery-only warm,
+      // so a surveyed course never got the engine's map, cooldowns or progress, and never became his.
+      void import('../../services/courseDownloadEngine')
+        .then((eng) => eng.downloadCourse({
+          name: s.club_name, courseId: s.id, displayId: s.id,
+          lat: s.lat ?? null, lng: s.lng ?? null,
+        }))
+        .catch(() => undefined);
       return;
     }
     setSelectedLoading(true);
@@ -1780,6 +1783,16 @@ export default function PlayTab() {
           return;
         }
         resolveId = real.id;
+      } else if (String(s.id).startsWith('local:')) {
+        // A local id with no surveyed card (the marquee rows): its pinned database record.
+        const apiId = await resolveLocalCourseId(String(s.id).slice('local:'.length)).catch(() => null);
+        if (!isCurrent()) return;
+        if (!apiId) {
+          setSelectError("Couldn't open that course. Tap it again to retry.");
+          setSelectedLoading(false);
+          return;
+        }
+        resolveId = apiId;
       }
       const c = await getCourse(resolveId);
       if (!isCurrent()) return;

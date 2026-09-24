@@ -2330,7 +2330,7 @@ check('Final QA: co-located courses ask which nine; search matches bundled cours
     // (b) C5 — search matches BUNDLED courses locally first (offline-safe) and only shows the
     //     connectivity error when there's nothing (local OR remote) to show.
     const okSearch =
-      /const localMatches: CourseSummary\[\] = LOCAL_COURSES\.filter\(/.test(play) &&
+      /const localMatches: CourseSummary\[\] = SURVEYED_COURSES\.filter\(/.test(play) &&
       /if \(err && merged\.length === 0\) setSearchError/.test(play) &&
       /if \(localMatches\.length === 0\) setSearchError/.test(play);
     return okChooser && okSearch;
@@ -18161,9 +18161,11 @@ check(
       /eng\.downloadCourse\(\{ name: c\.club_name, courseId: c\.id, displayId: s\.id,/.test(play),
     `near-you + search rows (${rows}/2) and the selected card render the pipeline's progress, and the pick hands the pipeline the id its card holds`);
   const sel = play.slice(play.indexOf('const selectSummary = useCallback'), play.indexOf('const onTapInfo'));
+  // 2026-09-23 (Tim — "Unify the pipeline") — the surveyed branch too: no screen-owned imagery warm
+  // anywhere in the pick; both branches hand the course to the one pipeline.
   check('COURSE BUILD: the pick does not run a second imagery build beside the pipeline',
-    (sel.match(/prefetchCourseImagery\(/g) ?? []).length === 1,
-    'only the bundled-course branch warms imagery itself; an API course is built by the pipeline alone');
+    !/prefetchCourseImagery|prefetchRoundData/.test(sel) && (sel.match(/eng\.downloadCourse\(/g) ?? []).length === 2,
+    'a surveyed pick and a database pick are both built by the pipeline alone, with its progress on the card');
 }
 
 // 2026-09-23 — from Tim's pasted Vercel logs: every voice-intent warmup ended "400 'messages' must

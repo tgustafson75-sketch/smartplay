@@ -85,8 +85,8 @@ describe('a course the caddie fetched reaches the Play tab', () => {
   it('the Play tab lists them alongside bundled, custom and recent courses', () => {
     const play = read('app/(tabs)/play.tsx');
     expect(play).toMatch(/downloadedCourseSummaries\(downloadedCourses, recentCourseMeta\)/);
-    const memo = play.slice(play.indexOf('const closestLocal'), play.indexOf('const closestLocal') + 1400);
-    expect(memo).toMatch(/\.\.\.downloadedRows/);
+    const memo = play.slice(play.indexOf('const closestLocal'), play.indexOf('const distanceLabelById'));
+    expect(memo).toMatch(/downloaded: downloadedCourseSummaries\(downloadedCourses, recentCourseMeta\)/);
   });
 
   /** And the caddie's promise has to match what the app does. */
