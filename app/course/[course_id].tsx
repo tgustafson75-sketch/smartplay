@@ -17,7 +17,7 @@ import { getCourse } from '../../services/golfCourseApi';
 // reflects the actual layout instead of a default 18-hole / par-4 /
 // 380y placeholder. Reported: Mariners Point showed 18 holes at 380y
 // each, when it's actually 9 par-3 holes maxing at ~160y.
-import { getCourse as getLocalCourseData } from '../../data/courses';
+import { getCourse as getLocalCourseData, getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { fetchCourseContent, getCachedContent, CONTENT_CLIENT_TIMEOUT_MS, type CourseContent } from '../../services/courseContentService';
 import { holeNoteFromStats } from '../../services/holeNote';
 import { fetchCourseGeometry, getHoleGeometry, resolveLocalCourseId } from '../../services/courseGeometryService';
@@ -158,7 +158,12 @@ export default function CourseDetailScreen() {
         // though their real per-hole data already ships in data/courses.ts. getLocalCourseData matches
         // by id===slug and returns null for unknown slugs, so resolve straight off the slug: every
         // bundled course now shows its real layout, and there's no allowlist to keep in sync.
-        const dataCourse = getLocalCourseData(slug);
+        // Exact id only: getLocalCourseData's substring fallback would hand a marquee slug a
+        // different course's card.
+        const dataCourse = (() => { const d = getLocalCourseData(slug); return d && d.id === slug ? d : null; })();
+        // The CHECKED holes (getBundledHoles zeroes a tee that fails its own scorecard) — the same
+        // card round start and the pipeline use.
+        const checkedHoles = dataCourse ? getBundledHoles(course_id) : [];
 
         // Build the holes array. Prefer the bundled per-hole data (with
         // correct par + yardage per hole) over the legacy generic
@@ -166,8 +171,8 @@ export default function CourseDetailScreen() {
         // ONLY for courses we don't have data for yet (currently
         // Sunnyvale + San Jose Muni until we hand-code or fetch their
         // per-hole records).
-        const realHoles: import('../../types/course').Hole[] | null = dataCourse
-          ? dataCourse.holes.map(h => ({
+        const realHoles: import('../../types/course').Hole[] | null = dataCourse && checkedHoles.length
+          ? checkedHoles.map(h => ({
               hole_number: h.hole,
               par: h.par,
               yardage: h.distance,
@@ -233,7 +238,17 @@ export default function CourseDetailScreen() {
           setLoading(false);
           // (bundled images need no API geometry; setCourse above already re-runs the photo memo)
         }
-        // Background enrichment — don't await, don't block UI on it.
+        /**
+         * 2026-09-23 (Tim — "Keep it as verified data inside the one pipeline") — a SURVEYED course's
+         * card is the verified one. This used to replace it a moment later with the database
+         * record's holes and yardages, so the screen showed the survey and then quietly didn't.
+         * Only its map is built, under its own id, the way the pipeline builds it.
+         */
+        if (realHoles) {
+          void fetchCourseGeometry(course_id, { courseLocation: getBundledCourseCentroid(course_id) }).catch(() => {});
+          return;
+        }
+        // No surveyed card (the marquee rows): its database record, in the background.
         /**
          * 2026-09-23 — through the geometry service's VERIFIED resolver (a known id, then name +
          * expected city), not the first hit of a name search. `Westlake Country Club` matched a

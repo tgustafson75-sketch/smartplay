@@ -43,4 +43,16 @@ describe('a database course that is a surveyed course gets the survey', () => {
     const c = await loadCourseCard('menifee-db');
     expect(c?.source).toBe('database');
   });
+
+  it('Course Detail keeps a surveyed card — no background swap to the database record', () => {
+    const fs = jest.requireActual('fs') as typeof import('fs');
+    const path = jest.requireActual('path') as typeof import('path');
+    const src = fs.readFileSync(path.join(__dirname, '../../app/course/[course_id].tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const i = src.indexOf('if (realHoles) {');
+    expect(i).toBeGreaterThan(-1);
+    const guard = src.slice(i, src.indexOf('void resolveLocalCourseId(slug)'));
+    expect(guard).toMatch(/fetchCourseGeometry\(course_id,[\s\S]*return;/);
+    expect(src).toMatch(/checkedHoles = dataCourse \? getBundledHoles\(course_id\)/);
+  });
 });
