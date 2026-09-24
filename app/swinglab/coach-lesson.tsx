@@ -24,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../contexts/ThemeContext';
-import { darkTheme } from '../../theme/tokens';
+import { lightTheme } from '../../theme/tokens';
 import { safeBack } from '../../services/safeBack';
 import { analyzeSwingFromVideo, type SwingBiomechanics } from '../../services/poseAnalysisApi';
 import { resolveSwingerHandedness } from '../../services/swingerHandedness';
@@ -519,7 +519,7 @@ export default function CoachLessonScreen() {
           {LESSON_PLANS.map((p) => (
             <TouchableOpacity key={p.id} style={s.planRow} onPress={() => startPlan(p)} accessibilityRole="button">
               <View style={{ flex: 1 }}><Text style={s.focusLabel}>{p.label}</Text><Text style={s.planBlurb}>{p.blurb}</Text></View>
-              <Ionicons name="play-circle" size={22} color={colors.accent} />
+              <Ionicons name="play-circle" size={22} color={lightTheme.colors.accent} />
             </TouchableOpacity>
           ))}
 
@@ -527,7 +527,7 @@ export default function CoachLessonScreen() {
           {LESSON_FOCUSES.map((f) => (
             <TouchableOpacity key={f.id} style={s.focusRow} onPress={() => pickFocus(f)} accessibilityRole="button">
               <Text style={s.focusLabel}>{f.label}</Text>
-              <Ionicons name="chevron-forward" size={18} color={ON_BLACK_MUTED} />
+              <Ionicons name="chevron-forward" size={18} color={lightTheme.colors.text_muted} />
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -633,7 +633,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
      *
      * 2026-09-24 (Tim, light mode: cards washed out) — the 09-06 pass pinned the TEXT but left the
      * planRow/focusRow cards on themed colors.surface/border, which are '#ffffff' in light mode: white
-     * labels on white cards. The cards sit on the same black, so they read the dark palette too.
+     * labels on white cards. Tim's call: the cards are light green with dark text in BOTH themes —
+     * a fixed light card on the fixed black, like the green hero above it. lightTheme accent_muted /
+     * text_primary / text_muted.
      */
     screen: { flex: 1, backgroundColor: '#000' },
     scrimTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, backgroundColor: 'rgba(0,0,0,0.45)' },
@@ -668,9 +670,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     heroCta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
     heroCtaText: { color: '#0d1a0d', fontSize: 15, fontWeight: '800' },
     sectionLabel: { color: ON_BLACK_MUTED, fontSize: 11, fontWeight: '900', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
-    planRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: darkTheme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.accent, padding: 16, marginTop: 12 },
-    planBlurb: { color: ON_BLACK_MUTED, fontSize: 13, marginTop: 3 },
-    focusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: darkTheme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: darkTheme.colors.border, padding: 16, marginTop: 12 },
-    focusLabel: { color: ON_BLACK_TEXT, fontSize: 16, fontWeight: '700' },
+    planRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: lightTheme.colors.accent_muted, borderRadius: 12, borderWidth: 1, borderColor: lightTheme.colors.accent, padding: 16, marginTop: 12 },
+    planBlurb: { color: lightTheme.colors.text_muted, fontSize: 13, marginTop: 3 },
+    focusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: lightTheme.colors.accent_muted, borderRadius: 12, borderWidth: 1, borderColor: lightTheme.colors.border, padding: 16, marginTop: 12 },
+    focusLabel: { color: lightTheme.colors.text_primary, fontSize: 16, fontWeight: '700' },
   });
 }
