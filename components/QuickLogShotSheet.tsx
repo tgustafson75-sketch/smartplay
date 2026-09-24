@@ -194,7 +194,9 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
     });
     reset();
     onClose();
-  }, [club, distance, outcome, direction, currentHole, holeOverride, logShot, onClose, pinnedLoc]);
+    // distanceUnit: the typed number is converted with the unit on screen NOW — without it a switch
+    // to metres (or back) logged the next shot converted with the old unit.
+  }, [club, distance, outcome, direction, currentHole, holeOverride, logShot, onClose, pinnedLoc, distanceUnit]);
 
   if (!isRoundActive) return null;
 

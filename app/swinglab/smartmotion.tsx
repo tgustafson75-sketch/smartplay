@@ -5344,12 +5344,17 @@ export default function SmartMotion() {
      */
     if (cmd === 'angleDtl' || cmd === 'angleFaceOn') { applyPuttMode(false, 'user'); showModeFade('ANGLE IS AUTOMATIC'); return; }
     const recording = phase === 'recording';
-    if (cmd === 'stop') { if (recording) void stopRecording(); return; }
-    if (cmd === 'start') { if (!recording) beginNextRecording(); return; }
+    // 2026-09-23 — a count in progress is a recording ASKED FOR. "Stop" (or a toggle) during it
+    // cancels it; before, stop was ignored because nothing was recording yet and the count started
+    // the recording anyway, and a toggle started a second one on top of the count's.
+    const counting = countdownTimerRef.current != null;
+    if (cmd === 'stop') { if (counting) clearCountdown(); else if (recording) void stopRecording(); return; }
+    if (cmd === 'start') { if (counting) clearCountdown(); if (!recording) beginNextRecording(); return; }
     // The watch tap, arriving while SmartMotion is already open.
     if (cmd === 'countdown') { if (!recording) startCountdown(5); return; }
     // toggle
-    if (recording) void stopRecording();
+    if (counting) clearCountdown();
+    else if (recording) void stopRecording();
     else beginNextRecording();
   };
   useEffect(() => {

@@ -959,7 +959,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
    
-  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx]);
+  }, [hasPose, poseFrames, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay

@@ -172,7 +172,7 @@ export function AddedPlayerCards({ holes, courseName, ownerName, ownerScores }: 
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await Share.share({ message: buildExport(card) });
     } catch { /* the share sheet being dismissed is not an error */ }
-  }, [buildExport]);
+  }, [buildExport, t]);
 
   const ownerSummary = useMemo(() => {
     const played = holes.filter((h) => (ownerScores[h.hole] ?? 0) > 0);

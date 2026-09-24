@@ -88,3 +88,15 @@ if [ -n "$STAGED_TSX" ]; then
     exit 1
   fi
 fi
+
+# 2026-09-23 (Tim — "we don't want ANY issues pending") — ZERO lint warnings, enforced. The last four
+# had sat as a "baseline" and two of them were real bugs (a stop during the SmartMotion countdown was
+# ignored; a quick-logged shot converted with a stale distance unit). A baseline is where bugs hide.
+printf 'pre-commit: lint (zero warnings)... '
+if OUT=$(npx expo lint -- --max-warnings 0 2>&1); then
+  printf 'clean\n'
+else
+  printf 'FAILED\n\n%s\n\n' "$OUT"
+  echo 'Commit blocked: fix the lint warning(s) above — a warning is an issue pending.'
+  exit 1
+fi
