@@ -5145,4 +5145,4 @@ We need correct images not no images where appropriate."
   "no signal" really recovers (quiet prefetch every 15s + on foreground).
 - Reviewed (5th review): 3 defects fixed (no-signal recovery, bad cached file → live, one-frame flash); `retry=1`
   verified accepted by Mapbox (one request). Gates: tsc, lint 0, jest 5,542, sim all pass.
-
+- SHIPPED: main `94b99a11`, OTA group `95e36634-ac61-4730-a343-1ca5bb660db0`.

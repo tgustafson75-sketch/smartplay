@@ -8,7 +8,7 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-24 ~03:00Z. SHIPPED: main `81f6fd09` + ONE OTA `3348170d` (unify pipeline, Mapbox scale fix, Course Cloud pre-fix AI rows ignored, zero lint). Not yet verified on device.
+> ### ⚠️ LATEST — 2026-09-24. SHIPPED: main `94b99a11` + OTA `95e36634` (hole images: real tiles everywhere, bundled-photo code gone, no-signal recovers), on top of `81f6fd09` + OTA `3348170d` (unify pipeline, Mapbox scale fix, Course Cloud pre-fix AI rows ignored, zero lint). Not yet verified on device.
 > Tim: hold everything and ship ONE reviewed release when he says go. One course pipeline (surveyed data kept
 > as verified data inside it), Play/picker list only the player's courses, and the Mapbox scale fix (was 2×
 > wrong — SmartVision framing, markers and tapped yardages), lint at zero and enforced. Detail: SPRINT-LOG Day 127
