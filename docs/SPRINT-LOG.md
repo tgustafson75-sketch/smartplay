@@ -5099,3 +5099,23 @@ only, no client-side encryption.
   Database courses now send the back-tee card (device cache only); the weekly refresh sends it too (review find).
 - Every fix break-tested on the pre-fix code. jest 5472/5472, sim 1082/1082. NOT verified on device (PATH 2/4/5).
 - Deleted Vercel's auto-created analytics branch (its preview build failed; it cannot measure the native app).
+
+### Day 127 (cont.) — "Unify the pipeline… SmartVision images correctly every time" — branch `unify-pipeline-2026-09-23`, LOCAL ONLY, NOT SHIPPED
+
+**Shipped to the branch (12 commits, 0a5567c9 → 67c19ac7):**
+- One course card for every id (`services/courseCard`); round start, engine, Play pick, Course Detail read it.
+- Surveyed courses are an index, not a list: "Your courses" = played / downloaded / home / scorecard (`services/yourCourses`). Round-setup picker the same (was a fixed four Menifee/Hemet rows).
+- Verified corrections: a database course that IS a surveyed course (layout name, one candidate, placed ≤8 km) resolves to the survey everywhere (`surveyedTwinOf`); replaced round start's private by-name override.
+- Marquee rows (Pebble/Torrey/Streamsong) carry their pinned database id — no invented "Par 72" card, one id per course.
+- **Mapbox scale was 2× wrong everywhere** (156543 vs measured 78271.5 m/px at z0 — 150 m = 148 px on a real tile): holes framed a zoom too tight (tee cut off), markers/player dot/tapped yardages at half distance, AI greens at double. One constant now; derived-geometry cache v2.
+- SmartVision tiles carry their frame (in the cache file name); markers and yardages project with the displayed tile's frame; same-geometry cached tile leads (weak signal), live behind it; stale geometry evicted; integer sizes. Caddie preview uses the same cached-first tile.
+- Found greens must match the hole length from a known tee; SmartVision centroid by id only.
+- Triple-check: 3 parallel reviews → 13 verified defects fixed (legacy bare-slug downloads, sister-layout twins, at-course chooser for unowned surveyed courses, alias rows, Bethpage Black→Yellow, default-pick races, Course Detail twin/rating). Every guard break-tested.
+
+**Gates:** tsc clean, lint 4 (baseline), jest 5,511, sim all pass.
+
+**Open / carried:**
+- A fourth review of the fix commits was running at save time.
+- Course Cloud may hold AI-derived greens shared before the scale fix (placed at 2× distance from their tile centre). Needs Tim's call before anything touches shared data.
+- Not done: removing the empty bundled-photo code paths in SmartVision (unreachable since the packs were emptied 08-25); Course Detail hole-thumbnail grid still live-only.
+- Nothing verified on device. Critical paths touched: PATH 2 ROUND, PATH 5 GPS (SmartVision yardages).
