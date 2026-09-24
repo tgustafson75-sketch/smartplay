@@ -22,6 +22,9 @@ jest.mock('../../services/golfCourseApi', () => {
     // Found by the triple-check: the club name claimed a sister layout, and no location meant no check.
     'generals-retreat': { ...card('generals-retreat', 'Hermitage Golf Course', herm.lat, herm.lng), course_name: "General's Retreat" },
     'westlake-nowhere': card('westlake-nowhere', 'Westlake Country Club', 0, 0),
+    // ...and the positive case the stricter rule first lost: the surveyed layout itself.
+    'presidents-reserve': { ...card('presidents-reserve', 'Hermitage Golf Course', herm.lat, herm.lng), course_name: "President's Reserve" },
+    'berlin-championship': { ...card('berlin-championship', 'Berlin Country Club', berlin.lat + 0.01, berlin.lng), course_name: 'Championship' },
   };
   return { ...actual, getCourse: jest.fn(async (id: string) => byId[id] ?? null), peekCachedCourse: jest.fn(async (id: string) => byId[id] ?? null) };
 });
@@ -45,6 +48,11 @@ describe('a database course that is a surveyed course gets the survey', () => {
 
   it('a sister layout at a surveyed club is not the surveyed layout', async () => {
     expect((await loadCourseCard('generals-retreat'))?.source).toBe('database');
+  });
+
+  it('the surveyed layout itself is matched by club + layout, and a generic layout label is the club', async () => {
+    expect((await loadCourseCard('presidents-reserve'))?.courseId).toBe('local:hermitage-pr');
+    expect((await loadCourseCard('berlin-championship'))?.courseId).toBe('local:berlin-cc');
   });
 
   it('a record with no location is never claimed by name alone', async () => {

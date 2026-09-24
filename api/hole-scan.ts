@@ -188,7 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? ` SCALE: this image spans about ${Math.round(spanYards)} yards edge to edge, so 0.01 of normalized width ≈ ${Math.round(spanYards / 100)} yards. A putting green is typically 20-40 yards across (${(25 / spanYards).toFixed(3)}-${(40 / spanYards).toFixed(3)} normalized) and a tee box 8-20 yards — use this to reject anything of the wrong size.`
         : '') +
       // 2026-08-10 — a wide frame contains the WHOLE PROPERTY, not one hole: several greens, the
-      // practice green and the clubhouse are all in shot, and a green is only ~15px across. Saying
+      // practice green and the clubhouse are all in shot, and a green is only ~30px across. Saying
       // so changes the task from "trace this green" (impossible at that size) to "pick the right
       // one" (what the wide view is actually good for) — and stops it outlining a neighbouring hole.
       (spanYards && spanYards > 700

@@ -28,26 +28,27 @@ import { saveDerivedHoleGeometry, type HoleGeometry, type LandmarkFeature } from
 /** The side vocabulary LandmarkFeature uses — kept in one place so the derived side can't drift. */
 type LandmarkSide = LandmarkFeature['side'];
 
-/** Zoom for the derivation tile. At z16, a 1024px tile spans ~2 km — wide enough to contain a
- *  full par-5 green even when the seed is the tee, while keeping the green large enough (~30-60px)
- *  for the model to localize. Square so x and y normalize identically. */
+/** Zoom for the derivation tile. At z16, a 1024px tile spans ~1 km (~1,100 yd at 34°N — figures
+ *  corrected 2026-09-23 for Mapbox's measured scale) — wide enough to contain a par-5 green from its
+ *  tee, with the green ~30px across for the model to localize. Square so x and y normalize identically. */
 const TILE_ZOOM = 16;
 const TILE_SIZE = 1024;
 
 /**
  * 2026-08-10 (Tim — "locate the green, the tee box, the fairway, hazards correctly and TIGHTLY").
  *
- * THE HARD LIMIT nobody had measured. At z16 a 1024px tile spans ~1990 yards — the whole property,
- * not one hole. A 30-yard green is therefore about **15 pixels across**. You cannot trace 8-14 tight
- * vertices around a 15px blob, and "find THE green" is ambiguous when eighteen of them are in frame.
+ * THE HARD LIMIT nobody had measured. At z16 a 1024px tile spans ~1,100 yards (the ~1,990 first
+ * written here used a scale 2x too large; corrected 2026-09-23) — most of a property, not one hole. A
+ * 30-yard green is therefore about **30 pixels across**. You cannot trace 8-14 tight
+ * vertices around a ~30px blob, and "find THE green" is ambiguous when eighteen of them are in frame.
  * No amount of prompt work fixes that; it is a resolution ceiling. (Verified by pulling the real
  * Connecticut National tile: clubhouse, parking lot and most of the course, all in one frame.)
  *
  * So the read is now TWO PASSES, which is also how a person would do it:
  *   1. LOCATE on the wide z16 tile — plenty for "which blob is this hole's green", the job the wide
  *      view is actually good at.
- *   2. TRACE on a z18 tile re-centred on that green — ~498 yards across, where the same green is
- *      ~62 pixels and its collar, bunker edges and tee pad are genuinely resolvable.
+ *   2. TRACE on a z18 tile re-centred on that green — ~275 yards across, where the same green is
+ *      ~110 pixels and its collar, bunker edges and tee pad are genuinely resolvable.
  * Pass 2 is where every outline comes from. If it fails for any reason we keep pass 1's result, so
  * this is strictly additive — worst case is exactly the old behavior.
  */
@@ -218,7 +219,7 @@ export async function deriveHoleGeometry(input: {
     }
     if (!coarseGreen) return null;
 
-    // ── PASS 2 — TRACE on a tight tile re-centred on that green. Same green is now ~62px, so the
+    // ── PASS 2 — TRACE on a tight tile re-centred on that green. Same green is now ~110px, so the
     // collar, bunker lips and tee pad are actually resolvable. Everything we render comes from here.
     // Any failure falls back to the wide read, so this can only add detail, never remove it.
     let data: HoleScanResponse | null = wide;
@@ -240,7 +241,7 @@ export async function deriveHoleGeometry(input: {
        * extent check nor the confidence field caught it. Nothing in the model's self-report could.
        *
        * What DID catch it: looking closer. A tight tile re-centred on the claim returns
-       * found_green=false, because at 62px-per-green the house is obviously a house. So a NEGATIVE
+       * found_green=false, because at ~110px-per-green the house is obviously a house. So a NEGATIVE
        * verdict from the tight pass now discards the derivation outright.
        *
        * The distinction below is load-bearing: `tight === null` is a TRANSPORT failure (timeout,

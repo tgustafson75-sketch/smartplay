@@ -53,7 +53,10 @@ export function surveyedByName(name: string): string | null {
   const key = normName(name);
   if (key.length < 3) return null;
   const { COURSES } = require('../data/courses') as typeof import('../data/courses');
-  const exact = COURSES.filter((c) => normName(c.name) === key || normName(c.fullName) === key);
+  // fullName is "Club — Layout, City ST (note)": its part before the first comma is the club-and-layout
+  // name a database record spells out ("Hermitage Golf Course President's Reserve").
+  const clubAndLayout = (fn: string) => normName((fn ?? '').replace(/\(.*?\)/g, '').split(',')[0]);
+  const exact = COURSES.filter((c) => normName(c.name) === key || normName(c.fullName) === key || clubAndLayout(c.fullName) === key);
   if (exact.length === 1) return exact[0].id;
   if (exact.length > 1) return null;
   const close = COURSES.filter((c) => {
@@ -66,12 +69,21 @@ export function surveyedByName(name: string): string | null {
 }
 
 /**
- * Downloads written before 2026-09-23 stored a surveyed course under its BARE slug ('palms'). The
- * one id for a surveyed course is `local:<slug>`; every reader of stored ids goes through this.
+ * Ids saved before 2026-09-23 in two old forms: a surveyed course under its BARE slug ('palms'), and a
+ * marquee course under `local:<slug>` though it has no survey. The one id for a surveyed course is
+ * `local:<slug>`, for any other its database id; every reader of stored ids goes through this.
  */
 export function canonicalCourseId(id: string): string {
-  if (!id || id.includes(':')) return id;
-  const { COURSES } = require('../data/courses') as typeof import('../data/courses');
+  if (!id) return id;
+  const { COURSES, getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
+  if (id.startsWith('local:')) {
+    // A `local:` id with no survey behind it (the marquee rows before 2026-09-23 — rounds, home
+    // courses, downloads saved as `local:pebble-beach`) is its pinned database course.
+    if (getBundledHoles(id).length) return id;
+    const { pinnedApiIdForSlug } = require('./courseGeometryService') as typeof import('./courseGeometryService');
+    return pinnedApiIdForSlug(id.slice('local:'.length)) ?? id;
+  }
+  if (id.includes(':')) return id;
   return COURSES.some((c) => c.id === id) ? `local:${id}` : id;
 }
 
@@ -98,7 +110,9 @@ export function surveyedTwinOf(course: {
   // The LAYOUT decides at a multi-course club: "Hermitage — General's Retreat" must not be claimed
   // by the surveyed President's Reserve because the club name matches. The club name alone counts
   // only when the record names no separate layout.
-  const layoutIsClub = !layout || normName(layout) === normName(club) || normName(club).includes(normName(layout));
+  // A generic label ("Championship", "Main", "18 Holes") at a one-course club names no separate layout.
+  const genericLayout = /^(the )?(championship|main|regulation|full|18[ -]?holes?|golf course|course)( course)?$/i.test(layout);
+  const layoutIsClub = !layout || genericLayout || normName(layout) === normName(club) || normName(club).includes(normName(layout));
   const candidates = [`${club} ${layout}`.trim(), layout, ...(layoutIsClub ? [club] : [])].filter(Boolean);
   let slug: string | null = null;
   for (const n of candidates) { slug = surveyedByName(n); if (slug) break; }

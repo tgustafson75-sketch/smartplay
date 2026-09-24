@@ -72,6 +72,15 @@ describe('a SmartVision tile always comes with the frame it was drawn in', () =>
     expect(t?.fallback?.uri).toMatch(/^https:/);
   });
 
+  it('a cached tile that would crop the hole in THIS box (folded→unfolded, old scale) does not lead', async () => {
+    // Cached for a tall portrait box, then asked for a wide one: cover would crop the hole's length.
+    await fetchHoleImagery(HOLE, { width: 400, height: 900 });
+    await flush(); await flush();
+    const t = await fetchHoleImagery(HOLE, { width: 1200, height: 700 });
+    expect(t?.uri).toMatch(/^https:/);
+    expect(t?.fallback?.uri).toMatch(/^file:/);
+  });
+
   it('fractional screen sizes (Android dp) still make readable, whole-pixel tiles', () => {
     const f = frameForHole(HOLE, { width: 411.42857142857144, height: 700.5 })!;
     expect([f.width, f.height]).toEqual([411, 701]);

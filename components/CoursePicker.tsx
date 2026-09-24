@@ -53,7 +53,7 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
     custom: Object.values(customMap ?? {}).map((c) => ({ id: c.id, name: c.name })),
     recentIds: (recentIds ?? []).map(canonicalCourseId),
     recentMeta: recentMeta ?? {},
-    home: home ?? [],
+    home: (home ?? []).map((h) => ({ ...h, id: h.id ? canonicalCourseId(h.id) : h.id })),
     downloaded: Object.values(downloadedMap ?? {})
       .filter((d) => d && !d.aliasOf && !d.courseId.startsWith('place:'))
       .map((d) => ({ id: canonicalCourseId(d.courseId), name: d.name })),

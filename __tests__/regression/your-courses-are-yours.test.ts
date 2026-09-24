@@ -3,7 +3,7 @@
  * courses to every player. "Your courses" is now only what is his; a surveyed course joins on the
  * same terms as a database one, and is still found by search.
  */
-import { composeYourCourses, yourCoursePicks } from '../../services/yourCourses';
+import { composeYourCourses, yourCoursePicks, decideAutoPick } from '../../services/yourCourses';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -79,5 +79,34 @@ describe('Your courses are the player\'s courses', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../components/CoursePicker.tsx'), 'utf8');
     expect(src).not.toMatch(/id: 'local:/);
     expect(src).toMatch(/myCourses\.map\(/);
+  });
+
+  describe('the Play card picks for him only when it should', () => {
+    const A = { id: 'a' }, B = { id: 'b' }, R = { id: 'round' };
+    const base = { hasSelection: false, loading: false, error: false, lastPickWasAutomatic: true, lastAutoPickId: null as string | null, activeRoundCourse: null as { id: string } | null, defaultPick: A as { id: string } | null };
+    it('picks the default on an empty card', () => expect(decideAutoPick(base)).toBe(A));
+    it('never over a course on the card or a pick in flight', () => {
+      expect(decideAutoPick({ ...base, hasSelection: true })).toBeNull();
+      expect(decideAutoPick({ ...base, loading: true })).toBeNull();
+    });
+    it('never over the error of a pick HE made', () =>
+      expect(decideAutoPick({ ...base, error: true, lastPickWasAutomatic: false })).toBeNull());
+    it('an automatic pick that failed is not retried (no loop), but another course is fine', () => {
+      expect(decideAutoPick({ ...base, error: true, lastAutoPickId: 'a' })).toBeNull();
+      expect(decideAutoPick({ ...base, error: true, lastAutoPickId: 'a', defaultPick: B })).toBe(B);
+    });
+    it('the active round\'s course wins, even over an earlier automatic failure', () => {
+      expect(decideAutoPick({ ...base, activeRoundCourse: R })).toBe(R);
+      expect(decideAutoPick({ ...base, error: true, lastAutoPickId: 'a', activeRoundCourse: R })).toBe(R);
+    });
+  });
+
+  it('a course saved under an older id form still counts as the same course', () => {
+    const { canonicalCourseId } = jest.requireActual('../../services/courseCard');
+    expect(canonicalCourseId('local:pebble-beach')).toBe('3j4b4ar8');
+    expect(canonicalCourseId('local:palms')).toBe('local:palms');
+    expect(canonicalCourseId('palms')).toBe('local:palms');
+    const { homeCourseKey } = jest.requireActual('../../store/playerProfileStore');
+    expect(homeCourseKey({ id: 'local:pebble-beach', name: 'x' })).toBe(homeCourseKey({ id: '3j4b4ar8', name: 'y' }));
   });
 });

@@ -340,7 +340,9 @@ function evictStale(courseId: string | null, holeNumber: number, current: TileFr
     for (const n of listCache()) {
       if (!n.startsWith(prefix)) continue;
       const f = frameFromFileName(n);
-      if (f && !sameSpot(f, current)) {
+      // Other geometry, or this geometry at this size framed at another zoom (the old scale).
+      const sameSize = f && f.width === current.width && f.height === current.height;
+      if (f && (!sameSpot(f, current) || (sameSize && Math.abs(f.zoom - current.zoom) > 0.05))) {
         try { new File(Paths.cache, n).delete(); } catch { /* already gone */ }
       }
     }
@@ -393,7 +395,11 @@ export async function fetchHoleImagery(
   // frame, and the live URL waits behind it as the fallback: on a weak link the live image can take
   // a minute to fail, and a correct picture on disk beats a blank canvas. The exact-size file is
   // written below, so the next view is pixel-exact. A tile of OTHER geometry never leads.
-  const sameGeometry = tile.fallback && sameSpot(tile.fallback.frame, frame) ? tile.fallback : null;
+  // ...and only if, drawn (cover) into THIS box, it still shows the whole fitted hole: its displayed
+  // zoom may not be tighter than the exact frame's. A tile cached folded and shown unfolded, or one
+  // framed under the old 2x scale, fails this and waits behind the live one instead.
+  const showsWholeHole = (f: TileFrame) => displayFrame(f, frame.width, frame.height).zoom <= frame.zoom + 0.15;
+  const sameGeometry = tile.fallback && sameSpot(tile.fallback.frame, frame) && showsWholeHole(tile.fallback.frame) ? tile.fallback : null;
   const lead = sameGeometry ? { uri: sameGeometry.uri, frame: sameGeometry.frame, fallback: { uri: url, frame } } : tile;
   const name = tileFileName(input.courseId, input.holeNumber, frame);
   const cacheFile = new File(Paths.cache, name);

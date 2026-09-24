@@ -63,3 +63,29 @@ export function yourCoursePicks(src: {
   for (const d of src.downloaded ?? []) add(d.id, nameOf(d.id, d.name));
   return out.slice(0, src.limit ?? 6);
 }
+
+/**
+ * 2026-09-23 (triple-check) — which course the Play card should pick FOR the player, if any. Pure, so
+ * every case is tested rather than reasoned about:
+ *  - never over a course on the card or a pick in flight;
+ *  - the active round's course first, even over an earlier automatic failure;
+ *  - never over the error of a pick HE made (the error is the answer on screen);
+ *  - never the same course an automatic pick just failed on (no retry loop), anything else is fine.
+ */
+export function decideAutoPick<T extends CourseRow>(s: {
+  hasSelection: boolean;
+  loading: boolean;
+  error: boolean;
+  lastPickWasAutomatic: boolean;
+  lastAutoPickId: string | null;
+  activeRoundCourse: T | null;
+  defaultPick: T | null;
+}): T | null {
+  if (s.hasSelection || s.loading) return null;
+  const failedAutoId = s.error && s.lastPickWasAutomatic ? s.lastAutoPickId : null;
+  const ok = (c: T | null) => (c && c.id !== failedAutoId ? c : null);
+  const active = ok(s.activeRoundCourse);
+  if (active) return active;
+  if (s.error && !s.lastPickWasAutomatic) return null;
+  return ok(s.defaultPick);
+}

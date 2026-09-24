@@ -54,7 +54,7 @@ import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
 import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
-import { composeYourCourses } from '../../services/yourCourses';
+import { composeYourCourses, decideAutoPick } from '../../services/yourCourses';
 import { surveyedTwinOf, canonicalCourseId } from '../../services/courseCard';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
@@ -1080,12 +1080,13 @@ export default function PlayTab() {
     let cancelled = false;
     void (async () => {
       const out: CourseSummary[] = [];
-      for (const id of recentCourseIds.slice(0, 4)) {
+      for (const savedId of recentCourseIds.slice(0, 4)) {
+        // Ids saved in an older form (a bare slug, a marquee `local:` id) read as the course's one id.
+        const id = canonicalCourseId(savedId);
         // B3 — local: IDs return null from the external API. Resolve them
         // from the bundled SURVEYED_COURSES catalog instead; skip the network call.
-        const cid = canonicalCourseId(id);
-        if (cid.startsWith('local:')) {
-          const local = SURVEYED_COURSES.find(l => l.id === cid);
+        if (id.startsWith('local:')) {
+          const local = SURVEYED_COURSES.find(l => l.id === id);
           if (local && !out.some(o => o.id === local.id)) out.push(local);
           continue;
         }
@@ -1305,7 +1306,7 @@ export default function PlayTab() {
       downloaded: downloadedCourseSummaries(downloadedCourses, recentCourseMeta),
       ownedIds: [
         ...Object.values(downloadedCourses ?? {}).map(d => canonicalCourseId(d?.courseId ?? '')),
-        ...(homeCourses ?? []).map(h => h.id ?? ''),
+        ...(homeCourses ?? []).map(h => canonicalCourseId(h.id ?? '')),
       ],
     });
     if (!userPosition) return combined;
@@ -1423,18 +1424,17 @@ export default function PlayTab() {
   // Only seeds once per session: if the user has already picked a
   // course or a round is active, leave it alone.
   const hasOwnCourses = closestLocal.length > 0;
+  /** The selectSeqRef value of the last pick THIS effect made — any other value is the player's. */
+  const autoPickSeqRef = useRef<number>(-1);
+  const autoPickIdRef = useRef<string | null>(null);
   useEffect(() => {
-    // A pick still loading (a database, near-you or marquee course) is the player's choice in flight:
-    // defaulting now would supersede it and silently drop what he tapped.
-    // Nor after a pick that failed: its error is the answer on screen, not a cue to pick for him.
-    if (selected || selectedLoading || selectError) return;
-    const findById = (id: string | null | undefined): CourseSummary | null =>
-      (id ? closestLocal.find(l => l.id === id) ?? SURVEYED_COURSES.find(l => l.id === id) : null) ?? null;
-    if (isRoundActive && activeCourseId) {
-      // Round in progress — surface the active course as selected.
-      const match = findById(activeCourseId);
-      if (match) { void selectSummary(match); return; }
-    }
+    // Whether to pick at all is services/yourCourses.decideAutoPick (tested case by case) — never
+    // over a pick in flight or the error of a pick he made, never the same failed automatic pick twice.
+    const findById = (raw: string | null | undefined): CourseSummary | null => {
+      const id = raw ? canonicalCourseId(raw) : null;   // ids saved in an older form still resolve
+      return (id ? closestLocal.find(l => l.id === id) ?? SURVEYED_COURSES.find(l => l.id === id) : null) ?? null;
+    };
+    const activeMatch = isRoundActive && activeCourseId ? findById(activeCourseId) : null;
     /**
      * 2026-09-14 (Tim) — up to THREE home courses, and the first that resolves is the default.
      *
@@ -1477,7 +1477,20 @@ export default function PlayTab() {
      */
     // No invented default: a player with no course of his own sees an empty card and the search.
     const defaultPick = previewMatch ?? gpsNearest ?? homeMatch ?? closestLocal[0] ?? null;
-    if (defaultPick) void selectSummary(defaultPick);
+    const pick = decideAutoPick<CourseSummary>({
+      hasSelection: !!selected,
+      loading: selectedLoading,
+      error: !!selectError,
+      lastPickWasAutomatic: selectSeqRef.current === autoPickSeqRef.current,
+      lastAutoPickId: autoPickIdRef.current,
+      activeRoundCourse: activeMatch,
+      defaultPick,
+    });
+    if (pick) {
+      void selectSummary(pick);
+      autoPickSeqRef.current = selectSeqRef.current;   // selectSummary bumped it synchronously
+      autoPickIdRef.current = pick.id;
+    }
     // selectSummary is intentionally not in deps — it'd retrigger on every
     // closure refresh. We only want this once per mount + once GPS resolves.
     // hasOwnCourses: his list fills in after mount (recents resolve, stores rehydrate); an empty list
@@ -1528,7 +1541,7 @@ export default function PlayTab() {
 
   /** Is the course on screen one of his home set? Drives the star on the selected card. */
   const isSelectedHome = useMemo(
-    () => !!selected && (homeCourses ?? []).some((h) => (h.id && h.id === selected.id)
+    () => !!selected && (homeCourses ?? []).some((h) => (h.id && canonicalCourseId(h.id) === canonicalCourseId(selected.id))
       || (!h.id && (h.name ?? '').trim().toLowerCase() === (selected.club_name ?? '').trim().toLowerCase())),
     [homeCourses, selected],
   );
@@ -1545,7 +1558,7 @@ export default function PlayTab() {
    */
   const isHomeCourse = useCallback(
     (id: string | null | undefined, name: string | null | undefined) =>
-      (homeCourses ?? []).some((h) => (h.id && id && h.id === id)
+      (homeCourses ?? []).some((h) => (h.id && id && canonicalCourseId(h.id) === canonicalCourseId(id))
         || (!h.id && (h.name ?? '').trim().toLowerCase() === (name ?? '').trim().toLowerCase())),
     [homeCourses],
   );

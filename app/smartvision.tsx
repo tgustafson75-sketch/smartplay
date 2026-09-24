@@ -161,8 +161,8 @@ function autoZoom(yardage: number, par: number): number {
   return 16;
 }
 
-// Mapbox Web Mercator: meters per pixel at the equator at zoom z is
-// 156543.03 / 2^z. Adjusted for latitude by multiplying by cos(lat).
+// Mapbox Static Images: meters per pixel at the equator at zoom z is 78271.5 / 2^z (512-px tiles,
+// measured 2026-09-23), times cos(lat). One owner: services/mapboxImagery.mapboxMetersPerPixel.
 function metersPerPixel(lat: number, zoom: number): number {
   return mapboxMetersPerPixel(lat, zoom);   // 2026-09-23 — the one measured scale (services/mapboxImagery)
 }

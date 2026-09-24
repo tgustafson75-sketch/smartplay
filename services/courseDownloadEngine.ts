@@ -248,7 +248,7 @@ export function isApiCourseId(id: string): boolean {
  *   2. a surveyed course by name
  *   3. a database search by name
  */
-async function resolveCourse(name: string, explicitCourseId?: string | null): Promise<{ courseId: string; courseName: string; holes: CourseHole[]; rating?: string | number | null; slope?: string | number | null } | 'unavailable' | null> {
+async function resolveCourse(name: string, explicitCourseId?: string | null): Promise<{ courseId: string; courseName: string; holes: CourseHole[]; rating?: string | number | null; slope?: string | number | null; byName?: boolean } | 'unavailable' | null> {
   const { loadCourseCard, readDatabaseCard } = require('./courseCard') as typeof import('./courseCard');
   const fromCard = (c: import('./courseCard').CourseCard) =>
     ({ courseId: c.courseId, courseName: c.name, holes: c.holes, rating: c.rating, slope: c.slope });
@@ -277,7 +277,7 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
   const slug = surveyedByName(name);
   if (slug) {
     const card = await loadCourseCard(`local:${slug}`).catch(() => null);
-    if (card?.holes.length) return fromCard(card);
+    if (card?.holes.length) return { ...fromCard(card), byName: true };
   }
 
   try {
@@ -292,7 +292,7 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
       // A record that came back with no holes is "nothing to play", not an outage.
       if (emptyRecord) return null;
       if (!card) return 'unavailable';
-      if (card.holes.length) return fromCard(card);
+      if (card.holes.length) return { ...fromCard(card), byName: true };
     }
   } catch { return 'unavailable'; }
   return null;
@@ -452,8 +452,12 @@ async function downloadCourseInner(input: {
   // 2026-09-23 — also a database id that resolved to a surveyed course (a twin, or a marquee slug's
   // record): recorded as an alias, or the same ask re-resolves over the network every session.
   const aliasId = input.courseId && (input.courseId.startsWith('place:') || isApiCourseId(input.courseId)) ? input.courseId : null;
-  const rememberAlias = (resolvedId: string, name: string, holeCount: number, greens?: number) => {
+  const rememberAlias = (resolvedId: string, name: string, holeCount: number, greens?: number, byName?: boolean) => {
     if (!aliasId || aliasId === resolvedId) return;
+    // A database id is aliased only when ITS OWN record led to the course (a surveyed twin). One
+    // resolved by the name fallback (its record did not come back) is a guess: aliasing it would
+    // make "already downloaded" permanent for a course that was never built. (triple-check)
+    if (byName && !aliasId.startsWith('place:')) return;
     try {
       useDownloadedCoursesStore.getState().markDownloaded({
         courseId: aliasId, name, holeCount, at: Date.now(), greens, aliasOf: resolvedId,
@@ -484,11 +488,11 @@ async function downloadCourseInner(input: {
   const resolved = await resolveCourse(input.name, input.courseId ?? null);
   if (resolved === 'unavailable') { fail(downloadFailureText(input.name, 'unavailable')); return { ok: false, reason: 'unavailable' }; }
   if (!resolved) { fail(downloadFailureText(input.name, 'unresolved')); return { ok: false, reason: 'unresolved' }; }
-  const { courseId, courseName, holes, rating, slope } = resolved;
+  const { courseId, courseName, holes, rating, slope, byName } = resolved;
   if (store.isDownloaded(courseId) && !needsGeometry(courseId)) {
     // Already ours under its real id — record the alias so the next launch skips before the search.
     rememberAlias(courseId, courseName, holes.length,
-      useDownloadedCoursesStore.getState().downloaded[courseId]?.greens);
+      useDownloadedCoursesStore.getState().downloaded[courseId]?.greens, byName);
     finish();
     if (input.paidContent !== false) topUpInBackground(input);
     return { ok: true, courseId, fresh: false };
@@ -527,7 +531,7 @@ async function downloadCourseInner(input: {
       console.warn(`[courseDownload] ${courseName} downloaded with ZERO greens — yardages will be estimates until geometry builds`);
     }
     store.markDownloaded({ courseId, name: courseName, holeCount: holes.length, at: Date.now(), greens });
-    rememberAlias(courseId, courseName, holes.length, greens);
+    rememberAlias(courseId, courseName, holes.length, greens, byName);
     finish(courseId);
     return { ok: true, courseId, fresh: true };
   } catch (e) {

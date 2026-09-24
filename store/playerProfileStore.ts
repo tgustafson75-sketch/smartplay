@@ -76,7 +76,18 @@ export interface HomeCourse { id: string; name: string }
 
 /** Identity for de-duplication: the id when we have one, otherwise the name folded for case. */
 export function homeCourseKey(c: HomeCourse): string {
-  return (c.id || '').trim() || (c.name || '').trim().toLowerCase();
+  const id = canonicalId((c.id || '').trim());
+  return id || (c.name || '').trim().toLowerCase();
+}
+
+/** 2026-09-23 — an id saved in an older form (bare slug, marquee `local:`) is the same course as its
+ *  one id now, so it cannot be starred twice or fail to un-star. Lazy: the store must not pull the
+ *  course data in at import. */
+function canonicalId(id: string): string {
+  if (!id) return id;
+  try {
+    return (require('../services/courseCard') as typeof import('../services/courseCard')).canonicalCourseId(id);
+  } catch { return id; }
 }
 
 /** Drop blanks, de-duplicate, and cap at MAX_HOME_COURSES. Enforced in the STORE so a future
@@ -86,7 +97,7 @@ export function normalizeHomeCourses(courses: HomeCourse[] | null | undefined): 
   const out: HomeCourse[] = [];
   for (const c of courses ?? []) {
     const name = (c?.name ?? '').trim();
-    const id = (c?.id ?? '').trim();
+    const id = canonicalId((c?.id ?? '').trim());
     if (!name && !id) continue;
     const key = homeCourseKey({ id, name });
     if (seen.has(key)) continue;
