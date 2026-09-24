@@ -42,6 +42,68 @@ function centreOf(holes: CourseHole[]): { lat: number; lng: number } | null {
   return { lat: pts.reduce((a, p) => a + p.lat, 0) / pts.length, lng: pts.reduce((a, p) => a + p.lng, 0) / pts.length };
 }
 
+const normName = (s: string) =>
+  (s ?? '').toLowerCase().replace(/\b(golf|course|club|country|the|and|&|cc|gc|g\.c\.)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
+
+/**
+ * The surveyed course a NAME means: an exact normalised match, or a close one of similar length (a
+ * short surveyed name like "Lakes" must not claim "Twin Lakes"). ONE answer — two candidates is null.
+ */
+export function surveyedByName(name: string): string | null {
+  const key = normName(name);
+  if (key.length < 3) return null;
+  const { COURSES } = require('../data/courses') as typeof import('../data/courses');
+  const exact = COURSES.filter((c) => normName(c.name) === key || normName(c.fullName) === key);
+  if (exact.length === 1) return exact[0].id;
+  if (exact.length > 1) return null;
+  const close = COURSES.filter((c) => {
+    const cn = normName(c.name);
+    if (!(key.length >= 5 && cn.length >= 5)) return false;
+    if (!(cn.includes(key) || key.includes(cn))) return false;
+    return Math.min(cn.length, key.length) / Math.max(cn.length, key.length) >= 0.7;
+  });
+  return close.length === 1 ? close[0].id : null;
+}
+
+/** Further apart than this, a name match is a namesake, not the same course. */
+const TWIN_MAX_KM = 8;
+
+/**
+ * 2026-09-23 — VERIFIED CORRECTIONS. A database course that IS one of the surveyed courses: its name
+ * means exactly one surveyed course AND, when both are placed, they are within TWIN_MAX_KM. Returns
+ * the `local:` id whose surveyed card (real tee/green coordinates, checked tees) should be used.
+ *
+ * Replaces round start's own by-name override, which fuzzy-matched a name with no location check and
+ * ran only at round start — so the Play card, SmartVision and the download engine all used the
+ * database record while the round used the survey.
+ */
+export function surveyedTwinOf(course: {
+  club_name?: string | null; course_name?: string | null;
+  location?: { latitude?: number | null; longitude?: number | null } | null;
+}): string | null {
+  const candidates = [course.club_name, `${course.club_name ?? ''} ${course.course_name ?? ''}`, course.course_name]
+    .map((n) => (n ?? '').trim()).filter(Boolean);
+  let slug: string | null = null;
+  for (const n of candidates) { slug = surveyedByName(n); if (slug) break; }
+  if (!slug) return null;
+  const { getBundledHoles, getBundledCourseCentroid } = require('../data/courses') as typeof import('../data/courses');
+  if (!getBundledHoles(`local:${slug}`).some((h) => isValidGolfCoord(h.middleLat, h.middleLng))) return null;
+  const lat = course.location?.latitude, lng = course.location?.longitude;
+  const here = getBundledCourseCentroid(slug);
+  if (isValidGolfCoord(lat, lng) && here) {
+    const km = haversineKm(lat as number, lng as number, here.lat, here.lng);
+    if (km > TWIN_MAX_KM) return null;
+  }
+  return `local:${slug}`;
+}
+
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const r = (d: number) => (d * Math.PI) / 180;
+  const dLat = r(bLat - aLat), dLng = r(bLng - aLng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(aLat)) * Math.cos(r(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+
 /**
  * The course card. `network: false` answers only from what is on this device (bundled data, the
  * custom store, the database card cache) — for callers that must not add a request.
@@ -87,6 +149,11 @@ async function loadDatabaseCard(apiId: string, network: boolean): Promise<Course
   const api = require('./golfCourseApi') as typeof import('./golfCourseApi');
   const course = network ? await api.getCourse(apiId) : await api.peekCachedCourse(apiId);
   if (!course || !course.tees?.length) return null;
+  const twin = surveyedTwinOf(course);
+  if (twin) {
+    const surveyed = await loadCourseCard(twin, { network: false });
+    if (surveyed?.holes.length) return surveyed;
+  }
   const holes = api.courseToHoles(course);
   if (!holes.length) return null;
   const { playerTee } = require('./teeSelection') as typeof import('./teeSelection');

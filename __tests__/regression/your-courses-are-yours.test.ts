@@ -45,4 +45,11 @@ describe('Your courses are the player\'s courses', () => {
     const sel = play.slice(play.indexOf('const selectSummary = useCallback'), play.indexOf('const onTapInfo'));
     expect(sel).toMatch(/startsWith\('local:'\)\) \{\s*const apiId = await resolveLocalCourseId\(/);
   });
+
+  it('a searched course that IS a surveyed course opens as that surveyed card on the Play tab too', () => {
+    const play = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/play.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const sel = play.slice(play.indexOf('const selectSummary = useCallback'), play.indexOf('const onTapInfo'));
+    expect(sel).toMatch(/const twin = c \? surveyedTwinOf\(c\) : null;[\s\S]*?if \(twinRow\) \{\s*openSurveyed\(twinRow\);\s*return;/);
+  });
 });

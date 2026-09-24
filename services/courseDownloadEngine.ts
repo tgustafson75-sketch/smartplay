@@ -232,8 +232,6 @@ function logLocate(stage: string, details: Record<string, unknown>): void {
   } catch { /* best-effort */ }
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/\b(golf|course|club|country|the|and|&|cc|gc|g\.c\.)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
-
 /** Resolve a course NAME to real course data (id + holes): bundled catalog first (instant, offline), then
  *  golfcourseapi. Returns null when neither can resolve it. */
 /** A golfcourseapi id, as opposed to one of the app's own namespaced ids. */
@@ -265,23 +263,12 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
     // are exactly what ran before, so nothing that used to resolve stops resolving.
   }
 
-  // A surveyed course by name (exact normalised match, or a close one of similar length — a short
-  // surveyed name like "Lakes" must not claim "Twin Lakes").
-  const key = norm(name);
-  if (key.length >= 3) {
-    const b = COURSES.find((c) => {
-      const cn = norm(c.name), cf = norm(c.fullName);
-      if (!cn && !cf) return false;
-      if (cn === key || cf === key) return true;
-      if (!(key.length >= 5 && cn.length >= 5)) return false;
-      if (!(cn.includes(key) || key.includes(cn))) return false;
-      const ratio = Math.min(cn.length, key.length) / Math.max(cn.length, key.length);
-      return ratio >= 0.7;
-    });
-    if (b) {
-      const card = await loadCourseCard(`local:${b.id}`).catch(() => null);
-      if (card?.holes.length) return fromCard(card);
-    }
+  // A surveyed course by name — services/courseCard owns the matcher.
+  const { surveyedByName } = require('./courseCard') as typeof import('./courseCard');
+  const slug = surveyedByName(name);
+  if (slug) {
+    const card = await loadCourseCard(`local:${slug}`).catch(() => null);
+    if (card?.holes.length) return fromCard(card);
   }
 
   try {

@@ -1416,30 +1416,14 @@ check('Glasses connect errors show a human message (not a raw DAT_ code), raw co
 // ROOT: bundled holes (real coords) were only used when courseId === 'local:<slug>'. Any other entry
 // (search / GPS-nearby / download) to the same course got scorecard-only holes with no coords. LOCK the
 // name-based override so a bundled course's real geometry is used no matter how the round was started.
+// 2026-09-23 (Tim — "Unify the pipeline") — the by-name override moved out of round start into the
+// course card (services/courseCard surveyedTwinOf), so Play, SmartVision and the download engine get
+// the survey too. Its behaviour is pinned in __tests__/regression/a-database-course-that-is-surveyed;
+// here: round start runs on the CARD's id, and the old private override is gone.
 check('Round start uses bundled hole GEOMETRY by name, not just for local: ids',
   (() => {
-    const c = read('app/(tabs)/caddie.tsx');
-    return (
-      /const bundledMatch = getCourse\(courseName\)/.test(c) &&
-      /bundledHasCoords/.test(c) && /loadedHasCoords/.test(c) &&
-      /**
-       * 2026-09-10 — the override must take the VALIDATED bundle, not the raw array.
-       *
-       * getCourse() returns c.holes raw; getBundledHoles() runs validateBundledTees, which zeroes
-       * any bundled tee whose measured tee→green distance disagrees with the scorecard by >35%.
-       * Measured against the bundle that day: echo-hills 7 of 8 tees rejected, greenhill 14 of 16,
-       * westlake-cc-nj 14 of 14. Taking the raw array here put every one of those back into
-       * roundStore.courseHoles, where resolveTeeCoords reads them FIRST and reports them as real.
-       *
-       * The 2026-08-07 intent this guard exists for is unchanged — a bundled course still loads its
-       * real geometry by name, whatever the entry path. It just may not load a tee that failed its
-       * own scorecard test. Asserting the validated accessor AND the absence of the raw read.
-       */
-      /holes = bundledMatchHoles/.test(c) &&
-      /getBundledHoles\(`local:\$\{bundledMatch\.id\}`\)/.test(c) &&
-      !/holes = bundledMatch\.holes/.test(c) &&
-      /courseId = `local:\$\{bundledMatch\.id\}`/.test(c)
-    );
+    const c = readCode('app/(tabs)/caddie.tsx');
+    return /courseId = card\.courseId;/.test(c) && !/bundledMatch/.test(c);
   })(),
   'a bundled course (e.g. Berlin) loads its real tee/green coords for yardage+wind no matter the entry path — from the VALIDATED bundle, so a tee that failed its own scorecard test is not re-introduced');
 
@@ -11853,7 +11837,7 @@ check('LOCK: a selected course can always draw itself — centroid captured at s
       /coords !== undefined \|\| id == null/.test(rs);
     // both selection paths supply it — API courses from the record, bundled from the summary
     const passed = /useRoundStore\.getState\(\)\.setPreviewCourse\(c\.id, cCoords\);/.test(play) &&
-      /setPreviewCourse\(\s*s\.id,/.test(play);
+      /setPreviewCourse\(\s*row\.id,/.test(play);
     // the preview draws the centroid when hole geometry isn't there yet
     const draws = /if \(!previewCourseCoords\) return null;/.test(prev) &&
       /getCenteredImageryUrl\(\{/.test(prev);

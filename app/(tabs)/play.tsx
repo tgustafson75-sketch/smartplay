@@ -55,6 +55,7 @@ import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '.
 import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { composeYourCourses } from '../../services/yourCourses';
+import { surveyedTwinOf } from '../../services/courseCard';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, resolveLocalCourseId } from '../../services/courseGeometryService';
@@ -1696,22 +1697,23 @@ export default function PlayTab() {
   }, [query]);
 
   const selectSummary = useCallback(async (s: CourseSummary) => {
-    // M2 — auto-toggle 9-Hole chip when the selected course has exactly
-    // 9 bundled holes (e.g. Echo Hills, Mariners Point). getBundledHoles
-    // returns [] for non-local or unknown ids, so this is a no-op for
-    // 18-hole and API-only courses.
-    const bundledHoles = getBundledHoles(s.id);
-    if (bundledHoles.length === 9) {
-      setSetupNineHole(true);
-    } else if (bundledHoles.length > 0) {
-      // DP-4 — reset the chip for a known non-9-hole course so it can't
-      // stick ON after switching from a 9-hole pick. len===0 (unknown /
-      // API-only / loading) is left untouched so a manual override survives.
-      setSetupNineHole(false);
-    }
     const mySeq = ++selectSeqRef.current;
     const isCurrent = () => mySeq === selectSeqRef.current;
-    if (s.isLocal) {
+    /** A course with a surveyed card: that card, built by the one pipeline. */
+    const openSurveyed = (row: CourseSummary) => {
+      // M2 — auto-toggle 9-Hole chip when the selected course has exactly
+      // 9 bundled holes (e.g. Echo Hills, Mariners Point). getBundledHoles
+      // returns [] for non-local or unknown ids, so this is a no-op for
+      // 18-hole and API-only courses.
+      const bundledHoles = getBundledHoles(row.id);
+      if (bundledHoles.length === 9) {
+        setSetupNineHole(true);
+      } else if (bundledHoles.length > 0) {
+        // DP-4 — reset the chip for a known non-9-hole course so it can't
+        // stick ON after switching from a 9-hole pick. len===0 (unknown /
+        // API-only / loading) is left untouched so a manual override survives.
+        setSetupNineHole(false);
+      }
       setSelectedLoading(false);
       setSelectError(null);
       // 2026-07-25 (deep audit — S1 fabrication) — was hardcoded `par_total: 72, holes: [], 6527y`
@@ -1730,14 +1732,14 @@ export default function PlayTab() {
       const realPar = teeHoles.reduce((a, h) => a + (h.par || 0), 0);
       const realYards = teeHoles.reduce((a, h) => a + (h.yardage || 0), 0);
       setSelected({
-        id: s.id,
-        club_name: s.club_name,
-        course_name: s.club_name,
-        location: { city: s.location.split(',')[0]?.trim() ?? '', state: s.location.split(',')[1]?.trim() ?? '', country: 'US' },
+        id: row.id,
+        club_name: row.club_name,
+        course_name: row.club_name,
+        location: { city: row.location.split(',')[0]?.trim() ?? '', state: row.location.split(',')[1]?.trim() ?? '', country: 'US' },
         tees: [{
           tee_name: 'default',
           total_yards: realYards > 0 ? realYards : 6527,
-          course_rating: s.rating, slope_rating: s.slope,
+          course_rating: row.rating, slope_rating: row.slope,
           par_total: realPar > 0 ? realPar : 72,
           holes: teeHoles,
         }],
@@ -1751,18 +1753,21 @@ export default function PlayTab() {
       // the Caddie tab sees it. previewCourseId is a render-only hint.
       // Bundled courses carry a centroid on the summary — pass it for the same reason.
       useRoundStore.getState().setPreviewCourse(
-        s.id,
-        s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null,
+        row.id,
+        row.lat != null && row.lng != null ? { lat: row.lat, lng: row.lng } : null,
       );
       // 2026-09-23 (Tim — "Unify the pipeline") — the SAME build every other course gets: map, hole
       // imagery, notes, with live progress on this card. This used to run its own imagery-only warm,
       // so a surveyed course never got the engine's map, cooldowns or progress, and never became his.
       void import('../../services/courseDownloadEngine')
         .then((eng) => eng.downloadCourse({
-          name: s.club_name, courseId: s.id, displayId: s.id,
-          lat: s.lat ?? null, lng: s.lng ?? null,
+          name: row.club_name, courseId: row.id, displayId: row.id,
+          lat: row.lat ?? null, lng: row.lng ?? null,
         }))
         .catch(() => undefined);
+    };
+    if (s.isLocal) {
+      openSurveyed(s);
       return;
     }
     setSelectedLoading(true);
@@ -1796,6 +1801,14 @@ export default function PlayTab() {
       }
       const c = await getCourse(resolveId);
       if (!isCurrent()) return;
+      // Verified corrections (services/courseCard): a database course that IS a surveyed course opens
+      // as that surveyed card, so this card, SmartVision and the round all use the same map.
+      const twin = c ? surveyedTwinOf(c) : null;
+      const twinRow = twin ? SURVEYED_COURSES.find(l => l.id === twin && l.isLocal) : undefined;
+      if (twinRow) {
+        openSurveyed(twinRow);
+        return;
+      }
       if (c) {
         setSelected(c);
         // 2026-09-23 (triple-check) — the card now shows the RIGHT course, so the lock on Start Round

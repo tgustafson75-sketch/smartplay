@@ -40,7 +40,7 @@ import { getCaddieName } from '../../lib/persona';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { usePointsStore } from '../../store/pointsStore';
-import { getCourseList, getCourse, getCourseHoleCount, getBundledHoles } from '../../data/courses';
+import { getCourseList, getCourse, getCourseHoleCount } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
@@ -2937,6 +2937,9 @@ export default function CaddieTab() {
       const card = await loadCourseCard(picked.id, { name: picked.name });
       if (card) {
         holes = card.holes;
+        // The card's id: a database course that IS a surveyed course comes back as its surveyed card
+        // (services/courseCard surveyedTwinOf), and the round must run on that id's map.
+        courseId = card.courseId;
         courseName = card.name;
         if (card.location) courseLocation = card.location;
       }
@@ -2955,49 +2958,9 @@ export default function CaddieTab() {
     // 2026-07-27 — the geometry fetch (+ its player-facing "map ready / couldn't map" heads-up) is
     // handled in ONE place AFTER startRound (see below), so a non-listed API course reports honestly
     // instead of loading GPS silently. Here we just note the honest empty start.
-    // 2026-08-07 (Tim — Berlin CC had bundled geometry but the round loaded NONE of it: no yardage, no
-    // wind, no tee brief). ROOT CAUSE: bundled holes (real tee/green coords) were ONLY used when the
-    // courseId was exactly `local:<slug>`. Starting the SAME physical course via search / GPS-nearby /
-    // download produced a golfcourseapi record (scorecard yardages, NO coords) and my bundle was never
-    // consulted. Fix: resolve a bundled course by NAME no matter how the round was entered — if we have
-    // it bundled WITH coordinates and the loaded holes lack coordinates, use the bundle and route
-    // courseId through local: so geometry / hole-detection / SmartVision / yardage all use the real map.
-    {
-      // 2026-08-08 (2-week audit O7) — getCourse() requires the BUNDLED name to CONTAIN the searched
-      // name, so a longer API name silently no-op'd the override ("Mines Golf Club" vs bundled "Mines").
-      // Normalized bidirectional match: strip punctuation + generic suffixes, then either-contains.
-      const normName = (s: string) => s.toLowerCase()
-        .replace(/\b(golf|country|club|course|links|g\.?c\.?|c\.?c\.?)\b/g, '')
-        .replace(/[^a-z0-9]/g, '').trim();
-      const bundledMatch = getCourse(courseName) ?? (() => {
-        const q = normName(courseName);
-        if (q.length < 4) return null; // too short to trust a fuzzy hit
-        const { COURSES } = require('../../data/courses') as typeof import('../../data/courses');
-        return COURSES.find(c => {
-          const b = normName(c.name) || normName(c.fullName);
-          return b.length >= 4 && (b === q || b.includes(q) || q.includes(b));
-        }) ?? null;
-      })();
-      /**
-       * 2026-09-10 — the by-name override takes the VALIDATED bundle too. It previously read
-       * `bundledMatch.holes` raw, so a course rescued by name re-introduced exactly the tees the
-       * primary path above now rejects.
-       */
-      const bundledMatchHoles = bundledMatch ? getBundledHoles(`local:${bundledMatch.id}`) : [];
-      const bundledHasCoords = bundledMatchHoles.some(h => h.middleLat !== 0 && h.middleLng !== 0);
-      const loadedHasCoords = holes.some(h => h.middleLat !== 0 && h.middleLng !== 0);
-      if (bundledMatch && bundledHasCoords && !loadedHasCoords) {
-        holes = bundledMatchHoles;
-        courseId = `local:${bundledMatch.id}`;
-        courseName = bundledMatch.name;
-        // Anchor the course location to hole 1 so offCourseDetector / geometry prewarm use the real spot.
-        const h1 = bundledMatchHoles.find(h => h.hole === 1) ?? bundledMatchHoles[0];
-        if (h1 && h1.middleLat !== 0 && h1.middleLng !== 0) {
-          courseLocation = { lat: h1.teeLat || h1.middleLat, lng: h1.teeLng || h1.middleLng };
-        }
-        console.log('[startRound] bundled-by-name override →', bundledMatch.id, holes.length, 'holes w/ coords (entry path had none)');
-      }
-    }
+    // 2026-08-07 (Tim — Berlin CC had bundled geometry but the round loaded none of it) — the
+    // by-name rescue that lived here is now the course card's verified-corrections rule
+    // (services/courseCard surveyedTwinOf), so every surface gets it, not only round start.
 
     // 2026-08-08 (Tim — "you have to allow a 9-hole course to be played twice"). At a 9-hole course the
     // 18-HOLE format now MEANS twice around (exactly the 18Birdies semantic; zero new UI): holes 10-18
