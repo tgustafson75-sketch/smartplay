@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../contexts/ThemeContext';
+import { darkTheme } from '../../theme/tokens';
 import { safeBack } from '../../services/safeBack';
 import { analyzeSwingFromVideo, type SwingBiomechanics } from '../../services/poseAnalysisApi';
 import { resolveSwingerHandedness } from '../../services/swingerHandedness';
@@ -629,6 +630,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
      * '#0d1a0d' — near-black on black. Same shape as the caddie bottom bar found the same day: a
      * hardcoded dark surface with theme-aware contents, which only ever looked right because the app
      * is used in dark mode.
+     *
+     * 2026-09-24 (Tim, light mode: cards washed out) — the 09-06 pass pinned the TEXT but left the
+     * planRow/focusRow cards on themed colors.surface/border, which are '#ffffff' in light mode: white
+     * labels on white cards. The cards sit on the same black, so they read the dark palette too.
      */
     screen: { flex: 1, backgroundColor: '#000' },
     scrimTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, backgroundColor: 'rgba(0,0,0,0.45)' },
@@ -663,9 +668,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     heroCta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
     heroCtaText: { color: '#0d1a0d', fontSize: 15, fontWeight: '800' },
     sectionLabel: { color: ON_BLACK_MUTED, fontSize: 11, fontWeight: '900', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
-    planRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.accent, padding: 16, marginTop: 12 },
+    planRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: darkTheme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.accent, padding: 16, marginTop: 12 },
     planBlurb: { color: ON_BLACK_MUTED, fontSize: 13, marginTop: 3 },
-    focusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 16, marginTop: 12 },
+    focusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: darkTheme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: darkTheme.colors.border, padding: 16, marginTop: 12 },
     focusLabel: { color: ON_BLACK_TEXT, fontSize: 16, fontWeight: '700' },
   });
 }
