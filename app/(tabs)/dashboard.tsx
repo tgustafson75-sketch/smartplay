@@ -993,9 +993,9 @@ export default function Dashboard() {
           * shape of the lesson entirely, so it has its own store (coachLessonStore.sessions) and its
           * own card here, on the screen the player actually sees.
           *
-          * Gated on isShelved: Coach Caddie is in SHELVED_ROUTES today, so for a player this card
-          * does not exist. If the 1.0 decision goes the other way, deleting that one line in
-          * releaseSurface.ts is the whole change — the card, the store and the route come with it.
+          * Gated on isShelved: Coach Caddie left SHELVED_ROUTES for BETA_ROUTES on 2026-09-20, so the
+          * card shows for every player once a lesson exists. Re-shelving it is one line in
+          * releaseSurface.ts — the card, the store and the route go with it.
           */}
         {!isShelved('/swinglab/coach-lesson') && lastLessonSession ? (
           <TouchableOpacity
