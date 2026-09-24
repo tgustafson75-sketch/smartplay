@@ -820,6 +820,27 @@ export async function sweepGeometryCache(): Promise<number> {
   return removed;
 }
 
+/** A golfcourseapi id — not one of the app's namespaced ids (local:, custom:, place:, near:). */
+function isApiCourseId(id: string): boolean {
+  return !!id && !/^(local|custom|place|near|ai):/.test(id) && !id.startsWith('__');
+}
+
+/** Per-hole LONGEST yardage across every tee set on the card — the back tees OSM routes start from. */
+export function backTeeYards(course: { tees?: { holes?: { yardage?: number | null }[] }[] } | null | undefined): number[] {
+  const tees = course?.tees ?? [];
+  const n = Math.min(18, Math.max(0, ...tees.map((t) => t.holes?.length ?? 0)));
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    let best = 0;
+    for (const t of tees) {
+      const y = t.holes?.[i]?.yardage;
+      if (typeof y === 'number' && Number.isFinite(y) && y > best && y <= 900) best = Math.round(y);
+    }
+    out.push(best);
+  }
+  return out;
+}
+
 /**
  * Hard reset for one course (or all of them). The "refresh back to no bad content" escape hatch:
  * the next read rebuilds from the server. Never throws.
@@ -1192,6 +1213,24 @@ async function fetchCourseGeometryInner(
       }
     }
   } catch { /* no bundled card — the engine falls back to geometry-only selection */ }
+  /**
+   * 2026-09-23 — a DATABASE course sends its card too. Only bundled courses did, so for every
+   * golfcourseapi course the engine chose hole-ways by geometry alone and its scorecard veto never ran:
+   * TPC Sawgrass Dye's Valley was built from the Stadium course's OSM routes, 75% off its own card.
+   * Measured live the same day: sent its card, Dye's Valley built ITS holes, 11.6% off.
+   * The BACK-tee yardage per hole, because OSM hole routes are drawn from the back tee; a forward card
+   * would make a correct course look wrong against a 25% bar.
+   */
+  if (!params.has('cardYards') && isApiCourseId(courseId)) {
+    try {
+      // From this device's cache only: the pick that led here fetched and cached the card. A build
+      // must not add a request — or a paid detail call — in front of itself to get one.
+      const { peekCachedCourse } = await import('./golfCourseApi');
+      const course = await peekCachedCourse(courseId);
+      const back = backTeeYards(course);
+      if (back.filter((y) => y > 50).length >= 3) params.set('cardYards', back.join(','));
+    } catch { /* no card available — geometry-only selection, as before */ }
+  }
   if (upstreamId === '__osm_only__') {
     params.set('osmOnly', '1');
     // Course Cloud read-first: OSM-only means the proxy is WEAK for this course (no golfcourseapi

@@ -49,6 +49,14 @@ function isCacheStale(cached_at: number): boolean {
   return Date.now() - cached_at > CACHE_TTL_MS;
 }
 
+/**
+ * The course card from THIS device's cache only — never the network. For callers that want a card if
+ * one is already here and must not add a request (or spend quota) to get one.
+ */
+export async function peekCachedCourse(course_id: string): Promise<Course | null> {
+  return readCachedCourse(course_id);
+}
+
 export async function clearCourseCache(): Promise<void> {
   try {
     const info = await FileSystem.getInfoAsync(CACHE_DIR);
