@@ -26,6 +26,12 @@ export interface DownloadedCourse {
    * the player owns. [[a-field-that-is-sometimes-a-placeholder]]
    */
   greens?: number;
+  /**
+   * 2026-09-23 — set on an ALIAS row: an id the player asked for (a `place:` near-you id, or a
+   * database id that is a surveyed course) recorded so the next ask is answered from the store. The
+   * course itself is the row under `aliasOf`; an alias row is never listed.
+   */
+  aliasOf?: string;
 }
 
 /**

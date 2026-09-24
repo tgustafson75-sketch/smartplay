@@ -2980,7 +2980,6 @@
     "text": {
       "no_courses_found_try_a": "No courses found. Try a different name or city.",
       "recent_local": "YOUR COURSES",
-      "local_data": "Local data",
       "skip_manual_round_no_course": "Skip — manual round (no course data)",
       "course_search_api_key_is": "Course-search API key is not configured on the server. Use a course from the local list below for now.",
       "check_your_network_or_pick": "Check your network — or pick a course from the local list below."

@@ -65,6 +65,16 @@ export function surveyedByName(name: string): string | null {
   return close.length === 1 ? close[0].id : null;
 }
 
+/**
+ * Downloads written before 2026-09-23 stored a surveyed course under its BARE slug ('palms'). The
+ * one id for a surveyed course is `local:<slug>`; every reader of stored ids goes through this.
+ */
+export function canonicalCourseId(id: string): string {
+  if (!id || id.includes(':')) return id;
+  const { COURSES } = require('../data/courses') as typeof import('../data/courses');
+  return COURSES.some((c) => c.id === id) ? `local:${id}` : id;
+}
+
 /** Further apart than this, a name match is a namesake, not the same course. */
 const TWIN_MAX_KM = 8;
 
@@ -81,19 +91,22 @@ export function surveyedTwinOf(course: {
   club_name?: string | null; course_name?: string | null;
   location?: { latitude?: number | null; longitude?: number | null } | null;
 }): string | null {
-  const candidates = [course.club_name, `${course.club_name ?? ''} ${course.course_name ?? ''}`, course.course_name]
-    .map((n) => (n ?? '').trim()).filter(Boolean);
+  // Placed or nothing: a name alone is a namesake until the two are shown to be in the same place.
+  const lat = course.location?.latitude, lng = course.location?.longitude;
+  if (!isValidGolfCoord(lat, lng)) return null;
+  const club = (course.club_name ?? '').trim(), layout = (course.course_name ?? '').trim();
+  // The LAYOUT decides at a multi-course club: "Hermitage — General's Retreat" must not be claimed
+  // by the surveyed President's Reserve because the club name matches. The club name alone counts
+  // only when the record names no separate layout.
+  const layoutIsClub = !layout || normName(layout) === normName(club) || normName(club).includes(normName(layout));
+  const candidates = [`${club} ${layout}`.trim(), layout, ...(layoutIsClub ? [club] : [])].filter(Boolean);
   let slug: string | null = null;
   for (const n of candidates) { slug = surveyedByName(n); if (slug) break; }
   if (!slug) return null;
   const { getBundledHoles, getBundledCourseCentroid } = require('../data/courses') as typeof import('../data/courses');
   if (!getBundledHoles(`local:${slug}`).some((h) => isValidGolfCoord(h.middleLat, h.middleLng))) return null;
-  const lat = course.location?.latitude, lng = course.location?.longitude;
   const here = getBundledCourseCentroid(slug);
-  if (isValidGolfCoord(lat, lng) && here) {
-    const km = haversineKm(lat as number, lng as number, here.lat, here.lng);
-    if (km > TWIN_MAX_KM) return null;
-  }
+  if (!here || haversineKm(lat as number, lng as number, here.lat, here.lng) > TWIN_MAX_KM) return null;
   return `local:${slug}`;
 }
 
@@ -138,22 +151,39 @@ export async function loadCourseCard(courseId: string, opts: { network?: boolean
     const geo = require('./courseGeometryService') as typeof import('./courseGeometryService');
     const apiId = await geo.resolveLocalCourseId(slug).catch(() => null);
     if (!apiId) return null;
-    const card = await loadDatabaseCard(apiId, network);
-    return card ? { ...card, courseId } : null;
+    // ONE id per course: a slug with no survey IS its database course, so the card carries the
+    // database id — or the same course is owned, listed and built twice under two ids.
+    return loadDatabaseCard(apiId, network);
   }
 
   return loadDatabaseCard(courseId, network);
 }
 
 async function loadDatabaseCard(apiId: string, network: boolean): Promise<CourseCard | null> {
+  return (await readDatabaseCard(apiId, network)).card;
+}
+
+/**
+ * The database card for an id, and whether the record EXISTS with nothing to play (no tees/holes) —
+ * which is an answer about that course ("not playable"), unlike a record that did not come back.
+ * The download engine needs the difference and must not pay a second request to learn it.
+ */
+export async function readDatabaseCard(apiId: string, network = true): Promise<{ card: CourseCard | null; emptyRecord: boolean }> {
   const api = require('./golfCourseApi') as typeof import('./golfCourseApi');
   const course = network ? await api.getCourse(apiId) : await api.peekCachedCourse(apiId);
-  if (!course || !course.tees?.length) return null;
+  if (!course) return { card: null, emptyRecord: false };
+  // A surveyed course first: its verified card stands even when the database record is empty.
   const twin = surveyedTwinOf(course);
   if (twin) {
     const surveyed = await loadCourseCard(twin, { network: false });
-    if (surveyed?.holes.length) return surveyed;
+    if (surveyed?.holes.length) return { card: surveyed, emptyRecord: false };
   }
+  if (!course.tees?.length || api.courseToHoles(course).length === 0) return { card: null, emptyRecord: true };
+  return { card: await cardFromCourse(apiId, course), emptyRecord: false };
+}
+
+async function cardFromCourse(apiId: string, course: import('../types/course').Course): Promise<CourseCard | null> {
+  const api = require('./golfCourseApi') as typeof import('./golfCourseApi');
   const holes = api.courseToHoles(course);
   if (!holes.length) return null;
   const { playerTee } = require('./teeSelection') as typeof import('./teeSelection');

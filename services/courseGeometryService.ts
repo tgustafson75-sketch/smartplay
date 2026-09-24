@@ -132,6 +132,11 @@ const LOCAL_COURSE_API_HINTS: Record<string, LocalCourseHint> = {
   palms: { search: 'Menifee Lakes Country Club', expectedCity: 'menifee' },
 };
 
+/** The verified database id pinned for a local slug, with no lookup (null when none is pinned). */
+export function pinnedApiIdForSlug(localSlug: string): string | null {
+  return LOCAL_COURSE_API_HINTS[localSlug]?.apiId ?? null;
+}
+
 const RESOLVED_ID_KEY_PREFIX = 'local-courseapi-id-v1::';
 const resolvedIdMem: Map<string, string> = new Map();
 

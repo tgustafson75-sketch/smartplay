@@ -51,10 +51,10 @@ describe('one course card for every kind of course', () => {
     expect(mockNetworkCalls).toEqual([]);
   });
 
-  it('a marquee slug with no surveyed card resolves to its pinned database record, keeping its id', async () => {
+  it('a marquee slug with no surveyed card IS its pinned database course — one id, not two', async () => {
     const c = await loadCourseCard('local:pebble-beach');
     expect(c?.source).toBe('database');
-    expect(c?.courseId).toBe('local:pebble-beach');
+    expect(c?.courseId).toBe('3j4b4ar8');
     expect(mockNetworkCalls).toEqual(['3j4b4ar8']);
   });
 

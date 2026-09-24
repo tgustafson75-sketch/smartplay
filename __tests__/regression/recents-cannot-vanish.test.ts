@@ -26,7 +26,8 @@ describe('a recent course survives a failed lookup', () => {
   it('the silent-drop is gone — there is an else', () => {
     const i = play.indexOf('const c = await getCourse(id);');
     expect(i).toBeGreaterThan(-1);
-    const block = play.slice(i, i + 1800);
+    // 2600: the surveyed-twin mapping (2026-09-23) sits between the lookup and the else.
+    const block = play.slice(i, i + 2600);
     expect(block).toContain('} else {');
     expect(block).toContain('const cached = recentCourseMeta[id];');
   });

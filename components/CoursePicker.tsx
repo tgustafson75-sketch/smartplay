@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { searchCourses } from '../services/golfCourseApi';
 import { yourCoursePicks } from '../services/yourCourses';
+import { canonicalCourseId } from '../services/courseCard';
+import { useDownloadedCoursesStore } from '../store/downloadedCoursesStore';
 import { useRoundStore } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useCustomCourseStore } from '../store/customCourseStore';
@@ -46,13 +48,20 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
   const recentMeta = useRoundStore((s) => s.recentCourseMeta);
   const home = usePlayerProfileStore((s) => s.homeCourses);
   const customMap = useCustomCourseStore((s) => s.courses);
+  const downloadedMap = useDownloadedCoursesStore((s) => s.downloaded);
   const myCourses = useMemo(() => yourCoursePicks({
     custom: Object.values(customMap ?? {}).map((c) => ({ id: c.id, name: c.name })),
-    recentIds: recentIds ?? [],
+    recentIds: (recentIds ?? []).map(canonicalCourseId),
     recentMeta: recentMeta ?? {},
     home: home ?? [],
-    surveyedName: (id) => getBundledCourseById(id.slice('local:'.length))?.name ?? null,
-  }), [customMap, recentIds, recentMeta, home]);
+    downloaded: Object.values(downloadedMap ?? {})
+      .filter((d) => d && !d.aliasOf && !d.courseId.startsWith('place:'))
+      .map((d) => ({ id: canonicalCourseId(d.courseId), name: d.name })),
+    surveyedName: (id) => {
+      const c = getBundledCourseById(id.slice('local:'.length));
+      return c && c.holes.length ? c.name : null;
+    },
+  }), [customMap, recentIds, recentMeta, home, downloadedMap]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ id: string; club_name: string; course_name: string; location: string }[]>([]);
   // 2026-06-04 — Many golfcourseapi results share club names (e.g. multiple

@@ -55,10 +55,10 @@ import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '.
 import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { composeYourCourses } from '../../services/yourCourses';
-import { surveyedTwinOf } from '../../services/courseCard';
+import { surveyedTwinOf, canonicalCourseId } from '../../services/courseCard';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
-import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, resolveLocalCourseId } from '../../services/courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, resolveLocalCourseId, pinnedApiIdForSlug } from '../../services/courseGeometryService';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { isValidGolfCoord } from '../../utils/coordGuard';
@@ -598,7 +598,11 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
  * wearing a local id, and taking the local branch gave them an invented "Par 72 · 6,527 yds" card.
  */
 const SURVEYED_COURSES: CourseSummary[] = LOCAL_COURSES_RAW.map(raw => {
-  const c = { ...raw, isLocal: getBundledHoles(raw.id).length > 0 };
+  // A row with no survey is a database course: it carries its pinned database id, the one id the
+  // rest of the app knows it by (round, recents, downloads, home).
+  const surveyed = getBundledHoles(raw.id).length > 0;
+  const pinned = surveyed ? null : pinnedApiIdForSlug(raw.id.replace(/^local:/, ''));
+  const c = { ...raw, id: pinned ?? raw.id, isLocal: surveyed };
   const derived = getBundledCourseCentroid(c.id);
   if (!derived) return c;
   const moved = c.lat == null || c.lng == null ||
@@ -1079,13 +1083,22 @@ export default function PlayTab() {
       for (const id of recentCourseIds.slice(0, 4)) {
         // B3 — local: IDs return null from the external API. Resolve them
         // from the bundled SURVEYED_COURSES catalog instead; skip the network call.
-        if (id.startsWith('local:')) {
-          const local = SURVEYED_COURSES.find(l => l.id === id);
-          if (local) out.push(local);
+        const cid = canonicalCourseId(id);
+        if (cid.startsWith('local:')) {
+          const local = SURVEYED_COURSES.find(l => l.id === cid);
+          if (local && !out.some(o => o.id === local.id)) out.push(local);
           continue;
         }
         const c = await getCourse(id);
         if (cancelled) return;
+        // A course played under its database id before it was known to be surveyed: listed as the
+        // surveyed row it now opens as, so the same course is never two rows.
+        const twinId = c ? surveyedTwinOf(c) : null;
+        const twinRow = twinId ? SURVEYED_COURSES.find(l => l.id === twinId && l.isLocal) : undefined;
+        if (twinRow) {
+          if (!out.some(o => o.id === twinRow.id)) out.push(twinRow);
+          continue;
+        }
         if (c) {
           const tee = pickTeeSet(c.tees, preferredTee, handicapGender);
           const location = [c.location.city, c.location.state].filter(Boolean).join(', ');
@@ -1291,7 +1304,7 @@ export default function PlayTab() {
       surveyed: SURVEYED_COURSES,
       downloaded: downloadedCourseSummaries(downloadedCourses, recentCourseMeta),
       ownedIds: [
-        ...Object.values(downloadedCourses ?? {}).map(d => d?.courseId ?? ''),
+        ...Object.values(downloadedCourses ?? {}).map(d => canonicalCourseId(d?.courseId ?? '')),
         ...(homeCourses ?? []).map(h => h.id ?? ''),
       ],
     });
@@ -1339,7 +1352,11 @@ export default function PlayTab() {
   const atCourse: { course: CourseSummary; yards: number; sibling: CourseSummary | null } | null = useMemo(() => {
     if (!userPosition) return null;
     const within: { course: CourseSummary; yards: number }[] = [];
-    for (const c of closestLocal) {
+    // His courses, plus any SURVEYED course he is standing at: arriving at Menifee for the first time
+    // must still offer Palms-or-Lakes rather than one-tap a guess (the surveyed rows are no longer in
+    // his list until they are his — see SURVEYED_COURSES).
+    const mine = new Set(closestLocal.map(c => c.id));
+    for (const c of [...closestLocal, ...SURVEYED_COURSES.filter(l => l.isLocal && !mine.has(l.id))]) {
       if (c.lat == null || c.lng == null) continue;
       const yds = haversineYards(userPosition, { lat: c.lat, lng: c.lng });
       if (yds <= 550) within.push({ course: c, yards: yds });
@@ -1407,7 +1424,10 @@ export default function PlayTab() {
   // course or a round is active, leave it alone.
   const hasOwnCourses = closestLocal.length > 0;
   useEffect(() => {
-    if (selected) return;
+    // A pick still loading (a database, near-you or marquee course) is the player's choice in flight:
+    // defaulting now would supersede it and silently drop what he tapped.
+    // Nor after a pick that failed: its error is the answer on screen, not a cue to pick for him.
+    if (selected || selectedLoading || selectError) return;
     const findById = (id: string | null | undefined): CourseSummary | null =>
       (id ? closestLocal.find(l => l.id === id) ?? SURVEYED_COURSES.find(l => l.id === id) : null) ?? null;
     if (isRoundActive && activeCourseId) {
@@ -1463,7 +1483,7 @@ export default function PlayTab() {
     // hasOwnCourses: his list fills in after mount (recents resolve, stores rehydrate); an empty list
     // at mount must not be the last word. It flips once, so this still runs a handful of times.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeCourses, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId, hasOwnCourses]);
+  }, [homeCourses, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId, hasOwnCourses, selectedLoading]);
 
   /**
    * 2026-09-14 (Tim) — "When user selects up to 3 home courses, logic should spool those to the play

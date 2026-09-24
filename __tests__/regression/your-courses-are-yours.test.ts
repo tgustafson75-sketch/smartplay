@@ -34,14 +34,17 @@ describe('Your courses are the player\'s courses', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     const memo = play.slice(play.indexOf('const closestLocal'), play.indexOf('const distanceLabelById'));
     expect(memo).toMatch(/composeYourCourses/);
-    expect(play).not.toMatch(/\.\.\.SURVEYED_COURSES\b/);
+    // The whole catalog is never spread into a list (the at-course check takes only surveyed rows
+    // the player is standing at, via a filter).
+    expect(play).not.toMatch(/\.\.\.SURVEYED_COURSES\s*[,\]]/);
     expect(play).not.toMatch(/SURVEYED_COURSES\[0\]/);
   });
 
   it('a local id with no surveyed card opens its database record, not an invented Par 72 card', () => {
     const play = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/play.tsx'), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    expect(play).toMatch(/isLocal: getBundledHoles\(raw\.id\)\.length > 0/);
+    expect(play).toMatch(/const surveyed = getBundledHoles\(raw\.id\)\.length > 0;/);
+    expect(play).toMatch(/id: pinned \?\? raw\.id, isLocal: surveyed/);
     const sel = play.slice(play.indexOf('const selectSummary = useCallback'), play.indexOf('const onTapInfo'));
     expect(sel).toMatch(/startsWith\('local:'\)\) \{\s*const apiId = await resolveLocalCourseId\(/);
   });
@@ -61,12 +64,15 @@ describe('Your courses are the player\'s courses', () => {
       recentIds: ['abc', 'local:palms', 'nameless'],
       recentMeta: { abc: { club_name: 'Wachusett CC' } },
       home: [{ id: 'local:palms', name: 'Palms' }, { id: 'h9', name: 'Home Nine' }],
+      downloaded: [{ id: 'dl1', name: 'Added By The Caddie' }, { id: 'abc', name: 'dup' }],
       surveyedName: (id) => (id === 'local:palms' ? 'Menifee Lakes — Palms' : null),
     });
     expect(out.map((c) => [c.id, c.name, c.isLocal])).toEqual([
       ['abc', 'Wachusett CC', false], ['local:palms', 'Menifee Lakes — Palms', true],
-      ['h9', 'Home Nine', false], ['custom:1', 'My Muni', true],
+      ['h9', 'Home Nine', false], ['custom:1', 'My Muni', true], ['dl1', 'Added By The Caddie', false],
     ]);
+    // A local id with no survey behind it has no card of its own here.
+    expect(yourCoursePicks({ custom: [], recentIds: [], recentMeta: {}, home: [{ id: 'local:x', name: 'X' }], surveyedName: () => null })[0].isLocal).toBe(false);
   });
 
   it('the picker has no hard-coded course list', () => {

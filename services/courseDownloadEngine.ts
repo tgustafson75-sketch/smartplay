@@ -249,15 +249,24 @@ export function isApiCourseId(id: string): boolean {
  *   3. a database search by name
  */
 async function resolveCourse(name: string, explicitCourseId?: string | null): Promise<{ courseId: string; courseName: string; holes: CourseHole[]; rating?: string | number | null; slope?: string | number | null } | 'unavailable' | null> {
-  const { loadCourseCard } = require('./courseCard') as typeof import('./courseCard');
+  const { loadCourseCard, readDatabaseCard } = require('./courseCard') as typeof import('./courseCard');
   const fromCard = (c: import('./courseCard').CourseCard) =>
     ({ courseId: c.courseId, courseName: c.name, holes: c.holes, rating: c.rating, slope: c.slope });
 
   if (explicitCourseId && !/^(place|near):/.test(explicitCourseId)) {
     const id = COURSES.some((c) => c.id === explicitCourseId) ? `local:${explicitCourseId}` : explicitCourseId;
     try {
-      const card = await loadCourseCard(id);
-      if (card?.holes.length) return fromCard(card);
+      // The record EXISTS and has nothing to play (no tees/holes): that is the answer for this id.
+      // Falling through to the name paths downloaded a DIFFERENT course by name — Bethpage Black
+      // (no tees) came back as Bethpage Yellow, owned and listed. (triple-check 2026-09-23)
+      if (isApiCourseId(id)) {
+        const { card, emptyRecord } = await readDatabaseCard(id);
+        if (card?.holes.length) return fromCard(card);
+        if (emptyRecord) return null;
+      } else {
+        const card = await loadCourseCard(id);
+        if (card?.holes.length) return fromCard(card);
+      }
     } catch { /* fall through to the name paths */ }
     // No record for this id (unreachable, or an id the voice model invented): the name paths below
     // are exactly what ran before, so nothing that used to resolve stops resolving.
@@ -277,9 +286,11 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
     if (hits.length === 1 && hits[0]._error) return 'unavailable';
     const first = hits?.[0];
     if (first?.id) {
-      const card = await loadCourseCard(String(first.id));
+      const { card, emptyRecord } = await readDatabaseCard(String(first.id));
       // The search FOUND the course; its card did not come back (quota, network, nothing cached).
       // That is an outage, not "not in the database" — which is also what arms the 6h cooldown.
+      // A record that came back with no holes is "nothing to play", not an outage.
+      if (emptyRecord) return null;
       if (!card) return 'unavailable';
       if (card.holes.length) return fromCard(card);
     }
@@ -438,12 +449,14 @@ async function downloadCourseInner(input: {
    * showing up as a duplicate course. Do not render this map without it.
    * [[two-owners-is-the-root-cause]]
    */
-  const aliasId = input.courseId && input.courseId.startsWith('place:') ? input.courseId : null;
+  // 2026-09-23 — also a database id that resolved to a surveyed course (a twin, or a marquee slug's
+  // record): recorded as an alias, or the same ask re-resolves over the network every session.
+  const aliasId = input.courseId && (input.courseId.startsWith('place:') || isApiCourseId(input.courseId)) ? input.courseId : null;
   const rememberAlias = (resolvedId: string, name: string, holeCount: number, greens?: number) => {
     if (!aliasId || aliasId === resolvedId) return;
     try {
       useDownloadedCoursesStore.getState().markDownloaded({
-        courseId: aliasId, name, holeCount, at: Date.now(), greens,
+        courseId: aliasId, name, holeCount, at: Date.now(), greens, aliasOf: resolvedId,
       });
     } catch { /* an alias is an optimisation; never fail a download over it */ }
   };
@@ -554,12 +567,15 @@ export function isCourseDownloaded(courseId: string | null | undefined): boolean
  * the end of the Play tab's distance list, which is the existing behaviour for a coordless course.
  */
 export function downloadedCourseSummaries(
-  downloaded: Readonly<Record<string, { courseId: string; name: string }>>,
+  downloaded: Readonly<Record<string, { courseId: string; name: string; aliasOf?: string }>>,
   nameMeta: Readonly<Record<string, { club_name: string; location: string }>> = {},
 ): { id: string; club_name: string; location: string; rating: null; slope: null }[] {
+  const { canonicalCourseId } = require('./courseCard') as typeof import('./courseCard');
   const rows = Object.values(downloaded ?? {})
     .filter((d) => d != null && typeof d.courseId === 'string' && d.courseId !== '')
-    .filter((d) => !d.courseId.startsWith('place:') && !d.courseId.startsWith('local:'))
+    // A bare surveyed slug from an older download is `local:` too — listed from the survey, not here.
+    .filter((d) => !d.courseId.startsWith('place:') && !canonicalCourseId(d.courseId).startsWith('local:'))
+    .filter((d) => !d.aliasOf)
     .map((d) => {
       const meta = nameMeta?.[d.courseId];
       return {

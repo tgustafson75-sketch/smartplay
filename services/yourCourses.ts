@@ -41,6 +41,9 @@ export function yourCoursePicks(src: {
   recentIds: readonly string[];
   recentMeta: Readonly<Record<string, { club_name: string }>>;
   home: readonly { id?: string | null; name?: string | null }[];
+  /** Courses he downloaded (a caddie "add it" lands here) — alias rows already left out. */
+  downloaded?: readonly { id: string; name: string }[];
+  /** The surveyed card's name for a `local:` id with a survey, else null. */
   surveyedName: (id: string) => string | null;
   limit?: number;
 }): { id: string; name: string; fullName: string; isLocal: boolean }[] {
@@ -51,10 +54,12 @@ export function yourCoursePicks(src: {
   const add = (id: string | null | undefined, name: string) => {
     if (!id || !name || seen.has(id)) return;
     seen.add(id);
-    out.push({ id, name, fullName: name, isLocal: id.startsWith('local:') || id.startsWith('custom:') });
+    // isLocal = the course has its OWN card here (a survey or a scorecard) — round setup reads it.
+    out.push({ id, name, fullName: name, isLocal: id.startsWith('custom:') || (id.startsWith('local:') && !!src.surveyedName(id)) });
   };
   for (const id of src.recentIds) add(id, nameOf(id));
   for (const h of src.home) if (h.id) add(h.id, nameOf(h.id, h.name));
   for (const c of src.custom) add(c.id, c.name);
+  for (const d of src.downloaded ?? []) add(d.id, nameOf(d.id, d.name));
   return out.slice(0, src.limit ?? 6);
 }

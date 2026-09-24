@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { courseDisplayLabel } from '../../data/courseComplexes';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import { pickTeeSet } from '../../services/teeSelection';
+import { pickTeeSet, playerTee } from '../../services/teeSelection';
+import { surveyedTwinOf } from '../../services/courseCard';
 import {
   View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet,
   useWindowDimensions,
@@ -246,6 +247,24 @@ export default function CourseDetailScreen() {
          */
         if (realHoles) {
           void fetchCourseGeometry(course_id, { courseLocation: getBundledCourseCentroid(course_id) }).catch(() => {});
+          // The survey has holes but often no rating/slope (21 of 35 carry a blank). Those two — and
+          // only those, only where blank — come from the course's VERIFIED database record.
+          if (stubCourse.tees.some(t => t.course_rating == null || t.slope_rating == null)) {
+            void resolveLocalCourseId(slug).then(async (apiId) => {
+              if (!apiId || cancelled) return;
+              const c = await getCourse(apiId);
+              const tee = c ? (playerTee(c) ?? c.tees[0]) : null;
+              if (cancelled || !tee) return;
+              setCourse(prev => prev && prev.id === course_id ? {
+                ...prev,
+                tees: prev.tees.map((t, i) => i === 0 ? {
+                  ...t,
+                  course_rating: t.course_rating ?? tee.course_rating ?? null,
+                  slope_rating: t.slope_rating ?? tee.slope_rating ?? null,
+                } : t),
+              } : prev);
+            }).catch(() => {});
+          }
           return;
         }
         // No surveyed card (the marquee rows): its database record, in the background.
@@ -288,6 +307,13 @@ export default function CourseDetailScreen() {
       let fetchedCourseLocation: { lat: number; lng: number } | null = null;
       try {
         const c = await getCourse(realId);
+        // A database record that IS a surveyed course opens as the surveyed card — the one the round,
+        // the Play card and SmartVision use (services/courseCard surveyedTwinOf).
+        const twin = c ? surveyedTwinOf(c) : null;
+        if (twin && !cancelled) {
+          router.replace(`/course/${twin}` as never);
+          return;
+        }
         if (
           c &&
           typeof c.location?.latitude === 'number' &&
@@ -317,7 +343,7 @@ export default function CourseDetailScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [course_id]);
+  }, [course_id, router]);
 
   useEffect(() => {
     let cancelled = false;
