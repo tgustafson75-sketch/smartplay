@@ -5086,3 +5086,16 @@ SmartManage: @vercel/analytics added (`fcefba7`); smartmanageai.vercel.app was a
 re-pointed by hand; smartmanage.app DNS is not on Vercel (SSL fails). Noted in memory.
 Noted, not fixed: the policy calls a backup an "encrypted snapshot" — it is Supabase at-rest encryption
 only, no client-side encryption.
+
+**Triple-check release (held on branch triple-check-2026-09-23, then shipped as ONE release — Tim: no piecemeal OTAs):**
+- Pass 1 (3 reviewers): 7 defects — GPS-tick rebuild loop on bundled fallbacks; voice tab jumps a no-op inside the tabs;
+  Start Round locked through the map build; voice quick-round could replace a live round (+ one consumer gate);
+  owned courses never topped up (brief, imagery); "unavailable" mislabeled "not in database"; "1 greens".
+- New: services/layoutVerifier — the tee box verifies the layout on multi-course properties; auto, quiet switch
+  (roundStore.switchRoundLayout keeps scores/shots). Hole-aware after pass 3 (only current/next tee counts).
+- Pass 2: goToTab fix never ran (root '__root' slot); unknown tees counted as proof; combos; twiceAround stuck.
+- Pass 3: verifier false-switch measured on real Menifee tees; hole-aware rules, ~270 real-data cases, 0 false switches.
+- Live Sawgrass check (3 requests): with its back-tee card, Dye's Valley builds its own holes (11.6% off vs 75%).
+  Database courses now send the back-tee card (device cache only); the weekly refresh sends it too (review find).
+- Every fix break-tested on the pre-fix code. jest 5472/5472, sim 1082/1082. NOT verified on device (PATH 2/4/5).
+- Deleted Vercel's auto-created analytics branch (its preview build failed; it cannot measure the native app).

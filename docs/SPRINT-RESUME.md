@@ -8,7 +8,9 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-23. COURSE ENGINE + CLAUDE-COST FIX SHIPPED (`6ac60296`, `d7a64f63`, `ba5df313`). OTA `a757346d` PUBLISHED TO PRODUCTION.
+> ### ⚠️ LATEST — 2026-09-23 (late). TRIPLE-CHECK RELEASE SHIPPED as ONE OTA — see SPRINT-LOG Day 127 'Triple-check release'. Tee-box layout verifier is new; nothing verified on device yet.
+>
+> ### Earlier 2026-09-23. COURSE ENGINE + CLAUDE-COST FIX SHIPPED (`6ac60296`, `d7a64f63`, `ba5df313`). OTA `a757346d` PUBLISHED TO PRODUCTION.
 >
 > Server half is live with the push (course-content on Haiku with a budget that fits, proxy CDN caching,
 > Course Cloud refuses 0,0, brain 24s whole-turn deadline). Client half — dedupe/cooldowns, Play tab pick
