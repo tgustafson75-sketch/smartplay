@@ -65,7 +65,7 @@ import { isValidGolfCoord } from '../../utils/coordGuard';
 // 2026-09-06 — the eleven bundled-image thumbnail imports are gone. Every one of those maps has
 // been {} since 2026-08-25, so each `X_HOLE_IMAGES[1]` resolved to undefined and courseThumb()'s
 // lat/lng rescue was already drawing the card. All 41 courses now build the same way:
-// satelliteThumb(lat, lng). getLocalHoleImageById stays — it is the id-keyed hole-image lookup.
+// satelliteThumb(lat, lng). (The hole-image lookups themselves were deleted 2026-09-23.)
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { QuickTutorial } from '../../components/QuickTutorial';

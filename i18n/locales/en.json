@@ -2002,15 +2002,12 @@
   "smartvision": {
     "smart_vision_screen": {
       "ai_estimate": "AI ESTIMATE",
-      "bundled": "Bundled",
       "waiting_on_your_location_to": "Waiting on your location to drop the satellite aerial. Make sure Location is on — the moment I get a GPS fix, the map appears here with live front / middle / back yardages.",
       "shot_map": "SHOT MAP",
       "shot_map_off": "SHOT MAP OFF",
       "no_signal_for_the_aerial": "No signal to load this hole's aerial. It draws the moment the connection is back — your GPS yardages still work."
     },
-    "accessibility_label": {
-      "showing_a_bundled_hole_photo": "Showing a bundled hole photo — no live coordinates for this hole yet"
-    },
+    "accessibility_label": {},
     "label": {
       "carry": "CARRY",
       "front": "FRONT",

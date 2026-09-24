@@ -5133,3 +5133,16 @@ old-scale clients refused; cached maps with pre-fix AI holes rebuild online. Res
 rare: a SmartVision voice-mark made on a hand-DRAGGED marker before the fix was saved at the old scale
 (GPS marks unaffected). Nothing verified on device yet — PATH 2 + PATH 5.
 
+**Follow-up release (same night), branch `cleanup-2026-09-24`:** Tim — "we should not end up in error states ever.
+We need correct images not no images where appropriate."
+- Bundled hole-photo code removed entirely (tables empty since 08-25): `*_HOLE_IMAGES`, `getLocalHoleImage*`,
+  `data/palmsImages.ts`, `data/holeLineCalibration.ts`, `app/landmark-curate.tsx` (+ route, debug link,
+  `services/landmarks.ts`), every curated branch in SmartVision / caddie preview / Play / Course Detail / recap / sim.
+- `components/course/HoleTileImage`: cached-first tile → hole's cached tile → live (after a bad file) → one retry →
+  fallback; saves what it downloads. Course Detail grid shows real holes (was a gradient), recap hole view too.
+- Play: a picked surveyed course shows its aerial (was an icon). Caddie preview in-round uses the map, else the
+  SmartVision resolvers. SmartVision locates a course by any of its own points; a failed tile walks the chain, and
+  "no signal" really recovers (quiet prefetch every 15s + on foreground).
+- Reviewed (5th review): 3 defects fixed (no-signal recovery, bad cached file → live, one-frame flash); `retry=1`
+  verified accepted by Mapbox (one request). Gates: tsc, lint 0, jest 5,542, sim all pass.
+

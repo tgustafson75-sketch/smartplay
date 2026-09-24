@@ -9,8 +9,11 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { Image, Text } from 'react-native';
 
 const mockTile = jest.fn();
+const mockFetch = jest.fn(async () => null);
 jest.mock('../../services/mapboxImagery', () => ({
   holeTile: (...a: unknown[]) => mockTile(...a),
+  fetchHoleImagery: (...a: unknown[]) => (mockFetch as (...x: unknown[]) => unknown)(...a),
+  urlForFrame: () => 'https://api.mapbox.com/x?a=1',
   tileSizeForPrefetch: () => undefined,
 }));
 
@@ -35,9 +38,29 @@ describe('a hole image walks its fallbacks before it gives up', () => {
     expect(r.getByText('none')).toBeTruthy();
   });
 
-  it('a cached file on disk draws straight away', () => {
+  it('a cached file on disk draws straight away — and if it will not load (truncated), the live tile', () => {
     mockTile.mockReturnValue({ uri: 'file:///cache/h3-exact.png', frame: FRAME, fallback: null });
-    expect(uriOf(render(<HoleTileImage input={INPUT} />))).toBe('file:///cache/h3-exact.png');
+    const r = render(<HoleTileImage input={INPUT} />);
+    expect(uriOf(r)).toBe('file:///cache/h3-exact.png');
+    fireEvent(r.UNSAFE_getByType(Image), 'error');
+    expect(uriOf(r)).toBe('https://api.mapbox.com/x?a=1');
+  });
+
+  it('a different hole starts at ITS first image — no frame of the previous hole\'s fallback', () => {
+    mockTile.mockReturnValue({ uri: 'https://api.mapbox.com/x?a=1', frame: FRAME, fallback: { uri: 'file:///cache/h3.png', frame: FRAME } });
+    const r = render(<HoleTileImage input={INPUT} />);
+    fireEvent(r.UNSAFE_getByType(Image), 'error');
+    expect(uriOf(r)).toBe('file:///cache/h3.png');
+    mockTile.mockReturnValue({ uri: 'file:///cache/h4.png', frame: FRAME, fallback: null });
+    r.rerender(<HoleTileImage input={{ ...INPUT, holeNumber: 4 }} />);
+    expect(uriOf(r)).toBe('file:///cache/h4.png');
+  });
+
+  it('a live tile is saved for next time', () => {
+    mockFetch.mockClear();
+    mockTile.mockReturnValue({ uri: 'https://api.mapbox.com/x?a=1', frame: FRAME, fallback: null });
+    render(<HoleTileImage input={INPUT} />);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('a hole nothing places shows the fallback, not a picture of somewhere else', () => {

@@ -189,10 +189,10 @@ Global overlays that are NOT routes but provide cross-app navigation:
 
 `_layout.tsx` defines `DEBUG_ROUTES` and an effect: any non-owner (and not `__DEV__`) landing on one is `router.replace('/(tabs)/caddie')`. Belt-and-suspenders per-screen gates also exist.
 
-Gated set: `/gps-test`, `/api-debug`, `/battery-debug`, `/cage-debug`, `/ghost-debug`, `/patterns-debug`, `/smartfinder-debug`, `/subscription-debug`, `/voice-debug`, `/author/reference-assets`, `/landmark-curate`, `/voice-misses`, `/swing-analysis-debug`, `/native-modules-debug`, `/dev/CourseTruth`, `/harness`.
+Gated set: `/gps-test`, `/api-debug`, `/battery-debug`, `/cage-debug`, `/ghost-debug`, `/patterns-debug`, `/smartfinder-debug`, `/subscription-debug`, `/voice-debug`, `/author/reference-assets`, `/voice-misses`, `/swing-analysis-debug`, `/native-modules-debug`, `/dev/CourseTruth`, `/harness`.
 
 - Most are reached from **Settings → Owner Tools** (`settings.tsx`), e.g. `/owner-logs`, `/author/reference-assets`, `/harness`, `/voice-debug`, `/swinglab/tutorials`, `/swing-analysis-debug`, `/gps-test`, `/native-modules-debug`, `/cage-debug`, `/kevin-learning`, `/mark-green`.
-- **`/cage-debug`** is the hub for `/api-debug`, `/patterns-debug`, `/ghost-debug`, `/landmark-curate`, and the cage-review tree.
+- **`/cage-debug`** is the hub for `/api-debug`, `/patterns-debug`, `/ghost-debug`, and the cage-review tree.
 - **`/owner-logs`** (Issue Log) is deliberately **NOT** in DEBUG_ROUTES — it's an all-beta-tester surface (`openToolHandler` maps "send the issue log" → `/owner-logs?send=1` for everyone); only its per-entry AI triage is owner-gated.
 - `/harness` and `/dev/CourseTruth` self-gate and have no UI inbound nav besides the gate list → **dev/deep-link only**.
 

@@ -4,7 +4,8 @@
  *
  * One hole's satellite tile, with the same rules SmartVision uses (services/mapboxImagery.holeTile):
  * the exact cached file when it is on disk, else the live URL; if that fails to load, this hole's
- * cached tile at another size; then ONE retry of the live URL (most failures are a dropped request).
+ * cached tile at another size, then the live tile (when a cached file was what failed), then ONE
+ * retry of it (most failures are a dropped request). A live tile is saved for next time.
  * Only after all of that does `fallback` show — and it is never a picture of somewhere else.
  *
  * Replaces the course-detail grid's decorative gradient (every hole looked the same) and the recap
@@ -12,7 +13,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, type ImageStyle, type StyleProp } from 'react-native';
-import { holeTile, tileSizeForPrefetch, type HoleImageryInput } from '../../services/mapboxImagery';
+import { holeTile, fetchHoleImagery, urlForFrame, tileSizeForPrefetch, type HoleImageryInput } from '../../services/mapboxImagery';
 
 type Props = {
   input: HoleImageryInput;
@@ -43,13 +44,27 @@ export default function HoleTileImage({ input, width: w, height: h, style, resiz
   );
   const candidates = useMemo(() => {
     if (!tile) return [] as string[];
+    const live = urlForFrame(tile.frame);
     const out = [tile.uri];
     if (tile.fallback) out.push(tile.fallback.uri);
-    if (/^https:/.test(tile.uri)) out.push(`${tile.uri}${tile.uri.includes('?') ? '&' : '?'}retry=1`);
+    // A cached FILE that will not load (truncated by an app kill mid-write) → the live tile.
+    if (live && !out.includes(live)) out.push(live);
+    if (live) out.push(`${live}${live.includes('?') ? '&' : '?'}retry=1`);
     return out;
   }, [tile]);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => { setAttempt(0); }, [candidates]);
+  // The attempt belongs to ONE candidate list: a new list starts at 0 on its first render (a reset
+  // in an effect would paint one frame of the old list's later entry — triple-check).
+  const listKey = candidates.join('|');
+  const [state, setState] = useState<{ key: string; attempt: number }>({ key: listKey, attempt: 0 });
+  const attempt = state.key === listKey ? state.attempt : 0;
+
+  // A live tile is also saved (fetchHoleImagery writes the exact file), so the next open is free.
+  useEffect(() => {
+    if (tile && /^https:/.test(tile.uri)) {
+      void fetchHoleImagery({ courseId, holeNumber, tee, green, par, yardage }, { width, height }).catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tile]);
 
   const uri = candidates[attempt];
   if (!uri) return <>{fallback}</>;
@@ -58,7 +73,7 @@ export default function HoleTileImage({ input, width: w, height: h, style, resiz
       source={{ uri }}
       style={style}
       resizeMode={resizeMode}
-      onError={() => setAttempt((a) => a + 1)}
+      onError={() => setState({ key: listKey, attempt: attempt + 1 })}
     />
   );
 }

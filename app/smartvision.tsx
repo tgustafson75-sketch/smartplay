@@ -50,6 +50,7 @@ import {
   useWindowDimensions,
   BackHandler,
   Animated,
+  AppState,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { safeBack } from '../services/safeBack';
@@ -471,13 +472,13 @@ export default function SmartVisionScreen() {
   // homeCourseName whenever activeCourseName was briefly null, which
   // leaked the home course's label into substring-matching everywhere
   // downstream (e.g. a Crystal Springs round whose courseName fell to
-  // "Menifee Lakes — Palms" would substring-match getLocalHoleImage as
+  // "Menifee Lakes — Palms" would substring-match the (since deleted) name-based photo lookup as
   // palms and render the wrong hole). courseId-derived label is the
   // canonical source.
   // 2026-05-17 — Also removed homeCourseName from the courseName
   // cascade. Same leak as effectiveCourseId above: if Tim's home is
   // "Menifee Lakes — Palms", any null effectiveCourseId fell here and
-  // substring-matched Palms via the name-based getLocalHoleImage
+  // substring-matched Palms via the (since deleted) name-based photo
   // path. Empty string when no real context exists — let downstream
   // render the explicit empty state.
   // 2026-08-25 — activeCourse holds whatever string started the round, which can be a spoken phrase
@@ -615,6 +616,10 @@ export default function SmartVisionScreen() {
   const [tileFrame, setTileFrame] = useState<TileFrame | null>(null);
   /** A cached tile of this hole, with its own frame, for when the live one fails to load. */
   const tileFallbackRef = useRef<{ uri: string; frame: TileFrame } | null>(null);
+  // Every URI tried for this hole, so each fallback step runs once. Cleared on hole change.
+  const tileTriedRef = useRef<Set<string>>(new Set());
+  /** The frame of the last tile attempted — what the no-signal recovery keeps trying. */
+  const lastFrameRef = useRef<TileFrame | null>(null);
   /** The live tile, its fallback and one retry all failed: the canvas says "no signal", not "no location". */
   const [tileFailed, setTileFailed] = useState(false);
   const showTile = useCallback((uri: string | null, frame: TileFrame | null, fallback: { uri: string; frame: TileFrame } | null = null) => {
@@ -664,21 +669,11 @@ export default function SmartVisionScreen() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    // 2026-06-23 (audit SV-3) — when the hole/course changes, stale imageUri +
-    // geometry from the PREVIOUS hole can flash (wrong-hole satellite tile +
-    // wrong par) before the new async tile/geometry resolves. Clear them up
-    // front, but GATE it: curated holes resolve SYNCHRONOUSLY below (the
-    // (the old curated early-return that set imageUri
-    // null and bails), so blanking them here would just cause a flash on the
-    // path Tim tests most. Only clear when the new hole takes the ASYNC
-    // satellite/Mapbox path (curated NOT used this render). `getLocalHoleImage*`
-    // are synchronous bundled-asset lookups (no network), so this mirrors the
-    // exact condition used below at the curated early-return.
-    // 2026-08-11 — the satellite tile is now the target for every hole, so the previous-hole tile
-    // must always be cleared; leaving it up while the new one resolves is exactly the wrong-hole
-    // flash this guard was written to prevent.
+    // 2026-06-23 (audit SV-3) — clear the previous hole's tile + geometry up front, so a wrong-hole
+    // tile or par cannot flash while the new hole resolves.
     showTile(null, null);
     setTileFailed(false);
+    tileTriedRef.current = new Set();
     setGeometry(null);
 
     /**
@@ -1229,20 +1224,45 @@ export default function SmartVisionScreen() {
   // 2026-09-23 (Tim — "we should not end up in error states ever") — then ONE retry of the live
   // tile (most failures are a dropped request, not a dead link); only after that the honest state,
   // which says the signal is the problem rather than asking for a location we already have.
-  const tileRetriedRef = useRef<string | null>(null);
   const onTileError = useCallback(() => {
+    const tried = tileTriedRef.current;
+    if (imageUri) tried.add(imageUri);
     const fb = tileFallbackRef.current;
     const frame = tileFrame;
-    if (fb && fb.uri !== imageUri) { showTile(fb.uri, fb.frame); return; }
-    if (imageUri && /^https:/.test(imageUri) && tileRetriedRef.current !== imageUri && frame) {
-      const retry = `${imageUri}${imageUri.includes('?') ? '&' : '?'}retry=1`;
-      tileRetriedRef.current = retry;
-      showTile(retry, frame);
-      return;
-    }
+    if (frame) lastFrameRef.current = frame;
+    // 1. this hole's cached tile (its own frame)
+    if (fb && !tried.has(fb.uri)) { showTile(fb.uri, fb.frame); return; }
+    // 2. a cached FILE that would not load (truncated by an app kill mid-write) → the live tile
+    const live = frame ? urlForFrame(frame) : null;
+    if (live && !tried.has(live)) { showTile(live, frame); return; }
+    // 3. one retry of the live tile — most failures are a dropped request
+    const retry = live ? `${live}${live.includes('?') ? '&' : '?'}retry=1` : null;
+    if (retry && frame && !tried.has(retry)) { showTile(retry, frame); return; }
     setTileFailed(true);
     showTile(null, null);
   }, [imageUri, tileFrame, showTile]);
+
+  /**
+   * "It draws the moment the connection is back" has to be TRUE (triple-check): while the canvas
+   * says no signal, quietly preload the tile every 15s and whenever the app returns to the
+   * foreground; the moment it loads, it is shown. Image.prefetch — nothing flickers while waiting.
+   */
+  useEffect(() => {
+    if (!tileFailed) return;
+    const frame = lastFrameRef.current;
+    const url = frame ? urlForFrame(frame) : null;
+    if (!frame || !url) return;
+    let done = false;
+    const attempt = () => {
+      if (done) return;
+      void Image.prefetch(url).then((ok) => {
+        if (ok && !done) { done = true; tileTriedRef.current = new Set(); showTile(url, frame); }
+      }).catch(() => undefined);
+    };
+    const timer = setInterval(attempt, 15_000);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') attempt(); });
+    return () => { done = true; clearInterval(timer); sub.remove(); };
+  }, [tileFailed, showTile]);
   void autoZoom; // legacy helper retained for future use
 
   // Marker positions in CANVAS-LOCAL pixel coordinates (top-left origin,

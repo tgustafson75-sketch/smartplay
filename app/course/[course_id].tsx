@@ -423,9 +423,8 @@ export default function CourseDetailScreen() {
     localSlug === 'greenhill' ? 'Greenhill Golf Course' :
     localSlug === 'westlake-cc-nj' ? 'Westlake Country Club' :
     null;
-  // 2026-09-05 — carries the LAYOUT, not just the club. This name feeds getLocalHoleImage below,
-  // and a bare club name on a multi-course property resolves to whichever sibling it happens to
-  // contain — the Menifee Palms/Lakes bug.
+  // 2026-09-05 — carries the LAYOUT, not just the club: a bare club name on a multi-course property
+  // reads as whichever sibling it happens to contain — the Menifee Palms/Lakes bug.
   const displayClubName = localFriendlyName ?? courseDisplayLabel(course?.club_name, course?.course_name);
   const noteByHole = useMemo(() => {
     const m = new Map<number, string>();
@@ -463,18 +462,9 @@ export default function CourseDetailScreen() {
     });
   }, [tee, noteByHole, descriptionByHole]);
 
-  // Hole photos. Resolution order per hole:
-  //   1. Curated bundled image for the named course (Palms, Lakes,
-  //      Rancho California, Crystal Springs, Mariners Point — all 5
-  //      now have full 18-hole sets).
-  //   2. Mapbox per-hole tile (requires green geometry).
-  //   3. Skip (returns null and gets filtered).
-  // Tim 2026-05-14 hit "aerial unavailable" on Lakes/Rancho because the
-  // Palms-only branch was the only bundled path; now every local course
-  // routes through getLocalHoleImage which handles all 5.
-  // 2026-06-14 (Tim — close the capture→course-book loop) — the user's OWN photo of a
-  // hole (from SmartFinder ingest) is the most valuable imagery; prefer it over the
-  // curated bundle / satellite. Subscribe to the manifest so new captures re-render.
+  // Hole photos, per hole: the player's OWN capture (SmartFinder ingest — the most valuable imagery),
+  // else the hole's satellite tile (HoleTileImage, cached-first), else the hole is left out — never a
+  // picture of somewhere else. Subscribe to the capture manifest so new captures re-render.
   const captures = useCourseCaptureStore((s) => s.captures);
   const surveyedHoles = useMemo(() => (course_id?.startsWith('local:') ? getBundledHoles(course_id) : []), [course_id]);
   const holePhotos = useMemo(() => {

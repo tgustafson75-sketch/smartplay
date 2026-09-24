@@ -142,12 +142,18 @@ describe('SmartVision projects with the frame of the tile on screen', () => {
     expect(sv).not.toMatch(/\bsetImageUri\(/);
   });
 
-  it('a live tile that fails to load falls back to the cached one with ITS frame', () => {
+  it('a tile that fails to load walks: cached tile → live (after a bad file) → one retry → no-signal', () => {
     expect(sv).toMatch(/onError=\{onTileError\}/);
-    expect(sv).toMatch(/if \(fb && fb\.uri !== imageUri\) \{ showTile\(fb\.uri, fb\.frame\); return; \}/);
-    // then ONE retry of the live tile, then the honest no-signal state (Tim: "no error states ever")
-    expect(sv).toMatch(/tileRetriedRef\.current !== imageUri/);
+    expect(sv).toMatch(/if \(fb && !tried\.has\(fb\.uri\)\) \{ showTile\(fb\.uri, fb\.frame\); return; \}/);
+    expect(sv).toMatch(/if \(live && !tried\.has\(live\)\) \{ showTile\(live, frame\); return; \}/);
+    expect(sv).toMatch(/if \(retry && frame && !tried\.has\(retry\)\) \{ showTile\(retry, frame\); return; \}/);
     expect(sv).toMatch(/setTileFailed\(true\);/);
+  });
+
+  it('"it draws the moment the connection is back" is true: the failed tile is re-tried quietly', () => {
+    expect(sv).toMatch(/if \(!tileFailed\) return;[\s\S]{0,400}Image\.prefetch\(url\)[\s\S]{0,200}showTile\(url, frame\)/);
+    expect(sv).toMatch(/setInterval\(attempt, 15_000\)/);
+    expect(sv).toMatch(/AppState\.addEventListener\('change', \(st\) => \{ if \(st === 'active'\) attempt\(\); \}\)/);
   });
 
   it('with no hole coordinates, the aerial is centred on THIS course by its id — never a name guess', () => {
