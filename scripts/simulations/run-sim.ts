@@ -10953,16 +10953,20 @@ check('LOCK: L1HolePreview falls back to the same Mapbox hole tile SmartVision r
       // 2026-08-11 — the import now also pulls getCenteredImageryUrl (the course-centroid fallback
       // that removes the green screen when hole geometry hasn't landed). Assert the tile builder is
       // imported, not the exact import list.
-      /import \{[^}]*getHoleImageryUrl[^}]*\} from '\.\.\/\.\.\/services\/mapboxImagery'/.test(s) &&
+      // 2026-09-23 — holeTile: the same frame builder, cached-first, with the hole's cached tile as fallback.
+      /import \{[^}]*holeTile[^}]*\} from '\.\.\/\.\.\/services\/mapboxImagery'/.test(s) &&
       /aerialTileUrl/.test(s) &&
       // the tile is a FALLBACK: captured shot and curated bundle still win, in that order
       /capturedUri \? \(\{ uri: capturedUri \}[\s\S]{0,160}?curatedImage \?\? \(aerialTileUrl/.test(s) &&
       // the memo must sit ABOVE the isRoundActive early return (a hook below a gate crashes on open)
       s.indexOf('const aerialTileUrl') < s.indexOf('if (!isRoundActive)') &&
+      s.indexOf('const [failedTileUri') > -1 && s.indexOf('const [failedTileUri') < s.indexOf('if (!isRoundActive)') &&
+      // a tile that fails to load gives way to the hole's cached tile
+      /onError=\{\(\) => onTileError\(previewTileUrl\)\}/.test(s) &&
       // 2026-08-10 second pass — the PRE-ROUND branch returns before aerialTileUrl is ever reached,
       // so it needs its OWN tile or a selected course still shows "Pick a course on the Play tab".
       // That was the half missed the first time, and it's the green screen Tim saw again.
-      /const previewTileUrl = useMemo/.test(s) &&
+      /const previewTile = useMemo/.test(s) && /const previewTileUrl = tileUri\(previewTile\);/.test(s) &&
       /if \(previewTileUrl\) \{/.test(s) &&
       s.indexOf('const previewTileUrl') < s.indexOf('if (!isRoundActive)') &&
       // and the geometry has to be warmed pre-round or the cache the memo reads is always empty

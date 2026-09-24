@@ -20,7 +20,7 @@ import { getBundledHoles, COURSES } from '../../data/courses';
 import { HoleBrandBadge } from './HoleBrandBadge';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
-import { getHoleImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
+import { holeTile, getCenteredImageryUrl, centeredFrame, type HoleTile } from '../../services/mapboxImagery';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { useTranslation } from 'react-i18next';
 import { resolveYardageSource, yardageSourceLabel, isLiveYardage } from '../../services/yardageSource';
@@ -301,10 +301,10 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
    * Hook placement is deliberate: ABOVE the `!isRoundActive` early return, with the other hooks —
    * a hook below a gate is what crashed SmartMotion on open ([[analysis-wow-wave-2026-08-09]]).
    */
-  const aerialTileUrl = useMemo(() => {
+  const aerialTile = useMemo((): HoleTile | null => {
     if (!geometry?.green) return null;
     try {
-      return getHoleImageryUrl(
+      return holeTile(
         {
           courseId: activeCourseId,
           holeNumber: currentHole,
@@ -319,6 +319,16 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       return null;
     }
   }, [geometry, W, H, activeCourseId, currentHole]);
+  /**
+   * 2026-09-23 (Tim — "SmartVision images correctly every time") — a tile that fails to load (no
+   * signal) gives way to this hole's cached tile, the same rule SmartVision uses. This preview drew
+   * live URLs only, so with no signal it showed nothing even when round prep had cached the hole.
+   */
+  const [failedTileUri, setFailedTileUri] = useState<string | null>(null);
+  const tileUri = (t: HoleTile | null): string | null =>
+    !t ? null : t.uri !== failedTileUri ? t.uri : t.fallback?.uri ?? null;
+  const onTileError = useCallback((uri: string | null) => { if (uri) setFailedTileUri(uri); }, []);
+  const aerialTileUrl = tileUri(aerialTile);
 
   /**
    * 2026-08-10, second pass (Tim — "why am I STILL seeing green screens for SmartVision when I click
@@ -335,7 +345,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
    * engine), then the bundled hole coords. Null only when we genuinely have no coordinate, which is
    * the one case that still deserves the placeholder.
    */
-  const previewTileUrl = useMemo(() => {
+  const previewTile = useMemo((): HoleTile | null => {
     const id = previewCourseId_resolved;
     if (!id) return null;
     const coordOk = (la?: number | null, ln?: number | null) =>
@@ -381,14 +391,15 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     if (!green) {
       if (!previewCourseCoords) return null;
       try {
-        return getCenteredImageryUrl({
+        const uri = getCenteredImageryUrl({
           lat: previewCourseCoords.lat, lng: previewCourseCoords.lng,
           zoom: 15, width: reqW, height: reqH,
         });
+        return uri ? { uri, frame: centeredFrame({ lat: previewCourseCoords.lat, lng: previewCourseCoords.lng, zoom: 15, width: reqW, height: reqH }), fallback: null } : null;
       } catch { return null; }
     }
     try {
-      return getHoleImageryUrl(
+      return holeTile(
         { courseId: id, holeNumber: 1, tee, green, par, yardage },
         { width: reqW, height: reqH },
       );
@@ -400,6 +411,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     // changed. Removing it re-breaks the green screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewCourseId_resolved, previewCourseCoords, W, H, tick]);
+  const previewTileUrl = tileUri(previewTile);
 
   // Player dot refresh tick
   useEffect(() => {
@@ -454,7 +466,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       })();
       return (
         <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
-          <ImageBackground source={{ uri: previewTileUrl }} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+          <ImageBackground source={{ uri: previewTileUrl }} onError={() => onTileError(previewTileUrl)} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
             <View style={styles.planScrim} pointerEvents="none" />
             <View style={styles.planLabelWrap} pointerEvents="none">
               <Text style={styles.placeholderSubLight}>{t('caddie_l1_hole_preview.l1_hole_preview.tap_to_plan_this_hole')}</Text>
@@ -520,7 +532,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     const cartY = pctAlong != null ? (padBottom + pctAlong * trackHeight) : null;
     return (
       <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
-        <ImageBackground source={heroImageSource} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
+        <ImageBackground source={heroImageSource} onError={() => { if (!capturedUri && !curatedImage) onTileError(aerialTileUrl); }} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
           {cartY != null && yardsToGreen != null ? (
             <>
               <View style={[styles.playerCartOnImage, { bottom: cartY, left: box.width / 2 - 12 }]}>

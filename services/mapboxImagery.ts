@@ -351,18 +351,33 @@ const writesInFlight = new Set<string>();
  * its place while there may be signal — plus that cached tile as the fallback for when the live
  * load fails. The exact file is written in the background for next time.
  */
+/**
+ * The same answer with no download: for surfaces that draw a tile but should not write one (the
+ * caddie tab's hole preview). The exact file when it is on disk, else the live URL, with this
+ * hole's cached tile as the fallback — so a preview with no signal still shows the hole.
+ */
+export function holeTile(input: HoleImageryInput, options: HoleImageryOptions = {}): HoleTile | null {
+  const frame = frameForHole(input, options);
+  const url = frame ? urlForFrame(frame) : null;
+  if (!frame || !url) return null;
+  try {
+    const cacheFile = new File(Paths.cache, tileFileName(input.courseId, input.holeNumber, frame));
+    if (cacheFile.exists) return { uri: cacheFile.uri, frame, fallback: null };
+  } catch { /* a cache read is never worth an exception */ }
+  return { uri: url, frame, fallback: cachedTilesForHole(input.courseId, input.holeNumber, frame)[0] ?? null };
+}
+
 export async function fetchHoleImagery(
   input: HoleImageryInput,
   options: HoleImageryOptions = {},
 ): Promise<HoleTile | null> {
-  const frame = frameForHole(input, options);
-  const url = frame ? urlForFrame(frame) : null;
-  if (!frame || !url) return null;
+  const tile = holeTile(input, options);
+  if (!tile) return null;
+  if (tile.uri.startsWith('file:')) return tile;
+  const { frame, fallback } = tile;
+  const url = tile.uri;
   const name = tileFileName(input.courseId, input.holeNumber, frame);
   const cacheFile = new File(Paths.cache, name);
-  if (cacheFile.exists) return { uri: cacheFile.uri, frame, fallback: null };
-
-  const fallback = cachedTilesForHole(input.courseId, input.holeNumber, frame)[0] ?? null;
 
   if (!writesInFlight.has(name)) {
     writesInFlight.add(name);
