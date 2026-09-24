@@ -3,7 +3,7 @@
  * courses to every player. "Your courses" is now only what is his; a surveyed course joins on the
  * same terms as a database one, and is still found by search.
  */
-import { composeYourCourses } from '../../services/yourCourses';
+import { composeYourCourses, yourCoursePicks } from '../../services/yourCourses';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -51,5 +51,27 @@ describe('Your courses are the player\'s courses', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     const sel = play.slice(play.indexOf('const selectSummary = useCallback'), play.indexOf('const onTapInfo'));
     expect(sel).toMatch(/const twin = c \? surveyedTwinOf\(c\) : null;[\s\S]*?if \(twinRow\) \{\s*openSurveyed\(twinRow\);\s*return;/);
+  });
+
+  it('the round-setup picker lists his courses, never a fixed four, and never a nameless id', () => {
+    const none = yourCoursePicks({ custom: [], recentIds: [], recentMeta: {}, home: [], surveyedName: () => 'X' });
+    expect(none).toEqual([]);
+    const out = yourCoursePicks({
+      custom: [{ id: 'custom:1', name: 'My Muni' }],
+      recentIds: ['abc', 'local:palms', 'nameless'],
+      recentMeta: { abc: { club_name: 'Wachusett CC' } },
+      home: [{ id: 'local:palms', name: 'Palms' }, { id: 'h9', name: 'Home Nine' }],
+      surveyedName: (id) => (id === 'local:palms' ? 'Menifee Lakes — Palms' : null),
+    });
+    expect(out.map((c) => [c.id, c.name, c.isLocal])).toEqual([
+      ['abc', 'Wachusett CC', false], ['local:palms', 'Menifee Lakes — Palms', true],
+      ['h9', 'Home Nine', false], ['custom:1', 'My Muni', true],
+    ]);
+  });
+
+  it('the picker has no hard-coded course list', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../components/CoursePicker.tsx'), 'utf8');
+    expect(src).not.toMatch(/id: 'local:/);
+    expect(src).toMatch(/myCourses\.map\(/);
   });
 });

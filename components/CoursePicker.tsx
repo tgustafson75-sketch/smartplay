@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { searchCourses } from '../services/golfCourseApi';
+import { yourCoursePicks } from '../services/yourCourses';
+import { useRoundStore } from '../store/roundStore';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useCustomCourseStore } from '../store/customCourseStore';
+import { COURSES } from '../data/courses';
 import { useTranslation } from 'react-i18next';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -30,24 +35,24 @@ interface Props {
   onInfo?: (courseId: string) => void;
 }
 
-// ─── Local fallback courses ────────────────────────────────────────────────────
-
-// Curated local courses — Tim's home rotation. Each maps to a real
-// golfcourseapi course via the slug → friendly-name resolution in
-// app/course/[course_id].tsx so detail pages, geometry, and content
-// fetch work the same as any API course (with curated bundled photos
-// where applicable, e.g. Palms).
-const LOCAL_COURSES: PickedCourse[] = [
-  { id: 'local:palms',             name: 'Menifee Lakes — Palms',       fullName: 'Menifee Lakes Country Club — Palms',       isLocal: true },
-  { id: 'local:lakes',             name: 'Menifee Lakes — Lakes',       fullName: 'Menifee Lakes Country Club — Lakes',       isLocal: true },
-  { id: 'local:rancho-california', name: 'Rancho California',           fullName: 'Rancho California Golf Club',              isLocal: true },
-  { id: 'local:echo-hills',        name: 'Echo Hills',                  fullName: 'Echo Hills Golf Course — Hemet, CA',       isLocal: true },
-];
+const getBundledCourseById = (slug: string) => COURSES.find((c) => c.id === slug) ?? null;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
   const { t } = useTranslation();
+  // 2026-09-23 (Tim — "We shouldn't have old bundled courses") — his courses, not a fixed four.
+  const recentIds = useRoundStore((s) => s.recentCourseIds);
+  const recentMeta = useRoundStore((s) => s.recentCourseMeta);
+  const home = usePlayerProfileStore((s) => s.homeCourses);
+  const customMap = useCustomCourseStore((s) => s.courses);
+  const myCourses = useMemo(() => yourCoursePicks({
+    custom: Object.values(customMap ?? {}).map((c) => ({ id: c.id, name: c.name })),
+    recentIds: recentIds ?? [],
+    recentMeta: recentMeta ?? {},
+    home: home ?? [],
+    surveyedName: (id) => getBundledCourseById(id.slice('local:'.length))?.name ?? null,
+  }), [customMap, recentIds, recentMeta, home]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ id: string; club_name: string; course_name: string; location: string }[]>([]);
   // 2026-06-04 — Many golfcourseapi results share club names (e.g. multiple
@@ -193,7 +198,7 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
       {!loading && query.trim().length < 3 && (
         <View style={styles.localSection}>
           <Text style={styles.localLabel}>{t('course_picker.text.recent_local')}</Text>
-          {LOCAL_COURSES.map((c) => (
+          {myCourses.map((c) => (
             <TouchableOpacity
               key={c.id}
               style={[styles.resultRow, selected?.id === c.id && styles.resultRowActive]}
@@ -201,7 +206,6 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
               activeOpacity={0.75}
             >
               <Text style={styles.resultName}>{c.name}</Text>
-              <Text style={styles.resultSub}>{t('course_picker.text.local_data')}</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity
