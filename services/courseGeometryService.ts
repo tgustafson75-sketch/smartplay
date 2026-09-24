@@ -533,7 +533,26 @@ function cacheIsServable(geo: CourseGeometry | null): boolean {
   const v = (geo as CourseGeometry & { pipeline_version?: number }).pipeline_version ?? 0;
   if (v !== GEOMETRY_PIPELINE_VERSION) return false;
   if (mappedHoleCount(geo) === 0) return false;
+  // Online, a map carrying AI holes from before the scale fix is rebuilt; offline it still serves.
+  if (preScaleEstimateCount(geo) > 0) return false;
   return Date.now() - geo.fetched_at < REFRESH_AFTER_MS;
+}
+
+/**
+ * 2026-09-23 — AI-found holes (estimated) were placed with a Mapbox scale 2x too large until the
+ * fix, and Course Cloud served them as course maps. The cloud was cleaned at this instant; a cached
+ * map fetched before it that carries estimated holes is not trusted. Such holes do not count as
+ * "mapped" when deciding whether a fresh build is a downgrade — or the clean rebuild is refused in
+ * favour of the misplaced copy.
+ */
+export const SCALE_FIX_CLOUD_CLEAN_AT = Date.parse('2026-09-24T03:30:00Z'); // = api/_courseCloud AI_SCALE_FIX_AT
+export function preScaleEstimateCount(geo: CourseGeometry | null | undefined, cleanAt: number = SCALE_FIX_CLOUD_CLEAN_AT): number {
+  if (!geo?.holes?.length || !(geo.fetched_at < cleanAt)) return 0;
+  return geo.holes.filter(h => h.green != null && h.estimated === true).length;
+}
+/** Mapped holes that can be trusted — the measure a downgrade is judged by. */
+export function trustedMappedHoleCount(geo: CourseGeometry | null | undefined, cleanAt: number = SCALE_FIX_CLOUD_CLEAN_AT): number {
+  return mappedHoleCount(geo) - preScaleEstimateCount(geo, cleanAt);
 }
 
 /** How many holes in this geometry actually carry a usable green — the measure of "is this real". */
@@ -563,13 +582,13 @@ async function writePersistedCache(geo: CourseGeometry): Promise<void> {
     const incoming = mappedHoleCount(geo);
     if (incoming === 0) {
       const existing = await readPersistedCache(geo.course_id);
-      if (mappedHoleCount(existing) > 0) {
+      if (trustedMappedHoleCount(existing) > 0) {
         console.warn(`[courseGeometry] refusing to overwrite ${mappedHoleCount(existing)} mapped holes with an EMPTY read for ${geo.course_id} — keeping the good cache`);
         return;
       }
     } else {
       const existing = await readPersistedCache(geo.course_id);
-      const had = mappedHoleCount(existing);
+      const had = trustedMappedHoleCount(existing);
       if (had > incoming) {
         console.warn(`[courseGeometry] refusing to downgrade ${geo.course_id}: cached ${had} mapped holes, incoming only ${incoming}`);
         return;
@@ -591,7 +610,7 @@ async function writePersistedCache(geo: CourseGeometry): Promise<void> {
 async function commitGeometry(courseId: string, geo: CourseGeometry): Promise<CourseGeometry> {
   const incoming = mappedHoleCount(geo);
   const inMem = memCache.get(courseId);
-  if (mappedHoleCount(inMem) > incoming) {
+  if (trustedMappedHoleCount(inMem) > incoming) {
     console.warn(`[courseGeometry] keeping the better in-memory copy of ${courseId} (${mappedHoleCount(inMem)} vs ${incoming} mapped holes)`);
     await writePersistedCache(geo); // still guarded on disk; a no-op when it would downgrade
     return inMem as CourseGeometry;

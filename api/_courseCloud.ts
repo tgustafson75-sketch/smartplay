@@ -21,6 +21,20 @@ const CANON = 'course_geometry';
 
 // Higher = more trusted. A lone AI-vision guess loses to OSM/bundled/on-foot data.
 const SOURCE_RANK: Record<string, number> = { ai_vision: 1, user_walk: 2, osm: 3, bundled: 4 };
+
+/**
+ * 2026-09-23 — AI-found geometry reported before this instant was placed with a Mapbox scale 2x too
+ * large (services/mapboxImagery.MAPBOX_Z0_METERS_PER_PX) and is never used again: not chosen as a
+ * hole's best report, not served. The share route refuses old-scale clients from the deploy, which
+ * is before this; a fixed client re-sharing refreshes its report's time and is trusted. The app's
+ * cached maps use the same instant (courseGeometryService.SCALE_FIX_CLOUD_CLEAN_AT).
+ */
+export const AI_SCALE_FIX_AT = '2026-09-24T03:30:00Z';
+export function isPreScaleAiRow(r: { source?: unknown; created_at?: unknown; updated_at?: unknown }): boolean {
+  if (String(r.source) !== 'ai_vision') return false;
+  const at = String(r.created_at ?? r.updated_at ?? '');
+  return !at || Date.parse(at) < Date.parse(AI_SCALE_FIX_AT);
+}
 const rank = (s: string) => SOURCE_RANK[s] ?? 0;
 
 // Confidence label bucket used on read. Exported for tests.
@@ -113,6 +127,8 @@ export async function recordContribution(
       green_back_lat: num(h.green_back_lat), green_back_lng: num(h.green_back_lng),
       source,
       confidence,
+      // The report's time is when it was last MADE: a re-share from a fixed client re-earns trust.
+      created_at: new Date().toISOString(),
     };
     const { error } = await db.from(REPORTS).upsert(row, { onConflict: 'course_id,hole,contributor_hash' });
     if (error) { console.warn('[courseCloud] report upsert failed', courseId, hole, error.message); continue; }
@@ -217,8 +233,8 @@ async function recomputeCanonical(
     .eq('hole', hole);
   if (error || !Array.isArray(data) || data.length === 0) return;
 
-  // Best report wins: source rank, then confidence, then recency.
-  const best = chooseBestReport(data);
+  // Best report wins: source rank, then confidence, then recency — among reports still trusted.
+  const best = chooseBestReport(data.filter((r) => !isPreScaleAiRow(r)));
   if (!best) return;
 
   const canon = {
@@ -283,6 +299,7 @@ export async function readSharedGeometry(db: Db, courseId: string): Promise<Shar
   if (!Array.isArray(data) || data.length === 0) return null;
   const holes = data
     .map((r): SharedHoleGeometry | null => {
+      if (isPreScaleAiRow(r)) return null;   // misplaced by the old scale — never served
       const tee = pt(r.tee_lat, r.tee_lng);
       const green = pt(r.green_lat, r.green_lng);
       if (!tee && !green) return null;

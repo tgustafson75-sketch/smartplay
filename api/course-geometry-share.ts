@@ -28,6 +28,8 @@ import { recordContribution, type SharedHoleInput } from './_courseCloud';
 const APP_KEY = process.env.SPC_APP_KEY || 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29';
 const CONTRIB_SALT = process.env.SPC_CONTRIB_SALT || 'spc_course_cloud_salt_v1';
 const MAX_HOLES = 36;
+/** The client scale version whose AI geometry is placed correctly (2026-09-23 fix). */
+export const MIN_SCALE_V = 2;
 
 function norm(v: unknown): string {
   return String(v ?? '').trim();
@@ -55,7 +57,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const db = getSmartPlaySupabase();
   if (!db) return res.status(200).json({ ok: false, error: 'not_configured' });
 
-  const body = (req.body ?? {}) as { course_id?: unknown; contributor?: unknown; holes?: unknown };
+  const body = (req.body ?? {}) as { course_id?: unknown; contributor?: unknown; holes?: unknown; scale_v?: unknown };
+  /**
+   * 2026-09-23 — AI-found geometry from a client that projected with the OLD Mapbox scale (2x too
+   * large; see services/mapboxImagery.MAPBOX_Z0_METERS_PER_PX) is misplaced. Clients on the fixed
+   * scale send scale_v >= 2; anything else is thanked and NOT stored, so a phone that has not taken
+   * the update cannot re-seed the cloud after it was cleaned. 200, not 4xx: nothing for it to retry.
+   */
+  if (!(Number(body.scale_v) >= MIN_SCALE_V)) return res.status(200).json({ ok: true, written: 0, ignored: 'stale_client_scale' });
   const courseId = norm(body.course_id);
   if (!courseId) return res.status(400).json({ ok: false, error: 'no_course_id' });
   if (!Array.isArray(body.holes) || body.holes.length === 0) return res.status(400).json({ ok: false, error: 'no_holes' });
