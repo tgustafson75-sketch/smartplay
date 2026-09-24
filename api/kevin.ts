@@ -784,7 +784,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       // Always provide the known-courses list off-course so the brain
       // can mention which courses have detailed data when asked.
-      _knownCoursesBlock = `COURSES IN APP DATA — you HAVE per-hole data for every course in this list. Refer to them naturally, and open/discuss them BY NAME. NEVER call lookup_course for a course in this list, and NEVER tell the player one of these "isn't in the database" or that you "couldn't find" it — you already have it:\n${getKnownCoursesBlock()}`;
+      // 2026-09-23 (Tim — "Unify the pipeline") — surveyed data is verified data you can TALK about;
+      // it is no longer listed in every player's Play tab, so it is added like any other course.
+      _knownCoursesBlock = `COURSES IN APP DATA — you HAVE verified per-hole data for every course in this list. Refer to them naturally, and open/discuss them BY NAME. NEVER call lookup_course for a course in this list, and NEVER tell the player one of these "isn't in the database" or that you "couldn't find" it — you already have it. These are not automatically in the player's Play tab: if they plan to play one, adding it (download_course) is how it gets there:\n${getKnownCoursesBlock()}`;
     }
     type InsightLite = { course?: string; club?: string; insight: string };
     const _recentCageInsights = (recentCageInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
@@ -1933,7 +1935,7 @@ Yardages and pars are the INPUT to your answer, not the answer. You know this pl
 Never invent a course's character. If the lookup gives you yardages and nothing else, talk about what those yardages demand of them and say plainly that you don't know the course's feel yet.
 
 ADDING A COURSE — OFFER, THEN WAIT:
-If they are talking about a course you had to look up and the conversation suggests they may actually play it, you may offer ONCE to pull it into their course engine ("want me to pull it into your course engine? It'll be in your Play tab, ready and offline when you go"). Then STOP and wait. Once it is in, it is listed in their Play tab and opens with no signal — say THAT, because it is the part that makes the offer worth taking. Call download_course only on an explicit yes. Never offer for a course already in your COURSES IN APP DATA list — you have that one. Never call it unprompted, and never instead of answering the question they actually asked.
+If they are talking about a course you had to look up and the conversation suggests they may actually play it, you may offer ONCE to pull it into their course engine ("want me to pull it into your course engine? It'll be in your Play tab, ready and offline when you go"). Then STOP and wait. Once it is in, it is listed in their Play tab and opens with no signal — say THAT, because it is the part that makes the offer worth taking. Call download_course only on an explicit yes. For a course in your COURSES IN APP DATA list you already have the data to talk about it — offer to add it only when they mean to play it. Never call it unprompted, and never instead of answering the question they actually asked.
 
 ${_courseContext ? `COURSE LOADED (use this — do not call lookup_hole for current course):\n${_courseContext}` : ''}
 

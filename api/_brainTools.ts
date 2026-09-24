@@ -421,7 +421,7 @@ export const BRAIN_TOOLS: AiToolDef[] = [
    */
   {
     name: 'download_course',
-    description: 'Pull a course into the player\'s course engine — downloads its geometry, content and imagery so it is ready and available offline. Use ONLY after the player explicitly agrees to add a course you were discussing ("yeah, pull it up", "add it", "download it", "get that one"). You may OFFER once after talking about a course they do not have ("want me to pull it into your course engine?") and then WAIT. Never call this unprompted, never on a course already in your COURSES IN APP DATA list, and never as a way to answer a question — lookup_course and lookup_hole already fetch what you need to TALK about a course.',
+    description: 'Pull a course into the player\'s course engine — downloads its geometry, content and imagery so it is ready and available offline. Use ONLY after the player explicitly agrees to add a course you were discussing ("yeah, pull it up", "add it", "download it", "get that one"). You may OFFER once after talking about a course they do not have ("want me to pull it into your course engine?") and then WAIT. Never call this unprompted, not for a course in your COURSES IN APP DATA list unless they mean to play it (you already have its data to talk about), and never as a way to answer a question — lookup_course and lookup_hole already fetch what you need to TALK about a course.',
     parameters: {
       type: 'object',
       properties: {
