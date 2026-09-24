@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { courseDisplayLabel } from '../../data/courseComplexes';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { pickTeeSet, playerTee } from '../../services/teeSelection';
+import { isValidGolfCoord } from '../../utils/coordGuard';
 import { surveyedTwinOf } from '../../services/courseCard';
 import {
   View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet,
   useWindowDimensions,
-  type ImageSourcePropType, Alert } from 'react-native';
+  Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import CourseDetailBanner from '../../components/course/CourseDetailBanner';
@@ -28,14 +29,12 @@ import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settin
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { prewarmBriefing } from '../../services/briefingGenerator';
 import { prewarmVoice } from '../../services/voiceWarmup';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
-import { getLocalHoleImage } from '../../data/localCourseImages';
 import type { Course } from '../../types/course';
 import { useTranslation } from 'react-i18next';
 import { goToTab } from '../../services/safeBack';
@@ -477,33 +476,33 @@ export default function CourseDetailScreen() {
   // hole (from SmartFinder ingest) is the most valuable imagery; prefer it over the
   // curated bundle / satellite. Subscribe to the manifest so new captures re-render.
   const captures = useCourseCaptureStore((s) => s.captures);
+  const surveyedHoles = useMemo(() => (course_id?.startsWith('local:') ? getBundledHoles(course_id) : []), [course_id]);
   const holePhotos = useMemo(() => {
     if (!tee || !course) return [];
     return tee.holes.map(h => {
       // 1. Player's own captured photo for this hole (closes the bootstrap loop).
       const cap = useCourseCaptureStore.getState().bestForward(course.id, h.hole_number);
       if (cap && cap.kind === 'single' && cap.uri) {
-        return { hole_number: h.hole_number, url: cap.uri, bundled: null, yardage: h.yardage };
+        return { hole_number: h.hole_number, url: cap.uri, tile: null, yardage: h.yardage };
       }
-      const bundled = getLocalHoleImage(displayClubName, h.hole_number);
-      if (bundled) {
-        // Phase 405b — carry yardage so the grid renders a centered
-        // yardage overlay on each tile per the v3 reference.
-        return { hole_number: h.hole_number, url: '__bundled__', bundled, yardage: h.yardage };
-      }
+      // The hole's satellite tile: from its map, or — for a surveyed course whose map is not built
+      // yet — its surveyed tee/green, so the hole draws on first open instead of being left out.
       const geom = getHoleGeometry(course.id, h.hole_number);
-      const url = getHoleThumbnailUrl({
-        courseId: course.id,
-        holeNumber: h.hole_number,
-        par: h.par,
+      const surveyed = surveyedHoles.find(b => b.hole === h.hole_number);
+      const pt = (la?: number | null, ln?: number | null) =>
+        la != null && ln != null && isValidGolfCoord(la, ln) ? { lat: la, lng: ln } : null;
+      const green = geom?.green ?? pt(surveyed?.middleLat, surveyed?.middleLng);
+      const teePt = geom?.tee ?? pt(surveyed?.teeLat, surveyed?.teeLng);
+      if (!green) return null;   // nothing places this hole yet — never a picture of somewhere else
+      return {
+        hole_number: h.hole_number,
+        url: null,
+        tile: { courseId: course.id, holeNumber: h.hole_number, par: h.par, yardage: h.yardage, tee: teePt, green },
         yardage: h.yardage,
-        tee: geom?.tee ?? null,
-        green: geom?.green ?? null,
-      });
-      return url ? { hole_number: h.hole_number, url, bundled: null, yardage: h.yardage } : null;
-    }).filter((x): x is { hole_number: number; url: string; bundled: ImageSourcePropType | null; yardage: number } => x !== null);
+      };
+    }).filter((x): x is NonNullable<typeof x> => x !== null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tee, course, displayClubName, geometryCompletions, captures]);
+  }, [tee, course, surveyedHoles, geometryCompletions, captures]);
 
   // Phase 405b — heroSource useMemo + getCourseImageryUrl fallback
   // were removed in the V3-reference redesign. The page no longer
@@ -662,12 +661,7 @@ export default function CourseDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('course.course_detail_screen.hole_photos')}</Text>
           <HolePhotosGrid
-            photos={holePhotos.map(p => ({
-              hole_number: p.hole_number,
-              url: p.url === '__bundled__' ? '' : p.url,
-              palmsImage: p.bundled ?? undefined,
-              yardage: p.yardage,
-            }))}
+            photos={holePhotos}
           />
         </View>
 

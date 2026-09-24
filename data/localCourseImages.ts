@@ -1,92 +1,12 @@
 /**
- * Local course image registration.
+ * Local (surveyed) course registry: slugs, verified centroids, and the name → slug resolver.
  *
- * Curated bundled hole screenshots for courses Tim has playtested. Bundler
- * needs literal require() calls — this file is the registration site.
- *
- * To add a new local course pack:
- *   1. Drop the assets at `assets/courses/<slug>/hole-01.jpg` … `hole-18.jpg`
- *   2. Add a new entry below: `lakes: { 1: require('...'), ... }`
- *   3. Add a name match in `getLocalHoleImage` that recognizes the course
- *
- * Empty maps (Lakes, Rancho California) are placeholders — until Tim drops
- * the JPGs, those courses fall through to Mapbox aerial.
+ * 2026-09-23 — this file used to register the bundled hole screenshots too (`*_HOLE_IMAGES`,
+ * `getLocalHoleImage*`). Every table had been empty since 2026-08-25 and every hole image is now the
+ * Mapbox tile drawn cached-first (services/mapboxImagery.holeTile), so that half is gone.
  */
 
-import type { ImageSourcePropType } from 'react-native';
 import { isAmbiguousComplexName } from './courseComplexes';
-
-// 2026-05-26 — Fix BJ: all 18 holes refreshed with 18Birdies versions
-// (replacing prior Golfshot screenshots). Same caveats as Maplewood —
-// baked-in 18B chrome (top stats bar, bottom Hole pill, floating
-// yardage bubbles, "Green Maps" icon) needs cropping/masking before
-// public release; the white tee→green line is intentionally kept
-// as a yellow-dot calibration reference. File registration
-// (hole-01.jpg through hole-18.jpg) is unchanged — same paths,
-// same keys; the JPGs themselves were swapped at the bytes level.
-export const PALMS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// Menifee Lakes — Lakes course (Tim's home club's sister course to Palms).
-// Imported from V3's menifee-lakes set, renamed lakes-h{n}.jpg → hole-{nn}.jpg.
-export const LAKES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// Rancho California — imported from V3, renamed rancho-h{n}.jpg → hole-{nn}.jpg.
-// THIRD-PARTY (Golfshot-derived) — intentionally empty; see the note above.
-export const RANCHO_CALIFORNIA_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// Phase BL — Crystal Springs Golf Course, Burlingame CA (18 holes).
-export const CRYSTAL_SPRINGS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// San Jose Municipal Golf Course (Bay Area, CA — Tim's home area while
-// he's there over the next 3-6 months). All 18 holes bundled
-// 2026-05-14 from Tim's IMG_6426–IMG_6443 photo set, sequentially
-// mapped (6426→hole 1, 6443→hole 18).
-export const SAN_JOSE_MUNI_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// Sunnyvale Golf Course (Bay Area, CA — added 2026-05-16 because Tim
-// is playing it tomorrow). All 18 holes bundled from Golfshot-app
-// screenshots Tim captured: sequential filename timestamps
-// (172038–172307 on 2026-04-18) mapped 1:1 to holes 1–18.
-export const SUNNYVALE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// Phase BL — Mariners Point Golf Center, Burlingame CA (9 holes par 3).
-export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// 2026-06-04 — Maplewood + Pembroke Pines bundles removed. Both had
-// raw Golfshot/18Birdies UI chrome that needs an IP-clean replacement
-// pass before re-bundling. Until then they fall through to Mapbox
-// satellite (the dynamic-tile fallback).
-
-// 2026-06-04 — Echo Hills Golf Course, Hemet CA (9-hole executive
-// par 35). Tim's local rotation. Bundled from raw Golfshot Android
-// screenshots (IMG 7635–7643, 1768x1976) via scripts/clean-course-
-// images.py — crop (460,170,1768,1750) → 1308x1580. Removes the
-// status bar, top ad banner, left "Hole / Back Edge / Green Center
-// / Front Edge / Par / Get Pro!" sidebar, and bottom Holes/Preview/
-// Track nav. Small residual chrome (info "i" top-right + pencil
-// bottom-right corner) — acceptable for beta. Baked-in tee→green
-// line + Green Center yardage bubble intentionally kept as
-// SmartVision visual reference.
-export const ECHO_HILLS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// 2026-05-28 — Westlake Country Club, Jackson NJ. Full 18-hole bundle
-// from Tim's Green Maps Android screenshots (IMG 7502-7519 + 7527-7529,
-// 1768x2208 / 1768x1976). Cropped to 1768x1450 via ffmpeg to match the
-// Palms aesthetic: clean aerial, tee→green measurement line preserved,
-// Green Maps "wind & slope" pill kept on the side, device chrome and
-// Yds/Par/Handicap header bar removed.
-//
-// Per-hole quick reference (from the original capture headers):
-//   01 par 4 416y    02 par 5 472y    03 par 3 146y
-//   04 par 4 380y    05 par 4 432y    06 par 3 170y
-//   07 par 4 366y    08 par 4 416y    09 par 4 333y
-//   10 par 5 510y    11 par 4 374y    12 par 4 351y
-//   13 par 3 198y    14 par 5 500y    15 par 4 379y
-//   16 par 4 378y    17 par 3 144y    18 par 4 288y
-// Total: par 71, ~6253y from this tee box.
-export const GREENHILL_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const WESTLAKE_CC_NJ_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 export type LocalCourseSlug =
   // 2026-08-25 — MARQUEE SET. Bundled with NO image pack on purpose: hole imagery comes from Mapbox
@@ -136,95 +56,6 @@ export type LocalCourseSlug =
   | 'wente-vineyards' | 'yocha-dehe' | 'shadow-lakes'
   // 2026-07-29 — Gabe's Brevard County FL courses (OSM-built).
   | 'crane-creek' | 'manatee-cove';
-
-// 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
-// course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
-export const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// 2026-07-06 — Webster/Dudley (MA). Cropped aerials from Tim's Golf Pad hole-view
-// screenshots (2216-2224 → holes 1-9). 2026-07-07 — reprocessed (tighter crop +
-// unfade + vivid color) and extended to 18: the course plays 18 as the NINE TWICE
-// (scorecard-confirmed), so holes 10-18 show the same aerials as 1-9.
-// 2026-08-11 — EMPTIED: these are Golf Pad hole-view screenshots (third-party app UI), per the
-// note below. Metro bundles what is required, so dropping the requires removes them from the
-// shipped app. Webster/Dudley renders from our own Mapbox tiles instead.
-const WD: Record<number, ImageSourcePropType> = {};
-
-// THIRD-PARTY (Golf Pad-derived) — intentionally empty; see the note below.
-export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-
-// Golf Pad hole-view captures (aerial + flight line + green distance).
-
-// 2026-07-18 — Pembroke Lakes Country Club (Pembroke Pines FL). 18 holes, same capture source.
-export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// 2026-07-23 — Highland / Miccosukee / Killian / Redlands: 18 cropped aerials each (chrome-free,
-// from the GPS-app hole-view screenshots). Bundled as the seamless backup so SmartVision always
-// has an image even when the Mapbox satellite tile fails.
-export const HIGHLAND_LINKS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-export const MICCOSUKEE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-export const KILLIAN_GREENS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-export const REDLANDS_CC_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-// 2026-07-28 — courses that HAD geometry but no bundled hole art (green-screened to the SVG sketch).
-// Regenerated as clean satellite aerials via services/mapboxImagery (same runtime engine) from their
-// tee/green coords — no baked-in markers; the app draws its own overlays.
-export const MINES_GC_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const DALE_HOLLOW_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const OLD_FORT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const NASHBORO_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const HERMITAGE_PR_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const COYOTE_CREEK_VALLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const PRUNERIDGE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const WENTE_VINEYARDS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const YOCHA_DEHE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const CRANE_CREEK_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const MANATEE_COVE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
-
-export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
-  'crane-creek': CRANE_CREEK_HOLE_IMAGES,
-  'manatee-cove': MANATEE_COVE_HOLE_IMAGES,
-  'wente-vineyards': WENTE_VINEYARDS_HOLE_IMAGES,
-  'yocha-dehe': YOCHA_DEHE_HOLE_IMAGES,
-  'coyote-creek-tournament': COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES,
-  'coyote-creek-valley': COYOTE_CREEK_VALLEY_HOLE_IMAGES,
-  'pruneridge': PRUNERIDGE_HOLE_IMAGES,
-  'mines-gc': MINES_GC_HOLE_IMAGES,
-  'dale-hollow': DALE_HOLLOW_HOLE_IMAGES,
-  'old-fort': OLD_FORT_HOLE_IMAGES,
-  'nashboro': NASHBORO_HOLE_IMAGES,
-  'hermitage-pr': HERMITAGE_PR_HOLE_IMAGES,
-  'highland-links': HIGHLAND_LINKS_HOLE_IMAGES,
-  'miccosukee': MICCOSUKEE_HOLE_IMAGES,
-  'killian-greens': KILLIAN_GREENS_HOLE_IMAGES,
-  'redlands-cc': REDLANDS_CC_HOLE_IMAGES,
-  'webster-dudley': WEBSTER_DUDLEY_HOLE_IMAGES,
-  'pembroke-pines': PEMBROKE_PINES_HOLE_IMAGES,
-  'palms': PALMS_HOLE_IMAGES,
-  'lakes': LAKES_HOLE_IMAGES,
-  'rancho-california': RANCHO_CALIFORNIA_HOLE_IMAGES,
-  'crystal-springs': CRYSTAL_SPRINGS_HOLE_IMAGES,
-  'mariners-point': MARINERS_POINT_HOLE_IMAGES,
-  'san-jose-muni': SAN_JOSE_MUNI_HOLE_IMAGES,
-  'sunnyvale': SUNNYVALE_HOLE_IMAGES,
-  'westlake-cc-nj': WESTLAKE_CC_NJ_HOLE_IMAGES,
-  'echo-hills': ECHO_HILLS_HOLE_IMAGES,
-  'greenhill': GREENHILL_HOLE_IMAGES,
-  'spessard-holland': SPESSARD_HOLLAND_HOLE_IMAGES,
-};
 
 /**
  * 2026-05-16 — Centroid lat/lng for each LOCAL_COURSES entry. Used as
@@ -464,107 +295,6 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
 }
 
 /**
- * Resolve a course name to its bundled hole image, if available.
- *
- * 2026-05-16 update: San Jose Muni + Sunnyvale ARE matched again now
- * that their JPGs were programmatically cropped (Python/PIL) to remove
- * the Golfshot yardage UI, "Get Pro!" banner, Android status bars, and
- * info/edit buttons. What remains is the actual per-hole aerial strip
- * with tee at bottom, green at top, and a baked-in green-center
- * yardage label. Net result: ~24MB asset-bundle reduction PLUS the
- * imagery is finally usable.
- */
-export function getLocalHoleImage(courseName: string | null, holeNumber: number): ImageSourcePropType | null {
-  if (!courseName) return null;
-  const c = courseName.toLowerCase();
-  /**
-   * 2026-09-05 — MULTI-COURSE GATE, BEFORE ANY SUBSTRING MATCH.
-   *
-   * Tim played the Palms at Menifee Lakes and got the Lakes' hole imagery beside correct Palms
-   * yardages. golfcourseapi returns the same parent club for both layouts, so the name in hand was
-   * "Menifee Lakes Country Club" — which contains "lakes", does not contain "palms", and sailed
-   * straight into the generic match below.
-   *
-   * The `lakes && !palms` guard further down was not wrong. It was answering a question the name
-   * could not answer. A facility name cannot identify a layout, so this declines instead of
-   * guessing and the caller falls through to live satellite geometry, which is keyed by the course
-   * id and is correct. A right hole from a satellite beats a curated photograph of a different golf
-   * course. [[two-owners-is-the-root-cause]]
-   */
-  if (isAmbiguousComplexName(courseName)) return null;
-  if (c.includes('crystal') && c.includes('spring')) return CRYSTAL_SPRINGS_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('mariner')) return MARINERS_POINT_HOLE_IMAGES[holeNumber] ?? null;
-  // Pembroke precedes the 'lakes' match (the course is "Pembroke Lakes").
-  // 2026-08-12 — Doral removed from the bundled set: Golden Palm has no hole GPS in ANY source, so
-  // there was nothing honest to render. A Doral round now falls through to live satellite geometry.
-  if (c.includes('pembroke')) return PEMBROKE_PINES_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-09-01 — Shadow Lakes must precede the generic 'lakes' match for the same reason Pembroke
-  // does. It had NO guard here at all, so Jay's home course rendered Menifee's hole aerials. This
-  // file's own header promises both functions resolve identically from the same courseName; they
-  // did not. Shadow Lakes is scorecard-only (no bundled hole imagery), so the honest answer is null
-  // and the caller falls through to live satellite geometry. [[illustration-data-points]]
-  if (c.includes('shadow')) return null;
-  // "palms" check must follow "lakes" handling — Tim's home-course label
-  // is often "Menifee Lakes — Palms" which contains both words. Without
-  // anchoring on "palms" appearing in the suffix, a Crystal Springs round
-  // whose courseName falls through to homeCourse would be substring-
-  // matched as palms and render the wrong imagery.
-  if (c.includes('lakes') && !c.includes('palms')) return LAKES_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('palms')) return PALMS_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('rancho')) return RANCHO_CALIFORNIA_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('san jose')) return SAN_JOSE_MUNI_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('sunnyvale')) return SUNNYVALE_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-06-04 — Echo Hills, Hemet CA.
-  if (c.includes('echo')) return ECHO_HILLS_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-05-28 — Westlake CC, Jackson NJ. Match on "westlake" — single
-  // bundled Westlake property today, so the bare substring is enough.
-  // Revisit if a sibling Westlake course gets bundled.
-  if (c.includes('westlake')) return WESTLAKE_CC_NJ_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-07-24 (final QA) — also match "green hill" (with a space): the canonical course name in
-  // data/courses.ts is "Green Hill", which does NOT contain "greenhill", so the name path returned
-  // null for its own bundled aerials (the id path masked it everywhere else).
-  if (c.includes('greenhill') || c.includes('green hill')) return GREENHILL_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-07-24 (final QA) — Spessard Holland + Webster Dudley had bundled aerials + a getLocalCourseSlug
-  // branch, but NO getLocalHoleImage branch, so any name-only consumer (course-detail hole grid,
-  // SmartVision hasCurated check) showed no imagery. Mirror getLocalCourseSlug.
-  if (c.includes('spessard') || c.includes('holland')) return SPESSARD_HOLLAND_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('webster') || c.includes('dudley')) return WEBSTER_DUDLEY_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-07-23 — the 4 screenshot-anchored beta courses (name-keyed parity with the id path).
-  if (c.includes('highland')) return HIGHLAND_LINKS_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('miccosukee')) return MICCOSUKEE_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('killian')) return KILLIAN_GREENS_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('redlands')) return REDLANDS_CC_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-07-28 — Coyote Creek (two courses; default to Tournament unless "valley" is named) + Pruneridge.
-  if (c.includes('coyote')) return (c.includes('valley') ? COYOTE_CREEK_VALLEY_HOLE_IMAGES[holeNumber] : COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES[holeNumber]) ?? null;
-  if (c.includes('pruneridge')) return PRUNERIDGE_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('wente')) return WENTE_VINEYARDS_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('yocha')) return YOCHA_DEHE_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('crane creek') || c.includes('crane')) return CRANE_CREEK_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('manatee')) return MANATEE_COVE_HOLE_IMAGES[holeNumber] ?? null;
-  return null;
-}
-
-/**
- * 2026-05-17 — Canonical courseId-keyed hole image lookup. Preferred
- * over getLocalHoleImage(courseName, ...) wherever the caller knows the
- * `local:<slug>` id, because substring-matching against a free-text
- * courseName is fragile (e.g. a Crystal Springs round whose
- * courseName fell through to the user's "Menifee Lakes — Palms" home
- * course would be matched as Palms and render the wrong hole).
- * Returns null when the slug isn't a known local course or the hole
- * number is out of range.
- */
-export function getLocalHoleImageById(
-  courseId: string | null | undefined,
-  holeNumber: number,
-): ImageSourcePropType | null {
-  if (!courseId || !courseId.startsWith('local:')) return null;
-  const slug = courseId.slice('local:'.length) as LocalCourseSlug;
-  const set = LOCAL_COURSE_IMAGES[slug];
-  return set?.[holeNumber] ?? null;
-}
-
-/**
  * 2026-09-13 — `getDefaultPreviewImage()` was DELETED, and the rule it encoded is kept here because
  * the rule is the valuable part.
  *
@@ -572,8 +302,7 @@ export function getLocalHoleImageById(
  * screenshots into non-Palms contexts; the fix was to return null, and the function then existed only
  * to return null to nobody — it had zero callers. Its job belongs to the consumer: when there is no
  * course context, SmartVision renders an explicit "pick a course" empty state, which it does (see the
- * empty-state branches in app/smartvision.tsx) using getLocalHoleImage / getLocalHoleImageById for the
- * cases where imagery genuinely exists.
+ * empty-state branches in app/smartvision.tsx).
  *
  * So: never add a fallback that guesses a course's art. An empty state that says what it needs beats a
  * picture of the wrong golf course. [[silence-is-not-an-answer]]

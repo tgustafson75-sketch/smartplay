@@ -100,9 +100,8 @@ import { useCaddieBarReserve } from '../components/GlobalCaddieBar';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
-import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS } from '../data/localCourseImages';
+import { LOCAL_COURSE_CENTROIDS } from '../data/localCourseImages';
 import { localSlugFromCourseId, resolveLocalSlug } from '../data/courseSlug';
-import { getHoleLineCalibration, calibrationToCanvas } from '../data/holeLineCalibration';
 import { getBundledHoles, getCourseHoleCount, getBundledCourseCentroid } from '../data/courses';
 // 2026-05-31 — Fix GA: consolidate to canonical haversine. Prior inline
 // implementation duplicated utils/geoDistance.ts and was a maintenance
@@ -110,7 +109,6 @@ import { getBundledHoles, getCourseHoleCount, getBundledCourseCentroid } from '.
 // Single source of truth now lives in utils/geoDistance.ts.
 import { haversineYards as canonicalHaversineYards, bearingDegrees } from '../utils/geoDistance';
 import { planAimLines, layupFraction } from '../utils/layupPlan';
-import { LinearGradient } from 'expo-linear-gradient';
 // 2026-06-23 (Phase 3b) — honest AI recommendation bar. composeShotRead is
 // pure/local/offline: club (from the player's REAL bag, ladder fallback) +
 // plays-like + a short "why" line. NO fabricated success% (per the
@@ -567,35 +565,11 @@ export default function SmartVisionScreen() {
   );
   const holeKey = holeKeyOf(holeIndex);
 
-  // 2026-05-17 — Curated bundled image. Prefer the courseId-keyed lookup
-  // (canonical) and fall back to courseName-based substring matching
-  // only when courseId is missing. Hoisted ABOVE the canvas sizing (2026-06-23)
-  // so the box can match the image's aspect.
-  const curatedImage = useMemo(() => {
-    const direct = getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex);
-    if (direct) return direct;
-    // A round persisted under an upstream id still maps to our bundled crop; localSlugFromCourseId
-    // handles both `local:<slug>` and the legacy alias ids.
-    const slug = localSlugFromCourseId(courseId);
-    return slug ? getLocalHoleImageById(`local:${slug}`, holeIndex) : null;
-  }, [courseId, courseName, holeIndex]);
-
   /**
-   * 2026-08-11 (Tim) — "since we've gotten rid of bundled courses, do we get rid of the static
-   * setting in SmartVision? And it's always satellite, but it goes live and updates when you're in
-   * a live round."
-   *
-   * Yes. What the toggle actually chose between was a LIVE aerial and a FROZEN one — every bundled
-   * "static" hole is itself a cropped aerial photo, so the two sides were never different kinds of
-   * picture, just different vintages. Making the user pick the stale one was a setting that could
-   * only make the app worse, and pre-round it silently DID pick the stale one for 27 courses.
-   *
-   * So satellite is simply what SmartVision shows now. The 459 bundled hole photos are kept, but
-   * demoted to what they were always best at: an instant, offline-safe fallback for a hole we have
-   * no coordinates for. Order is live tile → bundled photo → centroid/GPS tile → honest empty state.
-   * [[hands-free-zero-setup-is-the-product]] [[simplified-sophistication]]
+   * 2026-09-23 (Tim — "We shouldn't have old bundled courses") — SmartVision draws the satellite tile
+   * the course engine frames, or the honest "waiting" state. The bundled hole photos (emptied
+   * 2026-08-25) and every branch that could show one are gone; the lookups had nothing left to return.
    */
-  const [imagerySource, setImagerySource] = useState<'satellite' | 'curated' | 'none'>('none');
 
   // Image area: leaves room for back chevron + hole switcher at top, F/M/B
   // yardage panel at bottom. Square-ish on phones, full-height on tablets.
@@ -628,23 +602,8 @@ export default function SmartVisionScreen() {
     ? H - insets.top - insets.bottom - TOP_BAR_H - barReserve
     : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H - barReserve - AIREC_EST;
   const availH = measuredAerialH > 0 ? measuredAerialH : estAvailH;
-  // 2026-06-24 (Tim — "the T you can't see") — our curated hole crops are 2:3
-  // portrait (1024×1536). The box must be EXACTLY that aspect or resizeMode:cover
-  // crops the top/bottom and the TEE (~83% down) falls off the visible image while
-  // calibration still maps to the full image. Capping HEIGHT alone wasn't enough:
-  // when availH < fullW*1.5 the box stayed wider than 2:3 and still cropped. So fit
-  // a TRUE 1.5-aspect box inside (fullW × availH), SHRINKING THE WIDTH when height
-  // is the limit. Now cover == contain (whole hole + tee visible) and markers
-  // (calibration × imageW × imageH) align 1:1; the narrower box centers via
-  // canvasBox alignSelf.
-  const CURATED_ASPECT = 1536 / 1024; // = 1.5
-  const isCuratedPortrait = !isSplit && !!curatedImage;
-  const imageH = isCuratedPortrait
-    ? Math.min(availH, Math.round(fullW * CURATED_ASPECT))
-    : availH;
-  const imageW = isCuratedPortrait
-    ? Math.round(imageH / CURATED_ASPECT)
-    : fullW;
+  const imageH = availH;
+  const imageW = fullW;
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
   const [imageUri, setImageUriState] = useState<string | null>(null);
@@ -656,7 +615,10 @@ export default function SmartVisionScreen() {
   const [tileFrame, setTileFrame] = useState<TileFrame | null>(null);
   /** A cached tile of this hole, with its own frame, for when the live one fails to load. */
   const tileFallbackRef = useRef<{ uri: string; frame: TileFrame } | null>(null);
+  /** The live tile, its fallback and one retry all failed: the canvas says "no signal", not "no location". */
+  const [tileFailed, setTileFailed] = useState(false);
   const showTile = useCallback((uri: string | null, frame: TileFrame | null, fallback: { uri: string; frame: TileFrame } | null = null) => {
+    if (uri) setTileFailed(false);
     setImageUriState(uri);
     setTileFrame(uri ? frame : null);
     tileFallbackRef.current = uri ? fallback : null;
@@ -716,6 +678,7 @@ export default function SmartVisionScreen() {
     // must always be cleared; leaving it up while the new one resolves is exactly the wrong-hole
     // flash this guard was written to prevent.
     showTile(null, null);
+    setTileFailed(false);
     setGeometry(null);
 
     /**
@@ -740,9 +703,6 @@ export default function SmartVisionScreen() {
       const warmGeo = courseId ? getHoleGeometry(courseId, holeIndex) : null;
       if (warmGeo) setGeometry(warmGeo);
 
-      const warmCurated =
-        getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex);
-
       const bundled = courseHoles.find(x => x.hole === holeIndex);
       const ok = (la?: number, ln?: number) =>
         la != null && ln != null && la !== 0 && ln !== 0 && Math.abs(la) <= 90 && Math.abs(ln) <= 180;
@@ -765,12 +725,7 @@ export default function SmartVisionScreen() {
        */
       const warmEnough = !!warmGeo?.green;
 
-      if (warmCurated && warmEnough) {
-        // A bundled photo is the fastest thing we own and works offline. Show it now; the satellite
-        // pass below replaces it when it resolves, exactly as it would have anyway.
-        setImagerySource('curated');
-        setLoading(false);
-      } else if (warmEnough && warmGreen && courseId && imageW > 0 && imageH > 0) {
+      if (warmEnough && warmGreen && courseId && imageW > 0 && imageH > 0) {
         const MAXW = 1280;
         let w = imageW;
         let h = imageH;
@@ -782,7 +737,6 @@ export default function SmartVisionScreen() {
         const warmIn = { lat: warmGreen.lat, lng: warmGreen.lng, zoom: 16, width: w, height: h };
         const warmUri = getCenteredImageryUrl(warmIn);
         if (warmUri) {
-          setImagerySource('satellite');
           showTile(warmUri, centeredFrame(warmIn));
           setLoading(false);
         }
@@ -1014,8 +968,6 @@ export default function SmartVisionScreen() {
       // 2026-08-11 — this used to RETURN here whenever a bundled photo existed, before the hole's
       // coordinates had even been computed, so 27 courses could never show a live tile pre-round.
       // The photo is now a fallback, decided AFTER we know whether a live tile is possible.
-      const curatedAvailable =
-        getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex);
       // 2026-06-01 — Fix GI: when geo has polygons but no centroid
       // (some upstream sources return green_polygon without computing
       // green centroid), derive the centroid from the polygon so the
@@ -1097,7 +1049,6 @@ export default function SmartVisionScreen() {
           tee: effectiveTee,
           green: effectiveGreen,
         };
-        setImagerySource('satellite');
         rememberTileSize(reqW, reqH);
         const framed = frameForHole(holeInput, { width: reqW, height: reqH });
         const greenIn = { lat: effectiveGreen.lat, lng: effectiveGreen.lng, zoom: 16, width: reqW, height: reqH };
@@ -1117,16 +1068,9 @@ export default function SmartVisionScreen() {
           if (cancelled) return;
           showTile(floor.uri, floor.frame);
         }
-      } else if (curatedAvailable) {
-        // No coordinates for this hole, but we have a bundled aerial of it — better than a course-
-        // wide centroid tile, and it works with no signal. imageUri stays null so the render picks
-        // up `curatedImage`.
-        setImagerySource('curated');
-        showTile(null, null);
       } else {
-        // Centroid / live-GPS fallback tile for a hole we have neither coordinates nor a photo for.
-        const hasCurated = false;
-        if (!hasCurated) {
+        // Centroid / live-GPS fallback tile for a hole with no coordinates.
+        {
           // 2026-07-14 (Tim — "if we haven't screenshotted the holes, satellite doesn't work"):
           // center a Mapbox satellite tile on the best point we have, so ANY course from the Golf
           // Course API gets real aerial imagery — no paid geometry database. Priority:
@@ -1149,8 +1093,23 @@ export default function SmartVisionScreen() {
           const rs = useRoundStore.getState();
           const ownLocation = rs.activeCourseId === courseId ? rs.courseLocation
             : rs.previewCourseId === courseId ? rs.previewCourseCoords : null;
+          // 2026-09-23 (Tim — "we should not end up in error states ever") — and any other point this
+          // course's OWN data places: another hole of it in the map cache, or the round's own holes.
+          // A course the app knows anything about is never "waiting on your location".
+          const anyHoleOfThisCourse = (() => {
+            for (let h = 1; h <= 27; h++) {
+              const g = courseId ? getHoleGeometry(courseId, h) : null;
+              if (g?.green && okc(g.green)) return g.green;
+            }
+            if (rs.activeCourseId === courseId) {
+              const ch = courseHoles.find(x => okc({ lat: x.middleLat, lng: x.middleLng }) && x.middleLat !== 0);
+              if (ch) return { lat: ch.middleLat, lng: ch.middleLng };
+            }
+            return null;
+          })();
           const centroid = (slug ? getBundledCourseCentroid(slug) ?? LOCAL_COURSE_CENTROIDS[slug] : null)
-            ?? (ownLocation ? { lat: ownLocation.lat, lng: ownLocation.lng } : null);
+            ?? (ownLocation ? { lat: ownLocation.lat, lng: ownLocation.lng } : null)
+            ?? anyHoleOfThisCourse;
           const fix = getLastFix();
           const playerPt = fix && okc(fix.location) ? { lat: fix.location.lat, lng: fix.location.lng } : null;
           // 2026-07-24 (Tim — "never a green screen") — center on the BEST coord we have: this hole's own
@@ -1196,11 +1155,9 @@ export default function SmartVisionScreen() {
             const centredIn = { lat: center.lat, lng: center.lng, zoom, width: reqW, height: reqH };
             const uri = getCenteredImageryUrl(centredIn);
             if (cancelled) return;
-            setImagerySource('satellite');
-            showTile(uri, centeredFrame(centredIn));
+              showTile(uri, centeredFrame(centredIn));
           } else {
             // No coordinate of any kind — the render falls to the honest "waiting on location" card.
-            setImagerySource('none');
             showTile(null, null);
           }
         }
@@ -1269,11 +1226,23 @@ export default function SmartVisionScreen() {
    * The live tile did not load (no signal, a dropped request): the cached tile of this hole, with
    * its own frame, before giving up to the "waiting" card.
    */
+  // 2026-09-23 (Tim — "we should not end up in error states ever") — then ONE retry of the live
+  // tile (most failures are a dropped request, not a dead link); only after that the honest state,
+  // which says the signal is the problem rather than asking for a location we already have.
+  const tileRetriedRef = useRef<string | null>(null);
   const onTileError = useCallback(() => {
     const fb = tileFallbackRef.current;
-    if (fb && fb.uri !== imageUri) showTile(fb.uri, fb.frame);
-    else showTile(null, null);
-  }, [imageUri, showTile]);
+    const frame = tileFrame;
+    if (fb && fb.uri !== imageUri) { showTile(fb.uri, fb.frame); return; }
+    if (imageUri && /^https:/.test(imageUri) && tileRetriedRef.current !== imageUri && frame) {
+      const retry = `${imageUri}${imageUri.includes('?') ? '&' : '?'}retry=1`;
+      tileRetriedRef.current = retry;
+      showTile(retry, frame);
+      return;
+    }
+    setTileFailed(true);
+    showTile(null, null);
+  }, [imageUri, tileFrame, showTile]);
   void autoZoom; // legacy helper retained for future use
 
   // Marker positions in CANVAS-LOCAL pixel coordinates (top-left origin,
@@ -1294,61 +1263,6 @@ export default function SmartVisionScreen() {
   // pre-Phase-108 behaviour exactly for the no-projection path.
   // Phase 108-followup — user override (drag) wins over projection wins
   // over static fallback.
-  // 2026-05-26 — Fix BM: local-image hole-line calibration consumer.
-  // When the screen is rendering a bundled hole image (Maplewood,
-  // Palms — and any future course with bundled assets), the projection
-  // fallback (last clause of the useMemos below) puts tee at
-  // (50%, 85%) and pin at (50%, 15%) — a centered vertical axis that
-  // ignores the actual hole layout. The Batch 46 scaffold gives us
-  // per-hole calibrated pixel coords on the cropped 1768×1450 image;
-  // when calibration exists, use it as the static fallback instead
-  // of the dumb centered axis. User drag still wins via teeOverride /
-  // pinOverride; geo projection still wins when both teeCoord and
-  // GPS projection (from Mapbox tile parameters) is ONLY valid when the
-  // canvas is actually rendering a Mapbox or Golfbert tile. Curated bundled
-  // photos have their own framing that is NOT bearing-rotated to match the
-  // Mapbox projection math — applying it gives wrong coordinates (markers
-  // fly off-screen or land in white background areas). Calibration data
-  // (fraction-based tee/green pixel positions detected from each image) is
-  // the correct source for curated photos.
-  // 2026-06-23 (Tim) — PREFER our own clean curated images over Golfbert for
-  // courses we've cropped+calibrated (e.g. Palms). Golfbert's satellite has a
-  // DIFFERENT framing than our crops, so our per-hole calibration (tee/green
-  // pixel fractions, derived FROM our crops) misplaced the tee off-screen and
-  // scattered the hazard overlays. Using our image makes the image+calibration
-  // a matched pair → tee/pin anchor correctly. Trade-off (Tim's call): Golfbert
-  // hazard overlays are suppressed on these holes until re-mapped onto our image.
-  // 2026-08-11 — was "the user chose Static". Now: we have a bundled photo AND could not build a
-  // live tile for this hole, so the photo IS the imagery.
-  const preferCurated = !!curatedImage && imagerySource === 'curated';
-
-  // GPS projection is Mapbox-tile-specific; applying it to a curated bundled photo (whose framing
-  // is not bearing-rotated to match) sends T/P markers off-screen, so curated holes use calibration.
-  //
-  // 2026-09-06 — the `golfbertHole?.imageryUrl` term is GONE, and it was a live bug, not just a
-  // special case. When the bundled packs were emptied on 2026-08-25, `preferCurated` went false at
-  // Palms/Lakes and Golfbert's photo took the render. That flipped this flag true, which switched
-  // marker placement off GPS projection and onto data/holeLineCalibration.ts — whose palms/lakes
-  // fractions were scanned FROM the very crops that had just been deleted. Golfbert's framing is
-  // different, so the tee/pin were anchored by measurements of an image no longer on screen. The
-  // 2026-06-23 note below predicted exactly this; our crop winning the race was all that hid it.
-  const onCuratedPhoto = preferCurated || (!imageUri && !!curatedImage);
-
-  // 2026-09-06 — id first, name only as a last resort. resolveLocalSlug is that rule, shared with
-  // the centroid path below so the two cannot drift apart again.
-  const calibrationSlug = useMemo(
-    () => resolveLocalSlug(courseId, courseName),
-    [courseId, courseName],
-  );
-  const calibration = useMemo(() => {
-    if (!calibrationSlug) return null;
-    return getHoleLineCalibration(calibrationSlug, holeIndex);
-  }, [calibrationSlug, holeIndex]);
-  const calibratedPoints = useMemo(() => {
-    if (!calibration) return null;
-    return calibrationToCanvas(calibration, imageW, imageH);
-  }, [calibration, imageW, imageH]);
-
   const teeOverride = teeByHole[holeKey];
   // 2026-06-23 (Tim — "move the measurement lines and the T box jumps off-screen,
   // can't see it") — the GPS-projection path returns UNCLAMPED pixels, so when a
@@ -1369,7 +1283,7 @@ export default function SmartVisionScreen() {
   // interpolation). So branch the clamp on `isCurated`: curated gets a tight
   // symmetric ~20px inset so markers sit where calibration says; satellite keeps
   // the exact original 22/22/46/58 values (do not change satellite behavior).
-  const clampMarker = useCallback((p: { x: number; y: number }, isCurated: boolean) => {
+  const clampMarker = useCallback((p: { x: number; y: number }) => {
     // 2026-07-20 (white-screen guard) — Math.max/Math.min do NOT sanitize NaN
     // (Math.max(22, Math.min(w, NaN)) === NaN), so a non-finite geometry coordinate
     // (projectToPixels of a malformed tee/green) would reach the aim-line <SvgLine>/
@@ -1378,36 +1292,26 @@ export default function SmartVisionScreen() {
     // instead of taking the screen down.
     const px = Number.isFinite(p.x) ? p.x : imageW / 2;
     const py = Number.isFinite(p.y) ? p.y : imageH / 2;
-    if (isCurated) {
-      return {
-        x: Math.max(20, Math.min(imageW - 20, px)),
-        y: Math.max(20, Math.min(imageH - 20, py)),
-      };
-    }
     return {
       x: Math.max(22, Math.min(imageW - 22, px)),
       y: Math.max(46, Math.min(imageH - 58, py)),
     };
   }, [imageW, imageH]);
   const teeCanvas = useMemo(() => {
-    if (teeOverride) return clampMarker(teeOverride, onCuratedPhoto);
-    // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
-    if (!onCuratedPhoto && teeCoord && projection) {
+    if (teeOverride) return clampMarker(teeOverride);
+    if (teeCoord && projection) {
       const off = projectToPixels(teeCoord, projection.center, projection.zoom, projection.bearing);
-      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y }, false);
+      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y });
     }
-    if (calibratedPoints) return clampMarker(calibratedPoints.tee, onCuratedPhoto);
     return { x: imageW / 2, y: imageH * 0.85 };
-  }, [teeOverride, teeCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto, clampMarker]);
+  }, [teeOverride, teeCoord, projection, imageW, imageH, clampMarker]);
   const pinDefaultCanvas = useMemo(() => {
-    // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
-    if (!onCuratedPhoto && greenCoord && projection) {
+    if (greenCoord && projection) {
       const off = projectToPixels(greenCoord, projection.center, projection.zoom, projection.bearing);
-      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y }, false);
+      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y });
     }
-    if (calibratedPoints) return clampMarker(calibratedPoints.green, onCuratedPhoto);
     return { x: imageW / 2, y: imageH * 0.15 };
-  }, [greenCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto, clampMarker]);
+  }, [greenCoord, projection, imageW, imageH, clampMarker]);
 
   // Pin override (user-dragged) — stored in canvas coords.
   const pinOverride = pinByHole[holeKey];
@@ -1437,25 +1341,12 @@ export default function SmartVisionScreen() {
   const playerCanvas = useMemo(() => {
     const fix = getLastFix();
     if (!fix) return null;
-    const onCurated = onCuratedPhoto;
-    if (onCurated && teeCoord && greenCoord) {
-      const total = haversineYards(teeCoord.lat, teeCoord.lng, greenCoord.lat, greenCoord.lng);
-      const fromPlayer = haversineYards(fix.location.lat, fix.location.lng, greenCoord.lat, greenCoord.lng);
-      if (total <= 0 || !Number.isFinite(fromPlayer) || fromPlayer > 1500) return null;
-      const pctAlong = Math.max(0, Math.min(1, 1 - fromPlayer / total));
-      const padTop = 12;
-      const padBottom = 12;
-      const trackHeight = imageH - padTop - padBottom;
-      // pctAlong=0 (at tee) → near bottom, pctAlong=1 (at green) → near top.
-      // Screen y increases downward, so y = padTop + (1 - pctAlong) * trackHeight.
-      return { x: imageW / 2, y: padTop + (1 - pctAlong) * trackHeight };
-    }
     if (!projection) return null;
     const off = projectToPixels(fix.location, projection.center, projection.zoom, projection.bearing);
     return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     // markBumpTick listed so the memo recomputes when fix-change fires.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projection, imageW, imageH, markBumpTick, onCuratedPhoto, teeCoord, greenCoord]);
+  }, [projection, imageW, imageH, markBumpTick]);
 
   // 2026-07-29 (Tim — "a mark of the shots from the last time in different colors → a shot map") —
   // project ANY lat/lng to canvas the SAME way the live player dot is placed (full 2D on satellite;
@@ -1463,19 +1354,11 @@ export default function SmartVisionScreen() {
   // guarded end-to-end — a NaN into <SvgCircle> white-screens the hole view.
   const projectLoc = useCallback((loc: { lat: number; lng: number } | null | undefined): { x: number; y: number } | null => {
     if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return null;
-    if (onCuratedPhoto && teeCoord && greenCoord) {
-      const total = haversineYards(teeCoord.lat, teeCoord.lng, greenCoord.lat, greenCoord.lng);
-      const fromGreen = haversineYards(loc.lat, loc.lng, greenCoord.lat, greenCoord.lng);
-      if (!(total > 0) || !Number.isFinite(fromGreen)) return null;
-      const pctAlong = Math.max(0, Math.min(1, 1 - fromGreen / total));
-      const y = 12 + (1 - pctAlong) * (imageH - 24);
-      return Number.isFinite(y) ? { x: imageW / 2, y } : null;
-    }
     if (!projection) return null;
     const off = projectToPixels(loc, projection.center, projection.zoom, projection.bearing);
     const x = imageW / 2 + off.x, y = imageH / 2 - off.y;
     return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
-  }, [onCuratedPhoto, teeCoord, greenCoord, projection, imageW, imageH]);
+  }, [projection, imageW, imageH]);
 
   /**
    * 2026-08-24 — THE STRATEGIC OVERLAY, OWNER-ONLY.
@@ -2348,7 +2231,7 @@ export default function SmartVisionScreen() {
             {/* 2026-07-14 (Tim — "cheat the paid geometry DB") — when this hole's green/tee were
                 DERIVED by AI vision from satellite (no curated/API geometry existed), say so.
                 Honesty tenet: the player must know these coords are AI-estimated, not surveyed. */}
-            {geometry?.estimated && !preferCurated ? (
+            {geometry?.estimated ? (
               <View style={styles.estimatedBadge}>
                 <Ionicons name="sparkles" size={9} color="#0a0a0a" />
                 <Text style={styles.estimatedBadgeText}>{t('smartvision.smart_vision_screen.ai_estimate')}</Text>
@@ -2359,19 +2242,6 @@ export default function SmartVisionScreen() {
             <Ionicons name="chevron-forward" size={22} color={holeIndex >= (totalHoles) ? '#374151' : '#ffffff'} />
           </TouchableOpacity>
         </View>
-        {/* 2026-08-11 (Tim — "since we've gotten rid of bundled courses, do we get rid of the
-            static setting? and it's always satellite, but it goes live and updates when you're in a
-            live round"). Toggle REMOVED. It chose between a live aerial and a frozen one — both are
-            aerials, so the only thing it could do was hand the user a staler picture, and pre-round
-            it silently picked the stale one for the 27 courses with bundled photos. SmartVision is
-            satellite now; the bundled photo is an automatic fallback for holes with no coordinates.
-            The badge below just reports which one you're looking at — it isn't a control. */}
-        {imagerySource === 'curated' ? (
-          <View style={styles.modeBtn} accessibilityRole="text" accessibilityLabel={t('smartvision.accessibility_label.showing_a_bundled_hole_photo')}>
-            <Ionicons name="image" size={20} color="#ffffff" />
-            <Text style={styles.modeBtnText}>{t('smartvision.smart_vision_screen.bundled')}</Text>
-          </View>
-        ) : null}
       </View>
 
       {/* 2026-05-23 — Live Strategy card. Auto-renders when the
@@ -2418,13 +2288,8 @@ export default function SmartVisionScreen() {
         {/* 2026-06-23 (Tim) — "Golfbert premium" pill removed: it's internal
             data-sourcing detail, not something the player needs on the map, and
             it collided with the tap-to-place banner. */}
-        {/* 2026-09-06 — two branches, not three. Curated bundled photo when one exists (matched to
-            our calibration → correct anchoring), else the Mapbox tile the course engine framed.
-            The Golfbert branch that sat between them is removed: it was reachable on exactly two
-            courses and, once the bundled packs were emptied, it mis-anchored both. */}
-        {preferCurated ? (
-          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="cover" />
-        ) : imageUri ? (
+        {/* The Mapbox tile the course engine framed — the only imagery SmartVision draws. */}
+        {imageUri ? (
           <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={onTileError} />
         ) : loading ? (
           <View style={styles.canvasFallback}>
@@ -2438,37 +2303,13 @@ export default function SmartVisionScreen() {
             <Ionicons name="location-outline" size={30} color="#00C896" style={{ marginBottom: 10 }} />
             <Text style={styles.canvasFallbackTitle}>{courseName ?? 'Locating…'}</Text>
             <Text style={styles.canvasFallbackSub}>
-              {t('smartvision.smart_vision_screen.waiting_on_your_location_to')}
+              {tileFailed
+                ? t('smartvision.smart_vision_screen.no_signal_for_the_aerial')
+                : t('smartvision.smart_vision_screen.waiting_on_your_location_to')}
             </Text>
           </View>
         )}
 
-        {/* Edge vignette — dark side + top gradients that frame the fairway
-            and suppress the bright rough/sky content at the image edges.
-            Only shown on curated photos (which have light peripheral content);
-            GPS satellite tiles are typically darker at the edges already. */}
-        {preferCurated && (<>
-          <LinearGradient
-            colors={['rgba(6,15,9,0.82)', 'transparent']}
-            start={{ x: 0, y: 0.5 }} end={{ x: 0.28, y: 0.5 }}
-            style={StyleSheet.absoluteFill} pointerEvents="none"
-          />
-          <LinearGradient
-            colors={['transparent', 'rgba(6,15,9,0.82)']}
-            start={{ x: 0.72, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill} pointerEvents="none"
-          />
-          <LinearGradient
-            colors={['rgba(6,15,9,0.55)', 'transparent']}
-            start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.12 }}
-            style={StyleSheet.absoluteFill} pointerEvents="none"
-          />
-          <LinearGradient
-            colors={['transparent', 'rgba(6,15,9,0.65)']}
-            start={{ x: 0.5, y: 0.82 }} end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFill} pointerEvents="none"
-          />
-        </>)}
 
         {/* 2026-05-17 — SVG overlay rebuilt to Bluegolf-class.
             Bottom: fairway polygons (translucent green tint over satellite).
@@ -2486,11 +2327,8 @@ export default function SmartVisionScreen() {
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         >
-          {/* 2026-06-23 (Tim) — hazard/green/fairway polygons are projected via the
-              Mapbox tile geometry; on our curated image (different framing) they'd
-              land in the wrong spots, so suppress them when preferCurated. They
-              return for Golfbert/Mapbox tiles where the projection matches. */}
-          {!preferCurated && projection && geometry && (() => {
+          {/* Hazard/green/fairway polygons, projected with the displayed tile's frame. */}
+          {projection && geometry && (() => {
             // 2026-07-18 (audit) — finite-guard every projected vertex. A single non-finite
             // polygon point (bad AI/Golfbert geometry, null lat/lng) would emit "NaN,NaN" into the
             // SVG `points` string → react-native-svg native parser THROWS → white-screen/crash on
@@ -2558,7 +2396,7 @@ export default function SmartVisionScreen() {
             confidently. Rings degrade to nothing without a projection anyway — this makes the
             curated case explicit rather than accidental.
           */}
-          {!preferCurated && projection && strategy && (
+          {projection && strategy && (
             <SvgG opacity={0.9}>
               {(() => {
                 const c = playerCanvas ?? teeCanvas;

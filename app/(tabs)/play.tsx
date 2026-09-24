@@ -66,7 +66,6 @@ import { isValidGolfCoord } from '../../utils/coordGuard';
 // been {} since 2026-08-25, so each `X_HOLE_IMAGES[1]` resolved to undefined and courseThumb()'s
 // lat/lng rescue was already drawing the card. All 41 courses now build the same way:
 // satelliteThumb(lat, lng). getLocalHoleImageById stays — it is the id-keyed hole-image lookup.
-import { getLocalHoleImageById } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { QuickTutorial } from '../../components/QuickTutorial';
@@ -928,15 +927,6 @@ export default function PlayTab() {
       setPackedForCourseName(pack.headline ? (selected?.club_name ?? selected?.course_name ?? null) : null);
     } catch { /* a failed reconcile leaves the full bag, which is the safe side */ }
   }, [selected?.id, selected?.club_name, selected?.course_name, isRoundActive, carriedTodayLen, ownedForPack]);
-  // DP-3 — resolve the selected LOCAL course's real bundled thumbnail
-  // (hole-1 image) from its `local:<slug>` id via the canonical
-  // courseId-keyed resolver — the same registry the closest-local rows
-  // draw their thumbnails from. Returns null for API/non-local courses
-  // and for local slugs without bundled imagery (genuine placeholder).
-  const selectedLocalThumb = useMemo(
-    () => getLocalHoleImageById(selected?.id ?? null, 1),
-    [selected?.id],
-  );
   // Phase 407 — GPS position for course-locator default sort.
   // One-shot Balanced-accuracy fix at mount; refreshed when the tab
   // regains focus. Null when permission denied or fix unavailable —
@@ -1768,7 +1758,11 @@ export default function PlayTab() {
         id: row.id,
         club_name: row.club_name,
         course_name: row.club_name,
-        location: { city: row.location.split(',')[0]?.trim() ?? '', state: row.location.split(',')[1]?.trim() ?? '', country: 'US' },
+        // Its own coordinates too: without them the card's thumbnail had nothing to draw and showed an icon.
+        location: {
+          city: row.location.split(',')[0]?.trim() ?? '', state: row.location.split(',')[1]?.trim() ?? '', country: 'US',
+          ...(row.lat != null && row.lng != null ? { latitude: row.lat, longitude: row.lng } : {}),
+        },
         tees: [{
           tee_name: 'default',
           total_yards: realYards > 0 ? realYards : 6527,
@@ -1778,7 +1772,15 @@ export default function PlayTab() {
         }],
         cached_at: Date.now(),
       });
-      setSelectedHero(null);
+      // The course aerial framed on its SURVEYED holes — the same hero a database course gets once its
+      // map lands, available at once because the survey is on the device.
+      setSelectedHero(getCourseImageryUrl({
+        courseId: row.id,
+        holes: bundledHoles.map((h) => ({
+          tee: isValidGolfCoord(h.teeLat, h.teeLng) ? { lat: h.teeLat, lng: h.teeLng } : null,
+          green: isValidGolfCoord(h.middleLat, h.middleLng) ? { lat: h.middleLat, lng: h.middleLng } : null,
+        })),
+      }, 200, 200));
       // Mirror the selection into previewCourseId so pre-round surfaces
       // (SmartVision preview, L1HolePreview, hole-view) can resolve the
       // chosen course BEFORE the user taps Start Round. Distinct from
@@ -2612,9 +2614,7 @@ export default function PlayTab() {
                       coordinate satellite tile → placeholder. Before, an API course whose geometry
                       hadn't warmed yet (no hero URL) showed a bare icon even though its own
                       lat/lng were sitting right there in the record. */}
-                  {selectedLocalThumb ? (
-                    <Image source={selectedLocalThumb as ImageSourcePropType} style={styles.selectedThumbImg} resizeMode="cover" />
-                  ) : selectedHero ? (
+                  {selectedHero ? (
                     <Image source={{ uri: selectedHero }} style={styles.selectedThumbImg} resizeMode="cover" />
                   ) : thumbFor({ lat: selected.location.latitude ?? null, lng: selected.location.longitude ?? null }) ? (
                     <Image

@@ -235,11 +235,6 @@
     "text": "from {totalShotsParsed} shots {roundsTogether > 0 ? `across ${roundsToge…}"
   },
   {
-    "file": "app/landmark-curate.tsx",
-    "line": 224,
-    "text": "{lm.type} · {lm.side}{lm.position ? ` · (${lm.position.x}, ${lm…}"
-  },
-  {
     "file": "app/lie-analysis.tsx",
     "line": 496,
     "text": "{isListening ? `Tell ${getCaddieName(caddi…}"

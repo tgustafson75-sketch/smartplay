@@ -20,7 +20,7 @@
  * rare — Pembroke Lakes and Shadow Lakes collide on the same token today.
  */
 import { resolveComplex, isAmbiguousComplexName, COURSE_COMPLEXES, courseDisplayLabel } from '../../data/courseComplexes';
-import { getLocalHoleImage, getLocalCourseSlug } from '../../data/localCourseImages';
+import { getLocalCourseSlug } from '../../data/localCourseImages';
 
 describe('a name that identifies only the facility identifies no layout', () => {
   it('THE BUG: the parent club name resolves to no layout', () => {
@@ -29,11 +29,9 @@ describe('a name that identifies only the facility identifies no layout', () => 
     expect(isAmbiguousComplexName('Menifee Lakes Country Club')).toBe(true);
   });
 
-  it('THE BUG, at the surface Tim saw: no hole image for a facility-only name', () => {
-    // Before the gate this returned the LAKES aerial for every hole of a Palms round.
-    for (const hole of [1, 7, 12, 18]) {
-      expect(getLocalHoleImage('Menifee Lakes Country Club', hole)).toBeNull();
-    }
+  it('THE BUG, at the surface Tim saw: a facility-only name resolves to no layout', () => {
+    // Before the gate this resolved to LAKES for every hole of a Palms round. (The bundled hole
+    // photos it picked are gone, 2026-09-23; the slug is what still decides a layout.)
     expect(getLocalCourseSlug('Menifee Lakes Country Club')).toBeNull();
   });
 
@@ -58,9 +56,8 @@ describe('a name that identifies only the facility identifies no layout', () => 
   it('the practice ground belongs to the facility, not to a layout', () => {
     const r = resolveComplex('Menifee Lakes Driving Range');
     expect(r.kind).toBe('range');
-    // A range session must never be stamped with one layout's identity, and must never pull a
-    // layout's hole imagery.
-    expect(getLocalHoleImage('Menifee Lakes Driving Range', 1)).toBeNull();
+    // A range session must never be stamped with one layout's identity.
+    expect(getLocalCourseSlug('Menifee Lakes Driving Range')).toBeNull();
   });
 
   it('courses that are not complexes are untouched', () => {

@@ -206,10 +206,9 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // 2026-05-21 — Consolidation 3: owner-only authoring + diagnostic
   // surfaces added for centralised gating. Each was reachable today
   // — /author/reference-assets via the Tools menu "Reference
-  // Authoring" row (no row-level isOwnerEmail check), /landmark-curate
-  // only from swing-sessions-debug (transitively gated but defence-in-depth).
+  // Authoring" row (no row-level isOwnerEmail check). (/landmark-curate was removed 2026-09-23 with the
+  // bundled hole photos it placed landmarks on.)
   '/author/reference-assets',
-  '/landmark-curate',
   // 2026-09-09 — Tim's field checklist. Owner-only at the route AND at the render (a route is
   // reachable by voice, deep link, or typing), same as /owner-card.
   '/owner-checklist',
@@ -1852,10 +1851,6 @@ function AppNavigator() {
         />
         <Stack.Screen
           name="ghost-debug"
-          options={{ animation: 'slide_from_bottom', headerShown: false }}
-        />
-        <Stack.Screen
-          name="landmark-curate"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
         <Stack.Screen

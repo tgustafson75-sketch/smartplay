@@ -407,5 +407,10 @@
     "ready_other": "已就绪 · 已绘制 {{count}} 个果岭 · 已加入你的球场",
     "ready_no_greens": "已就绪 · 暂无果岭地图，码数为估算",
     "ready_unmeasured": "已就绪 · 已加入你的球场"
+  },
+  "smartvision": {
+    "smart_vision_screen": {
+      "no_signal_for_the_aerial": "没有信号，无法加载本洞的航拍图。连接恢复后会立即显示——GPS 码数仍然可用。"
+    }
   }
 }

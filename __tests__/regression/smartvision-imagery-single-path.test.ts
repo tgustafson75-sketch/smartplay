@@ -85,16 +85,16 @@ describe('the live tile leads and the photo is the fallback', () => {
     expect(effect).not.toContain('(isRoundActive || !curatedAvailable)');
   });
 
-  it('falls back to the bundled photo only when there are no coordinates', () => {
-    const live = effect.indexOf('if (effectiveGreen && courseId) {');
-    const curated = effect.indexOf('} else if (curatedAvailable) {');
-    expect(curated).toBeGreaterThan(live);
-    expect(effect).toContain("setImagerySource('curated')");
+  it('with no hole coordinates, the course\'s own aerial — never a bundled photo', () => {
+    // 2026-09-23 — the photos are gone; the no-coordinates branch is the course-located tile.
+    expect(effect).not.toContain('curatedAvailable');
+    expect(effect).toContain('showTile(uri, centeredFrame(centredIn));');
   });
 
   it('still ends at an honest empty state rather than a green screen', () => {
-    expect(effect).toContain("setImagerySource('none')");
     expect(src).toContain("t('smartvision.smart_vision_screen.waiting_on_your_location_to')");
+    // ...and when the location IS known but the tile would not load, it says so (signal), not "location".
+    expect(src).toContain("t('smartvision.smart_vision_screen.no_signal_for_the_aerial')");
     expect(enValue('smartvision.smart_vision_screen.waiting_on_your_location_to'))
       .toContain('Waiting on your location to drop the satellite aerial');
   });
@@ -107,19 +107,9 @@ describe('the live tile leads and the photo is the fallback', () => {
   });
 });
 
-describe('the photo-specific rendering follows the fallback, not a setting', () => {
-  it('calibration/projection treats the photo as curated only when it IS the imagery', () => {
-    // preferCurated drives tee/pin anchoring — a curated photo needs calibration, a tile needs GPS
-    // projection. Keying it off the old setting anchored markers wrongly whenever they disagreed.
-    expect(src).toContain("const preferCurated = !!curatedImage && imagerySource === 'curated';");
-  });
-
-  it('the edge vignette (tuned for photos) only paints over a photo', () => {
-    expect(src).toContain('{preferCurated && (<>');
-  });
-
-  it('reports which imagery you are seeing without pretending to be a control', () => {
-    expect(src).toContain("{imagerySource === 'curated' ? (");
-    expect(src).toContain('accessibilityRole="text"');
+describe('no photo-specific rendering is left', () => {
+  it('SmartVision has no curated-photo state, vignette or badge (the photos are gone, 2026-09-23)', () => {
+    expect(src).not.toMatch(/preferCurated|curatedImage|imagerySource|LinearGradient/);
   });
 });
+

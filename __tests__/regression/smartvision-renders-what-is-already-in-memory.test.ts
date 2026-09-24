@@ -49,14 +49,16 @@ describe('SmartVision renders what is already in memory', () => {
   it('can clear the loading state without awaiting anything', () => {
     // The regression was that EVERY exit from loading sat behind the async IIFE.
     expect(code).toMatch(/const warmEnough = !!warmGeo\?\.green;/);
-    expect(code).toMatch(/warmCurated && warmEnough[\s\S]{0,200}?setLoading\(false\)/);
+    expect(code).toMatch(/if \(warmEnough && warmGreen[\s\S]{0,700}?setLoading\(false\)/);
   });
 
-  it('but ONLY with real geometry — a curated photo alone must not drop the gate', () => {
-    // Fix DJ. If this weakens, markers paint at default positions and snap.
-    const curatedBranch = /if \(warmCurated( && warmEnough)?\)/.exec(code);
-    expect(curatedBranch).not.toBeNull();
-    expect(curatedBranch![1]).toBe(' && warmEnough');
+  it('but ONLY with real geometry — nothing else may drop the gate early', () => {
+    // Fix DJ. If this weakens, markers paint at default positions and snap. (The bundled-photo early
+    // exit that also had to respect this is gone with the photos, 2026-09-23.)
+    const fast = code.slice(code.indexOf('const warmEnough'), code.indexOf('void (async () => {', code.indexOf('const warmEnough')));
+    expect((fast.match(/setLoading\(false\)/g) ?? []).length).toBe(1);
+    expect(fast).toMatch(/if \(warmEnough && warmGreen/);
+    expect(code).not.toMatch(/warmCurated/);
   });
 
   it('the marker gate it protects is still in place', () => {

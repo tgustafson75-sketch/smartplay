@@ -225,7 +225,7 @@ The hole-shot-map UI lives at `components/recap/HoleShotMap.tsx` and the route a
 
 | File | Purpose | Role |
 |---|---|---|
-| `mapboxImagery.ts` | Mapbox Static Images URL builder + lazy file-system cache. `getHoleImageryUrl()` returns the remote URL for a hole's bounding box (auto-zoom by hole length, auto-bearing tee→green). `fetchHoleImagery()` returns the cached file URI when present. `prefetchHoles()` warms the cache during round prep. Returns `null` when `EXPO_PUBLIC_MAPBOX_TOKEN` is unset — caller falls through to a secondary provider. | Coach (Infra) |
+| `mapboxImagery.ts` | Mapbox Static Images URL builder + lazy file-system cache. `getHoleImageryUrl()` returns the remote URL for a hole's bounding box (auto-zoom by hole length, auto-bearing tee→green). `fetchHoleImagery()` / `holeTile()` return the tile WITH its frame (centre, zoom, bearing, size — also its cache file name), cached-first with a same-hole fallback; the screen projects markers with that frame. Scale: `MAPBOX_Z0_METERS_PER_PX` (measured). `prefetchHoles()` warms the cache during round prep. Returns `null` when `EXPO_PUBLIC_MAPBOX_TOKEN` is unset — caller falls through to a secondary provider. | Coach (Infra) |
 | `smartVisionOverlay.ts` | Pure-logic strategic overlay layers — yardage rings, danger-carry detection per player driver distance, lay-up suggestion, landing zone target, tap-to-target distance, carry feasibility check. `projectToTilePixels()` provides the inverse Web Mercator projection so SVG overlay markers land on the correct pixels of the rendered tile. Course-agnostic — works on any course where Phase Q (`courseGeometryService`) provides geometry. | Caddie + Coach |
 | `components/smartvision/HoleView.tsx` | The Mapbox + SVG composite component. Renders Mapbox tile as substrate, paints 5 SVG overlay layers (geometry, yardage rings, recent shots, target marker, Kevin annotations). `TouchableWithoutFeedback` over imagery converts taps to lat/lng via inverse projection; annotation taps open a strategic-detail modal. Reusable component — current `app/hole-view.tsx` keeps its existing surface and uses the same Mapbox URL builder. | Caddie + Coach |
 
@@ -233,17 +233,10 @@ The hole-shot-map UI lives at `components/recap/HoleShotMap.tsx` and the route a
 `components/caddie/L1HolePreview.tsx`. SmartVision is course-agnostic — any course with valid GPS
 coordinates produces an aerial view via Mapbox.
 
-> ⚠️ **CORRECTED 2026-08-24.** This paragraph used to claim `data/palmsImages.ts` and the 18
-> `assets/courses/palms/hole-*.jpg` screenshots were removed. **Neither was.** The module has FOUR
-> live consumers — `app/(tabs)/play.tsx`, `app/landmark-curate.tsx`,
-> `components/course/StartRoundCourseCard.tsx` and `components/course/CourseDetailModal.tsx` — and
-> the images are still bundled. It also duplicates `PALMS_HOLE_IMAGES` in `data/localCourseImages.ts`
-> (the same 18 `require()`s in two modules), so four screens still special-case one course while this
-> file described the app as course-agnostic *globally*.
->
-> **Follow-up, deliberately not done in the same pass:** point those four consumers at
-> `getLocalHoleImage()` and delete `data/palmsImages.ts`. It touches four screens under the layout
-> freeze and wants device verification, so it is written down rather than rushed.
+> **DONE 2026-09-23.** The bundled hole photos (`data/palmsImages.ts`, the `*_HOLE_IMAGES` tables and
+> `getLocalHoleImage*` in `data/localCourseImages.ts`, `data/holeLineCalibration.ts`, `app/landmark-curate.tsx`)
+> are removed — every table had been empty since 2026-08-25. Every hole image is the Mapbox tile, drawn
+> cached-first (`mapboxImagery.holeTile` / `components/course/HoleTileImage.tsx`).
 
 **Phase S provider strategy.** Mapbox is primary. If `EXPO_PUBLIC_MAPBOX_TOKEN` is unset (during Tim's account setup window), `app/hole-view.tsx` automatically falls through to the legacy Google Maps Static API (`EXPO_PUBLIC_GOOGLE_MAPS_KEY`). When neither is configured, the surface shows the "no imagery" graceful state. Once Tim sets the Mapbox token in Vercel env vars, every consumer transitions silently with no code change.
 

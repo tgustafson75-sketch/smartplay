@@ -408,5 +408,10 @@
     "ready_other": "Listo · {{count}} greens mapeados · en Tus campos",
     "ready_no_greens": "Listo · aún sin mapa de greens, las yardas son estimadas",
     "ready_unmeasured": "Listo · en Tus campos"
+  },
+  "smartvision": {
+    "smart_vision_screen": {
+      "no_signal_for_the_aerial": "Sin señal para cargar la vista aérea de este hoyo. Aparecerá en cuanto vuelva la conexión; tus distancias GPS siguen funcionando."
+    }
   }
 }

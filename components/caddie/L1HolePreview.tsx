@@ -6,7 +6,7 @@ import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore, primaryHomeCourseName } from '../../store/playerProfileStore';
 import { getHoleGeometry, fetchCourseGeometry, getCachedGeometry, type HoleGeometry } from '../../services/courseGeometryService';
-import { peekFix, getLastFix, resolveGreenCoords } from '../../services/smartFinderService';
+import { peekFix, getLastFix, resolveGreenCoords, resolveTeeCoords } from '../../services/smartFinderService';
 import { isValidGolfCoord } from '../../utils/coordGuard';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 
@@ -15,7 +15,6 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 // registered as empty so dropping `assets/courses/lakes/hole-XX.jpg` /
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
-import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
 import { getBundledHoles, COURSES } from '../../data/courses';
 import { HoleBrandBadge } from './HoleBrandBadge';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
@@ -302,23 +301,31 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
    * a hook below a gate is what crashed SmartMotion on open ([[analysis-wow-wave-2026-08-09]]).
    */
   const aerialTile = useMemo((): HoleTile | null => {
-    if (!geometry?.green) return null;
+    // 2026-09-23 (Tim — "correct images, not no images") — the map's tee/green, else the SAME
+    // resolvers SmartVision frames with (a marked green, the round's surveyed card), so a hole whose
+    // map is not built yet still shows its aerial instead of the "preview coming" card.
+    const valid = (p: { lat: number; lng: number } | null | undefined) => (p && isValidGolfCoord(p.lat, p.lng) ? p : null);
+    const green = valid(geometry?.green) ?? valid((() => { try { return resolveGreenCoords(currentHole).middle; } catch { return null; } })());
+    if (!green) return null;
+    const tee = valid(geometry?.tee) ?? valid((() => { try { return resolveTeeCoords(currentHole).tee; } catch { return null; } })());
     try {
       return holeTile(
         {
           courseId: activeCourseId,
           holeNumber: currentHole,
-          tee: geometry.tee ?? null,
-          green: geometry.green,
-          par: geometry.par,
-          yardage: geometry.yardage,
+          tee,
+          green,
+          par: geometry?.par ?? 4,
+          yardage: geometry?.yardage ?? 0,
         },
         { width: Math.round(Math.max(320, Math.min(W, 1280))), height: Math.round(Math.max(240, Math.min(H, 1280))) },
       );
     } catch {
       return null;
     }
-  }, [geometry, W, H, activeCourseId, currentHole]);
+    // tick: the resolvers read live stores (a marked green, the round's card) this memo cannot see.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geometry, W, H, activeCourseId, currentHole, tick]);
   /**
    * 2026-09-23 (Tim — "SmartVision images correctly every time") — a tile that fails to load (no
    * signal) gives way to this hole's cached tile, the same rule SmartVision uses. This preview drew
@@ -434,37 +441,8 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     return () => { cancelled = true; clearInterval(id); };
   }, [isRoundActive]);
 
-  // 2026-05-17 — Pre-round path. Show the selected/planned course's hole 1 imagery if available
-  // (curated 2:3 crop → aspect-locked + centered), else a soft placeholder.
+  // 2026-05-17 — Pre-round path: the selected/planned course's hole 1 satellite tile, else a soft placeholder.
   if (!isRoundActive) {
-    const previewImg =
-      getLocalHoleImageById(previewCourseId_resolved, 1) ??
-      (previewCourseLabel ? getLocalHoleImage(previewCourseLabel, 1) : null);
-    if (previewImg) {
-      const box = buildHoleBox(imageAspect(previewImg), W, H);
-      // Pre-round hole-1 distance for the branded badge (bundled data; null for non-local courses).
-      const previewDist = (() => {
-        try { return getBundledHoles(previewCourseId_resolved || '')?.find(h => h.hole === 1)?.distance ?? null; }
-        catch { return null; }
-      })();
-      return (
-        <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
-          <ImageBackground source={previewImg} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
-            {/* 2026-07-25 (Tim — "540 bleeds through the card") — the curated hole JPG has the yardage
-                printed on it, which showed through behind the label. A bottom-up scrim seats the text
-                on a clean dark base so only OUR label reads, not the baked-in number. */}
-            <View style={styles.planScrim} pointerEvents="none" />
-            <View style={styles.planLabelWrap} pointerEvents="none">
-              <Text style={styles.placeholderSubLight}>{t('caddie_l1_hole_preview.l1_hole_preview.tap_to_plan_this_hole')}</Text>
-            </View>
-          </ImageBackground>
-          {/* 2026-07-28 (Tim — "branded badge not showing") — the Course/Hole/Distance badge was only on
-              the in-round branches, so browsing the Caddie tab pre-round showed no badge. Add it here too
-              (previewing hole 1 of the selected course), frame-level so it clears the ••• tools pill. */}
-          {compact ? null : <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />}
-        </HoleFrame>
-      );
-    }
     // 2026-08-10 — before the placeholder, try the satellite tile for the previewed course's hole 1.
     // A selected course with real coordinates must never show "pick a course".
     if (previewTileUrl) {
@@ -494,17 +472,12 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     );
   }
 
-  // Curated bundled image takes priority over any aerial/SVG fallback whenever one exists.
-  const curatedImage =
-    getLocalHoleImageById(activeCourseId, currentHole) ??
-    getLocalHoleImage(activeCourse, currentHole);
-
   // Prefer the player's own captured shot, then the curated bundle, then the SAME Mapbox satellite
   // tile SmartVision renders (2026-08-10 green-screen fix — see aerialTileUrl above). Only when all
   // three are absent do we fall through to the SVG sketch.
   // NOTE: the captured-shot ternary stays on ONE line — scripts/simulations/run-sim.ts asserts this
   // exact precedence (`capturedUri ? ({ uri: capturedUri }`) to lock "your own photo always wins".
-  const heroImageSource: ImageSourcePropType | null = capturedUri ? ({ uri: capturedUri } as const) : (curatedImage ?? (aerialTileUrl ? ({ uri: aerialTileUrl } as const) : null));
+  const heroImageSource: ImageSourcePropType | null = capturedUri ? ({ uri: capturedUri } as const) : (aerialTileUrl ? ({ uri: aerialTileUrl } as const) : null);
 
   if (heroImageSource) {
     // A curated crop (require) → aspect-lock to its natural aspect; a captured aerial (uri) → fill.
@@ -540,7 +513,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     const cartY = pctAlong != null ? (padBottom + pctAlong * trackHeight) : null;
     return (
       <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
-        <ImageBackground source={heroImageSource} onError={() => { if (!capturedUri && !curatedImage) onTileError(aerialTileUrl); }} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
+        <ImageBackground source={heroImageSource} onError={() => { if (!capturedUri) onTileError(aerialTileUrl); }} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
           {cartY != null && yardsToGreen != null ? (
             <>
               <View style={[styles.playerCartOnImage, { bottom: cartY, left: box.width / 2 - 12 }]}>
@@ -585,71 +558,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
   }
 
   if (!geometry || !geometry.tee || !geometry.green) {
-    const localImg =
-      getLocalHoleImageById(activeCourseId, currentHole) ??
-      getLocalHoleImage(activeCourse, currentHole);
-    if (localImg) {
-      const box = buildHoleBox(imageAspect(localImg), W, H);
-      const fix = getLastFix();
-      const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
-      let pctAlong: number | null = null;
-      let yardsToGreen: number | null = null;
-      /**
-       * 2026-09-10 — THE OTHER HALF OF THIS COMPONENT.
-       *
-       * The hero-image branch above already goes through `resolveGreenCoords` (truth → Mark Green
-       * override → courseHoles → geometry cache → AI-derived). This branch — the curated local
-       * photo, the one that runs precisely when there is NO geometry — still read
-       * `holeRecord.middleLat` raw, behind a truthy `||`. For every golfcourseapi course those are
-       * literal 0, so the test failed, `yardsToGreen` stayed null, and the player got a hole photo
-       * with NO yardage badge and no position bar — on the exact courses that need it most.
-       *
-       * A zero green is also the one that must never reach haversine: {0,0} is a real point in the
-       * Gulf of Guinea and returns ~10M yards rather than an error. Both ends now go through the
-       * same cascade and the same coordinate guard as everywhere else.
-       * [[no-half-fixes-enforce-every-surface]]
-       */
-      const green = (() => {
-        try {
-          const m = resolveGreenCoords(currentHole).middle;
-          if (m && isValidGolfCoord(m.lat, m.lng)) return m;
-        } catch { /* fall through to the record */ }
-        return holeRecord && isValidGolfCoord(holeRecord.middleLat, holeRecord.middleLng)
-          ? { lat: holeRecord.middleLat, lng: holeRecord.middleLng }
-          : null;
-      })();
-      const tee = holeRecord && isValidGolfCoord(holeRecord.teeLat, holeRecord.teeLng)
-        ? { lat: holeRecord.teeLat, lng: holeRecord.teeLng }
-        : null;
-      if (fix && tee && green) {
-        const total = haversineYards(tee, green);
-        const fromPlayer = haversineYards(fix.location, green);
-        if (total > 0 && Number.isFinite(fromPlayer)) {
-          yardsToGreen = Math.round(fromPlayer);
-          pctAlong = Math.max(0, Math.min(1, 1 - fromPlayer / total));
-        }
-      }
-      return (
-        <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
-          <ImageBackground source={localImg} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
-            {pctAlong != null && yardsToGreen != null ? (
-              <>
-                <View style={[styles.playerTrackBar, { width: box.width - 16 }]}>
-                  <View style={styles.playerTrackTee} />
-                  <View style={styles.playerTrackGreen} />
-                  <View style={[styles.playerTrackDot, { left: `${pctAlong * 100}%` }]} />
-                </View>
-                <View style={styles.playerYardageBadge}>
-                  <Text style={styles.playerYardageText}>{fmtCompact(yardsToGreen)}</Text>
-                </View>
-              </>
-            ) : null}
-          </ImageBackground>
-          {compact ? null : <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop, right: 8 }} />}
-        </HoleFrame>
-      );
-    }
-    // No geometry + no curated image — soft placeholder.
+    // No coordinates for this hole anywhere yet — soft placeholder that opens SmartVision.
     return (
       <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>

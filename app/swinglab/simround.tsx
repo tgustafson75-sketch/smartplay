@@ -25,8 +25,7 @@ import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, simOppone
 import { puttFeetFrom } from '../../services/puttUnits';
 import { useFamilyStore } from '../../store/familyStore';
 import { COURSES } from '../../data/courses';
-import { getLocalHoleImageById } from '../../data/localCourseImages';
-import { getHoleImageryUrl } from '../../services/mapboxImagery';
+import { holeTile } from '../../services/mapboxImagery';
 import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
@@ -127,7 +126,7 @@ export default function SwingSimScreen() {
 
   const hole = course.holes[holeIdx];
   /**
-   * 2026-09-06 — the board's aerial. Curated first, then the same Mapbox tile every other hole-image
+   * 2026-09-06 — the board's aerial: the same Mapbox tile every other hole-image
    * surface uses. Before this it was curated-only, and every pack has been {} since 2026-08-25, so the
    * board rendered an ImageBackground with NO source: the tracer and the shot markers were drawing on
    * a flat panel. Sim Round is a game, not a stats surface, but a blank board still reads as broken.
@@ -136,17 +135,16 @@ export default function SwingSimScreen() {
    * Dudley has none, so the URL is null and the board falls back to the flat panel exactly as before.
    */
   const holeImg = useMemo(() => {
-    const curated = getLocalHoleImageById(`local:${courseId}`, hole?.hole ?? 1);
-    if (curated) return curated;
     if (!hole) return null;
-    const uri = getHoleImageryUrl({
+    // Cached-first (holeTile): a board the player already saw draws with no signal.
+    const uri = holeTile({
       courseId,
       holeNumber: hole.hole,
       par: hole.par,
       yardage: hole.distance,
       tee: hole.teeLat && hole.teeLng ? { lat: hole.teeLat, lng: hole.teeLng } : null,
       green: hole.middleLat && hole.middleLng ? { lat: hole.middleLat, lng: hole.middleLng } : null,
-    }, { width: 720, height: 900 });
+    }, { width: 720, height: 900 })?.uri ?? null;
     return uri ? { uri } : null;
   }, [courseId, hole]);
   const missBias = useMemo(() => missBiasFor(useCaddieMemoryStore.getState().getPlayer().tendencies.dominantMiss), []);

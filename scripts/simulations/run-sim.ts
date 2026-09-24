@@ -2152,12 +2152,12 @@ check('Final QA: start-a-round + tool-open + course-imagery + scoring-math corre
       /hotel_mode: \{ type: 'navigate', path: '\/swinglab\/indoor' \}/.test(ot) &&
       /swingsim: \{ type: 'navigate', path: '\/swinglab\/simround' \}/.test(ot) &&
       /TOOL_LABEL\[toolName\] \?\? 'that'/.test(ot);
-    // (c) name-path imagery now covers Spessard/Webster + "green hill" (space) — were dead.
+    // (c) 2026-09-23 — the name-path hole PHOTOS are gone (empty since 08-25); what these courses need
+    //     now is to be RESOLVABLE by name, which is where imagery for them comes from (their slug →
+    //     centroid → the Mapbox tile).
     const img = read('data/localCourseImages.ts');
     const okImagery =
-      /c\.includes\('spessard'\) \|\| c\.includes\('holland'\)\) return SPESSARD_HOLLAND_HOLE_IMAGES/.test(img) &&
-      /c\.includes\('webster'\) \|\| c\.includes\('dudley'\)\) return WEBSTER_DUDLEY_HOLE_IMAGES/.test(img) &&
-      /c\.includes\('greenhill'\) \|\| c\.includes\('green hill'\)\) return GREENHILL_HOLE_IMAGES/.test(img);
+      /c\.includes\('spessard'\)/.test(img) && /c\.includes\('webster'\)/.test(img) && /green hill/.test(img);
     // (d) golfer-model vs-par is normalized per-hole then projected to 18 (was blending 9s + 18s).
     const gm = read('services/golferModel.ts');
     const okScoring =
@@ -5254,10 +5254,11 @@ check('Recap view-hole shows the saved static hole image when no shots logged',
   // 2026-06-16 (Tim — "view hole" was blank) — a bundled course shows the saved hole
   // image instead of a bare "no shots" screen when tracking dropped that round.
   (() => {
+    // 2026-09-23 — the bundled photo is gone; the hole's own satellite tile (cached-first) is the image.
     const h = read('app/recap/hole/[round_id]/[hole].tsx');
-    return /getLocalHoleImageById\(courseId, hole\) \?\? getLocalHoleImage\(courseName, hole\)/.test(h) && /staticHoleImage \?/.test(h);
+    return /<HoleTileImage input=\{holeTileInput\}/.test(h) && /holeTileInput \? \(/.test(h);
   })(),
-  'the hole view shows the static image (bundled course) instead of blank when no shots tracked');
+  'the hole view shows the hole\'s own satellite tile (cached-first) instead of blank when no shots tracked');
 
 // 2026-07-24 (full-app audit, root A) — course dual-identity. Doral is a MULTI-COURSE resort
 // (Blue Monster, Gold, Silver, Red, Great White); we only bundle GOLD. A bare 'doral' name match
@@ -10957,7 +10958,7 @@ check('LOCK: L1HolePreview falls back to the same Mapbox hole tile SmartVision r
       /import \{[^}]*holeTile[^}]*\} from '\.\.\/\.\.\/services\/mapboxImagery'/.test(s) &&
       /aerialTileUrl/.test(s) &&
       // the tile is a FALLBACK: captured shot and curated bundle still win, in that order
-      /capturedUri \? \(\{ uri: capturedUri \}[\s\S]{0,160}?curatedImage \?\? \(aerialTileUrl/.test(s) &&
+      /capturedUri \? \(\{ uri: capturedUri \}[\s\S]{0,160}?\(aerialTileUrl/.test(s) && !/curatedImage/.test(s) &&
       // the memo must sit ABOVE the isRoundActive early return (a hook below a gate crashes on open)
       s.indexOf('const aerialTileUrl') < s.indexOf('if (!isRoundActive)') &&
       s.indexOf('const [failedTileUri') > -1 && s.indexOf('const [failedTileUri') < s.indexOf('if (!isRoundActive)') &&
@@ -11633,19 +11634,12 @@ check('LOCK: the skeleton is drawn ONLY inside the pose window, never clamped on
 // dots, cut-out-on-white). They must never be bundled again — Metro ships what is `require`d.
 check('LOCK: no third-party (Golfshot / Golf Pad) hole imagery is bundled',
   (() => {
+    // 2026-09-23 — the registry of hole images is deleted outright, not just emptied.
     const li = read('data/localCourseImages.ts');
-    // the three third-party folders must have ZERO requires anywhere in the registry
-    const noRequires = !/require\('\.\.\/assets\/courses\/(webster-dudley|rancho-california)\//.test(li);
-    // and their maps must still EXIST (exported, empty) so consumers don't break
-    const stillExported =
-      /export const RANCHO_CALIFORNIA_HOLE_IMAGES: Record<number, ImageSourcePropType> = \{\};/.test(li) &&
-      /export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = \{\};/.test(li);
-    // the intermediate WD const was the sneaky one — it kept the requires alive after the export
-    // was emptied, so the files would still have shipped.
-    const noIntermediate = !/const WD = \{\s*\n\s*1: require/.test(li);
-    return noRequires && stillExported && noIntermediate;
+    const code = readCode('data/localCourseImages.ts');
+    return !code.includes('assets/courses') && !/_HOLE_IMAGES/.test(code) && li.length > 0;
   })(),
-  'third-party hole imagery unregistered (no requires => not bundled), maps still exported empty so consumers are unaffected');
+  'no hole image is registered at all — the third-party packs and their registry are gone');
 
 // "On the very first pass, when that's the money shot that shows people, there's a failure. You'll
 // get an error where it says it ca[n't]… but then you'll get some data. In swing library it'll work."
@@ -12389,13 +12383,14 @@ check('LOCK: no course hole imagery is bundled — it comes from licensed Mapbox
      * of another app.
      */
     const reg = readCode('data/localCourseImages.ts');
-    const palms = readCode('data/palmsImages.ts');
+    const palms = '';   // data/palmsImages.ts deleted 2026-09-23
     // Plain string containment, not a regex: a pattern ending in an escaped slash before its
     // delimiter is ambiguous to parse, and the prose-assertion detector mis-split it into a bogus
     // sub-pattern. includes() says exactly what it means and cannot be misread.
     const noRequires = !reg.includes('assets/courses') && !palms.includes('assets/courses');
-    // The resolver must still EXIST (callers depend on it) and still be able to return null.
-    const resolverIntact = /export function getLocalHoleImage/.test(reg)
+    // 2026-09-23 — the photo resolver is gone with its callers; the centroids (what the Mapbox tile
+    // is centred on when a hole has no coordinates) must survive.
+    const resolverIntact = !/export function getLocalHoleImage/.test(reg)
       && /export const LOCAL_COURSE_CENTROIDS/.test(reg);
     return noRequires && resolverIntact;
   })(),
@@ -14170,7 +14165,8 @@ check('LOCK: the SmartVision strategy layer is DRAWN, owner-gated, and cannot em
      * ("opposite direction"); shipping strategy marks onto the same projection would have repeated
      * it, and confidently.
      */
-    const curatedSuppressed = /\{!preferCurated && projection && strategy && \(/.test(sv);
+    // 2026-09-23 — there is no curated photo any more; the layer draws only with a projection.
+    const curatedSuppressed = /\{projection && strategy && \(/.test(sv) && !/preferCurated/.test(readCode('app/smartvision.tsx'));
     return drawn && gated && nanSafe && oneProjection && curatedSuppressed;
   })(),
   'the four strategy layers are drawn through the screen\'s own projectLoc, gated to the owner, with every derived radius and pixel finite-checked before it reaches react-native-svg');

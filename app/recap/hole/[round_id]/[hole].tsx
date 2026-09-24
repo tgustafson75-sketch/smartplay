@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image, TouchableOpacity, type ImageSourcePropType } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import HoleShotMap from '../../../../components/recap/HoleShotMap';
 import { useRoundStore } from '../../../../store/roundStore';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../../../../services/courseGeometryService';
-import { getLocalHoleImageById, getLocalHoleImage } from '../../../../data/localCourseImages';
-import { getHoleThumbnailUrl } from '../../../../services/mapboxImagery';
+import HoleTileImage from '../../../../components/course/HoleTileImage';
 import type { ShotResult } from '../../../../store/roundStore';
 import { useWatchStore } from '../../../../store/watchStore';
 import { groupSwingsByHole, type RoundSwing } from '../../../../services/round/roundSwingRead';
@@ -32,7 +31,6 @@ export default function HoleShotMapScreen() {
   const currentRoundId = useRoundStore(s => s.currentRoundId);
   const liveShots = useRoundStore(s => s.shots);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
-  const activeCourse = useRoundStore(s => s.activeCourse);
   const roundHistory = useRoundStore(s => s.roundHistory);
   const isLive = isRoundActive && currentRoundId === round_id;
   const record = useMemo(
@@ -135,34 +133,18 @@ export default function HoleShotMapScreen() {
   );
   const confirmLine = confirmationSummary(confirmations);
 
-  // 2026-06-16 (Tim — "view hole" was blank when no shots logged) — the saved
-  // static hole image for a bundled course, so the hole view shows the hole even
-  // when shot tracking dropped out that round (network errors). Prefer the
-  // courseId-keyed lookup; fall back to the record's course name.
-  const courseName = isLive ? activeCourse : record?.courseName ?? null;
-  const curatedHoleImage = getLocalHoleImageById(courseId, hole) ?? getLocalHoleImage(courseName, hole);
-  /**
-   * 2026-09-06 (Tim — "all thumbnails clean… commercially elite") — this used to be curated-or-nothing,
-   * and every bundled image pack has been {} since 2026-08-25, so the "here's the hole" panel had gone
-   * permanently blank: a hole you logged no shots on showed a bare line of text where a picture used to
-   * be. Every other hole-image surface in the app already falls through to the Mapbox tile (SmartVision,
-   * L1HolePreview, the course-detail grid, the Play tab hero); this one was the last that did not.
-   *
-   * Geometry is already loaded above for the shot map, so the tile costs nothing extra. Null tee/green
-   * yields a null URL and the honest text-only empty state below — never a wrong or blank frame.
-   */
-  const staticHoleImage: ImageSourcePropType | { uri: string } | null = curatedHoleImage ?? (() => {
-    if (!geometry) return null;
-    const uri = getHoleThumbnailUrl({
-      courseId: courseId ?? null,
-      holeNumber: hole,
-      par: geometry.par,
-      yardage: geometry.yardage,
-      tee: geometry.tee,
-      green: geometry.green,
-    }, 640, 360);
-    return uri ? { uri } : null;
-  })();
+  // 2026-06-16 (Tim — "view hole" was blank when no shots logged) — show the hole anyway.
+  // 2026-09-23 (Tim — "correct images, not no images") — the hole's satellite tile, cached-first with
+  // the same fallbacks SmartVision uses (HoleTileImage), so a hole played with no signal still shows
+  // once round prep cached it. No green → no picture: never a frame of somewhere else.
+  const holeTileInput = geometry?.green ? {
+    courseId: courseId ?? null,
+    holeNumber: hole,
+    par: geometry.par,
+    yardage: geometry.yardage,
+    tee: geometry.tee,
+    green: geometry.green,
+  } : null;
 
   if (!geometryLoaded) {
     return (
@@ -181,9 +163,9 @@ export default function HoleShotMapScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={t('recap_hole.accessibility_label.back')}>
           <Text style={styles.backText}>{t('recap_hole.hole_shot_map_screen.back')}</Text>
         </TouchableOpacity>
-        {staticHoleImage ? (
+        {holeTileInput ? (
           <>
-            <Image source={staticHoleImage} style={styles.staticHero} resizeMode="cover" />
+            <HoleTileImage input={holeTileInput} style={styles.staticHero} />
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>{t('recap_hole.hole_shot_map_screen.hole', { hole })}</Text>
               <Text style={styles.emptyText}>{t('recap_hole.hole_shot_map_screen.no_shots_were_tracked_on')}</Text>

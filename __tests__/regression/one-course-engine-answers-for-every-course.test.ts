@@ -115,21 +115,20 @@ describe('SmartVision renders the same two-branch chain for every course', () =>
   });
 
   it('decides marker anchoring from the imagery actually on screen', () => {
-    // The provider term here is what silently swapped GPS projection for calibration measured off a
-    // different image. onCuratedPhoto must depend ONLY on our own curated photo being the imagery.
-    expect(smartvision).toContain(
-      'const onCuratedPhoto = preferCurated || (!imageUri && !!curatedImage);',
-    );
+    // 2026-09-23 — one kind of imagery (the framed tile), one anchoring rule: project with the tile's
+    // frame. No photo/calibration branch remains to swap it out.
+    expect(smartvision).not.toContain('onCuratedPhoto');
+    expect(smartvision).not.toContain('calibratedPoints');
+    expect(smartvision).toContain('if (teeCoord && projection) {');
   });
 
-  it('renders curated-or-tile, with nothing wedged between them', () => {
+  it('renders the tile, with nothing wedged in front of it', () => {
     const branch = smartvision.slice(
-      smartvision.indexOf('{preferCurated ? ('),
+      smartvision.indexOf('{imageUri ? ('),
       smartvision.indexOf(') : loading ? ('),
     );
-    expect(branch).toContain('source={curatedImage}');
     expect(branch).toContain('uri: imageUri');
-    expect(branch).not.toMatch(/golfbert/i);
+    expect(branch).not.toMatch(/golfbert|curated/i);
   });
 });
 
@@ -213,11 +212,11 @@ describe('one slug resolver, id first, shared by every surface', () => {
     expect(smartvision).not.toContain('homeCourseIdFromProfile');
   });
 
-  it('resolves the centroid and the calibration through the SAME resolver', () => {
-    // These asked the same question two ways: calibration was id-first, the centroid was name-only.
+  it('resolves the centroid by id — never by a name', () => {
     // The centroid decides where the aerial is CENTRED, so a name collision there is a confidently
-    // wrong picture of another club.
-    expect(smartvision).toContain('resolveLocalSlug(courseId, courseName)');
+    // wrong picture of another club. (The calibration that shared the resolver is gone, 2026-09-23.)
+    expect(smartvision).toContain('const slug = localSlugFromCourseId(courseId);');
+    expect(smartvision).not.toContain('resolveLocalSlug(courseId, courseName)');
     // No direct name-only resolution left in executing code — the history of it stays in comments.
     expect(smartvision).not.toContain('getLocalCourseSlug(');
   });

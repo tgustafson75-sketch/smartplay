@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { useDistanceFormat } from '../../hooks/useDistanceUnit';
-import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, useWindowDimensions, FlatList, type ImageSourcePropType } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, useWindowDimensions, FlatList } from 'react-native';
+import HoleTileImage from './HoleTileImage';
+import type { HoleImageryInput } from '../../services/mapboxImagery';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 
 type HolePhoto = {
   hole_number: number;
-  url: string;
-  /** Optional bundled image (Palms curated screenshots). Wins over url when present. */
-  palmsImage?: ImageSourcePropType;
+  /** The player's OWN photo of the hole (a SmartFinder capture) — wins when present. */
+  url?: string | null;
+  /** The hole's satellite tile, drawn cached-first (HoleTileImage) when there is no capture. */
+  tile?: HoleImageryInput | null;
   /** Phase 405b — yardage overlaid on the tile (matches v3 reference).
    *  Renders large white shadowed text centered on each photo so the
    *  user scans yards across the whole course at a glance. Null = no
@@ -60,14 +63,23 @@ export default function HolePhotosGrid({ photos }: Props) {
             onPress={() => setActiveIdx(i)}
             activeOpacity={0.85}
           >
-            {p.palmsImage ? (
-              <Image source={p.palmsImage} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            {p.url ? (
+              <Image source={{ uri: p.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            ) : p.tile ? (
+              // 2026-09-23 (Tim — "correct images, not no images") — the hole's own satellite tile,
+              // cached-first. The gradient stood in for EVERY hole since 06-15 because the live tile
+              // flashed white and re-fetched on each touch; HoleTileImage fixes both, so the gradient
+              // is now only what shows while a hole genuinely cannot be drawn.
+              <HoleTileImage
+                input={p.tile}
+                style={StyleSheet.absoluteFill}
+                fallback={<LinearGradient
+                  colors={['#aedbf2', '#86c873', '#3f7a3a']}
+                  locations={[0, 0.45, 1]}
+                  style={StyleSheet.absoluteFill}
+                />}
+              />
             ) : (
-              // 2026-06-15 (Tim) — the Mapbox satellite tile rendered WHITE in the small
-              // grid (and re-fetched/stacked on every touch). Thumbnails are eye candy →
-              // a clean static golf gradient (sky → fairway) that ALWAYS shows + never
-              // reloads. The REAL whole-view image still opens on tap (viewer keeps
-              // p.url — "don't break that"). No Mapbox/GPS dependency for the grid.
               <LinearGradient
                 colors={['#aedbf2', '#86c873', '#3f7a3a']}
                 locations={[0, 0.45, 1]}
@@ -103,11 +115,11 @@ export default function HolePhotosGrid({ photos }: Props) {
             style={{ width }}
             renderItem={({ item }) => (
               <View style={[styles.viewerSlide, { width }]}>
-                {item.palmsImage ? (
-                  <Image source={item.palmsImage} style={styles.viewerImg} resizeMode="contain" />
-                ) : (
+                {item.url ? (
                   <Image source={{ uri: item.url }} style={styles.viewerImg} resizeMode="contain" />
-                )}
+                ) : item.tile ? (
+                  <HoleTileImage input={item.tile} style={styles.viewerImg} resizeMode="contain" />
+                ) : null}
                 <View style={styles.viewerLabel}>
                   <Text style={styles.viewerLabelText}>{t('course_hole_photos_grid.viewer.hole_number', { hole: item.hole_number })}</Text>
                 </View>

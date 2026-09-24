@@ -144,7 +144,10 @@ describe('SmartVision projects with the frame of the tile on screen', () => {
 
   it('a live tile that fails to load falls back to the cached one with ITS frame', () => {
     expect(sv).toMatch(/onError=\{onTileError\}/);
-    expect(sv).toMatch(/if \(fb && fb\.uri !== imageUri\) showTile\(fb\.uri, fb\.frame\);/);
+    expect(sv).toMatch(/if \(fb && fb\.uri !== imageUri\) \{ showTile\(fb\.uri, fb\.frame\); return; \}/);
+    // then ONE retry of the live tile, then the honest no-signal state (Tim: "no error states ever")
+    expect(sv).toMatch(/tileRetriedRef\.current !== imageUri/);
+    expect(sv).toMatch(/setTileFailed\(true\);/);
   });
 
   it('with no hole coordinates, the aerial is centred on THIS course by its id — never a name guess', () => {
