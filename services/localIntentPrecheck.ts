@@ -546,6 +546,9 @@ const PATTERNS: Pattern[] = [
  * classifier. Returns a high-confidence VoiceIntent on match, or
  * null when no pattern matches (caller falls through to cloud).
  */
+/** "pin's back right", "the flag is at the front of the green", "they've got the pin tucked back left". */
+const PIN_LOCATION_RX = /\b(?:pin|flag|hole\s+location)\b[^.?!]{0,40}\b(?:front|back|middle|left|right|tucked|centre|center)\b/i;
+
 export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   if (!transcript || typeof transcript !== 'string') return null;
   const t = transcript.trim();
@@ -583,6 +586,14 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
    * [[smartplay-defect-class-unwired-halves]]
    */
   if (INSTRUCTIONAL_QUESTION_RX.test(t)) return null;
+  /**
+   * 2026-09-25 (triple-check of set_pin_position) — a pin LOCATION is the caddie's, not a yardage
+   * lookup. "the pin is at the back of the green" matched `back of` (green_back) and "pin is on the
+   * back left of the green" matched `on the back` (nine_split — a back-nine SCORE), so the pin was
+   * never recorded. A statement naming the pin/flag and a depth or side, with no distance question
+   * in it, goes to the brain, which records it for the hole and plays to it.
+   */
+  if (PIN_LOCATION_RX.test(t) && !/\b(how\s+far|how\s+many|yards?|yardage|distance)\b/i.test(t)) return null;
 
   // 2026-06-15 (Tim — tap-to-talk record loop) — when the Smart Motion screen is
   // OPEN, a record/watch/stop command must be DETERMINISTIC and LOCAL. Previously

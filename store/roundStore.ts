@@ -1880,6 +1880,7 @@ export const useRoundStore = create<RoundState>()(
         } catch { /* a missed clear must never fail the discard */ }
         set({
           isRoundActive: false,
+          pinByHole: {},   // a hole's pin belongs to the round that ended (triple-check)
           isSimRound: false,
           currentHole: 1,
           currentYardage: null,
@@ -2369,6 +2370,7 @@ export const useRoundStore = create<RoundState>()(
 
         set(state => ({
           isRoundActive: false,
+          pinByHole: {},   // a hole's pin belongs to the round that ended (triple-check)
           isSimRound: false,
           roundHistory: capHistory([...state.roundHistory, record]),
           currentHole: 1,

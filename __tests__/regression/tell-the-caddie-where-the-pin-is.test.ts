@@ -82,4 +82,30 @@ describe('telling the caddie where the pin is', () => {
     const vi = fs.readFileSync(path.join(__dirname, '../../api/voice-intent.ts'), 'utf8');
     expect(vi).toMatch(/NOT a mark: a pin LOCATION on the green — "pin's back right"[^\n]*is conversational/);
   });
+
+  // ── triple-check (2026-09-25) ───────────────────────────────────────────────────────────────
+  it('a side-only or odd-cased call keeps the depth in force — never snaps a back pin to middle', () => {
+    useRoundStore.getState().setPinPosition({ depth: 'back', side: 'center' });
+    dispatchConversationalToolActions([{ type: 'set_pin_position', side: 'right' } as never]);
+    expect(useRoundStore.getState().pinByHole[1]).toEqual({ depth: 'back', side: 'right' });
+    expect(resolveYardage(1).value).toBe(160);
+    dispatchConversationalToolActions([{ type: 'set_pin_position', depth: 'Front', side: 'Centre' } as never]);
+    expect(useRoundStore.getState().pinByHole[1]).toEqual({ depth: 'front', side: 'center' });
+  });
+
+  it('every natural way to say it reaches the caddie — none is answered as a yardage or a score', () => {
+    const { precheckLocalIntent } = jest.requireActual('../../services/localIntentPrecheck');
+    for (const q of ['the pin is at the back of the green', "pin's in the front of the green", 'pin is on the back left of the green', "pin's back right", "they've got the flag tucked back left"]) {
+      expect({ q, r: precheckLocalIntent(q) }).toEqual({ q, r: null });
+    }
+    // ...while the yardage questions still answer instantly.
+    expect(precheckLocalIntent('how far to the back of the green')?.parameters?.query_topic).toBe('green_back');
+    expect(precheckLocalIntent('yards to the front')?.parameters?.query_topic).toBe('green_front');
+  });
+
+  it('a round that ends takes its hole pins with it', () => {
+    dispatchConversationalToolActions([{ type: 'set_pin_position', depth: 'back', side: 'right' } as never]);
+    useRoundStore.getState().discardRound();
+    expect(useRoundStore.getState().pinByHole).toEqual({});
+  });
 });

@@ -264,8 +264,15 @@ function dispatchOne(a: AnyAction): void {
       if (!rs.isRoundActive) break;
       const hole = typeof a.hole === 'number' && Number.isFinite(a.hole) && a.hole >= 1 ? Math.trunc(a.hole) : rs.currentHole;
       if (a.clear) { rs.setHolePin(hole, null); break; }
-      const depth = a.depth === 'front' || a.depth === 'back' || a.depth === 'middle' ? a.depth : 'middle';
-      const side = a.side === 'left' || a.side === 'right' || a.side === 'center' ? a.side : 'center';
+      // Whatever the model sends — 'Back', 'centre', or only a side ("pin's on the right") — a part
+      // it did NOT say keeps the pin already in force on this hole; it never snaps to middle/center.
+      // (A side-only call used to reset a declared back pin to middle: 10 yards short. Triple-check.)
+      const { pinForHole } = require('../pinPosition') as typeof import('../pinPosition');
+      const current = pinForHole(rs, hole)?.pin ?? null;
+      const d = String(a.depth ?? '').trim().toLowerCase();
+      const sd = String(a.side ?? '').trim().toLowerCase().replace('centre', 'center');
+      const depth = d === 'front' || d === 'back' || d === 'middle' ? d : (current?.depth ?? 'middle');
+      const side = sd === 'left' || sd === 'right' || sd === 'center' ? sd : (current?.side ?? 'center');
       rs.setHolePin(hole, { depth, side });
       break;
     }
