@@ -1533,13 +1533,17 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * caddie must not be told "the pin is middle" when nobody has said so.
      */
     pinPosition: safe(() => {
-      if (!isRoundActive || !r.pinDeclared) return null;
-      const { describePin, aimNoteForPin } = require('./pinPosition') as typeof import('./pinPosition');
+      if (!isRoundActive) return null;
+      const { describePin, aimNoteForPin, pinForHole } = require('./pinPosition') as typeof import('./pinPosition');
+      // This hole's pin (said on the hole) wins over the round's; null when neither was declared.
+      const declared = pinForHole(r, currentHole);
+      if (!declared) return null;
       return {
-        depth: r.pinPosition.depth,
-        side: r.pinPosition.side,
-        said: describePin(r.pinPosition),
-        aim: aimNoteForPin(r.pinPosition),
+        depth: declared.pin.depth,
+        side: declared.pin.side,
+        said: describePin(declared.pin),
+        aim: aimNoteForPin(declared.pin),
+        scope: declared.scope,
       };
     }, null),
     /**

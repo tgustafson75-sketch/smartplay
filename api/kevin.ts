@@ -1308,10 +1308,10 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
       if (pg && (pg.feet != null || pg.slopePct != null || pg.note)) {
         lines.push(`- You have read this green with them before: ${[pg.feet != null ? `${pg.feet} feet` : null, pg.slopePct != null ? `${pg.slopePct}% slope` : null, pg.note || null].filter(Boolean).join(', ')}. That is a real prior read — recall it as memory, not as a guess.`);
       }
-      const pin = pinPosition as { depth: string; side: string; said: string; aim: string | null } | null;
+      const pin = pinPosition as { depth: string; side: string; said: string; aim: string | null; scope?: 'hole' | 'round' } | null;
       if (pin) {
         lines.push(
-          `- TODAY'S PIN is ${pin.said}. The yardages you have been given ALREADY play to that flag, not`
+          `- ${pin.scope === 'hole' ? "THIS HOLE'S PIN (the player told you)" : "TODAY'S PIN"} is ${pin.said}. The yardages you have been given ALREADY play to that flag, not`
           + ` to the middle — do not add or subtract for it again.`
           + (pin.aim ? ` ${pin.aim}` : '')
           + ` Say where the pin is when it changes the play; do not recite it every shot.`,

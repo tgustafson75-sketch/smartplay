@@ -591,6 +591,14 @@ interface RoundState {
    */
   pinPosition: PinPosition;
   pinDeclared: boolean;
+  /**
+   * 2026-09-25 (Tim — "make sure I can tell Caddie the pin location while playing a hole, like this is
+   * back right"). Pins move EVERY hole; `pinPosition` is the round's default (a pin sheet, or one
+   * declared on the Play tab). A pin said on a hole overrides it for that hole only. Hole-scoped, so a
+   * layout switch clears it; persisted with the round, so a restart mid-hole keeps it.
+   * services/pinPosition.pinForHole is the one reader.
+   */
+  pinByHole: Record<number, PinPosition>;
 
   // Phase 409 — TightLie pending result. The lie analysis completes
   // BEFORE the player hits the shot, so it can't be attached to a
@@ -703,6 +711,8 @@ interface RoundState {
   setSelectedTee: (color: TeeColor) => void;
   setTransportMode: (m: TransportMode) => void;
   setPinPosition: (p: PinPosition | null) => void;
+  /** The pin on ONE hole (null clears it back to the round's pin). */
+  setHolePin: (hole: number, p: PinPosition | null) => void;
   /** Clears the player's declaration so detection may fill it again (new round). */
   clearTransportDeclaration: () => void;
 
@@ -1103,6 +1113,7 @@ export const useRoundStore = create<RoundState>()(
       transportDeclared: false,
       pinPosition: PIN_CENTER,
       pinDeclared: false,
+      pinByHole: {},
 
       // Phase 409 — TightLie pending lie analysis. Cleared when a shot is
       // logged (its value is copied onto the shot.lie_analysis).
@@ -1139,6 +1150,12 @@ export const useRoundStore = create<RoundState>()(
       setPinPosition: (p) => set(p == null
         ? { pinPosition: PIN_CENTER, pinDeclared: false }
         : { pinPosition: p, pinDeclared: true }),
+      setHolePin: (hole, p) => set((s) => {
+        const next = { ...(s.pinByHole ?? {}) };
+        if (p == null) delete next[hole];
+        else next[hole] = p;
+        return { pinByHole: next };
+      }),
       setPendingLieAnalysis: (analysis) => set({ pendingLieAnalysis: analysis }),
       clearPendingLieAnalysis: () => set({ pendingLieAnalysis: null }),
       setPendingKevinRec: (rec) => set({ pendingKevinRec: rec ? { at: Date.now(), ...rec } : null }),
@@ -1402,6 +1419,7 @@ export const useRoundStore = create<RoundState>()(
            */
           pinPosition: PIN_CENTER,
           pinDeclared: false,
+          pinByHole: {},
           /**
            * 2026-09-17 — and cleared here, which is what clearTransportDeclaration's own docstring
            * says ("so detection may fill it again (new round)") — a method that had ZERO callers
@@ -2011,6 +2029,8 @@ export const useRoundStore = create<RoundState>()(
           userStatedYardage: null,
           pendingKevinRec: null,
           pendingLieAnalysis: null,
+          // A pin said on a hole belongs to THAT layout's hole.
+          pinByHole: {},
         });
       },
 
@@ -3887,6 +3907,7 @@ transportMode: s.transportMode,
         // every yardage to the middle of the green. Nothing can re-derive a pin.
         pinPosition: s.pinPosition,
         pinDeclared: s.pinDeclared,
+        pinByHole: s.pinByHole,
         /**
          * 2026-09-17 — transportDeclared belongs here for the SAME reason pinDeclared does, and was
          * simply missed. transportMode IS persisted two lines up, so a mid-round process kill — the

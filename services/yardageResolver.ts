@@ -34,7 +34,7 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { getGreenYardagesSync, getLastFix, classifyAccuracy, holeData } from './smartFinderService';
-import { adjustForPin, describePin } from './pinPosition';
+import { adjustForPin, describePin, pinForHole } from './pinPosition';
 
 export type YardageSource = 'user_stated' | 'gps_live' | 'static_card' | 'none';
 export type YardageConfidence = 'high' | 'med' | 'low';
@@ -75,7 +75,7 @@ const STATED_TTL_MS = 5 * 60 * 1000; // 5 min — stale after that
 export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   const round = useRoundStore.getState();
   const hole = holeNumberArg ?? round.currentHole;
-  return traceResolved(hole, applyDeclaredPin(resolveYardageInner(hole, round), round));
+  return traceResolved(hole, applyDeclaredPin(resolveYardageInner(hole, round), round, hole));
 }
 
 /**
@@ -104,9 +104,12 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
 function applyDeclaredPin(
   r: ResolvedYardage,
   round: ReturnType<typeof useRoundStore.getState>,
+  hole: number,
 ): ResolvedYardage {
-  if (!round.pinDeclared || r.value == null) return r;
-  const pin = round.pinPosition;
+  // This hole's pin if one was said on it, else the round's (services/pinPosition.pinForHole).
+  const declared = pinForHole(round, hole);
+  if (!declared || r.value == null) return r;
+  const pin = declared.pin;
   if (pin.depth === 'middle') return r;
   if (r.is_fallback) {
     return { ...r, reason: `${r.reason} Pin is ${describePin(pin)}, but this yardage is an estimate — not adjusting for it.` };

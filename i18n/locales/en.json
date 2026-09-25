@@ -663,7 +663,11 @@
       "play_this": "Play the {{ball}} this round",
       "add_another": "Add another ball",
       "save": "Save this ball"
-    }
+    },
+    "hole_pin_title": "HOLE {{hole}} PIN",
+    "hole_pin_set_hint": "Hole {{hole}}: pin {{pin}}{{from}}. Yardages play to it. You can also just tell your caddie — \"pin's back right\".",
+    "hole_pin_from_today": " (today's pin)",
+    "hole_pin_hint": "Where is the pin on hole {{hole}}? Tap it, or tell your caddie — \"pin's back right\". A back pin is a real club difference."
   },
   "swinglab": {
     "practice": "PRACTICE",

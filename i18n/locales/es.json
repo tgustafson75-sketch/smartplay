@@ -209,7 +209,11 @@
       "play_this": "Jugar la {{ball}} esta vuelta",
       "add_another": "Añadir otra bola",
       "save": "Guardar esta bola"
-    }
+    },
+    "hole_pin_title": "BANDERA HOYO {{hole}}",
+    "hole_pin_set_hint": "Hoyo {{hole}}: bandera {{pin}}{{from}}. Las distancias van a ella. También puedes decírselo a tu caddie: \"la bandera está atrás a la derecha\".",
+    "hole_pin_from_today": " (bandera de hoy)",
+    "hole_pin_hint": "¿Dónde está la bandera en el hoyo {{hole}}? Tócala o díselo a tu caddie: \"la bandera está atrás a la derecha\". Una bandera atrás cambia el palo."
   },
   "swinglab": {
     "practice": "PRÁCTICA",

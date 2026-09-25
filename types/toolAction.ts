@@ -22,6 +22,8 @@ export type ToolAction =
   // rangefinder scene by voice. Typed here from the start: the ONLY two UI tools ever silently
   // dropped were the two that lacked a ToolAction member, so an untyped payload is the drop class.
   | { type: 'zoom_target'; level?: 'in' | 'out' | 'reset' }
+  // 2026-09-25 — this hole's pin, told to the caddie ("pin's back right").
+  | { type: 'set_pin_position'; depth?: 'front' | 'middle' | 'back'; side?: 'left' | 'center' | 'right'; hole?: number; clear?: boolean }
   // 2026-08-21 — set_session_focus completes a wire that has existed on the CLASSIFIER path since
   // early on and never became a brain tool; set_playing_condition is what the ball is doing TODAY,
   // which the caddie must aim around rather than diagnose. Typed here from the start — the only two

@@ -164,6 +164,7 @@ Available intents:
    - "watching my student Mike from behind" -> { tool_name: "smartmotion", subject: "Mike", angle: "down_the_line", auto_start: true } ("from behind" maps to down_the_line)
    - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "this is the tee" / "this is the tee box" / "mark this tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
    - "mark the green" / "mark green" / "mark the pin" / "mark the flag" / "mark this as the pin" / "this is the pin" / "I'm on the green" / "I'm at the pin" / "mark this spot" / "drop a pin here" / "open Mark Green" -> { tool_name: "mark_green" }
+   - NOT a mark: a pin LOCATION on the green — "pin's back right" / "the pin is front left" / "flag's tucked back left today" / "middle pin" — is conversational (the caddie records it for the hole and plays to it). Marking needs the player AT the green saying mark/this is.
    (refresh_gps moved to its own intent_type below)
    - "open smartplay" / "show me smartplay" / "smart play" / "give me the smart play" / "what's the smart play here" / "smartplay here" -> { tool_name: "smartplay" }
    - "open Coach Mode" / "coach mode" / "start coaching" / "let's coach" / "watch my student" -> { tool_name: "coach_mode" }

@@ -209,7 +209,11 @@
       "play_this": "本轮使用 {{ball}}",
       "add_another": "添加其他球",
       "save": "保存这款球"
-    }
+    },
+    "hole_pin_title": "第 {{hole}} 洞旗位",
+    "hole_pin_set_hint": "第 {{hole}} 洞：旗位 {{pin}}{{from}}。码数按旗位计算。也可以直接告诉球童——\"旗在后右\"。",
+    "hole_pin_from_today": "（今日旗位）",
+    "hole_pin_hint": "第 {{hole}} 洞旗位在哪？点选，或告诉球童——\"旗在后右\"。后旗位会差一支杆。"
   },
   "swinglab": {
     "practice": "练习",

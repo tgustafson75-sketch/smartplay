@@ -138,6 +138,9 @@ type AnyAction = {
   kind?: string;
   compensate?: string;
   clear?: boolean;
+  // set_pin_position (2026-09-25)
+  depth?: string;
+  side?: string;
 };
 
 function toast(msg: string): void {
@@ -248,6 +251,22 @@ function dispatchOne(a: AnyAction): void {
       else if (typeof a.goal === 'string' && a.goal.trim()) {
         sf.useSessionFocusStore.getState().setFocus(a.goal.trim(), { note: typeof a.note === 'string' ? a.note : null });
       }
+      break;
+    }
+    case 'set_pin_position': {
+      /**
+       * 2026-09-25 (Tim — "make sure I can tell Caddie the pin location while playing a hole, like this
+       * is back right, and he can incorporate that into the analysis and logic"). The pin for ONE hole:
+       * the yardage resolver plays every number on the hole to it and the caddie hears it every turn
+       * (services/pinPosition.pinForHole). Nothing to record without a round.
+       */
+      const rs = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
+      if (!rs.isRoundActive) break;
+      const hole = typeof a.hole === 'number' && Number.isFinite(a.hole) && a.hole >= 1 ? Math.trunc(a.hole) : rs.currentHole;
+      if (a.clear) { rs.setHolePin(hole, null); break; }
+      const depth = a.depth === 'front' || a.depth === 'back' || a.depth === 'middle' ? a.depth : 'middle';
+      const side = a.side === 'left' || a.side === 'right' || a.side === 'center' ? a.side : 'center';
+      rs.setHolePin(hole, { depth, side });
       break;
     }
     case 'set_playing_condition': {

@@ -143,9 +143,11 @@ describe('one tap moves every surface, because the resolver owns it', () => {
 
   it('the pin is applied in resolveYardage, which is what every consumer calls', () => {
     const r = code('services/yardageResolver.ts');
-    expect(r).toMatch(/applyDeclaredPin\(resolveYardageInner\(hole, round\), round\)/);
+    expect(r).toMatch(/applyDeclaredPin\(resolveYardageInner\(hole, round\), round, hole\)/);
+    // 2026-09-25 — per HOLE: the pin said on the hole, else the round's (pinPosition.pinForHole).
+    expect(r).toMatch(/const declared = pinForHole\(round, hole\);/);
     // the maths is imported, not restated here
-    expect(r).toMatch(/import \{ adjustForPin, describePin \} from '\.\/pinPosition'/);
+    expect(r).toMatch(/import \{ adjustForPin, describePin, pinForHole \} from '\.\/pinPosition'/);
     expect(r).not.toMatch(/PIN_EDGE_INSET/);
   });
 
@@ -234,10 +236,11 @@ describe('the caddie is told the SIDE, which no yardage can carry', () => {
   it('it rides the one payload builder and the brain reads it', () => {
     const body = code('services/caddieRequestBody.ts');
     expect(body).toMatch(/pinPosition: safe\(/);
-    expect(body).toMatch(/if \(!isRoundActive \|\| !r\.pinDeclared\) return null;/);
+    // 2026-09-25 — the hole's pin, else the round's; nothing when neither was declared.
+    expect(body).toMatch(/const declared = pinForHole\(r, currentHole\);\s*if \(!declared\) return null;/);
     const k = code('api/kevin.ts');
     expect(k).toMatch(/pinPosition = null,/);
-    expect(k).toMatch(/TODAY'S PIN is \$\{pin\.said\}/);
+    expect(k).toMatch(/"TODAY'S PIN"\} is \$\{pin\.said\}/);
     // and it must tell the model the depth is ALREADY in the numbers, or it will double-count
     expect(k).toMatch(/do not add or subtract for it again/);
   });
@@ -255,7 +258,8 @@ describe('the entry is where Tim asked for it', () => {
 
   it('tapping a cell DECLARES it — not just sets the value', () => {
     expect(play).toMatch(/setSetupPin\(\{ depth, side \}\)/);
-    expect(play).toMatch(/pinDeclared && setupPin\.depth === depth/);
+    // 2026-09-25 — the flag shows the pin in force (the hole's in a round, the day's before).
+    expect(play).toMatch(/const active = !!shownPin && shownPin\.depth === depth/);
   });
 
   it('it is optional, and says what skipping means', () => {

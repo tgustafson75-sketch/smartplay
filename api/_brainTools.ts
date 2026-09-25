@@ -107,6 +107,8 @@ export const UI_TOOLS = new Set([
   'state_yardage',
   'club_change',
   'declare_hole',
+  // 2026-09-25 (Tim — "tell Caddie the pin location while playing a hole") — this hole's pin.
+  'set_pin_position',
 ]);
 
 export const BRAIN_TOOLS: AiToolDef[] = [
@@ -227,6 +229,20 @@ export const BRAIN_TOOLS: AiToolDef[] = [
         clear: { type: 'boolean', description: 'True when they say it has settled down or stopped.' },
       },
       required: ['stated'],
+    },
+  },
+  {
+    name: 'set_pin_position',
+    description: 'The player tells you WHERE THE PIN IS on the hole they are playing — "pin\'s back right", "flag is front left today", "it\'s tucked back", "middle pin". RECORD it: every yardage the app gives you from then on plays to that flag (depth), and its side tells you which miss is safe and where to aim. It applies to the hole they are on unless they name another. IN THIS SAME REPLY use it: the numbers you were handed this turn are still to the MIDDLE of the green, so for a back pin play toward the back yardage and for a front pin toward the front yardage you have, and aim to the safe side of a side pin. Do NOT call it for a QUESTION ("where\'s the pin?", "is it back right?") — answer that. Call it ALONGSIDE your spoken answer; it never replaces the club call.',
+    parameters: {
+      type: 'object',
+      properties: {
+        depth: { type: 'string', enum: ['front', 'middle', 'back'], description: 'Front, middle or back of the green. "Tucked" with no depth given → back is NOT implied; use middle.' },
+        side: { type: 'string', enum: ['left', 'center', 'right'], description: 'Left, centre or right, looking at the green from the fairway.' },
+        hole: { type: 'integer', description: 'Only when they named a hole. Otherwise omit — it is the hole they are on.' },
+        clear: { type: 'boolean', description: 'True when they say to forget it / it was wrong.' },
+      },
+      required: [],
     },
   },
   {

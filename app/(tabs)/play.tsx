@@ -37,7 +37,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
 import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
-import { describePin } from '../../services/pinPosition';
+import { describePin, pinForHole } from '../../services/pinPosition';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { useDownloadedCoursesStore } from '../../store/downloadedCoursesStore';
 import CourseBuildProgress from '../../components/course/CourseBuildProgress';
@@ -809,6 +809,27 @@ export default function PlayTab() {
   const setupPin = useRoundStore(s => s.pinPosition);
   const pinDeclared = useRoundStore(s => s.pinDeclared);
   const setSetupPin = useRoundStore(s => s.setPinPosition);
+  /**
+   * 2026-09-25 (Tim — "make the pin location card on the play tab an active card in round that
+   * corresponds to the hole in play as a manual backup"). In a round the card is THIS HOLE's pin —
+   * the same value the caddie sets when you tell him "pin's back right" (set_pin_position), read
+   * through the one owner (services/pinPosition.pinForHole). Before a round it is the day's pin.
+   */
+  const pinHole = useRoundStore(s => s.currentHole);
+  const pinByHole = useRoundStore(s => s.pinByHole);
+  const setHolePin = useRoundStore(s => s.setHolePin);
+  const pinInRound = isRoundActive && pinHole != null;
+  const shownPin = pinInRound
+    ? pinForHole({ pinByHole, pinDeclared, pinPosition: setupPin }, pinHole)?.pin ?? null
+    : (pinDeclared ? setupPin : null);
+  const holeHasOwnPin = pinInRound && !!pinByHole?.[pinHole];
+  const tapPin = (depth: 'front' | 'middle' | 'back', side: 'left' | 'center' | 'right') => {
+    if (!pinInRound) { setSetupPin({ depth, side }); return; }
+    // Tapping the hole's own flag again clears it back to the day's pin.
+    const own = pinByHole?.[pinHole];
+    if (own && own.depth === depth && own.side === side) setHolePin(pinHole, null);
+    else setHolePin(pinHole, { depth, side });
+  };
 
   const [query, setQuery] = useState('');
   // 2026-07-23 (Tim) — golfcourseapi has no city/state fields; a location hint appended to the
@@ -2940,7 +2961,11 @@ export default function PlayTab() {
               */}
             <View style={styles.sectionHead}>
               <Image source={SEC_ICON.tee} style={styles.sectionIcon} tintColor={colors.accent_lime} />
-              <Text style={styles.sectionHeadText}>{t("play.todays_pins", { defaultValue: "TODAY’S PINS" })}</Text>
+              <Text style={styles.sectionHeadText}>
+                {pinInRound
+                  ? t('play.hole_pin_title', { defaultValue: 'HOLE {{hole}} PIN', hole: pinHole })
+                  : t("play.todays_pins", { defaultValue: "TODAY’S PINS" })}
+              </Text>
             </View>
             {/**
               * 2026-09-14 (Tim) — "the Today's Pins card looks like a memory game. Can we make it
@@ -2973,7 +2998,7 @@ export default function PlayTab() {
                 {(['back', 'middle', 'front'] as const).map((depth, rowIdx) => (
                   <View key={depth} style={[styles.pinGreenRowInner, rowIdx > 0 && styles.pinGreenDivideTop]}>
                     {(['left', 'center', 'right'] as const).map((side, colIdx) => {
-                      const active = pinDeclared && setupPin.depth === depth && setupPin.side === side;
+                      const active = !!shownPin && shownPin.depth === depth && shownPin.side === side;
                       return (
                         <TouchableOpacity
                           key={side}
@@ -2982,7 +3007,7 @@ export default function PlayTab() {
                             colIdx > 0 && styles.pinGreenDivideLeft,
                             active && styles.pinCellActive,
                           ]}
-                          onPress={() => setSetupPin({ depth, side })}
+                          onPress={() => tapPin(depth, side)}
                           accessibilityRole="button"
                           accessibilityState={{ selected: active }}
                           accessibilityLabel={t('play.accessibility_label.pin_cell', {
@@ -3009,7 +3034,19 @@ export default function PlayTab() {
               </View>
             </View>
             <Text style={styles.transportHint}>
-              {pinDeclared
+              {pinInRound
+                ? (shownPin
+                    ? t('play.hole_pin_set_hint', {
+                        defaultValue: 'Hole {{hole}}: pin {{pin}}{{from}}. Yardages play to it. You can also just tell your caddie — "pin\'s back right".',
+                        hole: pinHole,
+                        pin: describePin(shownPin),
+                        from: holeHasOwnPin ? '' : t('play.hole_pin_from_today', { defaultValue: " (today's pin)" }),
+                      })
+                    : t('play.hole_pin_hint', {
+                        defaultValue: 'Where is the pin on hole {{hole}}? Tap it, or tell your caddie — "pin\'s back right". A back pin is a real club difference.',
+                        hole: pinHole,
+                      }))
+                : pinDeclared
                 ? t('play.pin_set_hint', {
                     defaultValue: 'Pin {{pin}}. Your yardage now plays to the flag, not the middle — but only on greens I have real front/back numbers for.',
                     pin: describePin(setupPin),

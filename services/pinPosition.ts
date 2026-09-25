@@ -39,6 +39,20 @@ import type { PinPosition, PinDepth } from '../store/roundStore';
  */
 export const PIN_EDGE_INSET_YARDS = 5;
 
+/**
+ * 2026-09-25 (Tim — "tell Caddie the pin location while playing a hole"). THE ONE READER of which pin
+ * applies on a hole: the pin said on that hole, else the round's declared pin, else none. `scope` lets
+ * the caddie say "this hole" or "today" truthfully.
+ */
+export function pinForHole(
+  round: { pinByHole?: Record<number, PinPosition> | null; pinDeclared: boolean; pinPosition: PinPosition },
+  hole: number | null | undefined,
+): { pin: PinPosition; scope: 'hole' | 'round' } | null {
+  const own = hole != null ? round.pinByHole?.[hole] : undefined;
+  if (own) return { pin: own, scope: 'hole' };
+  return round.pinDeclared ? { pin: round.pinPosition, scope: 'round' } : null;
+}
+
 export interface PinAdjustment {
   /** The yardage to play, after the pin. Same as `from` when nothing could be applied. */
   yards: number;
