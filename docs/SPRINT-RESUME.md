@@ -8,6 +8,11 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### 2026-09-30 — 1.0.2 STORE BUILDS DONE (commit 2e9627f3): iOS build 31 + Android versionCode 31, runtimeVersion
+> **"1.0.2"** (moved from "1.0.0" by Tim — OTAs now reach 1.0.2 binaries only). Includes the review sweep (9cee9f19)
+> and triple-check (d451fbfa). NOT submitted. Next: device check (round scoring via the 2-row bar, voice, SmartMotion
+> capture, sandbox purchase on the R8 build), then submit + Play release-day list below.
+
 > ### 2026-09-30 — Wear 1031 (watch-shapes fix) submitted: `wear:production`, 100%, 1030 excluded. Managed
 > publishing ON — nothing is public until Tim presses Publish after approval. The listing went out with it
 > (name "SmartPlay Caddie: Golf GPS AI"; recap + history import free; satellite hole views paid; trial
