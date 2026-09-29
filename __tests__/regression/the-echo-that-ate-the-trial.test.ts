@@ -110,8 +110,8 @@ describe('the players it already happened to are healed', () => {
     expect(planTrialLifecycle({ ...clobbered, status: 'expired' })).toEqual({});
   });
 
-  it('a genuinely new player still gets a fresh trial, not a heal', () => {
+  it('a genuinely new player gets neither a heal nor an app trial (1.0.2: the store offer is the trial)', () => {
     expect(planTrialLifecycle({ ...clobbered, firstOpenedAt: null, trialStartedAt: null }))
-      .toEqual({ initTrial: true });
+      .toEqual({});
   });
 });

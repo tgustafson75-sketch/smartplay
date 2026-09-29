@@ -177,19 +177,15 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => {
   },
   {
     /**
-     * 2026-09-03 — a HIGHLIGHT, not an instruction: there is no step to perform. It is here because
-     * a player who does not know the offer exists cannot count on it, and the whole point is that
-     * they should feel free to take their time.
+     * 2026-09-28 (1.0.2) — the store's introductory offer is the only trial; the app-side trial and
+     * its light-use extension are gone, so every line that promised them went with them.
      */
     id: 'trial',
     icon: 'gift-outline',
     title: 'Your free trial',
-    blurb: 'Miss it and we extend it.',
+    blurb: 'Start it from the plans screen.',
     steps: [
-      `Every new player gets a full free trial of everything — no card up front.`,
-      'If it runs out and you never really got a chance to play, we add another week instead of a bill.',
-      'It offers itself: fewer than three days out with the app and the card appears. One tap, no charge.',
-      'Weather, daylight and tee times are not your fault. A trial you never got to use is not a trial.',
+      'SmartPlay Full includes a 1-month free trial for new subscribers, started from the plans screen.',
     ],
   },
   {

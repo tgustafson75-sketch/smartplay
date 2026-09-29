@@ -193,15 +193,6 @@ interface PlayerProfileState {
    * a different length. Persisted automatically — partialize keeps everything it does not name.
    */
   promo_expires_at: number | null;
-  /**
-   * 2026-09-03 — when the light-use trial extension was given, or null if it never was.
-   *
-   * Its ONLY job is to make the offer one-time. A standing "here's another week" is a discount
-   * rather than a gesture, and a player who took the week and still did not play has answered the
-   * question. Stamped by grantTrialExtension, which also lays down the comp — the two cannot come
-   * apart, or the offer would re-fire on every launch and the trial would never end.
-   */
-  trial_extension_granted_at: number | null;
   subscription_status: SubscriptionStatus;
   /** Optional player email. Used by isOwnerEmail() to grant lifetime
    *  access on first boot. Currently no auth surface populates this; set
@@ -354,18 +345,11 @@ interface PlayerProfileState {
   completeSetup: () => void;
   completeOnboarding: () => void;
   setDefaultMode: (m: 'break_100' | 'break_90' | 'break_80' | 'free_play') => void;
-  initTrial: () => void;
   setSubscriptionStatus: (s: SubscriptionStatus) => void;
   /** Start a comp for N days. Stamps the end date and sets status 'active'. */
   grantPromo: (days: number) => void;
   /** End a comp early, or clear one that has run out. */
   clearPromo: () => void;
-  /**
-   * 2026-09-03 — the light-use extension: TRIAL_EXTENSION_DAYS of comp, stamped so it happens once.
-   * One action rather than grantPromo + a separate stamp, because a grant that forgets to stamp
-   * re-offers itself forever. services/billing/trialUsage decides WHETHER; this only carries it out.
-   */
-  grantTrialExtension: (days: number) => void;
   /**
    * 2026-09-03 — ADD days to a comp instead of replacing it.
    *
@@ -377,10 +361,9 @@ interface PlayerProfileState {
    */
   extendPromo: (days: number) => void;
   /**
-   * 2026-08-29 — set the trial start from the STORE's clock rather than from first app open.
-   * initTrial() stamps the moment the app was first opened, which was correct while the trial was
-   * ours to run; under IAP the trial begins when the player buys. See services/billing/purchases.ts
-   * `trialStartFromCustomerInfo`.
+   * 2026-08-29 — set the trial start from the STORE's clock. Under IAP the trial begins when the
+   * player buys (and since 1.0.2 the store's intro offer is the only trial). See
+   * services/billing/purchases.ts `trialStartFromCustomerInfo`.
    */
   setTrialStartedAt: (ms: number | null) => void;
   setEmail: (email: string | null) => void;
@@ -454,7 +437,6 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       first_opened_at: null,
       trial_started_at: null,
       promo_expires_at: null,
-      trial_extension_granted_at: null,
       subscription_status: 'free',
       email: null,
       handicap_index: null,
@@ -537,18 +519,6 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       completeSetup: () => set({ isSetupComplete: true }),
       completeOnboarding: () => set({ has_completed_onboarding: true }),
       setDefaultMode: (m) => set({ default_mode: m }),
-      initTrial: () => {
-        const now = Date.now();
-        // first_opened_at is PRESERVED when it already exists. This is called on a fresh install,
-        // where it is null and becomes now — but also when billing turns on for a player who has
-        // been using the app for weeks (app/_layout.tsx step 3). Clobbering it there would reset
-        // "when did this person start with us" to the day we started charging.
-        set(s => ({
-          first_opened_at: s.first_opened_at ?? now,
-          trial_started_at: now,
-          subscription_status: 'trial',
-        }));
-      },
       setSubscriptionStatus: (s) => set({ subscription_status: s }),
       grantPromo: (days) =>
         set({
@@ -565,16 +535,6 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
             subscription_status: 'active',
           };
         }),
-      grantTrialExtension: (days) => {
-        const now = Date.now();
-        set({
-          promo_expires_at: now + Math.max(1, Math.floor(days)) * 24 * 60 * 60 * 1000,
-          subscription_status: 'active',
-          // Stamped in the SAME set() as the grant. Two writes could interleave with a boot-time
-          // lifecycle pass and leave a comp with no stamp behind it, which re-offers on next launch.
-          trial_extension_granted_at: now,
-        });
-      },
       setTrialStartedAt: (ms) => set({ trial_started_at: ms }),
       setEmail: (email) => set({ email }),
       grantLifetime: () =>

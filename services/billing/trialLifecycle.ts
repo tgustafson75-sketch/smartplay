@@ -17,9 +17,13 @@
  *      a stale lifetime without locking Tim out of his own app.
  *   3. KILL-SWITCH stamps NOTHING. canAccess() already returns true for everything while it is off,
  *      so a grant buys nobody anything and only writes state that survives the flip.
- *   4. A real lifetime is left alone.
- *   5. The trial: start one for a fresh install, AND for the launch cohort on the day billing turns
- *      on — without that second case the flip locks out everyone who was here first.
+ *   4. A lifetime on a non-owner is a kill-switch leftover and is cleared to 'free'.
+ *   5. A LEGACY app trial already running heals and expires on its own dates.
+ *
+ * 2026-09-28 (1.0.2) — THE APP NO LONGER GRANTS A TRIAL. The store's introductory offer (one month,
+ * started from the plans screen) is the only trial. A fresh install, the launch cohort and a cleared
+ * lifetime all land on 'free'. Rung 5 is kept so the 14-day app trials already running when 1.0.2
+ * installs finish on the dates their players were promised.
  */
 
 import type { SubscriptionStatus } from '../../store/playerProfileStore';
@@ -42,14 +46,13 @@ export type LifecycleInput = {
 export type LifecyclePlan = {
   clearPromo?: boolean;
   grantLifetime?: boolean;
-  initTrial?: boolean;
   setStatus?: SubscriptionStatus;
 };
 
 export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
   const {
     subscriptionsEnabled, isOwner, status, promoExpiresAt,
-    firstOpenedAt, trialStartedAt, trialDurationMs, now,
+    trialStartedAt, trialDurationMs, now,
   } = input;
 
   // 1) An active comp outranks both blanket grants below.
@@ -88,18 +91,12 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
    * A mis-detected owner is no new risk: rung 3 has stripped that same player every launch since
    * 08-30, so this changes when the correction happens, not whether.
    *
-   * Converted straight to a TRIAL rather than to 'free'. initTrial sets the status itself, so this is
-   * one write; setting 'free' would have left them on the `lite` edition until the NEXT launch, which
-   * is the same stranding this file's own tests were written to prevent. Tim's rule stands: the
-   * cohort that was here first converts to trial, never to locked out.
+   * 2026-09-28 (1.0.2) — cleared to 'free'. It used to convert to an app trial; the app no longer
+   * grants one, so the store's introductory offer on the plans screen is their trial too.
    */
-  if (status === 'lifetime') return { initTrial: true };
+  if (status === 'lifetime') return { setStatus: 'free' };
 
-  // 5) The trial.
-  if (!firstOpenedAt) return { initTrial: true };
-  // The launch cohort: installed while billing was off, so they carry a firstOpenedAt and 'free'.
-  // Their 14 days start NOW rather than at install, or the flip hands them an expired clock.
-  if (status === 'free' && !trialStartedAt) return { initTrial: true };
+  // 5) A legacy app trial already running — no new ones start here (see the header).
   /**
    * 2026-09-18 — HEAL A TRIAL THAT WAS GRANTED AND THEN CLOBBERED.
    *

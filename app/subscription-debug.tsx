@@ -24,7 +24,6 @@ export default function SubscriptionDebugScreen() {
     first_opened_at,
     trial_started_at,
     setSubscriptionStatus,
-    initTrial: _initTrial,
     promo_expires_at,
     grantPromo,
     clearPromo,

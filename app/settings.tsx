@@ -1934,7 +1934,7 @@ export default function Settings() {
 
         {/* Reset / Sign Out — until real auth lands, this is the
             functional equivalent for testers who want to start fresh
-            (new persona, clear stored profile, fresh trial state). */}
+            (new persona, clear stored profile). */}
         <CollapsibleSection title={t('settings.title.reset')} icon="refresh-outline">
           <TouchableOpacity
             style={styles.resetRow}

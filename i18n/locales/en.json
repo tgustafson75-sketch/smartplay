@@ -1295,14 +1295,11 @@
       "we_could_not_reach_the": "We could not reach the store just now. Try again in a moment."
     },
     "paywall_screen": {
-      "on_the_house": "ON THE HOUSE",
-      "no_card_no_charge_subscribe": "No card, no charge. Subscribe whenever you're ready.",
       "smartplay_caddie_pro": "SmartPlay Caddie Pro",
       "restore_purchase": "Restore Purchase",
       "privacy_policy": "Privacy Policy",
       "terms_of_service": "Terms of Service",
       "subscription_automatically_renews_unless_can": "Subscription automatically renews unless cancelled at least 24 hours before the end of the trial period.",
-      "give_me_another_days": "Give me another {{TRIAL_EXTENSION_DAYS}} days",
       "free_for_days": "Free for {{trialDays}} days",
       "day_free_trial_cancel_anytime": "{{paywall_subhead}}{{n}} {{trial_days}}-day free trial. Cancel anytime.",
       "save_pct": "Save {{savingsPct}}%"

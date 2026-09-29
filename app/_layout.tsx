@@ -726,7 +726,7 @@ function AppNavigator() {
       done = true;
 
       const profile = usePlayerProfileStore.getState();
-      const { first_opened_at, trial_started_at, subscription_status, initTrial, setSubscriptionStatus, grantLifetime } = profile;
+      const { first_opened_at, trial_started_at, subscription_status, setSubscriptionStatus, grantLifetime } = profile;
 
       // 2026-05-19 — Owner email auto-mirror. Runs BEFORE the
       // subscriptions kill-switch so Owner Tools (Settings → Owner Tools)
@@ -801,7 +801,12 @@ function AppNavigator() {
       });
       if (plan.clearPromo) profile.clearPromo();
       if (plan.grantLifetime) grantLifetime();
-      if (plan.initTrial) initTrial();
+      /**
+       * 2026-09-28 (1.0.2) — initTrial is gone: the store's intro offer is the only trial. What it
+       * also did — stamp when this player first opened the app — is still wanted (the first_open
+       * funnel event and "when did they start with us"), so it is kept here on its own.
+       */
+      if (!first_opened_at) usePlayerProfileStore.setState({ first_opened_at: Date.now() });
       if (plan.setStatus) setSubscriptionStatus(plan.setStatus);
       return true;
     };
