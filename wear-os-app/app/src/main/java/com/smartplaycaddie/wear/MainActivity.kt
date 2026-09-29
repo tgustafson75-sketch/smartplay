@@ -53,7 +53,11 @@ import android.widget.HorizontalScrollView
 import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import androidx.core.app.ActivityCompat
+import androidx.wear.widget.BoxInsetLayout
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
@@ -104,6 +108,19 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         tts = TextToSpeech(this) { /* ready — best-effort */ }
 
         setContentView(buildUi())
+        seedForShapeCheck()
+    }
+
+    /**
+     * DEBUGGABLE BUILDS ONLY — lets the watch-shape check (docs/diagnosis/wear-shapes) show the screen
+     * with a real round and a long caddie message and no paired phone. A release build is not
+     * debuggable, so this is inert there.
+     */
+    private fun seedForShapeCheck() {
+        if ((applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) return
+        val msg = intent?.getStringExtra("shape_check_message") ?: return
+        handleCaddie(JSONObject().put("kind", "yardage").put("hole", 7).put("middle", 147).put("front", 132).put("back", 158))
+        handleCaddie(JSONObject().put("kind", "notification").put("text", msg))
     }
 
     /** Build the one-screen UI programmatically. */
@@ -143,7 +160,13 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
              * Bottom padding is deliberately larger than the top: on a round face the lower chord
              * narrows, so the last child needs room to clear the curve.
              */
-            setPadding(dp(16), dp(6), dp(16), dp(20))
+            /**
+             * 2026-09-30 (Play rejection, "Wear App Quality Guidelines: Watch shapes") — the ROUND
+             * edge is now handled by the BoxInsetLayout this sits in (see the end of buildUi), not by
+             * padding guessed for one face. This padding is only the breathing room inside the safe
+             * area, and the square-watch margin, where BoxInsetLayout insets nothing.
+             */
+            setPadding(dp(10), dp(6), dp(10), dp(10))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -222,9 +245,16 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         micBtn = Button(this).apply {
             text = "Ask caddie"
             setTextColor(Color.BLACK)
-            setBackgroundColor(GREEN)
+            // Stadium (pill) shape, the Wear Material button — a full-width rectangle had its corners
+            // sliced off by the round edge in Play's review screenshot.
+            background = pill(GREEN)
+            stateListAnimator = null
+            isAllCaps = true
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            minHeight = dp(48)
+            minimumHeight = dp(48)
+            setPadding(dp(14), 0, dp(14), 0)
             setOnClickListener { startSpeech() }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -237,7 +267,13 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
             setTextColor(DIM)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
             gravity = Gravity.CENTER
-            setPadding(0, dp(6), 0, 0)
+            setPadding(0, dp(6), 0, dp(2))
+            // The caddie's message is an item in the scrolling column: full column width so it
+            // WRAPS inside the safe area, and a long answer is read by scrolling, never cut off.
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
         }
 
         // Secondary: swing capture toggle, dim so it doesn't compete with the number.
@@ -269,7 +305,11 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
             compoundDrawablePadding = dp(8)
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(DIM)
             setTextColor(DIM)
-            setBackgroundColor(Color.parseColor("#1A1A1A"))
+            background = pill(Color.parseColor("#1A1A1A"))
+            stateListAnimator = null
+            minHeight = dp(48)
+            minimumHeight = dp(48)
+            setPadding(dp(14), 0, dp(16), 0)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
             setOnClickListener { onToggleCapture() }
             /**
@@ -304,7 +344,7 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
          * changes on a larger face (Galaxy Watch 4+ is 450x450) — it only starts scrolling where it
          * previously truncated.
          */
-        return ScrollView(this).apply {
+        val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.BLACK)
             isFillViewport = true
             isVerticalScrollBarEnabled = false
@@ -317,6 +357,44 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
                 ),
             )
         }
+
+        /**
+         * 2026-09-30 — THE ROOT CAUSE of the Play "Watch shapes" rejection: nothing here knew the
+         * screen was round. The scroll view filled the whole square framebuffer, so on a round face
+         * the mic button's corners and the caddie message's line ends sat outside the circle.
+         *
+         * BoxInsetLayout is the Wear container for exactly this: on a round screen it insets a
+         * BOX_ALL child to the square inscribed in the circle, so every pixel of the scrolling
+         * column — at any scroll position — is on glass. On a square screen it insets nothing and
+         * the column's own padding is the margin. Round-ness comes from the system, not a guess.
+         */
+        return BoxInsetLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            addView(
+                scroll,
+                BoxInsetLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    Gravity.CENTER,
+                    BoxInsetLayout.LayoutParams.BOX_ALL,
+                ).apply {
+                    // The scroll viewport itself stops short of the edge, so mid-scroll a row slides
+                    // out of view before it meets the bezel (a square face has no inset of its own).
+                    topMargin = dp(8)
+                    bottomMargin = dp(8)
+                },
+            )
+        }
+    }
+
+    /** Stadium-shaped button background with a touch ripple. */
+    private fun pill(color: Int): RippleDrawable {
+        fun shape() = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(100).toFloat()
+            setColor(color)
+        }
+        return RippleDrawable(ColorStateList.valueOf(Color.parseColor("#40FFFFFF")), shape(), shape())
     }
 
     /** One metric card for the drill strip: icon glyph · big value · dim label. */

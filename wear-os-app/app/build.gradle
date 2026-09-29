@@ -107,4 +107,6 @@ dependencies {
     // Wearable Data Layer (MessageClient / NodeClient). Google Maven —
     // no GitHub token / private repo needed.
     implementation 'com.google.android.gms:play-services-wearable:18.2.0'
+    // BoxInsetLayout — the round-aware container for this Views UI (Play "Watch shapes" policy).
+    implementation 'androidx.wear:wear:1.3.0'
 }
