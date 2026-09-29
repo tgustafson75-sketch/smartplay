@@ -276,6 +276,25 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     currentBall: safe(() => p.currentBall ?? null, null),
     /**
+     * 2026-09-29 — the tee-time rate category the player picked in Profile (veteran/military, senior,
+     * junior, resident, or none). Picked on a screen, so without this "book me a tee time" reached a
+     * caddie that could not say which rate to ask for. Message-side, like currentBall: editable any time.
+     */
+    rateCategory: safe(() => (require('../lib/rateCategory') as typeof import('../lib/rateCategory')).normalizeRateCategory(p.rateCategory), 'none'),
+    /**
+     * 2026-09-29 — the pro-shop number for the course in play (or being looked at). Fetched from Places
+     * and saved in the course book since June and never shown; now the screens show it, and this is
+     * the other half — "what's the pro shop's number?" is a question the caddie can answer.
+     */
+    proShop: safe(() => {
+      const id = activeCourseId ?? r.previewCourseId ?? null;
+      if (!id) return null;
+      const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
+      const book = mem.useCaddieMemoryStore.getState().getCourseBook(id);
+      const phone = book?.phone?.trim();
+      return phone ? { course: book?.name ?? null, phone } : null;
+    }, null),
+    /**
      * 2026-09-18 (Tim — "will the course engine build international courses?") — THE UNIT THE
      * PLAYER THINKS IN.
      *

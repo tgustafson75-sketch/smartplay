@@ -42,6 +42,7 @@
  */
 
 import type { AiToolDef } from './_aiProvider';
+import { RATE_CATEGORIES } from '../lib/rateCategory';
 
 /**
  * Tools the SERVER executes and whose result is fed back to the model.
@@ -109,6 +110,8 @@ export const UI_TOOLS = new Set([
   'declare_hole',
   // 2026-09-25 (Tim — "tell Caddie the pin location while playing a hole") — this hole's pin.
   'set_pin_position',
+  // 2026-09-29 (Tim — still on GolfNow only for tee times) — an honest booking hand-off. See the tool.
+  'find_tee_time',
 ]);
 
 export const BRAIN_TOOLS: AiToolDef[] = [
@@ -445,6 +448,29 @@ export const BRAIN_TOOLS: AiToolDef[] = [
         course_id: { type: 'string', description: 'The id from a prior lookup_course result, when you have one. Omit if you only have the name.' },
       },
       required: ['name'],
+    },
+  },
+  /**
+   * 2026-09-29 (Tim — "I still use GolfNow only for tee times"; "we don't have to verify Vet status,
+   * pro shop will check the accuracy of the pricing category"). No consumer booking API exists, so
+   * this is a HAND-OFF and the description says so in the words the caddie must use: the client
+   * (services/teeTimeLink.runFindTeeTime) opens the course's own booking page and, when the course
+   * book has a pro-shop number, offers the call with a one-line script of what to ask for.
+   */
+  {
+    name: 'find_tee_time',
+    description: 'Help the player get a TEE TIME. Use it whenever they ask to book, find or get a tee time — "book me a tee time Saturday morning at Menifee Lakes", "find us a tee time tomorrow", "can you get two of us out around 8 on Sunday, walking". You CANNOT book anything and cannot see what times are open: this opens the course\'s own booking page on their phone and, when the app has the pro shop\'s number, offers to call it with a short script of what to ask for. Pass every detail they said. Then say plainly it is a hand-off — "I\'ve opened their booking page — tell the shop you\'re after the veteran rate" — and NEVER say or imply they are booked, confirmed, or that a time is available. The course checks rate eligibility and sets the price. If they ask what rates or discounts a course offers, use search_web, and never quote a price you did not look up. If they did not say which course, ask before calling this.',
+    parameters: {
+      type: 'object',
+      properties: {
+        course: { type: 'string', description: 'The course name as the player said it ("Menifee Lakes"). For "my home course" use the home course from your context.' },
+        date: { type: 'string', description: 'The day in their words ("Saturday", "tomorrow", "the 14th"). Omit if not said.' },
+        time_window: { type: 'string', description: 'The time in their words ("morning", "around 8am", "after 2"). Omit if not said.' },
+        players: { type: 'integer', minimum: 1, maximum: 8, description: 'How many players, when they said it ("two of us" → 2). Omit if not said.' },
+        rate_category: { type: 'string', enum: [...RATE_CATEGORIES], description: 'Only when they NAME a rate this turn ("the senior rate", "I\'m a vet"). Omit otherwise — the app uses the rate category saved in their profile.' },
+        transport: { type: 'string', enum: ['walking', 'riding'], description: 'Walking or riding in a cart, when they said it. Omit if not said.' },
+      },
+      required: ['course'],
     },
   },
   {

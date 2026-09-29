@@ -10,4 +10,6 @@ module.exports = {
   Dimensions: { get: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }) },
   NativeModules: {},
   Linking: { openURL: async () => undefined, canOpenURL: async () => false },
+  // 2026-09-29 — services/teeTimeLink offers the pro-shop call through an Alert; tests spy on it.
+  Alert: { alert: () => undefined },
 };

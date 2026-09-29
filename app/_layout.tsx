@@ -14,7 +14,7 @@ import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { useClubBagStore } from '../store/clubBagStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { planTrialLifecycle } from '../services/billing/trialLifecycle';
-import { refreshEntitlement, planEntitlementWrite } from '../services/billing/purchases';
+import { syncEntitlementFromStore } from '../services/billing/redeemCode';
 import { PRICING } from '../lib/pricing';
 import { useSettingsStore } from '../store/settingsStore';
 import { selfContext } from '../store/issueLogStore';
@@ -674,47 +674,10 @@ function AppNavigator() {
       if (done) return true;
       if (!usePlayerProfileStore.persist.hasHydrated()) return false;
       done = true;
-      void (async () => {
-        const before = usePlayerProfileStore.getState().subscription_status;
-        const snapshot = await refreshEntitlement(before);
-        if (cancelled) return;
-        const next = snapshot.status;
-        /**
-         * Re-read rather than trusting `before`. The trial-lifecycle effect below can grant
-         * lifetime to an owner account while this store call is in flight, and writing a stale
-         * 'free' over that grant would lock Tim out of his own app on his own launch.
-         * [[two-owners-is-the-root-cause]]
-         */
-        const nowStatus = usePlayerProfileStore.getState().subscription_status;
-        /**
-         * Correct the trial's START before the status, because app/(tabs)/caddie.tsx reads the
-         * countdown off `trial_started_at` — which initTrial stamped at FIRST APP OPEN. Under IAP
-         * the trial begins at purchase, so without this a player who subscribes a fortnight after
-         * installing is told their brand-new trial has already run out.
-         */
-        if (snapshot.trialStartedAt != null) {
-          usePlayerProfileStore.getState().setTrialStartedAt(snapshot.trialStartedAt);
-        }
-        // Remember what the store said, so a later promo expiry can tell its 'active' from theirs.
-        if (snapshot.storeEntitled != null) {
-          usePlayerProfileStore.getState().setStoreEntitlementActive(snapshot.storeEntitled);
-          // A store subscriber whose status a lapsed promo moved to 'expired' before this read landed
-          // gets it back through planEntitlementWrite's storeEntitled rule just below.
-        }
-        /**
-         * 2026-09-18 — THE DECISION MOVED INTO THE MODULE, because this is where it was wrong.
-         *
-         * The three lines this replaces protected 'lifetime' and nothing else, and the case that
-         * mattered was the TRIAL: on a fresh install `before` is the default 'free', the store has
-         * never heard of the player so the mapping echoes 'free' back, and initTrial grants 'trial'
-         * while the read is in flight — so the echo landed on top and every new customer lost the
-         * 14-day trial on their first launch. Found on Tim's own App Store install, where the
-         * caddie answered "That one got away from me" to everything. See planEntitlementWrite.
-         */
-        const write = planEntitlementWrite({ before, mapped: next, now: nowStatus, storeEntitled: snapshot.storeEntitled });
-        if (write == null) return;
-        usePlayerProfileStore.getState().setSubscriptionStatus(write);
-      })();
+      // 2026-09-29 — the read-and-write sequence (and its history) moved to ONE owner,
+      // services/billing/redeemCode.syncEntitlementFromStore, so the code-redemption path writes
+      // entitlement exactly as this launch read does. `cancelled` still abandons a late answer.
+      void syncEntitlementFromStore({ isCancelled: () => cancelled });
       return true;
     };
     let unsub: (() => void) | undefined;

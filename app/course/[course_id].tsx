@@ -30,6 +30,7 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
+import { ProShopCallRow, useProShopPhone } from '../../components/course/ProShopCallRow';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { prewarmBriefing } from '../../services/briefingGenerator';
 import { prewarmVoice } from '../../services/voiceWarmup';
@@ -38,6 +39,9 @@ import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import type { Course } from '../../types/course';
 import { useTranslation } from 'react-i18next';
 import { goToTab } from '../../services/safeBack';
+
+/** Room the pro-shop row takes in the sticky bar (button + script line), so the scroll clears it. */
+const PRO_SHOP_ROW_HEIGHT = 72;
 
 /**
  * Course Detail — legacy long-scroll format.
@@ -426,6 +430,7 @@ export default function CourseDetailScreen() {
   // 2026-09-05 — carries the LAYOUT, not just the club: a bare club name on a multi-course property
   // reads as whichever sibling it happens to contain — the Menifee Palms/Lakes bug.
   const displayClubName = localFriendlyName ?? courseDisplayLabel(course?.club_name, course?.course_name);
+  const proShopPhone = useProShopPhone(course?.id ?? null);
   const noteByHole = useMemo(() => {
     const m = new Map<number, string>();
     (content?.hole_notes ?? []).forEach(n => m.set(n.hole_number, n.note));
@@ -586,7 +591,7 @@ export default function CourseDetailScreen() {
     <View style={styles.container}>
       <CourseDetailBanner />
 
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 130 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 130 + insets.bottom + (proShopPhone ? PRO_SHOP_ROW_HEIGHT : 0) }]} showsVerticalScrollIndicator={false}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.back}
@@ -668,6 +673,9 @@ export default function CourseDetailScreen() {
           the teal fill doesn't sit on a hard-coded dark border in light
           mode (visual "overlap" reported in user testing). */}
       <View style={[styles.ctaBar, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: 12 + insets.bottom }]}>
+        {/* 2026-09-29 — the pro shop's number, beside Book Tee Time. Renders nothing without one. */}
+        <ProShopCallRow courseId={course.id} />
+        <View style={styles.ctaRow}>
         <TouchableOpacity
           style={[styles.cta, { backgroundColor: colors.surface_elevated, borderWidth: 1, borderColor: colors.border }]}
           onPress={handleBookTeeTime}
@@ -686,6 +694,7 @@ export default function CourseDetailScreen() {
           <Ionicons name="flag" size={16} color="#0d1a0d" style={{ marginRight: 6 }} />
           <Text style={styles.ctaStartText}>{t('course.course_detail_screen.start_round_here')}</Text>
         </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -806,11 +815,11 @@ const styles = StyleSheet.create({
 
   ctaBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
-    flexDirection: 'row', gap: 10,
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 24,
     backgroundColor: '#060f09',
     borderTopWidth: 1, borderTopColor: '#1e3a28',
   },
+  ctaRow: { flexDirection: 'row', gap: 10 },
   cta: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', overflow: 'hidden' },
   ctaBookText: { fontSize: 14, fontWeight: '800' },
   // Match the Book Tee Time sibling: solid fill + a 1px outline of the

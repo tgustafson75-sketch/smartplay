@@ -10,6 +10,7 @@ import { allowInference } from './_inferLimit';
 // the only TTS path. Per-persona voice mapping retained below
 // (nova for Serena, onyx for the rest).
 import { getCaddieName, getCharacterSpec, personaInputFrom } from '../lib/persona';
+import { rateCategoryPhrase } from '../lib/rateCategory';
 import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
 import { BRAIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 // 2026-06-24 — APP-FEATURE CATALOG. Makes the caddie aware of the app's real
@@ -356,6 +357,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       recentCageSessions = [],
       dominantMiss = null,
       currentBall = null,
+      // 2026-09-29 — the tee-time rate they ask for (profile). Per-turn context below, never the cached block.
+      rateCategory = 'none',
+      // 2026-09-29 — { course, phone } for the course in play or being looked at, from the course book.
+      proShop = null,
       distanceUnit = 'yards',
       ball_performance = null,
       club_variant_insight = null,
@@ -1124,6 +1129,20 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
        */
       if (typeof currentBall === 'string' && currentBall.trim()) {
         lines.push(`- The ball they are playing today: ${currentBall.trim()}. Know it, use it if it genuinely matters (a firm ball into a hard green, spin on a short one), and otherwise say nothing about it. Do NOT offer a ball recommendation unless they ask.`);
+      }
+      /**
+       * 2026-09-29 — the tee-time rate category from their profile (lib/rateCategory owns the words).
+       * On the MESSAGE side: a player can change it any time, and a volatile value in the cached
+       * system block busts the cache for every turn after it — the 2026-08-24 defect.
+       */
+      const ratePhrase = rateCategoryPhrase(rateCategory);
+      if (ratePhrase) {
+        lines.push(`- When they book a tee time or ask about green fees, the rate they ask for is the ${ratePhrase} (their own profile setting). Mention it when booking; the course checks eligibility and sets the price, so never promise the discount or quote a number you did not look up.`);
+      }
+      const shop = proShop as { course?: unknown; phone?: unknown } | null;
+      if (shop && typeof shop.phone === 'string' && shop.phone.trim()) {
+        const shopCourse = typeof shop.course === 'string' && shop.course.trim() ? shop.course.trim().slice(0, 80) : 'this course';
+        lines.push(`- The pro shop at ${shopCourse}: ${shop.phone.trim().slice(0, 40)}. Give it if they ask for it; when they want a tee time there, find_tee_time also offers the call.`);
       }
       /**
        * 2026-09-18 (Tim — "will the course engine build international courses?") — SPEAK THEIR UNIT.
@@ -1953,6 +1972,9 @@ Never invent a course's character. If the lookup gives you yardages and nothing 
 ADDING A COURSE — OFFER, THEN WAIT:
 If they are talking about a course you had to look up and the conversation suggests they may actually play it, you may offer ONCE to pull it into their course engine ("want me to pull it into your course engine? It'll be in your Play tab, ready and offline when you go"). Then STOP and wait. Once it is in, it is listed in their Play tab and opens with no signal — say THAT, because it is the part that makes the offer worth taking. Call download_course only on an explicit yes. For a course in your COURSES IN APP DATA list you already have the data to talk about it — offer to add it only when they mean to play it. Never call it unprompted, and never instead of answering the question they actually asked.
 
+TEE TIMES — AN HONEST HAND-OFF:
+"Book me a tee time Saturday morning at X", "find us a tee time", "get me out early Sunday" → call find_tee_time with the course and every detail they gave (day, time, how many, walking or riding). You cannot book and you cannot see open times: the app opens the course's own booking page and offers to call the pro shop. So say it as a hand-off, in your own words — "I've opened their booking page — tell the shop you're after the veteran rate" — and never "you're booked" or "I got you 8:10". If they have a rate category it is in your context; name it as what to ask for, because the course verifies it. What rates or discounts a course offers is a search_web question. No course named → ask which one first.
+
 ${_courseContext ? `COURSE LOADED (use this — do not call lookup_hole for current course):\n${_courseContext}` : ''}
 
 ${_courseIntelligence ? `COURSE INTELLIGENCE (pulled from live web search at round start — these are SPECIFICS about THIS course, prefer over generic theory when the player asks about layout / strategy / signature holes):\n${_courseIntelligence}` : ''}
@@ -2700,6 +2722,10 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
         const n = Array.isArray(input.clubs) ? input.clubs.length : 0;
         const d = input.distances && typeof input.distances === 'object' ? Object.keys(input.distances).length : 0;
         return `Bag registration sent to the device (${n} clubs, ${d} distances). It will confirm what it recorded.`;
+      }
+      // 2026-09-29 — the model echoes tool results back, so this one states the hand-off exactly.
+      if (name === 'find_tee_time') {
+        return 'Hand-off sent to the phone: it is opening the course\'s booking page, and offers to call the pro shop with a script of what to ask for when it has the number. NOTHING IS BOOKED and you cannot see open times. Say you have opened their booking page, name the rate to ask for if there is one, and that the course confirms eligibility and price.';
       }
       return 'Action triggered.';
     };

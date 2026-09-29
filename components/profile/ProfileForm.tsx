@@ -36,6 +36,7 @@ import { useTranslation } from 'react-i18next';
 import { usePlayerProfileStore, isOwnerEmail, MAX_HOME_COURSES } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
 import { PillRow } from '../PillRow';
+import { RATE_CATEGORIES, normalizeRateCategory } from '../../lib/rateCategory';
 import { goToTab } from '../../services/safeBack';
 
 /**
@@ -244,6 +245,16 @@ export function ProfileForm() {
         value={p.preferredTee}
         onSelect={(v) => p.setPreferredTee(v as 'front' | 'middle' | 'back')}
       />
+
+      {/* 2026-09-29 — the rate to ask for when booking. Self-declared: the course verifies it, and the
+          helper line says so. Read by the pro-shop call script and sent to the caddie every turn. */}
+      <PillRow
+        label={t('settings.label.tee_time_rate')}
+        options={RATE_CATEGORIES.map((c) => ({ label: t(`settings.rate_category.${c}`), value: c }))}
+        value={normalizeRateCategory(p.rateCategory)}
+        onSelect={(v) => p.setRateCategory(normalizeRateCategory(v))}
+      />
+      <Text style={s.helper}>{t('settings.text.tee_time_rate_helper')}</Text>
 
       <PillRow
         label={t('settings.label.default_round_mode')}

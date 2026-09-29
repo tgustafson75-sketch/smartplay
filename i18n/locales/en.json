@@ -228,7 +228,11 @@
       "lifetime_access": "Lifetime access",
       "free_trial_see_plans": "Free trial — see plans",
       "free_trial_days_left": "Free trial — {{days}} days left",
-      "see_plans_from_price": "See plans — from {{price}}/month"
+      "see_plans_from_price": "See plans — from {{price}}/month",
+      "tee_time_rate_helper": "The rate to ask for when you book. The course checks eligibility at the counter — SmartPlay doesn't verify it.",
+      "redeem_code": "Redeem a code",
+      "redeem_code_sub_ios": "Founding or promo code, redeemed through the App Store",
+      "redeem_code_sub_android": "Founding or promo code, redeemed through Google Play"
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -293,7 +297,8 @@
       "reset_what_the_caddie_learned": "Reset what the caddie learned about how much to talk",
       "open_the_owner_console": "Open the owner console",
       "remove_home_course": "Remove {{course}} from your home courses",
-      "view_subscription_plans": "View subscription plans and restore purchases"
+      "view_subscription_plans": "View subscription plans and restore purchases",
+      "redeem_code": "Redeem a promo or founding code"
     },
     "label": {
       "handedness": "Handedness",
@@ -337,7 +342,8 @@
       "how_you_cover_a_number": "How You Cover a Number",
       "caddie_presence": "How much your caddie speaks up",
       "hands_free_listening": "Hands-free listening",
-      "home_courses": "Home courses (up to {{max}})"
+      "home_courses": "Home courses (up to {{max}})",
+      "tee_time_rate": "Tee-time rate"
     },
     "developer_tools_section": {
       "developer_tools_dev_build": "Developer Tools (dev build)",
@@ -370,6 +376,13 @@
       "how_present_should_be_during": "How present should {{caddieName}} be during your round?",
       "pick_a_meta_view_json": "Pick a Meta View JSON export of your \"Hey Meta\" voice exchanges. We match each one to the hole you were on so {{caddieName}} can recall what the glasses said during this round. Start a round first — only exchanges inside the active round's window are imported.",
       "say_log_this_to_capture": "Say \"{{caddieName}}, log this: ...\" to capture an issue. Tap to review + export the log to support@smartplaycaddie.com."
+    },
+    "rate_category": {
+      "none": "Standard",
+      "veteran_military": "Veteran / military",
+      "senior": "Senior",
+      "junior": "Junior",
+      "resident": "Resident"
     }
   },
   "scorecard": {
@@ -868,6 +881,11 @@
       "back_to_courses_list": "Back to courses list",
       "book_a_tee_time_at": "Book a tee time at this course",
       "start_a_new_round_at": "Start a new round at this course"
+    },
+    "pro_shop": {
+      "call": "Call pro shop",
+      "call_a11y": "Call the pro shop at {{phone}}",
+      "ask_for": "Ask for: {{script}}"
     }
   },
   "dev_course_truth": {
@@ -1290,7 +1308,11 @@
       "nothing_to_restore": "Nothing to restore",
       "no_active_subscription_on_this": "No active subscription on this Apple ID.",
       "couldn_t_check": "Couldn't check",
-      "we_could_not_reach_the": "We could not reach the store just now. Try again in a moment."
+      "we_could_not_reach_the": "We could not reach the store just now. Try again in a moment.",
+      "code_redeemed": "Code redeemed",
+      "code_redeemed_body": "You're all set — full access is on.",
+      "couldnt_open_redeem": "Couldn't open code redemption",
+      "couldnt_open_redeem_body": "Try again in a moment. You can also redeem it in the App Store or Google Play, then tap Restore Purchase."
     },
     "paywall_screen": {
       "smartplay_caddie_pro": "SmartPlay Caddie Pro",
@@ -1304,7 +1326,8 @@
       "start_free_trial": "Start Free Trial",
       "subscribe": "Subscribe",
       "one_moment": "One moment…",
-      "save_pct": "Save {{savingsPct}}%"
+      "save_pct": "Save {{savingsPct}}%",
+      "have_a_code": "Have a code? Redeem it"
     }
   },
   "permissions": {

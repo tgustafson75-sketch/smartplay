@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import { FEET_PER_YARD, PUTT_MAX_FEET } from '../services/puttUnits';
+import { normalizeRateCategory, type RateCategory } from '../lib/rateCategory';
 
 // ─── STATE ────────────────────────────────
 
@@ -177,6 +178,12 @@ interface PlayerProfileState {
   /** 2026-07-23 (Tim — Bag Vision 2b) — the ball the player currently games, free text
    *  (e.g. "Titleist Pro V1"). Compared against the data-driven ball recommendation. */
   currentBall: string | null;
+  /**
+   * 2026-09-29 — the green-fee rate the player asks for when booking (lib/rateCategory owns the list).
+   * Self-declared and never verified here: the course checks eligibility. Default 'none'. An old blob
+   * without it rehydrates to the default (persist merges over the initial state), so no migration.
+   */
+  rateCategory: RateCategory;
   preferredTee: 'front' | 'middle' | 'back';
   isSetupComplete: boolean;
   has_completed_onboarding: boolean;
@@ -349,6 +356,7 @@ interface PlayerProfileState {
   /** Toggle one course in or out of the set. Returns false when the set is already full. */
   toggleHomeCourse: (course: { id: string; name: string }) => boolean;
   setCurrentBall: (ball: string | null) => void;
+  setRateCategory: (c: RateCategory) => void;
   setPreferredTee: (tee: 'front' | 'middle' | 'back') => void;
   completeSetup: () => void;
   completeOnboarding: () => void;
@@ -432,6 +440,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       personalBest: null,
       homeCourses: [],
       currentBall: null,
+      rateCategory: 'none',
       preferredTee: 'middle',
       // 2026-05-14 — Tim: "Get rid of that whole stupid onboarding
       // nonsense. User does all that in profile and settings." Default
@@ -524,6 +533,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         return true;
       },
       setCurrentBall: (ball) => set({ currentBall: ball }),
+      setRateCategory: (c) => set({ rateCategory: normalizeRateCategory(c) }),
       setPreferredTee: (tee) => set({ preferredTee: tee }),
       completeSetup: () => set({ isSetupComplete: true }),
       completeOnboarding: () => set({ has_completed_onboarding: true }),

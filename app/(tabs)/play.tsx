@@ -60,6 +60,8 @@ import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, resolveLocalCourseId, pinnedApiIdForSlug } from '../../services/courseGeometryService';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
+import { openTeeTimeSearch } from '../../services/teeTimeLink';
+import { ProShopCallRow } from '../../components/course/ProShopCallRow';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { isValidGolfCoord } from '../../utils/coordGuard';
 // 2026-09-06 — the eleven bundled-image thumbnail imports are gone. Every one of those maps has
@@ -804,6 +806,7 @@ export default function PlayTab() {
   const setSetupTee = useRoundStore(s => s.setSelectedTee);
   // 2026-06-13 (Tim) — walking vs cart for this round.
   const setupTransport = useRoundStore(s => s.transportMode);
+  const setupTransportDeclared = useRoundStore(s => s.transportDeclared);
   const setSetupTransport = useRoundStore(s => s.setTransportMode);
   // 2026-09-13 (Tim) — today's pin, declared once for the round. See roundStore.pinPosition.
   const setupPin = useRoundStore(s => s.pinPosition);
@@ -2078,18 +2081,15 @@ export default function PlayTab() {
   // TeeOff have no free public booking API), so this opens a tee-time search for THIS course in the
   // browser — surfacing the course's own booking + aggregators without making the player browse the
   // ad-heavy GolfNow app. Deliberately not labeled/claimed as in-app booking (that needs a partnership).
+  // 2026-09-29 — through services/teeTimeLink like every other tee-time button, WITH the course id: this
+  // built its own Google search, so a course whose own booking site the course book already held (the
+  // lookup this screen fires on pick, above) still got a search page here and the real site elsewhere.
   const handleBookTeeTime = () => {
     if (!selected) return;
     const name = (selected.club_name ?? selected.course_name ?? '').trim();
     if (!name) return;
-    const city = selected.location?.city ?? '';
-    const state = selected.location?.state ?? '';
-    const loc = [city, state].filter(Boolean).join(' ').trim();
-    const q = encodeURIComponent(`${name}${loc ? ` ${loc}` : ''} tee times`);
-    const url = `https://www.google.com/search?q=${q}`;
-    Linking.openURL(url).catch((e) => {
-      console.log('[play] tee-time hand-off failed:', e);
-    });
+    const loc = [selected.location?.city, selected.location?.state].filter(Boolean).join(' ').trim();
+    void openTeeTimeSearch(name, loc || null, selected.id);
   };
 
   // 2026-07-01 (Tim) — the whole course at a glance (par/yardage per hole, out/in/total). Works
@@ -2709,6 +2709,12 @@ export default function PlayTab() {
                   <Text style={styles.actionBtnText}>{t('play.play_tab.tee_times')}</Text>
                 </TouchableOpacity>
               </View>
+              {/* 2026-09-29 — the pro shop's number beside Tee Times; nothing renders without one. */}
+              <ProShopCallRow
+                courseId={selected.id}
+                request={{ transport: setupTransportDeclared ? (setupTransport === 'cart' ? 'riding' : 'walking') : null }}
+                style={{ marginTop: 10, marginBottom: 0 }}
+              />
             </View>
 
             {/* Pre-beta — legacy round factors. STRATEGY (mode), FORMAT

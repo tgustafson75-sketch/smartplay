@@ -2138,6 +2138,13 @@ export default function CaddieTab() {
         } catch (e) { console.log('[caddie] download_course dispatch failed (non-fatal):', e); }
         break;
       }
+      // 2026-09-29 — twin of the conversationalToolDispatch case; one implementation in teeTimeLink.
+      case 'find_tee_time': {
+        (require('../../services/teeTimeLink') as typeof import('../../services/teeTimeLink'))
+          .runFindTeeTime(action)
+          .catch((e) => console.log('[caddie] find_tee_time failed (non-fatal):', e));
+        break;
+      }
       case 'set_reminder': {
         // 2026-07-04 (Tim — verbal reminders) — "remind me to work on my putting
         // Thursday" → a SmartPlan reminder the caddie surfaces + considers all week.
@@ -4347,7 +4354,7 @@ export default function CaddieTab() {
               {selectedPickedCourse && (
                 <TouchableOpacity
                   style={styles.findTeeBtn}
-                  onPress={() => { void openTeeTimeSearch(selectedPickedCourse.name); }}
+                  onPress={() => { void openTeeTimeSearch(selectedPickedCourse.name, null, selectedPickedCourse.id); }}
                 >
                   <Text style={styles.findTeeBtnText}>{t('caddie.caddie_tab.find_tee_time')}</Text>
                 </TouchableOpacity>
