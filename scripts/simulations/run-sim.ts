@@ -4639,7 +4639,9 @@ check('LOCK: a dropped TTS connection gets the same second chance a truncated cl
   (() => {
     const vs = readCode('services/voiceService.ts');
     const truncationRetries = /speak_truncated_clip/.test(vs) && /const retryRes = await fetch\(apiUrl \+ '\/api\/voice'/.test(vs);
-    const connectivityRetries = /logVoiceSilentFail\('speak_fetch_retry'/.test(vs);
+    // 2026-09-28 — the retry is logged as a diag (it usually recovers); speak_catch is the failure.
+    const connectivityRetries = /\.addAppEvent\('speak_fetch_retry', \{[\s\S]{0,200}?\}, 'diag'\);/.test(vs)
+      && /response = await fetch\(apiUrl \+ '\/api\/voice', \{[\s\S]{0,300}?signal: AbortSignal\.timeout\(8000\)/.test(vs);
     // The retry must be gated on BOTH conditions, or it becomes a way to talk over the player.
     const gated = /if \(!isConnectivityError\(fetchErr\) \|\| myId !== currentSpeechId\)[\s\S]{0,120}?throw fetchErr;/.test(vs);
     // AbortError must never be treated as retryable connectivity trouble.

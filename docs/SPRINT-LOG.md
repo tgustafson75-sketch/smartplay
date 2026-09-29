@@ -5192,3 +5192,14 @@ without the real prompt); reply still blocks on full TTS (the known ~5s text→v
 change); upstream TLS likely cold again after Lambda freeze; transcribe warmup does not touch Deepgram;
 no Vercel region pinning. Nothing verified on device. **Critical path: PATH 4 VOICE** (and PATH 1
 greeting→Caddie handoff).
+
+**Same day — Tim's Hemet issue log (1.0.1 (29), bundle 01a0d9e5):**
+- `course_search_failed` ×2 mid-round (holes 3, 14) was the layout verifier, not the player: failed and
+  empty sister-course lookups both came back [], and [] re-searched every 10 min all round. Empty is now
+  settled; a failure (`SiblingLookupFailed`) retries after 3 min (it used to re-ask every 4s tick on a
+  throw); background search failures log as diag. Guard: `a-single-course-round-searches-once` (6/6 red pre-fix).
+- `voice_silent_fail: speak_fetch_retry` was a retry that recovered ("Switched to light mode." played) →
+  now a diag; `speak_catch` remains the real failure.
+- `watch_yardage_blocked ×2` is real signal: once-per-reason, re-armed by a success, so the watch
+  connected after hole 1 and dropped by hole 3. No code change.
+- Meta diag line no longer reads "expected: expected unless…", and names the `glasses` profile.

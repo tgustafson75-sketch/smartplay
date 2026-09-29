@@ -440,6 +440,12 @@ export function searchErrorMessage(status: number, code: string | undefined): st
 
 export async function searchCourses(
   query: string,
+  /**
+   * 2026-09-28 — `background`: nobody is looking at this search (the layout verifier resolving sister
+   * courses mid-round). Its failure is still recorded, but as a diagnostic: a player-facing "check
+   * connection" error for a lookup the player never made is the issue log crying wolf.
+   */
+  opts?: { background?: boolean },
 ): Promise<{ id: string; club_name: string; course_name: string; location: string; _error?: string }[]> {
   console.log('[golfcourseapi] searchCourses:', query);
 
@@ -514,7 +520,8 @@ export async function searchCourses(
     const mapped = final.list.slice(0, 10).map(normalizeSearchResult);
     return rankByDroppedTokens(mapped, query, activeQuery);
   }
-  logSearch('course_search_failed', { query: query.slice(0, 60), reason: final.message.slice(0, 120) });
+  logSearch('course_search_failed', { query: query.slice(0, 60), reason: final.message.slice(0, 120), ...(opts?.background ? { background: true } : {}) },
+    opts?.background ? 'diag' : 'analysis_error');
   return [{ id: '', club_name: '', course_name: '', location: '', _error: final.message }];
 }
 

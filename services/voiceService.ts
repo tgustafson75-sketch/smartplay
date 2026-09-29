@@ -2124,11 +2124,21 @@ export const speak = async (
     } catch (fetchErr) {
       // A newer utterance already owns the speaker — retrying would talk over it.
       if (!isConnectivityError(fetchErr) || myId !== currentSpeechId) { clearTimeout(voiceTimeout); throw fetchErr; }
-      logVoiceSilentFail('speak_fetch_retry', {
-        speechId: myId,
-        error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
-        textHead: text.slice(0, 40),
-      });
+      /**
+       * 2026-09-28 — a DIAGNOSTIC, not a silent fail. This fires before the retry, and the retry
+       * usually lands: Tim's 09-23 log carried "voice_silent_fail: speak_fetch_retry … Switched to
+       * light mode." for a line he heard. If the retry also fails, the outer catch files speak_catch,
+       * which is the real silent-fail entry. An issue log that reports recoveries as failures is
+       * the 2026-08-10 "shut off the non-errors" problem.
+       */
+      try {
+        (require('../store/issueLogStore') as typeof import('../store/issueLogStore')).useIssueLogStore.getState()
+          .addAppEvent('speak_fetch_retry', {
+            speechId: myId,
+            error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+            textHead: text.slice(0, 40),
+          }, 'diag');
+      } catch { /* a diagnostic must never break the voice path */ }
       response = await fetch(apiUrl + '/api/voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

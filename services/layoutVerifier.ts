@@ -168,9 +168,21 @@ let state: VerifierState = INITIAL_STATE;
 let siblings: Sibling[] = [];
 let siblingsFor: string | null = null;
 let resolving: Promise<void> | null = null;
-let resolvedAt = 0;
-/** An empty answer may have been a network blip at round start; ask again this often. */
-const RERESOLVE_EMPTY_MS = 10 * 60 * 1000;
+let failedAt = 0;
+/**
+ * 2026-09-28 (Tim's Hemet round: two "Course search unavailable — check connection" errors at holes 3
+ * and 14, on a single-course club). A FAILED lookup is asked again after this long. An EMPTY one — the
+ * common single-layout course — is an answer and is never asked again.
+ *
+ * It used to be one rule for both: resolveSiblings dropped the search's error row like any other
+ * non-match, so a failure came back as [] and [] was re-searched every 10 minutes. Every single-course
+ * round searched the course database ~25 times in the background, and each one that landed in a dead
+ * spot filed a player-facing connection error for a lookup the player never asked for.
+ */
+export const RETRY_AFTER_FAILURE_MS = 3 * 60 * 1000;
+
+/** The lookup could not be completed (network, quota) — distinct from "this course has no siblings". */
+export class SiblingLookupFailed extends Error {}
 
 const norm = (s: string | null | undefined) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -180,7 +192,8 @@ const norm = (s: string | null | undefined) => String(s ?? '').toLowerCase().rep
  *  - Database courses: the same club in golfcourseapi (search by the club's own name, same club_name,
  *    different id). Their maps are built through the one pipeline's geometry service, deduped and
  *    cached, so a player standing on a sibling tee can be recognised.
- * Returns [] for a single-layout property — the common case costs one cached search.
+ * Returns [] for a single-layout property — the common case costs one cached search, once per round.
+ * Throws SiblingLookupFailed when the lookup could not be completed, so the caller can retry it.
  */
 export async function resolveSiblings(activeId: string, activeName: string): Promise<Sibling[]> {
   if (activeId.startsWith('custom:')) return [];
@@ -205,8 +218,11 @@ export async function resolveSiblings(activeId: string, activeName: string): Pro
   }
   const api = require('./golfCourseApi') as typeof import('./golfCourseApi');
   const card = await api.getCourse(activeId);
-  if (!card?.club_name) return [];
-  const hits = await api.searchCourses(card.club_name);
+  // The course being played always has a card; not getting it back is a failed lookup, not an answer.
+  if (!card?.club_name) throw new SiblingLookupFailed('active course card unavailable');
+  const hits = await api.searchCourses(card.club_name, { background: true });
+  // The sentinel error row is how searchCourses says "I could not ask" — never read it as "no match".
+  if (hits.length === 1 && hits[0]._error) throw new SiblingLookupFailed(hits[0]._error);
   const ids = hits
     .filter((h) => !h._error && h.id && String(h.id) !== activeId && norm(h.club_name) === norm(card.club_name))
     .map((h) => String(h.id))
@@ -216,7 +232,9 @@ export async function resolveSiblings(activeId: string, activeName: string): Pro
   const out: Sibling[] = [];
   for (const id of ids) {
     const c = await api.getCourse(id);
-    if (!c) continue;
+    // A sibling the search found but whose card did not come back is a failure too: dropping it would
+    // settle the property as having fewer layouts than it has, for the rest of the round.
+    if (!c) throw new SiblingLookupFailed(`sibling card unavailable: ${id}`);
     // Same NAME is not the same property: there is a "Riverside Golf Course" in half the states. A
     // sibling layout shares the grounds, so it must sit within a few kilometres of this one.
     if (home && isValidGolfCoord(c.location?.latitude, c.location?.longitude) &&
@@ -255,14 +273,17 @@ function tick(): void {
         siblings = [];
         state = INITIAL_STATE;
         resolving = resolveSiblings(activeId, round.activeCourse ?? '')
-          .then((s) => { if (siblingsFor === activeId) { siblings = s; resolvedAt = Date.now(); } })
-          .catch(() => { siblingsFor = null; })
+          // An answer, empty or not, is settled for this course.
+          .then((s) => { if (siblingsFor === activeId) { siblings = s; failedAt = 0; } })
+          // A failure waits RETRY_AFTER_FAILURE_MS. (It used to clear siblingsFor, which re-asked on the
+          // very next 4s tick for as long as the course had no signal.)
+          .catch(() => { if (siblingsFor === activeId) { siblings = []; failedAt = Date.now(); } })
           .finally(() => { resolving = null; });
       }
       return;
     }
     if (!siblings.length) {
-      if (resolvedAt && Date.now() - resolvedAt > RERESOLVE_EMPTY_MS) { siblingsFor = null; resolvedAt = 0; }
+      if (failedAt && Date.now() - failedAt > RETRY_AFTER_FAILURE_MS) { siblingsFor = null; failedAt = 0; }
       return;
     }
     const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
@@ -328,6 +349,7 @@ export function stopLayoutVerifier(): void {
   state = INITIAL_STATE;
   siblings = [];
   siblingsFor = null;
+  failedAt = 0;
 }
 
 /** Test seam: run one poll synchronously, and inject resolved siblings. */

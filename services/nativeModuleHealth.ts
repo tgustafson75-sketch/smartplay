@@ -58,10 +58,12 @@ export interface NativeModuleHealth {
 function expectedAbsence(id: NativeModuleId, platform: 'ios' | 'android' | 'web'): string | undefined {
   if (id === 'MetaWearablesFrame') {
     if (platform === 'android') {
-      return 'expected unless this build had GITHUB_TOKEN — the Meta DAT SDK lives in GitHub Packages, and plugins/withMetaWearablesDAT skips the Android wiring without it (see docs/NEEDS-A-NATIVE-BUILD.md). Glasses features degrade to the phone; nothing else is affected';
+      // 2026-09-28 — no leading "expected": the snapshot prints "(expected: …)" itself, so the header read
+      // "expected: expected unless…". And it named the token but not the profile that actually decides it.
+      return 'by design in production builds — only the `glasses` EAS profile compiles the Meta DAT SDK (MWDAT_ANDROID_ENABLED=1, plus a GITHUB_TOKEN for its GitHub Packages download; see docs/NEEDS-A-NATIVE-BUILD.md). Glasses features degrade to the phone; nothing else is affected';
     }
     if (platform === 'ios') {
-      return 'expected unless this build used the `glasses` EAS profile (MWDAT_IOS_ENABLED=1). Glasses features degrade to the phone; nothing else is affected';
+      return 'by design in production builds — only the `glasses` EAS profile compiles the Meta DAT SDK (MWDAT_IOS_ENABLED=1). Glasses features degrade to the phone; nothing else is affected';
     }
   }
   // MediaPipePose ships in the standard plugin set, so its absence is NOT expected anywhere.
