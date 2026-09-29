@@ -26,7 +26,7 @@ const EMAIL_RE = /^[^,()\s@]+@[^,()\s@]+\.[^,()\s@]+$/;
 const ALLOWED_EMAILS = new Set(
   (process.env.MESSAGING_ALLOWED_EMAILS ?? '')
     .split(',')
-    .map((e) => e.trim().toLowerCase())
+    .map((e: string) => e.trim().toLowerCase())
     .filter(Boolean),
 );
 const emailAllowed = (e: string): boolean => ALLOWED_EMAILS.size === 0 || ALLOWED_EMAILS.has(e);

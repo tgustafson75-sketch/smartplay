@@ -23,13 +23,14 @@
  */
 
 import React, { useMemo } from 'react';
-import { unitLabel } from '../../services/distanceUnits';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
 import { useTranslation } from 'react-i18next';
 import { shotDistanceDisplay } from '../../services/puttUnits';
 import { useDistanceUnit } from '../../hooks/useDistanceUnit';
+import { recentShotFacts, type RecentShotFacts } from '../../services/round/recentShots';
+import { clubLabel } from '../../services/clubRecognition';
 
 interface Props {
   /** Optional cap on rows rendered. Default 8 — enough to see the
@@ -44,14 +45,23 @@ interface Props {
    * "RECENT SHOTS" keeps meaning your recent shots when no round is in progress.
    */
   shots?: readonly ShotResult[];
+  /**
+   * 2026-09-29 — what these shots ARE ("THIS ROUND", "LAST ROUND · SEP 20"). The Dashboard's pool can
+   * be the live round or a finished one, and a list that does not say which lets last week's shots
+   * pass for today's. Omitted → the generic "SHOTS" header.
+   */
+  label?: string;
 }
 
 const DEFAULT_MAX_ROWS = 8;
 
 // Club → icon mapping. Wood/iron/wedge/putter each gets a distinct
 // glyph so the user can scan the column at a glance.
+// 2026-09-29 — a shot with no club logged is still a shot; it is NOT a question. This returned
+// 'help-outline' — a "?" glyph — for every club-less row, and quick-score placeholders made those
+// most of the card. A neutral marker now; the row says in words what is missing.
 function clubIcon(club: string | null): keyof typeof Ionicons.glyphMap {
-  if (!club) return 'help-outline';
+  if (!club) return 'ellipse-outline';
   const c = club.toLowerCase();
   if (c.includes('putter') || c === 'p') return 'flag-outline';
   if (c.includes('wedge') || /\b(sw|pw|gw|lw|aw)\b/.test(c)) return 'leaf-outline';
@@ -91,6 +101,18 @@ function directionTag(direction: ShotResult['direction'] | null | undefined): st
 }
 
 /**
+ * The line under the club: every result fact the row carries. A club-less row (a cockpit quick tap)
+ * may carry ONLY its direction — "straight" included — or only "short of target", and those were
+ * never drawn at all; the row showed a "?" and two dashes over the one thing that was known.
+ */
+function resultLine(f: RecentShotFacts): string | null {
+  const dir = f.club || f.clubAsLogged ? directionTag(f.direction) : f.direction;
+  const parts = [dir, f.outcomeText].filter((p): p is string => !!p);
+  if (parts.length === 0 && f.feel) parts.push(f.feel);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/**
  * 2026-09-13 (Tim, dashboard review) — RECENT SHOTS RENDERED AS A HEADING WITH NOTHING UNDER IT.
  *
  * Two owners of "your recent shots". The Dashboard's gate falls back to the LAST COMPLETED ROUND's
@@ -104,16 +126,22 @@ function directionTag(direction: ShotResult['direction'] | null | undefined): st
  * playing" is the right answer. One source per caller, chosen by the caller.
  * [[two-owners-is-the-root-cause]]
  */
-export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = false, shots: shotsProp }: Props) {
+export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = false, shots: shotsProp, label }: Props) {
   const distanceUnit = useDistanceUnit();
   const { t } = useTranslation();
   const liveShots = useRoundStore(s => s.shots);
   const currentHole = useRoundStore(s => s.currentHole);
   const shots = shotsProp ?? liveShots;
 
-  const rows = useMemo(() => {
-    const pool = holeOnly ? shots.filter(s => s.hole === currentHole) : shots;
-    return [...pool].slice(-maxRows).reverse();
+  /**
+   * 2026-09-29 — only rows that ARE shots, each reduced to what is known about it (services/round/
+   * recentShots, the one owner). Quick-score placeholders and penalty strokes are not shots; a row
+   * with no fact yet has nothing to show. The count in the header counts the same rows.
+   */
+  const { rows, total } = useMemo(() => {
+    const scoped = holeOnly ? shots.filter(s => s.hole === currentHole) : shots;
+    const facts = scoped.map(recentShotFacts).filter((f): f is RecentShotFacts => f != null);
+    return { rows: facts.slice(-maxRows).reverse(), total: facts.length };
   }, [shots, currentHole, holeOnly, maxRows]);
 
   if (rows.length === 0) return null;
@@ -121,8 +149,8 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <Text style={styles.headerLabel}>{t('caddie_shot_timeline.shot_timeline.shots')}</Text>
-        <Text style={styles.headerCount}>{t('caddie_shot_timeline.shot_timeline.of', { length: shots.length })}</Text>
+        <Text style={styles.headerLabel}>{label ?? t('caddie_shot_timeline.shot_timeline.shots')}</Text>
+        <Text style={styles.headerCount}>{t('caddie_shot_timeline.shot_timeline.of', { shown: rows.length, total })}</Text>
       </View>
       <ScrollView
         horizontal={false}
@@ -130,11 +158,14 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
         style={{ maxHeight: 240 }}
       >
         {rows.map((shot, i) => {
-          const icon = clubIcon(shot.club);
+          const club = shot.club ?? shot.clubAsLogged;
+          const icon = clubIcon(club);
           // 2026-09-13 (Tim) — "putts should be always in Feet." Every row said "yds", so a putt
           // logged from eight yards out read "8 yds" instead of the twenty-four-footer it was.
-          const dist = shotDistanceDisplay(shot.club, shot.distance_yards, distanceUnit);
-          const dir = directionTag(shot.direction);
+          // 2026-09-29 — the distance is the one recentShotFacts derives (said → GPS back-fill →
+          // start/end locations); when none exists the column stays EMPTY, never a dash and a unit.
+          const dist = shotDistanceDisplay(club, shot.distanceYards, distanceUnit);
+          const result = resultLine(shot);
           const oc = outcomeChip(shot.outcome);
           return (
             <View key={shot.id ?? i} style={styles.row}>
@@ -143,12 +174,22 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
                 <Text style={styles.holeBadge}>{shot.hole}</Text>
               </View>
               <View style={styles.clubCol}>
-                <Text style={styles.clubLabel} numberOfLines={1}>{shot.club ?? '—'}</Text>
-                {dir ? <Text style={styles.dirLabel}>{dir}</Text> : null}
+                {club ? (
+                  <Text style={styles.clubLabel} numberOfLines={1}>{shot.club ? clubLabel(shot.club) : club}</Text>
+                ) : (
+                  <Text style={[styles.clubLabel, styles.clubMissing]} numberOfLines={1}>
+                    {t('caddie_shot_timeline.shot_timeline.club_not_logged')}
+                  </Text>
+                )}
+                {result ? <Text style={styles.dirLabel}>{result}</Text> : null}
               </View>
               <View style={styles.distCol}>
-                <Text style={styles.distValue}>{dist?.value ?? '—'}</Text>
-                <Text style={styles.distUnit}>{dist?.unit ?? unitLabel(distanceUnit)}</Text>
+                {dist ? (
+                  <>
+                    <Text style={styles.distValue}>{dist.value}</Text>
+                    <Text style={styles.distUnit}>{dist.unit}</Text>
+                  </>
+                ) : null}
               </View>
               {oc ? (
                 <View style={[styles.chip, { backgroundColor: oc.bg, borderColor: oc.color }]}>
@@ -196,6 +237,7 @@ const styles = StyleSheet.create({
   clubCol: { flex: 1 },
   clubLabel: { color: '#f8fafc', fontSize: 13, fontWeight: '600', textTransform: 'capitalize' },
   dirLabel: { color: '#bcc6d3', fontSize: 11, marginTop: 1 },
+  clubMissing: { color: '#c2cad4', fontWeight: '500', textTransform: 'none' },
   distCol: { width: 50, alignItems: 'flex-end' },
   distValue: { color: '#f8fafc', fontSize: 15, fontWeight: '700' },
   distUnit: { color: '#64748b', fontSize: 9 },

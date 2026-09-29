@@ -444,6 +444,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // for on-course pattern reads: "second shot on this hole again
       // pushed right" etc.).
       holeShots = [],
+      // 2026-09-29 — the Dashboard's RECENT SHOTS when THIS round has none: the last finished round's
+      // recorded shots ({ daysAgo, course, shots }). Its own field so it can never read as today's
+      // pattern. services/round/recentShots owns both this and recentShots.
+      lastRoundShots = null,
       // Subjective emotional self-reports (last 5): { state, valence, hole }.
       // Closes the feedback loop — the caddie ADAPTS tone/coaching to how
       // the player says they feel, not just logs it.
@@ -2281,7 +2285,7 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
       ? `[RECENT SHOTS THIS ROUND — most recent last]
 ${shotsArr.slice(-10).map((s, i) => {
   const idx = shotsArr.length - shotsArr.slice(-10).length + i + 1;
-  return `${idx}. hole ${s.hole ?? '?'}: ${s.club ?? 'club ?'}${s.shape ? ', ' + s.shape : ''}${s.direction ? ' ' + s.direction : ''}${s.outcome ? ' (' + s.outcome + ')' : ''}${s.distance_yards != null ? ' — ' + s.distance_yards + 'y' : ''}`;
+  return `${idx}. hole ${s.hole ?? '?'}: ${s.club ?? 'club not logged'}${s.shape ? ', ' + s.shape : ''}${s.direction ? ' ' + s.direction : ''}${s.outcome ? ' (' + s.outcome + ')' : ''}${s.distance_yards != null ? ' — ' + s.distance_yards + 'y' : ''}`;
 }).join('\n')}
 [/RECENT SHOTS]
 
@@ -2301,10 +2305,28 @@ ${holeShotsArr.map(formatShotLite).join('\n')}
 [/THIS HOLE]
 `
       : '';
-    const onCourseRecentBlock = !inRoundDiagnostic && shotsArr.length >= 3
+    /**
+     * 2026-09-29 — the same facts the Dashboard's RECENT SHOTS card draws: club and distance too, and
+     * from the first shot (was 3+ and direction-only, so "what did I hit on 4?" had no answer while
+     * the card showed it). A fact that was not logged is left out, never printed as "?".
+     */
+    const recentShotLine = (s: ShotLite) =>
+      `  - h${s.hole ?? '?'}${s.shotIndex != null ? ` #${s.shotIndex}` : ''}: ${s.club ?? 'club not logged'}` +
+      (s.distance_yards != null ? `, ${s.distance_yards}y` : '') +
+      (s.direction ? `, ${s.direction}` : '') +
+      (s.outcome ? `, ${s.outcome}` : s.outcomeText ? `, ${s.outcomeText}` : '');
+    const onCourseRecentBlock = !inRoundDiagnostic && shotsArr.length >= 1
       ? `[RECENT PATTERN]
-${shotsArr.slice(-5).map(s => `  - h${s.hole ?? '?'} #${s.shotIndex ?? '?'}` + (s.direction ? ` ${s.direction}` : '') + (s.outcome ? `, ${s.outcome}` : s.outcomeText ? `, ${s.outcomeText}` : '')).join('\n')}
+${shotsArr.slice(-5).map(recentShotLine).join('\n')}
 [/RECENT PATTERN]
+`
+      : '';
+    const lastRound = lastRoundShots as { daysAgo?: number | null; course?: string | null; shots?: ShotLite[] } | null;
+    const lastRoundShotsArr = lastRound && Array.isArray(lastRound.shots) ? lastRound.shots : [];
+    const lastRoundShotsBlock = !inRoundDiagnostic && shotsArr.length === 0 && lastRoundShotsArr.length > 0
+      ? `[THEIR RECENT SHOTS — from their LAST ROUND${lastRound?.course ? ` at ${lastRound.course}` : ''}${lastRound?.daysAgo != null ? `, ${lastRound.daysAgo}d ago` : ''}; NOT today — the same list their dashboard's Recent Shots card shows]
+${lastRoundShotsArr.slice(-5).map(recentShotLine).join('\n')}
+[/THEIR RECENT SHOTS]
 `
       : '';
     // Subjective emotional self-reports — so the caddie reads the room.
@@ -2418,8 +2440,8 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
           : '')
         + '[/CLUBS IN THE BAG]\n'
       : '';
-    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || emotionalBlock || bagBlock || bagClubsBlock
-      ? `${onCourseHoleBlock}${onCourseRecentBlock}${emotionalBlock}${bagBlock}${bagClubsBlock}\n`
+    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || lastRoundShotsBlock || emotionalBlock || bagBlock || bagClubsBlock
+      ? `${onCourseHoleBlock}${onCourseRecentBlock}${lastRoundShotsBlock}${emotionalBlock}${bagBlock}${bagClubsBlock}\n`
       : '';
 
     const userMessage = sv

@@ -455,6 +455,9 @@
     "fairway_pct": "CLEAN TEE %",
     "tee_avg": "TEE AVG",
     "recent_shots": "RECENT SHOTS",
+    "recent_shots_this_round": "THIS ROUND",
+    "recent_shots_sim_round": "SIM ROUND",
+    "recent_shots_last_round": "LAST ROUND · {{date}}",
     "kevins_read": "Kevin's Read",
     "refreshing": "Refreshing…",
     "highlights": "Highlights",
@@ -493,7 +496,8 @@
       "progress": "PROGRESS",
       "train_your_swing": "TRAIN YOUR SWING",
       "exercises_that_help_this_fault": "Exercises that help this fault",
-      "no_shots_logged_yet_log": "No shots logged yet — log a shot from the Caddie tab.",
+      "no_shots_logged_yet_log": "No shots logged yet. Say the club when you hit — \"seven iron, 150\" — or log it from the Caddie tab, and your shots show here.",
+      "shots_scored_not_logged": "Your holes were scored by total, so there are no shots to show yet. Say the club when you hit — \"seven iron, 150\" — and they show here.",
       "recent_rounds": "RECENT ROUNDS",
       "day_one": "{{count}} day",
       "day_other": "{{count}} days",
@@ -3255,7 +3259,8 @@
   "caddie_shot_timeline": {
     "shot_timeline": {
       "shots": "SHOTS",
-      "of": "{{length}} of {{length}}"
+      "of": "{{shown}} of {{total}}",
+      "club_not_logged": "Club not logged"
     }
   },
   "cockpit_ask_caddie_button": {
