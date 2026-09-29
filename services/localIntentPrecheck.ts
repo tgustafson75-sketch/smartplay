@@ -612,6 +612,15 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     return intent(t, 'media_capture', { capture_type: 'swing', raw_utterance: t });
   }
 
+  /**
+   * 2026-09-29 — a TEE TIME is the brain's (its find_tee_time tool), never a lookup. "Find a tee time
+   * for a round at Menifee Lakes Saturday" matched the find_my_data block below (`find … round`), and
+   * "Get me a tee time to play Menifee Lakes Palms Saturday" matched the course-open (`play <course>`),
+   * both at confidence 'high' — so the booking hand-off was never reached. Any utterance naming a tee
+   * time defers, ahead of both.
+   */
+  if (/\btee[\s-]?times?\b/i.test(t)) return null;
+
   // 2026-07-25 (Tim — the app's whole point: "ask the caddie to find/pull up ANY of my data"). Checked
   // BEFORE the course-open below so "pull up my round at Mines" finds the ROUND record (not just opens
   // the Mines course). Fires only when the ask names a data noun (round/scorecard/recap/swing) — a bare

@@ -87,7 +87,7 @@ export const correctLastShotHandler: IntentHandler = {
     const phrase = String(params.club_phrase ?? intent.raw_text ?? '').trim();
     const parsed = parseSpokenClub(phrase);
     if (!parsed) {
-      track('correct_last_shot_ambiguous', { phrase: phrase.slice(0, 60) });
+      track('correct_last_shot_ambiguous', { chars: phrase.length }); // never the player's words
       return {
         success: false,
         voice_response: 'Which club was that last shot?',

@@ -26,6 +26,15 @@ export const SWING_ANALYSIS_FRAME_COUNT = 9;
  * or at the last millisecond are commonly black, a record-button transient, or undecodable.
  */
 const CLIP_EDGE_INSET_FRACTION = 0.06;
+/**
+ * The inset for a LOCATED window that the locator clamped to a clip edge. 6% of the whole clip is
+ * 1.8s on a 30s upload — longer than the swing window itself — so the span collapsed and the read got
+ * one frame (or nine bunched past address). A found window only needs to step off the transient.
+ */
+const LOCATED_EDGE_INSET_FRACTION = 0.05;
+const LOCATED_EDGE_INSET_MAX_MS = 150;
+/** A window covering at least this much of the clip is the clip, not a found swing. */
+const WHOLE_CLIP_WINDOW_FRACTION = 0.9;
 
 export type AnalysisSample = {
   /** Milliseconds into the clip. */
@@ -37,9 +46,10 @@ export type AnalysisSample = {
 /**
  * Evenly spaced sample times across [windowStartMs, windowStartMs + windowDurationMs].
  *
- * An end of the window that coincides with an end of the CLIP is pulled in by
- * CLIP_EDGE_INSET_FRACTION of the clip; an end inside the clip (a located swing window) is sampled
- * exactly, because that is where address and the finish are.
+ * An end of the window that coincides with an end of the CLIP is pulled in: by
+ * CLIP_EDGE_INSET_FRACTION of the clip when the window IS the clip, and by a small capped inset
+ * (5% of the window, at most 150ms) when a located swing window was clamped to the clip edge. An end
+ * inside the clip is sampled exactly, because that is where address and the finish are.
  */
 export function analysisSampleTimes(
   windowStartMs: number,
@@ -53,7 +63,12 @@ export function analysisSampleTimes(
   const clip = typeof clipDurationMs === 'number' && Number.isFinite(clipDurationMs) && clipDurationMs > 0
     ? clipDurationMs
     : null;
-  const inset = clip != null ? clip * CLIP_EDGE_INSET_FRACTION : 0;
+  const wholeClip = clip != null && windowDurationMs >= clip * WHOLE_CLIP_WINDOW_FRACTION;
+  const inset = clip == null
+    ? 0
+    : wholeClip
+      ? clip * CLIP_EDGE_INSET_FRACTION
+      : Math.min(clip * CLIP_EDGE_INSET_FRACTION, windowDurationMs * LOCATED_EDGE_INSET_FRACTION, LOCATED_EDGE_INSET_MAX_MS);
   const from = windowStartMs <= 0 ? Math.max(0, Math.min(inset, winEnd)) : windowStartMs;
   const to = clip != null && winEnd >= clip ? Math.max(from, clip - inset) : winEnd;
   const span = to - from;
@@ -116,8 +131,6 @@ export type SampleCoverage = {
   whole_clip: boolean;
 };
 
-/** A window covering at least this much of the clip is the clip, not a found swing. */
-const WHOLE_CLIP_WINDOW_FRACTION = 0.9;
 
 export function sampleCoverage(
   frameTimesSec: number[],

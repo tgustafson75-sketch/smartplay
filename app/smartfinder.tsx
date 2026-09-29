@@ -73,6 +73,7 @@ import { ingestCapture } from '../services/courseCaptureIngest';
 import { effectiveEyeHeightM, observeCalibration } from '../services/rangefinderCalibration';
 import { featureOnAimLine } from '../services/aimedFeature';
 import { useFlagGate } from '../hooks/useFlagGate';
+import { useEntitlementGate } from '../hooks/useEntitlementGate';
 import { buildAimCandidates } from '../services/aimCandidates';
 import { useTranslation } from 'react-i18next';
 
@@ -115,6 +116,9 @@ export default function SmartFinder() {
   // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `smartfinder` is off, whether it
   // was already off on entry or flips off while this screen is open. No message, by instruction.
   useFlagGate('smartfinder');
+  // 2026-09-29 (review) — and the paid-plan door: a deep link used to open this on the lite edition.
+  // Waits for profile hydration; never gates an owner or an active/trial/lifetime player.
+  useEntitlementGate('smartfinder');
   const styles = useStyles();
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const _insets = useSafeAreaInsets();

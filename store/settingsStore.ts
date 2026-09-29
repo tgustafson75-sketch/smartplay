@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { composeProactiveLine } from '../services/proactiveLineRegistry';
+// Zero deps, so this adds no store -> brain edge (see a-store-does-not-import-the-brain).
+import { getUserTurnEpoch } from '../services/userTurnClock';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 
@@ -731,6 +733,9 @@ export const useSettingsStore = create<SettingsState>()(
         if (prev !== p && p !== 'custom') {
           const introSrc = (require('../services/offlineVoiceCache') as typeof import('../services/offlineVoiceCache')).PERSONA_HANDOFF_INTROS;
           const text = introSrc[p] ?? `${p} stepping in.`;
+          // 2026-09-29 (review) — captured at the SWITCH, so a turn started during the 500ms settle
+          // counts too. See the check after the compose await below.
+          const epochAtSwitch = getUserTurnEpoch();
           if (personaHandoffTimer) clearTimeout(personaHandoffTimer);
           personaHandoffTimer = setTimeout(() => { void (async () => {
             personaHandoffTimer = null;
@@ -768,6 +773,12 @@ export const useSettingsStore = create<SettingsState>()(
                * attempt, then degrade. [[caddie-failsafe-no-walls]]
                */
               let spokenText = text;
+              /**
+               * 2026-09-29 (review) — this intro is userInitiated (so no gate stops it) and awaited a
+               * 3.5s brain call with nothing checked after it: switch persona, start talking, and the
+               * canned fallback played over the live recording. Same epoch + mic question every other
+               * proactive line asks. Silent (no caption either) — the player has moved on.
+               */
               // Asked through the registry, not the brain module: a store that imports the brain
               // closes a store -> brain -> store loop, because the brain reads stores to build its
               // context. See services/proactiveLineRegistry.
@@ -777,6 +788,10 @@ export const useSettingsStore = create<SettingsState>()(
                 { timeoutMs: 3_500 },
               );
               if (composed) spokenText = composed;
+              if (getUserTurnEpoch() !== epochAtSwitch || voiceMod.isCapturing?.() || voiceMod.isExternalMicActive?.()) {
+                console.log('[persona-handoff] intro dropped — the player started a turn');
+                return;
+              }
               if (spokenText !== text) {
                 voiceMod.speak?.(spokenText, gender, get().language ?? 'en', undefined, { userInitiated: true })
                   ?.catch?.(() => { voiceMod.flashCaption?.(spokenText); });

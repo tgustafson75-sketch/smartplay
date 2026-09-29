@@ -34,6 +34,36 @@ describe('nine frames, evenly spaced across the window', () => {
     }
   });
 
+  it('the whole-clip inset is unchanged (6% of the clip at each end)', () => {
+    const s = analysisSampleTimes(0, 5533, 5533);
+    expect(s).toHaveLength(9);
+    expect(s[0].tMs).toBe(332);
+    expect(s[8].tMs).toBe(5201);
+  });
+
+  // 2026-09-29 — a LOCATED swing window clamped to a clip edge (an upload where recording stopped ~1s
+  // after the swing, or started right at address) used to get 6% of the WHOLE clip as its inset. On a
+  // 30s clip that is 1.8s — more than the 1.5s window — so the span went <= 0 and the read got ONE frame.
+  it.each([
+    ['swing clamped to the end of a 30s clip', 28500, 1500, 30000],
+    ['swing clamped to the end of a 60s clip', 58000, 2000, 60000],
+    ['swing clamped to the start of a 30s clip', 0, 1500, 30000],
+    ['swing clamped to the start of a 12s clip (address must survive)', 0, 2000, 12000],
+  ])('%s keeps nine frames spread across the window', (_label, start, dur, clip) => {
+    const s = analysisSampleTimes(start, dur, clip);
+    expect(s).toHaveLength(9);
+    const end = start + dur;
+    // Still off the exact clip edge, but by a small inset — never by more than 150ms.
+    expect(s[0].tMs).toBeGreaterThanOrEqual(start);
+    expect(s[0].tMs).toBeLessThanOrEqual(start + 150);
+    expect(s[8].tMs).toBeLessThanOrEqual(end);
+    expect(s[8].tMs).toBeGreaterThanOrEqual(end - 150);
+    if (start === 0) expect(s[0].tMs).toBeGreaterThan(0);
+    if (end >= clip) expect(s[8].tMs).toBeLessThan(clip);
+    expect(s[8].tMs - s[0].tMs).toBeGreaterThanOrEqual(dur * 0.9);
+    for (let i = 1; i < s.length; i++) expect(s[i].tMs).toBeGreaterThan(s[i - 1].tMs);
+  });
+
   it('refuses a degenerate window instead of inventing times', () => {
     for (const bad of [0, -5, NaN, Infinity]) expect(analysisSampleTimes(0, bad, 5000)).toEqual([]);
   });

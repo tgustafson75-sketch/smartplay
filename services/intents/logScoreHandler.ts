@@ -129,7 +129,7 @@ export const logScoreHandler: IntentHandler = {
 // value was discarded — my "forget the last three" fix did nothing on the paths Tim actually uses.
 // It also passed `par ?? 4`, which made a par on a par-5 read as a bogey.
     void alreadyScored;
-    track('log_score_voice', { hole, strokes, par });
+    track('log_score_voice', { hole }); // never the score: services/analytics ships props to Sentry unstripped
     const label = scoreLabel(strokes, par);
     const holePart = hole === round.currentHole ? `Got it` : `Got it, hole ${hole}`;
     const scoreText = par != null
@@ -145,7 +145,7 @@ export const logScoreHandler: IntentHandler = {
       : parsePutts(intent.raw_text);
     if (inlinePutts !== null) {
       round.logPutts(hole, inlinePutts);
-      track('log_putts_voice', { hole, putts: inlinePutts, source: 'inline' });
+      track('log_putts_voice', { hole, source: 'inline' });
       return {
         success: true,
         voice_response: scoreText,

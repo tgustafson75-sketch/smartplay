@@ -8,7 +8,7 @@ import { decomposeWind, shotBearingDeg } from '../windRelative';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useConversationLog } from '../../store/conversationLogStore';
 import { haversineYards, holeProgressYards, shotDistance } from '../../utils/geoDistance';
-import { recordedShots } from '../round/recentShots';
+import { isPenaltyStrokeRow, isQuickScorePlaceholder, recordedShots } from '../round/recentShots';
 import { getCurrentLocation, getGreenCentroid } from '../shotLocationService';
 import { fetchWeatherAt, getCachedWeather } from '../weatherService';
 import { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
@@ -876,9 +876,13 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'shot_distance': {
-        // 2026-09-29 — the last RECORDED shot: a quick-score placeholder or penalty stroke is not a
+        // 2026-09-29 — the last REAL shot: a quick-score placeholder or penalty stroke is not a
         // shot, and answering "I don't have GPS for that shot" about one misreports a real shot.
-        const real = recordedShots(round.shots);
+        // NOT recordedShots(): that also drops rows carrying no fact YET — a cart-mode auto-logged
+        // drive has no club/direction/distance until the next shot back-fills it — so "how far was
+        // that?" right after it answered with the PREVIOUS shot's number. The newest swing is the
+        // one asked about; with no distance it says so honestly below.
+        const real = (round.shots ?? []).filter((s) => !isQuickScorePlaceholder(s) && !isPenaltyStrokeRow(s));
         const lastShot = real[real.length - 1];
         if (!lastShot) {
           return {

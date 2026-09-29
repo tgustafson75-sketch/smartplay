@@ -80,11 +80,13 @@ describe('the flip: a player who installed during the free period', () => {
     expect(plan).toEqual({});
   });
 
-  it('still expires on day 15 like anyone else', () => {
+  it('still expires on day 15 like anyone else (once the store says it issued nothing)', () => {
     const started = NOW;
+    // 2026-09-29 (review) — an explicit store `false` is required: null (store not yet answered) is
+    // also what a converted store trial looks like offline, and is left alone until the launch read.
     expect(planTrialLifecycle({
       ...launchCohort, subscriptionsEnabled: true, status: 'trial', trialStartedAt: started,
-      now: started + 15 * DAY,
+      now: started + 15 * DAY, storeEntitled: false,
     })).toEqual({ setStatus: 'expired' });
   });
 
@@ -144,11 +146,15 @@ describe('an active comp still outranks both blanket grants', () => {
       ...base, subscriptionsEnabled: true, promoExpiresAt: NOW - DAY,
       status: 'active', firstOpenedAt: NOW - 30 * DAY,
     });
-    expect(plan.clearPromo).toBe(true);
-    // 2026-09-28 (1.0.2) — the store has not answered on this install (storeEntitled absent), so this
-    // could be a subscriber: clear the comp, leave the status. The lapse itself is pinned in
+    // 2026-09-29 (review) — the store has not answered on this install (storeEntitled absent), so this
+    // could be a subscriber: leave the status AND keep the comp — clearing it erased the only evidence
+    // the 'active' was a promo's, so it could never lapse. The lapse itself is pinned in
     // __tests__/regression/a-promo-lapses-a-subscription-does-not.test.ts.
-    expect(plan).toEqual({ clearPromo: true });
+    expect(plan).toEqual({});
+    expect(planTrialLifecycle({
+      ...base, subscriptionsEnabled: true, promoExpiresAt: NOW - DAY,
+      status: 'active', firstOpenedAt: NOW - 30 * DAY, storeEntitled: false,
+    })).toEqual({ clearPromo: true, setStatus: 'expired' });
   });
 });
 

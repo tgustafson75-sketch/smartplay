@@ -69,7 +69,7 @@ export const logPuttsHandler: IntentHandler = {
 
     round.logPutts(hole, putts);
     (require('../pendingPuttAsk') as typeof import('../pendingPuttAsk')).clearAwaitingPutts();
-    track('log_putts_voice', { hole, putts });
+    track('log_putts_voice', { hole }); // never the putt count: services/analytics ships props to Sentry unstripped
 
     const reply = putts === 0
       ? 'Chip-in — logged.'

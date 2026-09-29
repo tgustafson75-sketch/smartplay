@@ -1065,7 +1065,8 @@ export default function SmartMotion() {
   /**
    * 2026-09-29 (narrow-phone audit #11) — the deck is content-height (chips, club bar, controls and
    * font scale all change it), so overlays that must clear it measure it instead of guessing a fixed
-   * offset. services/swing/smartMotionLayout.aboveDeck keeps the old offset until it is measured.
+   * offset — on narrow/short screens only. services/swing/smartMotionLayout.aboveDeck keeps the old
+   * offset until it is measured, and always on wider, taller screens (the open Fold).
    */
   const [deckHeight, setDeckHeight] = useState(0);
   // Status-perimeter pulse — a thin border around the video that ties to the
@@ -6163,7 +6164,7 @@ export default function SmartMotion() {
             pill sits for non-drills (free in drill mode), above the tab bar. Shows
             through setup + recording so a capture reads as "this is the X drill". */}
         {isDrill && (phase === 'setup' || phase === 'recording') ? (
-          <Animated.View style={[styles.drillBanner, { bottom: aboveDeck(deckHeight, insets.bottom + (isNarrow ? 138 : 64)), opacity: drillBannerOpacity }]} pointerEvents="none">
+          <Animated.View style={[styles.drillBanner, { bottom: aboveDeck(deckHeight, insets.bottom + (isNarrow ? 138 : 64), windowWidth, windowHeight), opacity: drillBannerOpacity }]} pointerEvents="none">
             <Text style={styles.drillBannerKicker} numberOfLines={1} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{`DRILL${drillShotCount ? ` · ${drillShotCount} SWINGS` : ''}`}</Text>
             <Text style={styles.drillBannerName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
               {(typeof drillName === 'string' && drillName.trim() ? drillName.trim() : 'Practice').toUpperCase()}
@@ -6334,7 +6335,7 @@ export default function SmartMotion() {
           <View
             style={[
               styles.framingPill,
-              { bottom: aboveDeck(deckHeight, insets.bottom + 96), backgroundColor: framing.status === 'framed' ? 'rgba(0,200,150,0.92)' : 'rgba(18,20,24,0.86)' },
+              { bottom: aboveDeck(deckHeight, insets.bottom + 96, windowWidth, windowHeight), backgroundColor: framing.status === 'framed' ? 'rgba(0,200,150,0.92)' : 'rgba(18,20,24,0.86)' },
             ]}
             pointerEvents="none"
           >
@@ -7231,7 +7232,7 @@ export default function SmartMotion() {
           float the shared status strip over the camera instead: it shows the caddie's Listening/
           Thinking/spoken-feedback text (previously audio-only on this screen), clear of the controls.
           Absolute + zIndex → overlays; pointerEvents=none → never blocks the capture UI. */}
-      <CaddieStatusStrip floating bottomOffset={aboveDeck(deckHeight, insets.bottom + 140)} />
+      <CaddieStatusStrip floating bottomOffset={aboveDeck(deckHeight, insets.bottom + 140, windowWidth, windowHeight)} />
       <ScrollView
         ref={pagerRef}
         horizontal

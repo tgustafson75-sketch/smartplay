@@ -239,11 +239,14 @@ export async function resolveSiblings(activeId: string, activeName: string): Pro
   const home = isValidGolfCoord(card.location?.latitude, card.location?.longitude)
     ? { lat: card.location.latitude as number, lng: card.location.longitude as number } : null;
   const out: Sibling[] = [];
+  let missing = 0;
   for (const id of ids) {
     const c = await api.getCourse(id);
-    // A sibling the search found but whose card did not come back is a failure too: dropping it would
-    // settle the property as having fewer layouts than it has, for the rest of the round.
-    if (!c) throw new SiblingLookupFailed(`sibling card unavailable: ${id}`);
+    // 2026-09-30 (review) — a sibling card that does not come back is SKIPPED, not fatal. getCourse
+    // also returns null for a permanently broken record (404), and throwing here discarded every good
+    // sibling with it — after the retry cap, for the whole round. Only "found siblings, resolved
+    // none" is a failed lookup (below).
+    if (!c) { missing += 1; continue; }
     // Same NAME is not the same property: there is a "Riverside Golf Course" in half the states. A
     // sibling layout shares the grounds, so it must sit within a few kilometres of this one.
     if (home && isValidGolfCoord(c.location?.latitude, c.location?.longitude) &&
@@ -255,6 +258,7 @@ export async function resolveSiblings(activeId: string, activeName: string): Pro
     const { courseDisplayLabel } = require('../data/courseComplexes') as typeof import('../data/courseComplexes');
     out.push({ courseId: id, courseName: courseDisplayLabel(c.club_name, c.course_name), holes, courseLocation: loc });
   }
+  if (missing > 0 && out.length === 0) throw new SiblingLookupFailed(`no sibling card available (${missing} missing)`);
   // Build their maps (deduped/cached by the geometry service) so their tees are known on the course.
   const geo = require('./courseGeometryService') as typeof import('./courseGeometryService');
   await Promise.all(out.map((s) => geo.fetchCourseGeometry(s.courseId, { courseLocation: s.courseLocation }).catch(() => null)));

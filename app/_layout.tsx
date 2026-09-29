@@ -71,7 +71,7 @@ import { initCaddieRewards, resetCaddieRewardsForRound } from '../services/caddi
 // called anyway (which only happens after the user starts a round),
 // so the lazy pattern is equivalent for normal use AND eliminates the
 // boot risk.
-import { consumeDeferredPaywall } from '../services/paywallGuard';
+import { resumeDeferredPaywall } from '../services/billing/deferredPaywallResume';
 import { initAudioLifecycle } from '../services/audioLifecycle';
 import { initBatteryMonitor } from '../services/batteryMonitor';
 import { shotDetectionService } from '../services/shotDetectionService';
@@ -1355,11 +1355,10 @@ function AppNavigator() {
   // otherwise have interrupted play.
   // Phase Y — gated on rehydration. Same race fingerprint as media session.
   useEffect(() => whenRoundStoreHydrated(() => {
+    // 2026-09-29 (review) — re-asks access against the CURRENT status (after profile hydration)
+    // instead of replaying the push: a player who subscribed or restored meanwhile is not re-sold.
     const showIfPending = async () => {
-      const deferred = await consumeDeferredPaywall();
-      if (!deferred) return;
-      console.log('[paywall] resuming deferred paywall —', deferred.reason);
-      try { router.push('/paywall' as never); } catch {}
+      await resumeDeferredPaywall(() => router.push('/paywall' as never));
     };
     void showIfPending();
     let active = useRoundStore.getState().isRoundActive;

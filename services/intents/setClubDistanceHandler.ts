@@ -82,7 +82,7 @@ export const setClubDistanceHandler: IntentHandler = {
     const yards = distances[0]?.yards ?? Number(intent.parameters.yards);
     const result = registerBagFromSpeech({ distances });
     if (result.distancesSet.length === 0) {
-      track('set_club_distance_miss', { phrase: club.slice(0, 40), yards });
+      track('set_club_distance_miss', { chars: club.length, yards }); // never the player's words
       return {
         success: false,
         voice_response: Number.isFinite(yards) && (yards < 30 || yards > 400)

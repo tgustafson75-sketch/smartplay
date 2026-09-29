@@ -54,10 +54,20 @@ describe('rails, overlays and the tools card', () => {
     expect(reviewOverlayInset(800, 34)).toBe(34);
   });
 
-  it('overlays clear the MEASURED deck, and keep the old offset until it is measured', () => {
-    expect(aboveDeck(212.4, 136)).toBe(220);
-    expect(aboveDeck(0, 136)).toBe(136);
-    expect(aboveDeck(NaN, 136)).toBe(136);
+  it('overlays clear the MEASURED deck on a narrow or short phone, and keep the old offset until it is measured', () => {
+    expect(aboveDeck(212.4, 136, 344, 880)).toBe(220);
+    expect(aboveDeck(212.4, 136, 390, 844)).toBe(220);
+    expect(aboveDeck(212.4, 136, 480, 667)).toBe(220);
+    expect(aboveDeck(0, 136, 344, 880)).toBe(136);
+    expect(aboveDeck(NaN, 136, 344, 880)).toBe(136);
+  });
+
+  it('the open Fold (~690dp wide, ~830dp tall) keeps the previous fixed offsets even once the deck is measured', () => {
+    // The drill banner, framing pill and CaddieStatusStrip moved on the Fold when this ignored the
+    // screen size — contradicting "only <400dp wide / short screens change".
+    expect(aboveDeck(212.4, 136, FOLD, 829)).toBe(136);
+    expect(aboveDeck(212.4, 60 + 64, FOLD, 829)).toBe(124);
+    expect(aboveDeck(212.4, 136, FOLD, 1000)).toBe(136);
   });
 
   it('fixed-size HUD text stops growing at 1.3x (a 344dp review bar holds "NEW SET" at that scale)', () => {
@@ -160,8 +170,8 @@ describe('SmartMotion is wired to those decisions', () => {
 
   it('#11 the framing pill, drill banner and caddie strip clear the measured deck', () => {
     expect(sm).toMatch(/onLayout=\{\(e\) => \{ const h = e\.nativeEvent\.layout\.height; if \(h > 0\) setDeckHeight\(h\); \}\}/);
-    expect(sm).toMatch(/bottom: aboveDeck\(deckHeight, insets\.bottom \+ 96\)/);
-    expect(sm).toMatch(/bottom: aboveDeck\(deckHeight, insets\.bottom \+ \(isNarrow \? 138 : 64\)\)/);
-    expect(sm).toMatch(/<CaddieStatusStrip floating bottomOffset=\{aboveDeck\(deckHeight, insets\.bottom \+ 140\)\} \/>/);
+    expect(sm).toMatch(/bottom: aboveDeck\(deckHeight, insets\.bottom \+ 96, windowWidth, windowHeight\)/);
+    expect(sm).toMatch(/bottom: aboveDeck\(deckHeight, insets\.bottom \+ \(isNarrow \? 138 : 64\), windowWidth, windowHeight\)/);
+    expect(sm).toMatch(/<CaddieStatusStrip floating bottomOffset=\{aboveDeck\(deckHeight, insets\.bottom \+ 140, windowWidth, windowHeight\)\} \/>/);
   });
 });

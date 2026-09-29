@@ -81,6 +81,7 @@ import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useTeeOverride } from '../services/courseTeeOverrides';
 import { useGreenOverride } from '../services/courseGreenOverrides';
 import { useFlagGate } from '../hooks/useFlagGate';
+import { useEntitlementGate } from '../hooks/useEntitlementGate';
 import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, getDerivedHoleGeometry, loadDerivedGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { deriveHoleGeometry } from '../services/holeGeometryDerivation';
 import { courseDisplayName } from '../services/courseDisplayName';
@@ -337,6 +338,9 @@ export default function SmartVisionScreen() {
   // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `smartvision` is off, whether it
   // was already off on entry or flips off while this screen is open. No message, by instruction.
   useFlagGate('smartvision');
+  // 2026-09-29 (review) — and the paid-plan door: a deep link used to open this on the lite edition.
+  // Waits for profile hydration; never gates an owner or an active/trial/lifetime player.
+  useEntitlementGate('smartvision');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();

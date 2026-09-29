@@ -69,7 +69,10 @@ function ensureInit(): void {
 
 export function track(event: string, properties?: Record<string, unknown>): void {
   ensureInit();
-  buffer.push({ event, properties, ts: Date.now() });
+  // 2026-09-30 (review) — the same strip as the usage pipe: these breadcrumbs reach Sentry, and some
+  // callers passed a precise ball lat/lng or the player's own words. One rule, both seams.
+  const { sanitizeUsageProps } = require('./usageTelemetry') as typeof import('./usageTelemetry');
+  buffer.push({ event, properties: sanitizeUsageProps(properties), ts: Date.now() });
   if (buffer.length >= MAX_BUFFER) flush('overflow');
 }
 

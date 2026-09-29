@@ -39,7 +39,7 @@ export type LifecycleInput = {
   now: number;
   /**
    * 2026-09-28 (1.0.2) — the store's last answer on a live paid entitlement (profile
-   * store_entitlement_active). Only consulted when a promo ends. Only an explicit `false` lets a
+   * store_entitlement_active). Consulted when a promo ends and at legacy trial expiry. Only an explicit `false` lets a
    * promo's 'active' lapse: null/absent means the store has not answered yet on this install, and a
    * subscriber must never be downgraded on a guess. Every launch's store read records the answer, so
    * a promo-only player lapses by the next launch at the latest.
@@ -67,6 +67,17 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
   if (promoExpiresAt != null) {
     if (promoExpiresAt > now) {
       return status === 'active' ? {} : { setStatus: 'active' };
+    }
+    /**
+     * 2026-09-29 (review) — NOT BEFORE THE STORE HAS ANSWERED. Clearing the promo here while the
+     * store's answer is still unknown (null — every 1.0.1→1.0.2 upgrader, and this runs at hydration,
+     * before the async launch read) erased the only evidence the 'active' came from a promo: the
+     * lapse rule below needs promo_expires_at to fire, so nothing ever re-checked and the player kept
+     * Pro for ever. Leave the promo in place (still expired, access unchanged — never a downgrade on a
+     * guess); the launch read records the store's answer and the next launch decides with it.
+     */
+    if (status === 'active' && input.storeEntitled == null && !isOwner && subscriptionsEnabled) {
+      return {};
     }
     // Expired: clear it and fall through to the normal ladder, so running out is visible in the
     // status without locking anyone out of anything.
@@ -142,8 +153,12 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
    * expiry — the moment a trial that converted to paid is still 'trial' locally until the next store
    * read lands. Opened offline on the course, the player would be dropped to lite right after being
    * charged. A store-entitled player's status is the store's to change (the launch read does it).
+   *
+   * And only on an explicit `false`: null means the store has not answered on this install (a 1.0.2
+   * upgrader opening offline), which is exactly the converted subscriber above before their first
+   * read. The launch read records the answer, so a real legacy app trial expires by the next launch.
    */
-  if (status === 'trial' && trialStartedAt && now - trialStartedAt > trialDurationMs && input.storeEntitled !== true) {
+  if (status === 'trial' && trialStartedAt && now - trialStartedAt > trialDurationMs && input.storeEntitled === false) {
     return { setStatus: 'expired' };
   }
   return {};

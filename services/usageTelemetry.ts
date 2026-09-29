@@ -96,6 +96,43 @@ async function ensureAnonId(): Promise<string> {
 // installs, that is an identifier the App Privacy / Data safety answers would have to declare as
 // linked to the player. Usage is keyed by the random per-install anonId only.
 
+/**
+ * 2026-09-29 (review) — WHAT THE SETTINGS ROW PROMISES, ENFORCED AT THE ONE SEAM.
+ *
+ * The row (and constants/legalText, docs/privacy-policy.html) says usage data is "never your name,
+ * email, scores, or location", and the toggle is on by default for new installs. Callers were sending
+ * {strokes, par} on log_score_voice, putts on log_putts_voice, the player's raw words in `phrase`, and
+ * a ball fix as lat/lng. Asking every caller to remember the promise is how that happened, so the
+ * promise is kept HERE: any prop whose key names a score, free text or a location is dropped before it
+ * is buffered, at any depth, whoever sent it. Keys compare case-insensitively and exactly —
+ * `chars` or `utterances` (a count) are not text and stay.
+ */
+const BLOCKED_PROP_KEYS: ReadonlySet<string> = new Set([
+  // scores
+  'strokes', 'stroke', 'par', 'putts', 'putt', 'score', 'scores', 'gross', 'net', 'to_par', 'topar',
+  // free text the player said or typed
+  'phrase', 'text', 'transcript', 'utterance', 'query', 'prompt', 'message_text', 'raw', 'input',
+  // identity and location
+  'name', 'email', 'lat', 'lng', 'lon', 'latitude', 'longitude', 'location', 'coords',
+]);
+
+export function sanitizeUsageProps(props: Record<string, unknown> | undefined, depth = 0): Record<string, unknown> | undefined {
+  if (!props || typeof props !== 'object') return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (BLOCKED_PROP_KEYS.has(k.toLowerCase())) continue;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      // Nested objects are walked (bounded) so the rule cannot be dodged by one level of nesting.
+      if (depth >= 3) continue;
+      out[k] = sanitizeUsageProps(v as Record<string, unknown>, depth + 1);
+      continue;
+    }
+    if (Array.isArray(v)) continue; // no caller sends one; an array is where free text would hide
+    out[k] = v;
+  }
+  return out;
+}
+
 function ensureInit(): void {
   if (initialized) return;
   initialized = true;
@@ -113,7 +150,7 @@ export function track(event: string, props?: Record<string, unknown>): void {
     if (!isOptedIn()) return;
     if (typeof event !== 'string' || !event.trim()) return;
     ensureInit();
-    buffer.push({ event: event.trim().slice(0, 64), props, ts: Date.now() });
+    buffer.push({ event: event.trim().slice(0, 64), props: sanitizeUsageProps(props), ts: Date.now() });
     // Bound the buffer: drop oldest if we somehow exceed the cap (offline).
     if (buffer.length > MAX_BUFFER) {
       buffer = buffer.slice(buffer.length - MAX_BUFFER);

@@ -71,13 +71,24 @@ export interface CaddieDataStripProps {
   par?: number | null;
   holeScore?: number | null;
   holePutts?: number | null;
-  onScoreStep?: (next: number) => void;
-  onPuttsStep?: (next: number) => void;
+  /**
+   * Called ONCE per settled entry, with the hole the taps were made on — never per tap. logScore's
+   * first-score auto-advance moves the round, so committing per tap walked "+ +" across two holes
+   * (the cockpit stepper's 08-08 "burned holes" defect, repeated here and caught in review 09-30).
+   */
+  onScoreStep?: (score: number, hole: number) => void;
+  onPuttsStep?: (putts: number, hole: number) => void;
   onPress: () => void;
 }
 
 /** The scoring row's height — the caddie tab's layout budget lifts everything above the strip by it. */
 export const STRIP_SCORING_ROW_HEIGHT = 50;
+/**
+ * Taps on either stepper settle for this long before the entry is written. Longer than the cockpit's
+ * 1.6s because this row is a PAIR — score then putts — and both must land before the score's
+ * auto-advance moves the round on.
+ */
+export const STRIP_SCORE_SETTLE_MS = 2_500;
 
 /**
  * One tap from blank is the common case, not a count from zero: + sets par (− one under), then each
@@ -129,6 +140,30 @@ export default function CaddieDataStrip({
    * screens get slimmer arrows and a wider HOLE cell; the touch target stays ~50dp via hitSlop.
    */
   const { width: screenW } = useWindowDimensions();
+  // ── Scoring row: pending entry, stamped with its hole, committed once ──
+  const [pendingScore, setPendingScore] = useState<number | null>(null);
+  const [pendingPutts, setPendingPutts] = useState<number | null>(null);
+  const pendingRef = useRef<{ hole: number | null; score: number | null; putts: number | null }>({ hole: null, score: null, putts: null });
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitRef = useRef<() => void>(() => undefined);
+  commitRef.current = () => {
+    if (settleTimerRef.current) { clearTimeout(settleTimerRef.current); settleTimerRef.current = null; }
+    const { hole: h, score: sc, putts: pt } = pendingRef.current;
+    pendingRef.current = { hole: null, score: null, putts: null };
+    setPendingScore(null);
+    setPendingPutts(null);
+    if (h == null) return;
+    // Putts first: logPutts never moves the round; logScore's first score may advance it.
+    if (pt != null) onPuttsStep?.(pt, h);
+    if (sc != null) onScoreStep?.(sc, h);
+  };
+  // The hole changed (arrows, voice, GPS) with an entry pending → it lands on the hole it was tapped on.
+  const currentHoleNum = hole.current;
+  useEffect(() => {
+    if (pendingRef.current.hole != null && pendingRef.current.hole !== currentHoleNum) commitRef.current();
+  }, [currentHoleNum]);
+  // Leaving the screen never drops a score just tapped in.
+  useEffect(() => () => commitRef.current(), []);
   const narrowStrip = screenW < 500;
   void _totalScore; void _scoreVsPar;
   const lastCellLabel = 'STROKE';
@@ -447,9 +482,23 @@ export default function CaddieDataStrip({
       </View>
     </View>
   );
-  const tap = (fn: () => void) => () => {
+  const shownScore = pendingScore ?? holeScore;
+  const shownPutts = pendingPutts ?? holePutts;
+  const stepEntry = (which: 'score' | 'putts', dir: 1 | -1) => () => {
     void Haptics.selectionAsync().catch(() => undefined);
-    fn();
+    const p = pendingRef.current;
+    if (p.hole != null && p.hole !== hole.current) commitRef.current();
+    const cur = pendingRef.current;
+    cur.hole = hole.current;
+    if (which === 'score') {
+      cur.score = stepHoleScore(cur.score ?? holeScore, dir, par);
+      setPendingScore(cur.score);
+    } else {
+      cur.putts = stepHolePutts(cur.putts ?? holePutts, dir, cur.score ?? holeScore);
+      setPendingPutts(cur.putts);
+    }
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(() => commitRef.current(), STRIP_SCORE_SETTLE_MS);
   };
 
   return (
@@ -541,19 +590,9 @@ export default function CaddieDataStrip({
         </View>
         {twoRow && (
           <View style={styles.scoreRow}>
-            {stepper(
-              'SCORE', holeScore,
-              tap(() => onScoreStep!(stepHoleScore(holeScore, -1, par))),
-              tap(() => onScoreStep!(stepHoleScore(holeScore, 1, par))),
-              'strip-score',
-            )}
+            {stepper('SCORE', shownScore, stepEntry('score', -1), stepEntry('score', 1), 'strip-score')}
             <View style={styles.scoreDivider} />
-            {stepper(
-              'PUTTS', holePutts,
-              tap(() => onPuttsStep?.(stepHolePutts(holePutts, -1, holeScore))),
-              tap(() => onPuttsStep?.(stepHolePutts(holePutts, 1, holeScore))),
-              'strip-putts',
-            )}
+            {stepper('PUTTS', shownPutts, stepEntry('putts', -1), stepEntry('putts', 1), 'strip-putts')}
             <View style={styles.scoreDivider} />
             <View style={styles.strokeCell}>
               <Text style={styles.cellLabel} maxFontSizeMultiplier={1.2}>{lastCellLabel}</Text>

@@ -62,7 +62,12 @@ describe('the wear APK is not older than the source it claims to carry', () => {
    * blind spot exactly where "I just changed that" lives. [[break-test-every-gate]]
    */
   (present.length ? it : it.skip)('every built wear artifact is newer than the wear source', () => {
-    const src = newestMtime(WEAR_SRC);
+    // 2026-09-30 — build.gradle too: the versionCode and dependencies live there, and an AAB built
+    // before a versionCode bump carries the old code Play rejects as a duplicate.
+    const gradleFile = path.join(ROOT, 'wear-os-app/app/build.gradle');
+    const srcTree = newestMtime(WEAR_SRC);
+    const gradleM = fs.statSync(gradleFile).mtimeMs;
+    const src = gradleM > srcTree.mtime ? { file: gradleFile, mtime: gradleM } : srcTree;
     const stale = present
       .filter(a => src.mtime > fs.statSync(a).mtimeMs)
       .map(a => path.relative(ROOT, a));

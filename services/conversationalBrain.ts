@@ -45,6 +45,18 @@ export interface BrainReply {
   source: 'kevin' | 'none';
   /** A proactive line whose moment passed: the player started a turn while it was generating. */
   stale?: boolean;
+  /**
+   * 2026-09-29 (review) — proactive lines only: remember the line in the shared history. Call it
+   * right before the line is SHOWN or SPOKEN, never before the caller's own busy check. A no-op for
+   * an aside that does not seed, and safe to call twice.
+   */
+  commit?: () => void;
+}
+
+/** A proactive line the caller may still decide not to say. `commit` seeds history — call it only when it is said. */
+export interface ProactiveLine {
+  text: string;
+  commit: () => void;
 }
 
 const NO_ANSWER: BrainReply = { text: null, audioBase64: null, toolActions: [], source: 'none' };
@@ -146,20 +158,39 @@ export async function generateProactiveLine(
  * only when the brain ANSWERED; when it failed or timed out they spoke the fixed fallback line over
  * the turn the player had started meanwhile. The epoch is checked after every outcome. Null = silent.
  */
+/**
+ * 2026-09-29 (review) — returns the line AND a commit(), no longer a bare string. The history seed
+ * used to happen here, before the caller's busy check could drop the line, so the caddie "remembered"
+ * saying something the player never heard; and a spoken FALLBACK line was never seeded at all, so the
+ * player's answer to it reached a caddie with no idea what he had asked. The caller commits right
+ * before it shows/speaks the line, whichever line that is.
+ */
 export async function proactiveLineOrFallback(
   directive: string,
   fallback: string,
   opts?: { timeoutMs?: number; seedHistory?: boolean },
-): Promise<string | null> {
+): Promise<ProactiveLine | null> {
   const epoch = getUserTurnEpoch();
   let line = fallback;
+  let commit = historyCommit(fallback, !!opts?.seedHistory);
   try {
     const r = await generateProactiveLine(directive, opts);
     if (r.stale) return null;
     if (r.text) line = r.text;
+    if (r.text && r.commit) commit = r.commit;
   } catch { /* the fallback stands — a proactive moment never goes silent for want of a brain */ }
   if (getUserTurnEpoch() !== epoch) return null;
-  return line;
+  return { text: line, commit };
+}
+
+/** Seed `text` as the caddie's last word — once, and only when the caller actually says it. */
+function historyCommit(text: string, seedHistory: boolean): () => void {
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    if (seedHistory) setConversationHistory([...getConversationHistory(), { role: 'assistant', content: text }]);
+  };
 }
 
 /**
@@ -169,7 +200,8 @@ export async function proactiveLineOrFallback(
  * comes out — precisely, not by replacing the whole history, which is what used to wipe a real
  * exchange the player had while this was generating (and left a non-seeding aside's directive in the
  * thread for good). Then: if the player started a turn since we asked, the moment has passed — the
- * line is STALE and nobody speaks it. Otherwise an opener is kept as the caddie's last word.
+ * line is STALE and nobody speaks it. Otherwise an opener is kept as the caddie's last word — once
+ * the caller commit()s it, right before saying it (2026-09-29).
  */
 function settleProactiveTurn(
   directive: string,
@@ -182,8 +214,12 @@ function settleProactiveTurn(
     console.log('[caddie] proactive line dropped — the player started talking while it generated');
     return { ...NO_ANSWER, stale: true };
   }
-  if (seedHistory) setConversationHistory([...getConversationHistory(), { role: 'assistant', content: turn.text }]);
-  return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
+  // 2026-09-29 (review) — NOT seeded here any more: the caller may still drop the line (mic live,
+  // tab thinking), and a line never said must not be the caddie's last word. See historyCommit.
+  return {
+    text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin',
+    commit: historyCommit(turn.text, seedHistory),
+  };
 }
 
 export async function generateProactiveOpener(
@@ -224,7 +260,8 @@ export async function generateProactiveOpener(
   });
   if (!turn?.text) return NO_ANSWER;
   /**
-   * Seed the shared history with ONLY the caddie's opener (assistant turn). askCaddie appended the
+   * Seed the shared history with ONLY the caddie's opener (assistant turn) — via r.commit(), which
+   * the caller runs right before it speaks (2026-09-29). askCaddie appended the
    * DIRECTIVE as a user turn — it is dropped, which is deliberate: the player never said that
    * sentence, and leaving it in makes the caddie answer the instruction instead of the person.
    */

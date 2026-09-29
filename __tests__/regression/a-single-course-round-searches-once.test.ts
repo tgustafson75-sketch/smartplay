@@ -68,6 +68,22 @@ describe('sister-layout lookup', () => {
     mockGetCourse.mockResolvedValue(null);
     await expect(resolveSiblings('hemet', 'Hemet Golf Club')).rejects.toBeInstanceOf(SiblingLookupFailed);
   });
+
+  it('THE BUG (2026-09-30 review): one broken sister card does not throw away the good ones', async () => {
+    const sisterRow = (id: string) => ({ id, club_name: 'Hemet Golf Club', course_name: `Course ${id}`, location: '' });
+    mockSearch.mockResolvedValue([...ownRowOnly, sisterRow('good'), sisterRow('broken')]);
+    const goodCard = { ...hemetCard, id: 'good', course_name: 'Course good',
+      tees: [{ tee_name: 'Blue', holes: Array.from({ length: 18 }, (_, i) => ({ hole_number: i + 1, par: 4, yardage: 380 })) }] };
+    mockGetCourse.mockImplementation(async (id: string) => (id === 'hemet' ? hemetCard : id === 'good' ? goodCard : null));
+    const out = await resolveSiblings('hemet', 'Hemet Golf Club');
+    expect(out.map((s) => s.courseId)).toEqual(['good']);
+  });
+
+  it('found sisters but NONE resolved is still a failed lookup (retried)', async () => {
+    mockSearch.mockResolvedValue([...ownRowOnly, { id: 'broken', club_name: 'Hemet Golf Club', course_name: 'B', location: '' }]);
+    mockGetCourse.mockImplementation(async (id: string) => (id === 'hemet' ? hemetCard : null));
+    await expect(resolveSiblings('hemet', 'Hemet Golf Club')).rejects.toBeInstanceOf(SiblingLookupFailed);
+  });
 });
 
 describe('THE BUG: a single-course round searches once, not every ten minutes', () => {

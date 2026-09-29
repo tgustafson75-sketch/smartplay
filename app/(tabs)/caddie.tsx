@@ -72,7 +72,7 @@ import { Asset } from 'expo-asset';
 // 2026-07-25 (Tim) — the canned mp3 opener is gone; the opener is now a real brain turn that seeds
 // conversation history (generateProactiveOpener), so replies keep context. getOpenerAssetForPersona
 // (bundled-mp3 opener) is no longer used.
-import { generateProactiveOpener, proactiveLineOrFallback } from '../../services/conversationalBrain';
+import { generateProactiveOpener, proactiveLineOrFallback, type ProactiveLine } from '../../services/conversationalBrain';
 import { noteUserTurn } from '../../services/userTurnClock';
 import { isSessionInFlight } from '../../services/listeningSession';
 import { awaitGreetingComplete } from '../greeting';
@@ -175,7 +175,7 @@ const L1_MAP_TOP_CLEAR = 64;
  * carries a directive, the caddie writes the line, and the fixed `message` is the offline fallback
  * so a proactive moment never goes silent. [[feels-like-a-real-caddie]] [[caddie-failsafe-no-walls]]
  */
-async function proactiveLineFor(trigger: { directive: string; message: string }): Promise<string | null> {
+async function proactiveLineFor(trigger: { directive: string; message: string }): Promise<ProactiveLine | null> {
   // seedHistory: a hole-change line is something the player answers ("what club, then?"), so the
   // caddie must remember having said it.
   return proactiveLineOrFallback(trigger.directive, trigger.message, { timeoutMs: 8_000, seedHistory: true });
@@ -185,7 +185,15 @@ async function proactiveLineFor(trigger: { directive: string; message: string })
 function voiceChannelBusy(): boolean {
   // isSessionInFlight: a turn the player opened BEFORE this line was asked for is still being
   // answered (thinking) — the mic and the speaker are both free, but the caddie is mid-reply.
-  return isSpeaking() || isCapturing() || isExternalMicActive() || isSessionInFlight();
+  // 2026-09-29 (review) — and the listening store: a typed or watch turn (handleTranscribedUtterance)
+  // sets it to 'thinking' without ever raising sessionInFlight, so the line used to land on its answer.
+  return isSpeaking() || isCapturing() || isExternalMicActive() || isSessionInFlight()
+    || useListeningSessionStore.getState().state !== 'idle';
+}
+
+/** The tab itself is mid-turn (a tap-path reply thinking, the mic listening or arming). */
+function tabTurnActive(state: VoiceState): boolean {
+  return state === 'thinking' || state === 'listening' || state === 'arming';
 }
 
 /**
@@ -201,8 +209,9 @@ async function speakProactiveTrigger(
   setVoiceState: (next: VoiceState | ((prev: VoiceState) => VoiceState)) => void,
   currentVoiceState: () => VoiceState,
 ): Promise<void> {
-  const line = await proactiveLineFor(trigger);
-  if (!line) return;
+  const composed = await proactiveLineFor(trigger);
+  if (!composed) return;
+  const line = composed.text;
   // The tab's own state catches a tap-path turn still being answered ('thinking'), which the
   // listening session's in-flight flag does not cover.
   const tabState = currentVoiceState();
@@ -210,6 +219,7 @@ async function speakProactiveTrigger(
     console.log('[caddie] proactive line dropped: the mic or the speaker is busy');
     return;
   }
+  composed.commit(); // said now — only now is it the caddie's last word
   setCaddieResponse(line);
   setVoiceState('proactive');
   const backToIdle = () => setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev));
@@ -1103,11 +1113,12 @@ export default function CaddieTab() {
         if (!opener) return;
         const s0 = voiceStateRef.current;
         if (voiceChannelBusy() || s0 === 'thinking' || s0 === 'listening' || s0 === 'arming') return;
-        setCaddieResponse(opener);
+        opener.commit();
+        setCaddieResponse(opener.text);
         const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
         if (voiceEnabled) {
           setVoiceState('proactive');
-          speak(opener, vg, lang, apiUrl)
+          speak(opener.text, vg, lang, apiUrl)
             .catch(() => {})
             .finally(() => {
               setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev));
@@ -1688,8 +1699,12 @@ export default function CaddieTab() {
             const env = await engine.analyze({ kind: 'shot_strategy' });
             const text = env.voice_summary;
             if (!text) return;
+            // 2026-09-29 (review) — the world moved during the analyze await: the same re-check as
+            // speakProactiveTrigger, and only OUR 'proactive' is ever reset — never a newer turn's state.
+            if (voiceChannelBusy() || tabTurnActive(voiceStateRef.current)) return;
             setCaddieResponse(text);
             setVoiceState('proactive');
+            const backToIdle = () => setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev));
             const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
             if (ve) {
               // Occupy the shared clock. Consulting it without claiming it would make this trigger
@@ -1698,9 +1713,9 @@ export default function CaddieTab() {
               noteInterjection();
               speak(text, vg, lang, apiUrl)
                 .catch(() => {})
-                .finally(() => setVoiceState('idle'));
+                .finally(backToIdle);
             } else {
-              setTimeout(() => setVoiceState('idle'), 3000);
+              setTimeout(backToIdle, 3000);
             }
           } catch (e) {
             console.log('[caddie] M6 stop-detection shot_strategy failed (non-fatal):', e);
@@ -1764,14 +1779,17 @@ export default function CaddieTab() {
             const sh = cid ? useCaddieMemoryStore.getState().getStaticHole(cid, currentHole) : null;
             if (sh?.note) text = `${text} Heads up: ${sh.note}`;
           } catch { /* book optional */ }
+          // 2026-09-29 (review) — re-check after the analyze await; reset only our own 'proactive'.
+          if (voiceChannelBusy() || tabTurnActive(voiceStateRef.current)) return;
           setCaddieResponse(text);
           setVoiceState('proactive');
+          const backToIdle = () => setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev));
           const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
           if (ve) {
             noteInterjection(); // same shared clock as every other unprompted voice
-            speak(text, vg, lang, apiUrl).catch(() => {}).finally(() => setVoiceState('idle'));
+            speak(text, vg, lang, apiUrl).catch(() => {}).finally(backToIdle);
           } else {
-            setTimeout(() => setVoiceState('idle'), 3000);
+            setTimeout(backToIdle, 3000);
           }
         } catch (e) {
           console.log('[caddie] tee-box auto-brief failed (non-fatal):', e);
@@ -1935,11 +1953,14 @@ export default function CaddieTab() {
          *    returns stale when a turn began; a live mic that is not a "turn" yet (VAD arming, a
          *    SmartMotion capture) is checked here.
          */
-        if (r.text && (isSpeaking() || isCapturing() || isExternalMicActive())) {
+        // 2026-09-29 (review) — and the same "turn still being answered" check every other proactive
+        // line makes: a typed/watch/earbud turn thinking, or the tab's own turn thinking/listening.
+        if (r.text && (voiceChannelBusy() || tabTurnActive(voiceStateRef.current))) {
           console.log('[caddie] opener dropped: the mic or the speaker got there first');
           openerPlayedThisProcess = true;
           claimOpenerSlot();
         } else if (r.text) {
+          r.commit?.(); // said now — the player's reply is answered against it
           if (r.audioBase64) {
             await speakFromBase64(r.audioBase64, { caption: r.text }).catch(() => undefined);
           } else {
@@ -2588,6 +2609,9 @@ export default function CaddieTab() {
       if (state !== 'listening') setKevinEmotion(null);
     },
     onReadyToListen: () => { handleMicPressRef.current(); },
+    // 2026-09-29 (review) — a superseded reply releases only its own 'thinking'; a newer turn's
+    // 'listening' / 'arming' stands.
+    onSuperseded: () => { setVoiceState((prev) => (prev === 'thinking' ? 'idle' : prev)); },
   });
 
   // ── Voice hook ───────────────────────────
@@ -4176,16 +4200,18 @@ export default function CaddieTab() {
           yardageSource={yardageReadout.source}
           paceLine={paceLineText}
           // 2026-09-29 (Tim: "Scoring is very hard with a small screen") — the scoring row. Same
-          // logScore / logPutts seam as the scorecard and the shot sheet; the ghost follows the
-          // score exactly as the sheet's Log Hole does. Hole advance stays the player's call.
+          // logScore / logPutts seam as the scorecard and the shot sheet (logScore also moves the
+          // ghost). The strip hands over ONE settled entry, stamped with the hole it was tapped on;
+          // a write after the round ended is dropped, as the cockpit stepper does.
           par={currentPar ?? null}
           holeScore={_scores[currentHole] ?? null}
           holePutts={stripHolePutts}
-          onScoreStep={(next) => {
-            logScore(currentHole, next);
-            useGhostStore.getState().updateHole(currentHole, next);
+          onScoreStep={(score, hole) => {
+            if (useRoundStore.getState().isRoundActive) logScore(hole, score);
           }}
-          onPuttsStep={(next) => logPutts(currentHole, next)}
+          onPuttsStep={(putts, hole) => {
+            if (useRoundStore.getState().isRoundActive) logPutts(hole, putts);
+          }}
           // 2026-05-19 — totalScore/scoreVsPar wiring temporarily removed.
           // Strip displays STROKE only (per Tim's "don't show score in
           // the data bar, scoring goes in the expandable tool arrow"

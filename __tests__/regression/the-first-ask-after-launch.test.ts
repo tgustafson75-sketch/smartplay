@@ -180,14 +180,26 @@ describe('a proactive line whose moment passed stays silent and leaves the threa
     ]);
   });
 
-  it('nobody spoke → the opener is kept as the caddie\'s last word, directive removed', async () => {
+  // 2026-09-29 (review) — CONTRACT CHANGE, deliberate: the opener is seeded by r.commit(), which the
+  // caller runs right before speaking. Seeding inside generateProactiveOpener meant a line the caller
+  // then dropped (mic live, tab thinking) was still the caddie's last word.
+  it('nobody spoke → the opener is kept as the caddie\'s last word once committed, directive removed', async () => {
     const env = setup(() => undefined);
     const r = await env.brain.generateProactiveOpener();
     expect(r.stale).toBeFalsy();
     expect(r.text).toBe('Morning. Whenever you are ready, I am here.');
+    r.commit?.();
+    r.commit?.(); // idempotent
     expect(env.hist.getConversationHistory()).toEqual([
       { role: 'assistant', content: 'Morning. Whenever you are ready, I am here.' },
     ]);
+  });
+
+  it('THE BUG (09-29): an opener the caller never commits (dropped at its busy check) leaves no trace', async () => {
+    const env = setup(() => undefined);
+    const r = await env.brain.generateProactiveOpener();
+    expect(r.text).toBe('Morning. Whenever you are ready, I am here.');
+    expect(env.hist.getConversationHistory()).toEqual([]);
   });
 
   it('an aside that does not seed history leaves no trace in it', async () => {
@@ -348,12 +360,14 @@ describe('a proactive line that FALLS BACK still yields to the player', () => {
   const setup = (ask: () => Promise<unknown>) => {
     let brain!: typeof import('../../services/conversationalBrain');
     let clock!: typeof import('../../services/userTurnClock');
+    let hist!: typeof import('../../services/voice/conversationHistory');
     jest.isolateModules(() => {
       clock = require('../../services/userTurnClock');
+      hist = require('../../services/voice/conversationHistory');
       jest.doMock('../../services/caddieBrain', () => ({ askCaddie: ask }));
       brain = require('../../services/conversationalBrain');
     });
-    return { brain, clock };
+    return { brain, clock, hist };
   };
   afterEach(() => jest.dontMock('../../services/caddieBrain'));
 
@@ -367,9 +381,19 @@ describe('a proactive line that FALLS BACK still yields to the player', () => {
     env = setup(async () => { env.clock.noteUserTurn(); throw new Error('network'); });
     expect(await env.brain.proactiveLineOrFallback('Say hi.', 'Fixed line.')).toBeNull();
   });
+  // 2026-09-29 (review) — CONTRACT CHANGE: returns { text, commit } so the caller seeds history only
+  // for a line it actually says — including the fallback, which used to never be seeded at all.
   it('the brain fails and nobody spoke → the fallback, so the moment is never silent', async () => {
     const env = setup(async () => null);
-    expect(await env.brain.proactiveLineOrFallback('Say hi.', 'Fixed line.')).toBe('Fixed line.');
+    expect((await env.brain.proactiveLineOrFallback('Say hi.', 'Fixed line.'))?.text).toBe('Fixed line.');
+  });
+  it('THE BUG (09-29): a SPOKEN fallback is seeded when committed; an uncommitted line is not', async () => {
+    const env = setup(async () => null);
+    const { hist } = env;
+    const p = await env.brain.proactiveLineOrFallback('Say hi.', 'Fixed line.', { seedHistory: true });
+    expect(hist.getConversationHistory()).toEqual([]); // not before the caller decides to say it
+    p!.commit();
+    expect(hist.getConversationHistory()).toEqual([{ role: 'assistant', content: 'Fixed line.' }]);
   });
 });
 

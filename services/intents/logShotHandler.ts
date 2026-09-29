@@ -103,7 +103,7 @@ export const logShotHandler: IntentHandler = {
     const clubPhrase = String(params.club_phrase ?? intent.raw_text ?? '').trim();
     const parsedClub = parseSpokenClub(clubPhrase);
     if (!parsedClub) {
-      track('log_shot_ambiguous_club', { phrase: clubPhrase.slice(0, 60) });
+      track('log_shot_ambiguous_club', { chars: clubPhrase.length }); // never the player's words
       // 2026-05-25 — Fix Z: phrase the clarifier so the auto-listen
       // loop (Fix Z extension in useVoiceCaddie) fires naturally on
       // the trailing '?'. User's next utterance is taken as the

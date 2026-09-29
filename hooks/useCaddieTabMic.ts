@@ -59,6 +59,12 @@ interface UsePipecatVoiceOpts {
   onToolAction?: (action: ToolAction) => void;
   onVoiceStateChange?: (state: 'idle' | 'listening' | 'thinking' | 'speaking') => void;
   onReadyToListen?: () => void;
+  /**
+   * 2026-09-29 (review) — this turn's reply was superseded (caption only). The hook set 'thinking'
+   * and will not set anything else, so the consumer must release ITS OWN 'thinking' — and only that:
+   * a newer turn may already have moved the screen to 'listening' / 'arming', which must survive.
+   */
+  onSuperseded?: () => void;
 }
 
 export function useCaddieTabMic({
@@ -66,6 +72,7 @@ export function useCaddieTabMic({
   onToolAction,
   onVoiceStateChange,
   onReadyToListen,
+  onSuperseded,
 }: UsePipecatVoiceOpts = {}) {
   // 2026-07-06 (voice-parity F2) — one brain turn at a time. A mic tap while the
   // caddie is still 'thinking' releases isProcessingRef in the consumer BEFORE
@@ -261,6 +268,10 @@ export function useCaddieTabMic({
        */
       if (getUserTurnEpoch() !== turnEpoch && (pendingTurnRef.current !== null || isCapturing() || isExternalMicActive())) {
         devLog('[caddie] reply superseded by a newer turn — caption only');
+        // 2026-09-29 (review) — this return used to leave the tab on the 'thinking' set above: the avatar
+        // stuck, VAD (idle-only) off, every proactive line dropped. A queued turn re-sets its own state
+        // in the finally below, synchronously; a live mic's owner already moved the screen on.
+        onSuperseded?.();
         return;
       }
       onVoiceStateChange?.('speaking');
@@ -308,7 +319,7 @@ export function useCaddieTabMic({
       pendingTurnRef.current = null;
       if (next) void processTurnRef.current?.(next);
     }
-  }, [onKevinSpoke, onReadyToListen, onToolAction, onVoiceStateChange]);
+  }, [onKevinSpoke, onReadyToListen, onSuperseded, onToolAction, onVoiceStateChange]);
   processTurnRef.current = processTurn;
 
   /**

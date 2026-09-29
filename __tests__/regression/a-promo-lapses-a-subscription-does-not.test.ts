@@ -37,8 +37,21 @@ describe('when a promo ends', () => {
   });
 
   it('before the store has answered on this install, nobody is downgraded on a guess', () => {
-    expect(planTrialLifecycle({ ...lapsedPromo, storeEntitled: null })).toEqual({ clearPromo: true });
-    expect(planTrialLifecycle({ ...lapsedPromo })).toEqual({ clearPromo: true });
+    // 2026-09-29 (review) — and the promo is KEPT, not cleared: clearing it erased the only evidence
+    // the 'active' was a promo's, so the lapse rule could never fire again → Pro for ever.
+    expect(planTrialLifecycle({ ...lapsedPromo, storeEntitled: null })).toEqual({});
+    expect(planTrialLifecycle({ ...lapsedPromo })).toEqual({});
+  });
+
+  it('once the store answers (next launch), the kept promo lapses', () => {
+    // Launch 1: store unknown → nothing. Launch read records false. Launch 2: lapses.
+    expect(planTrialLifecycle({ ...lapsedPromo, storeEntitled: null })).toEqual({});
+    expect(planTrialLifecycle({ ...lapsedPromo, storeEntitled: false }))
+      .toEqual({ clearPromo: true, setStatus: 'expired' });
+  });
+
+  it('a non-active expired promo still clears with the store unknown (nothing to lapse)', () => {
+    expect(planTrialLifecycle({ ...lapsedPromo, status: 'free', storeEntitled: null })).toEqual({ clearPromo: true });
   });
 
   it('a promo still running holds active, whatever the store says', () => {
@@ -77,8 +90,12 @@ describe('2026-09-29 (review) — a converted store trial is not expired locally
   it('the store vouches for the player → the local expiry rung stands down', () => {
     expect(planTrialLifecycle({ ...trialPast, storeEntitled: true })).toEqual({});
   });
-  it('a legacy app trial (store has no opinion) still expires on its date', () => {
+  it('a legacy app trial (store says it issued nothing) still expires on its date', () => {
     expect(planTrialLifecycle({ ...trialPast, storeEntitled: false })).toEqual({ setStatus: 'expired' });
-    expect(planTrialLifecycle({ ...trialPast, storeEntitled: null })).toEqual({ setStatus: 'expired' });
+  });
+  it('store not yet answered (1.0.2 upgrader opening offline) → not expired on a guess', () => {
+    // A converted store trial reads exactly like this before its first launch read lands.
+    expect(planTrialLifecycle({ ...trialPast, storeEntitled: null })).toEqual({});
+    expect(planTrialLifecycle({ ...trialPast })).toEqual({});
   });
 });

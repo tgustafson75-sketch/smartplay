@@ -10,7 +10,8 @@
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import CaddieDataStrip, { STRIP_SCORING_ROW_HEIGHT, stepHoleScore, stepHolePutts } from '../../components/CaddieDataStrip';
+import CaddieDataStrip, { STRIP_SCORING_ROW_HEIGHT, STRIP_SCORE_SETTLE_MS, stepHoleScore, stepHolePutts } from '../../components/CaddieDataStrip';
+import { act } from '@testing-library/react-native';
 import { caddieLayoutBudget } from '../../services/caddieLayoutBudget';
 
 const base = {
@@ -37,7 +38,11 @@ describe('the step rules', () => {
 });
 
 describe('THE ASK: score the hole from the bar', () => {
-  it('in a round: PAR in the top row, SCORE and PUTTS steppers that write the next value', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const settle = () => act(() => { jest.advanceTimersByTime(STRIP_SCORE_SETTLE_MS + 10); });
+
+  it('in a round: PAR in the top row; SCORE and PUTTS steppers hand over ONE settled entry', () => {
     const onScore = jest.fn();
     const onPutts = jest.fn();
     const r = render(
@@ -45,9 +50,37 @@ describe('THE ASK: score the hole from the bar', () => {
     );
     expect(r.getByText('PAR')).toBeTruthy();
     fireEvent.press(r.getByTestId('strip-score-plus'));
-    expect(onScore).toHaveBeenLastCalledWith(4);
     fireEvent.press(r.getByTestId('strip-putts-plus'));
-    expect(onPutts).toHaveBeenLastCalledWith(2);
+    expect(r.getAllByText('4')).toHaveLength(2); // PAR 4 and the pending SCORE 4, shown immediately
+    expect(onScore).not.toHaveBeenCalled();      // not written yet
+    settle();
+    expect(onPutts).toHaveBeenCalledWith(2, 7);
+    expect(onScore).toHaveBeenCalledWith(4, 7);
+  });
+
+  it('THE BUG (review 2026-09-30): "+ +" for a bogey is ONE write of 5 on this hole, not a 4 here and a 4 on the next', () => {
+    const onScore = jest.fn();
+    const r = render(<CaddieDataStrip {...base} par={4} holeScore={null} onScoreStep={onScore} onPuttsStep={jest.fn()} />);
+    fireEvent.press(r.getByTestId('strip-score-plus'));
+    fireEvent.press(r.getByTestId('strip-score-plus'));
+    settle();
+    expect(onScore.mock.calls).toEqual([[5, 7]]);
+  });
+
+  it('a hole change with an entry pending writes it to the hole it was TAPPED on', () => {
+    const onScore = jest.fn();
+    const r = render(<CaddieDataStrip {...base} par={4} holeScore={null} onScoreStep={onScore} onPuttsStep={jest.fn()} />);
+    fireEvent.press(r.getByTestId('strip-score-plus'));
+    r.rerender(<CaddieDataStrip {...base} hole={{ current: 8, total: 18, first: 1 }} par={3} holeScore={null} onScoreStep={onScore} onPuttsStep={jest.fn()} />);
+    expect(onScore.mock.calls).toEqual([[4, 7]]);
+  });
+
+  it('leaving the screen never drops a score just tapped in', () => {
+    const onScore = jest.fn();
+    const r = render(<CaddieDataStrip {...base} par={4} holeScore={null} onScoreStep={onScore} onPuttsStep={jest.fn()} />);
+    fireEvent.press(r.getByTestId('strip-score-minus'));
+    r.unmount();
+    expect(onScore.mock.calls).toEqual([[3, 7]]);
   });
 
   it('an entered score steps from what is recorded', () => {
@@ -55,7 +88,8 @@ describe('THE ASK: score the hole from the bar', () => {
     const r = render(<CaddieDataStrip {...base} par={4} holeScore={5} holePutts={2} onScoreStep={onScore} onPuttsStep={jest.fn()} />);
     expect(r.getByText('5')).toBeTruthy();
     fireEvent.press(r.getByTestId('strip-score-minus'));
-    expect(onScore).toHaveBeenLastCalledWith(4);
+    settle();
+    expect(onScore).toHaveBeenLastCalledWith(4, 7);
   });
 
   it('a stepper tap does not also open the shot sheet', () => {
@@ -94,7 +128,8 @@ describe('nothing above the strip sits on the new row', () => {
     const path = require('path') as typeof import('path');
     const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf8');
     expect(src).toMatch(/stripExtraHeight: stripHasScoringRow \? STRIP_SCORING_ROW_HEIGHT : 0/);
-    expect(src).toMatch(/onScoreStep=\{\(next\) => \{\s*logScore\(currentHole, next\);/);
-    expect(src).toMatch(/onPuttsStep=\{\(next\) => logPutts\(currentHole, next\)\}/);
+    // Writes go to the hole the strip hands over (tap-time hole), never currentHole at commit time.
+    expect(src).toMatch(/onScoreStep=\{\(score, hole\) => \{\s*if \(useRoundStore\.getState\(\)\.isRoundActive\) logScore\(hole, score\);/);
+    expect(src).toMatch(/onPuttsStep=\{\(putts, hole\) => \{\s*if \(useRoundStore\.getState\(\)\.isRoundActive\) logPutts\(hole, putts\);/);
   });
 });

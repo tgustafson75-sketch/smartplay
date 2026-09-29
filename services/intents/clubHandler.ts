@@ -149,7 +149,7 @@ export const clubChangeHandler: IntentHandler = {
     const round = useRoundStore.getState();
     if (round.isRoundActive) {
       if (!parsed) {
-        track('club_voice_ambiguous', { phrase: phrase.slice(0, 60) });
+        track('club_voice_ambiguous', { chars: phrase.length }); // never the player's words
         return {
           success: false,
           voice_response: clubClarifyPrompt(phrase),
@@ -186,7 +186,7 @@ export const clubChangeHandler: IntentHandler = {
     }
 
     if (!parsed) {
-      track('club_voice_ambiguous', { phrase: phrase.slice(0, 60) });
+      track('club_voice_ambiguous', { chars: phrase.length }); // never the player's words
       return {
         success: false,
         voice_response: "Which one — pitching, gap, sand, or lob wedge?",

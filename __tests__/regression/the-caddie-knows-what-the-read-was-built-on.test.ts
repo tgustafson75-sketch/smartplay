@@ -8,8 +8,75 @@
  */
 import fs from 'fs';
 import path from 'path';
+import handler from '../../api/kevin';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
 import { buildCaddieRequestBody, CADDIE_REQUEST_KEYS } from '../../services/caddieRequestBody';
+
+const seen: { system: string; user: string } = { system: '', user: '' };
+
+// The model and TTS are stubbed at the provider boundary (as book-me-a-tee-time-reaches-the-brain does);
+// everything between the request body and the prompt the model would receive is the shipped handler.
+jest.mock('../../api/_aiProvider', () => {
+  const actual = jest.requireActual('../../api/_aiProvider');
+  return {
+    ...actual,
+    completeText: jest.fn(async () => ({ text: 'ok' })),
+    runAgenticLoop: jest.fn(async (_provider: string, _tier: string, system: string, user: string) => {
+      seen.system = system;
+      seen.user = user;
+      return { text: 'It saw address and the finish, not the top.', provider: 'anthropic', rounds: 1, usage: null };
+    }),
+  };
+});
+jest.mock('openai', () => jest.fn().mockImplementation(() => ({
+  audio: { speech: { create: jest.fn(async () => ({ arrayBuffer: async () => new ArrayBuffer(0) })) } },
+  chat: { completions: { create: jest.fn(async () => ({ choices: [{ message: { content: '' } }] })) } },
+})));
+jest.mock('../../api/_inferLimit', () => ({ allowInference: () => true }));
+jest.mock('../../api/_cors', () => ({ applyCors: () => false }));
+
+function callKevin(body: Record<string, unknown>): Promise<number> {
+  return new Promise((resolve) => {
+    let status = 200;
+    const res = {
+      setHeader: () => res,
+      status(code: number) { status = code; return res; },
+      json() { resolve(status); return res; },
+      end() { resolve(status); return res; },
+    };
+    void handler({ method: 'POST', headers: {}, query: {}, body } as never, res as never);
+  });
+}
+
+/**
+ * The body of api/kevin's cached system prompt: `const systemPrompt = \`` to its closing backtick,
+ * tracking ${} depth — the same boundary scripts/simulations/run-sim.ts's cached-prompt RATCHET parses.
+ * Throws rather than returning '' so a moved/renamed declaration can never pass vacuously.
+ */
+function cachedSystemPromptSource(k: string): string {
+  const marker = 'const systemPrompt = `';
+  const open = k.indexOf(marker);
+  if (open < 0) throw new Error('api/kevin.ts: `const systemPrompt = \`` not found — the cached-block boundary moved');
+  let i = open + marker.length;
+  let depth = 0;
+  while (i < k.length) {
+    const c = k[i];
+    if (c === '\\') { i += 2; continue; }
+    if (depth === 0 && c === '`') return k.slice(open + marker.length, i);
+    if (c === '$' && k[i + 1] === '{') { depth++; i += 2; continue; }
+    if (depth > 0) { if (c === '{') depth++; else if (c === '}') depth--; }
+    i++;
+  }
+  throw new Error('api/kevin.ts: cached system prompt template never closed');
+}
+
+/** The message-side live facts block: the liveFactsBlock IIFE, up to its WHAT YOU CAN SEE RIGHT NOW return. */
+function liveFactsBlockSource(k: string): string {
+  const start = k.indexOf('const liveFactsBlock = (() => {');
+  const end = k.indexOf('WHAT YOU CAN SEE RIGHT NOW', start);
+  if (start < 0 || end < 0) throw new Error('api/kevin.ts: liveFactsBlock boundary not found');
+  return k.slice(start, end);
+}
 
 const body = () => buildCaddieRequestBody({ message: 'did it see my whole swing?', language: 'en' });
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
@@ -65,9 +132,24 @@ describe('both ends are wired', () => {
     expect(sm).toMatch(/\}, \[clipUri, phase, clipFps, analysis\]\);/);
   });
 
-  it('the brain renders it on the message side', () => {
+  it('the brain renders it in the message-side live facts block, and NOT in the cached system block', () => {
     const k = strip(fs.readFileSync(path.join(root, 'api/kevin.ts'), 'utf8'));
     expect(k).toMatch(/swing_read = null,/);
-    expect(k).toMatch(/if \(typeof swing_read === 'string' && swing_read\.trim\(\)\) \{\s*lines\.push\(`- The swing read on their screen was built from: \$\{swing_read\.trim\(\)/);
+    const push = /if \(typeof swing_read === 'string' && swing_read\.trim\(\)\) \{\s*lines\.push\(`- The swing read on their screen was built from: \$\{swing_read\.trim\(\)/;
+    expect(liveFactsBlockSource(k)).toMatch(push);
+    const cached = cachedSystemPromptSource(k);
+    expect(cached.length).toBeGreaterThan(1000);           // the parse found the real prompt
+    expect(cached).not.toMatch(/swing_read/);
+    expect(cached).not.toMatch(/The swing read on their screen was built from/);
+    expect(cached).not.toMatch(/\$\{\s*liveFactsBlock/);  // the block itself stays out of the cache
+  });
+
+  it('through the real handler: the line reaches the model in the MESSAGE and never the system prompt', async () => {
+    const marker = '9 frames from 1.2-2.8 s, where the swing was found; phases seen: address, finish; NOT seen: top, impact';
+    const status = await callKevin({ message: 'did it see my whole swing?', swing_read: marker });
+    expect(status).toBe(200);
+    expect(seen.user).toContain(`The swing read on their screen was built from: ${marker}`);
+    expect(seen.system).not.toContain(marker);
+    expect(seen.system).not.toContain('The swing read on their screen was built from');
   });
 });

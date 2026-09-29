@@ -53,10 +53,13 @@ export function reviewOverlayInset(windowHeight: number, insetBottom: number): n
 
 /**
  * A bottom offset that clears the deck. The deck is content-height (chips, club bar, controls, and
- * font scale all change it), so fixed offsets either overlapped it or floated far above it. Before the
- * deck has been measured, the previous fixed offset stands.
+ * font scale all change it), so on a narrow or short phone the fixed offsets overlapped it or floated
+ * far above it. Width/height-conditional like everything else here: on wider, taller screens (the open
+ * Fold) the previous fixed offset stands, as it does anywhere before the deck has been measured.
  */
-export function aboveDeck(deckHeight: number, fallback: number): number {
+export function aboveDeck(deckHeight: number, fallback: number, windowWidth: number, windowHeight: number): number {
+  const constrained = windowWidth < NARROW_WIDTH_DP || windowHeight < SHORT_HEIGHT_DP;
+  if (!constrained) return fallback;
   return Number.isFinite(deckHeight) && deckHeight > 0 ? Math.round(deckHeight) + 8 : fallback;
 }
 
