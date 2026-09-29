@@ -8,6 +8,14 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-29. 1.0.2 STORE BUILD candidate on LOCAL branch `release-1.0.2-polish` (NOT pushed, NO OTA — binary only).
+> Contains: 1.0.2 monetization (already on main at 9313287f), caddie-tab yardage/L1 live+zoom/plan card/pace
+> of play/round-data icon, tee times + store promo codes, Dashboard recent shots, two-row data strip with
+> in-bar SCORE/PUTTS, review fixes, SmartMotion (9 frames, auto ball region, 60fps default, narrow layout,
+> swing read reaches the caddie), narrow-screen pass (18 items), Android R8 on + Sentry 7.13 + purchases
+> 10.10.2 (release APK smoke-tested on emulator). Gates: tsc/lint clean, jest 5850, sim 1079/1079.
+> Next: Tim pushes + starts the EAS store build; device check PATH 2/4/6 + SmartMotion capture + sandbox purchase.
+
 > ### ⚠️ LATEST — 2026-09-28. First-ask sweep on LOCAL branch `firstask-2026-09-28` (NOT pushed, NOT OTA'd).
 > 16 defects behind "first ask delayed / racing or missing voice" fixed — warmups that never warmed the
 > brain, warmth that never expired, an opener that ate the first tap and landed on the first turn, a

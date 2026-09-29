@@ -5203,3 +5203,32 @@ greeting→Caddie handoff).
 - `watch_yardage_blocked ×2` is real signal: once-per-reason, re-armed by a success, so the watch
   connected after hole 1 and dropped by hole 3. No code change.
 - Meta diag line no longer reads "expected: expected unless…", and names the `glasses` profile.
+
+## Day 129 — 2026-09-29 — the 1.0.2 store build
+
+**Shipped today (local branch `release-1.0.2-polish`, not pushed, no OTA):**
+- Caddie tab: one yardage readout for strip + L1 (rest screen now updates; stationary GPS on High),
+  SmartVision live + pinch-zoom in the large L1 window, plan card clear of the crosshair/corner box,
+  pace of play (bar line + caddie context), round-data icon in place of the Cockpit layout.
+- Two-row data strip (Tim: "scoring is very hard with a small screen"): PAR in row one; SCORE / PUTTS
+  steppers + STROKE in row two via logScore/logPutts; layout budget lifts everything above by 50dp.
+- Tee times (rate category, pro-shop call, find_tee_time) + store-native promo/founding codes.
+- Dashboard Recent Shots: one owner with the caddie, no "?" rows.
+- Review fixes: proactive-line fallback yields to the player (one owner), VAD is a turn, mic-holder
+  set no longer cleared, navigate_replace gated, preview hole stamps dropped, plan card height 0,
+  verifier retries capped, funnel ignores upgraders, TTS body read bounded.
+- SmartMotion: 9 labelled frames + phase coverage, ball region found (box hidden), 60fps default /
+  120 opt-in, narrow layout, swing read (coverage/phases/fps) reaches the caddie.
+- Narrow screens (Fold closed / iPhone): 18 items incl. paywall CTA pinned, iOS keyboard lift, Menlo.
+- Android: R8 minify on (release APK smoke-tested on API 35 emulator; Expo headless loader kept),
+  Sentry 7.13.0, purchases 10.10.2, Health Connect native excluded.
+
+**Gates:** tsc clean, lint 0, jest 5850/5850, sim 1079/1079. Every fix has a test red on the prior tree.
+
+**Not verified on device.** Needs: PATH 2/4/6 on a real round, SmartMotion capture, earbud tap, watch
+swing, sandbox purchase on a release build (R8).
+
+**Notes:** narrow-screen agent soft-reset one unpushed local commit to fix a wrong message; the Wear-AAB
+guard now skips when no wear build exists (fresh clone/worktree); an agent last night used --no-verify
+on a message-only amend of an unpushed commit.
+
