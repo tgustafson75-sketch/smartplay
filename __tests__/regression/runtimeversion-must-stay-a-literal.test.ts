@@ -31,6 +31,13 @@
  * moment it changes, and only a new binary from the store can pick them up again. That may be the
  * right call one day; it is never an incidental one.
  */
+/*
+ * 2026-09-30 (Tim: "yes set to 1.0.2") — MOVED DELIBERATELY, AS A STORE RELEASE. 1.0.2 carries new
+ * native code (Sentry 7.13, RevenueCat 10.10, R8, Health Connect out of the binary). Under "1.0.0" any
+ * OTA cut from 1.0.2's JS would also reach 1.0.0/1.0.1 shells with the OLD native bridges, so a small
+ * 1.0.2 fix could not ship over the air without risking those installs. "1.0.2" isolates it: OTAs now
+ * reach 1.0.2 binaries only; 1.0.1 installs get fixes by updating from the store. Still a LITERAL.
+ */
 import fs from 'fs';
 import path from 'path';
 
@@ -39,9 +46,9 @@ const appJson = JSON.parse(
 ) as { expo: { runtimeVersion: unknown; updates?: Record<string, unknown> } };
 
 describe('runtimeVersion is a literal, not a policy', () => {
-  it('is the string "1.0.0" — the value every shipped binary carries', () => {
+  it('is the string "1.0.2" — the value the 1.0.2 store binaries carry', () => {
     expect(typeof appJson.expo.runtimeVersion).toBe('string');
-    expect(appJson.expo.runtimeVersion).toBe('1.0.0');
+    expect(appJson.expo.runtimeVersion).toBe('1.0.2');
   });
 
   it('is NOT a policy object — a fingerprint policy silently reaches zero users', () => {

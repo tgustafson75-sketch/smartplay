@@ -76,8 +76,10 @@ describe('the store will accept a second upload', () => {
 
 describe('the OTA contract is intact', () => {
   it('runtimeVersion is still the literal the shipped build carries', () => {
-    // Testers are frozen on this runtime; changing it strands every phone in the field.
-    expect(app.expo.runtimeVersion).toBe('1.0.0');
+    // Changing it strands every phone in the field from OTAs until they update from the store.
+    // 2026-09-30 (Tim: "yes set to 1.0.2") — moved deliberately with the 1.0.2 store build, whose new
+    // native SDKs make OTAs to older shells unsafe. See runtimeversion-must-stay-a-literal.test.ts.
+    expect(app.expo.runtimeVersion).toBe('1.0.2');
   });
 
   /**
