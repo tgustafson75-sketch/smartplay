@@ -100,6 +100,9 @@ export type ToolAction =
   // 2026-09-12 — the course engine, reached from the conversation: a course the player is only
   // THINKING about had no way in. `name` is required; `course_id` rides along when a prior
   // lookup_course produced one.
-  | { type: 'download_course'; name: string; course_id?: string };
+  | { type: 'download_course'; name: string; course_id?: string }
+  // 2026-09-29 — the tee-time hand-off (services/teeTimeLink.runFindTeeTime). Every field is the
+  // player's own words; rate_category is present only when they named one this turn.
+  | { type: 'find_tee_time'; course: string; date?: string; time_window?: string; players?: number; rate_category?: string; transport?: string };
 
 // ── POST handler ──────────────────────────────────────────────────────────────

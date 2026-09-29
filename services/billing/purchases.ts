@@ -368,12 +368,21 @@ export function storeEntitledFromCustomerInfo(
 
 export async function refreshEntitlement(
   current: SubscriptionStatus,
+  opts?: { fresh?: boolean },
 ): Promise<EntitlementSnapshot> {
   const unchanged: EntitlementSnapshot = { status: current, trialStartedAt: null, storeEntitled: null };
   if (!initBilling()) return unchanged;
   const Purchases = sdk();
   if (!Purchases) return unchanged;
   try {
+    /**
+     * 2026-09-29 — `fresh` drops the SDK's cached CustomerInfo first. The code-redemption flow reads
+     * seconds after the store granted something, which is exactly when a cached "not entitled" is
+     * still being served. The launch read keeps the cache. Best-effort: a failed invalidate still reads.
+     */
+    if (opts?.fresh) {
+      try { await Purchases.invalidateCustomerInfoCache?.(); } catch { /* read anyway */ }
+    }
     const info = await Purchases.getCustomerInfo();
     return { status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info), storeEntitled: storeEntitledFromCustomerInfo(info) };
   } catch (e) {
@@ -516,6 +525,50 @@ export async function purchasePackage(pkg: unknown, current: SubscriptionStatus)
     reportSilentFailure(e, { where: 'purchasePackage' });
     return { ok: false, reason: 'failed', message: err?.message };
   }
+}
+
+/**
+ * 2026-09-29 — iOS OFFER CODES (e.g. a FOUNDER subscription offer code made in App Store Connect).
+ *
+ * Apple's own sheet takes the code, so Apple vouches for it — which matters because since 1.0.2 a
+ * promo-granted 'active' lapses unless the store says entitled (services/billing/trialLifecycle). The
+ * SDK's promise settles when the sheet is PRESENTED, not when a code is redeemed; the redemption lands
+ * later through the store, which is why services/billing/redeemCode watches for it afterwards.
+ * Android has no in-app sheet — Play's redeem page is opened by URL instead (redeemCode).
+ */
+export async function presentOfferCodeSheet(): Promise<'presented' | 'unavailable' | 'failed'> {
+  if (Platform.OS !== 'ios') return 'unavailable';
+  if (!initBilling()) return 'unavailable';
+  const Purchases = sdk();
+  if (!Purchases || typeof Purchases.presentCodeRedemptionSheet !== 'function') return 'unavailable';
+  try {
+    await Purchases.presentCodeRedemptionSheet();
+    return 'presented';
+  } catch (e) {
+    reportSilentFailure(e, { where: 'presentCodeRedemptionSheet' });
+    return 'failed';
+  }
+}
+
+/**
+ * Call `cb` whenever the store pushes new CustomerInfo (a redeemed code, a renewal). Returns the
+ * unsubscribe. A no-op returning a no-op when billing is unavailable. The callback gets no payload on
+ * purpose: callers re-read through refreshEntitlement, the one mapping.
+ */
+export function onStoreCustomerInfoUpdate(cb: () => void): () => void {
+  if (!initBilling()) return () => undefined;
+  const Purchases = sdk();
+  if (!Purchases || typeof Purchases.addCustomerInfoUpdateListener !== 'function') return () => undefined;
+  const listener = () => { try { cb(); } catch { /* a listener must never throw into the SDK */ } };
+  try {
+    Purchases.addCustomerInfoUpdateListener(listener);
+  } catch (e) {
+    reportSilentFailure(e, { where: 'addCustomerInfoUpdateListener' });
+    return () => undefined;
+  }
+  return () => {
+    try { Purchases.removeCustomerInfoUpdateListener?.(listener); } catch { /* already gone */ }
+  };
 }
 
 /**

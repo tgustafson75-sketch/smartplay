@@ -62,6 +62,8 @@ import { PRESENCE_PROFILES, presenceFromFlags, applyPresence as applyPresenceFla
  */
 import { HEALTH_CONNECT_ENABLED, SUBSCRIPTIONS_ENABLED, trialDaysLeft } from '../services/featureAccess';
 import { PRICING } from '../lib/pricing';
+import { startCodeRedemption } from '../services/billing/redeemCode';
+import { track } from '../services/analytics';
 import CloudBackupCard from '../components/settings/CloudBackupCard';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, selectablePersonas } from '../lib/persona';
@@ -377,6 +379,19 @@ export default function Settings() {
         return t('settings.text.see_plans_from_price', { price: PRICING.monthly.displayPrice });
     }
   }, [subscriptionStatus, trialStartedAt, t]);
+  /** 2026-09-29 — open the store's code redemption; the grant is confirmed when the store says so. */
+  const handleRedeemCode = useCallback(async () => {
+    track('redeem_code_tapped', { where: 'settings' });
+    const r = await startCodeRedemption({
+      onGranted: () => {
+        track('redeem_code_granted', { where: 'settings' });
+        Alert.alert(t('paywall.alert.code_redeemed'), t('paywall.alert.code_redeemed_body'), [{ text: 'OK' }]);
+      },
+    });
+    if (r === 'unavailable') {
+      Alert.alert(t('paywall.alert.couldnt_open_redeem'), t('paywall.alert.couldnt_open_redeem_body'), [{ text: 'OK' }]);
+    }
+  }, [t]);
   // 2026-05-26 — Fix AB Phase 1: GHIN # local edit mirror.
   // 2026-06-09 — Account email. Setting it to an owner-allowlisted address
   // unlocks Owner Tools (the auto-mirror stops once the allow-list has >1
@@ -726,6 +741,24 @@ export default function Settings() {
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
             </TouchableOpacity>
+            {/* 2026-09-29 — founding / promo codes, redeemed by the STORE (services/billing/redeemCode),
+                so the store vouches for the access and it survives the 1.0.2 promo-lapse rule. */}
+            {Platform.OS === 'ios' || Platform.OS === 'android' ? (
+              <TouchableOpacity
+                style={[rowDivStyle, { alignItems: 'center' }]}
+                onPress={() => { void handleRedeemCode(); }}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.accessibility_label.redeem_code')}
+              >
+                <View style={styles.rowText}>
+                  <Text style={labelStyle}>{t('settings.text.redeem_code')}</Text>
+                  <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                    {Platform.OS === 'ios' ? t('settings.text.redeem_code_sub_ios') : t('settings.text.redeem_code_sub_android')}
+                  </Text>
+                </View>
+                <Ionicons name="gift-outline" size={18} color={colors.text_muted} />
+              </TouchableOpacity>
+            ) : null}
           </CollapsibleSection>
         ) : null}
 

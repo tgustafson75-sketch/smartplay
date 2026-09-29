@@ -58,6 +58,8 @@ const NAV_OPEN_ACTIONS = new Set([
   'navigate', 'navigate_replace',
   'open_smartvision', 'open_smartfinder', 'open_swinglab',
   'record_swing', 'configure_drill', 'set_angle', 'close_swinglab',
+  // 2026-09-29 — opens the browser. "I usually book at Menifee" in the interview is information.
+  'find_tee_time',
 ]);
 /** True while the voice conversation is the get-to-know profile interview. */
 export function isGetToKnowMode(): boolean {
@@ -141,6 +143,13 @@ type AnyAction = {
   // set_pin_position (2026-09-25)
   depth?: string;
   side?: string;
+  // find_tee_time (2026-09-29 — the tee-time hand-off)
+  course?: string;
+  date?: string;
+  time_window?: string;
+  players?: number;
+  rate_category?: string;
+  transport?: string;
 };
 
 function toast(msg: string): void {
@@ -584,6 +593,16 @@ function dispatchOne(a: AnyAction): void {
           console.log('[download_course] failed (non-fatal):', e);
           toast(`Couldn't pull ${courseName} in`);
         });
+      break;
+    }
+    /**
+     * 2026-09-29 — the tee-time hand-off. One implementation (services/teeTimeLink.runFindTeeTime)
+     * shared with the Caddie tab's twin case, so the two dispatchers cannot drift.
+     */
+    case 'find_tee_time': {
+      (require('../teeTimeLink') as typeof import('../teeTimeLink'))
+        .runFindTeeTime(a)
+        .catch((e) => console.log('[find_tee_time] failed (non-fatal):', e));
       break;
     }
     case 'set_reminder': {

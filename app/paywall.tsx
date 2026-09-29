@@ -8,6 +8,7 @@ import {
   ScrollView,
   Animated,
   Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -30,6 +31,7 @@ import {
   getTrialOffers,
 } from '../services/billing/purchases';
 import { trialAdjective, trialDuration, trialSpokenLine, type FreeTrial } from '../services/billing/introOffer';
+import { startCodeRedemption } from '../services/billing/redeemCode';
 import { useTranslation } from 'react-i18next';
 
 export default function PaywallScreen() {
@@ -41,6 +43,13 @@ export default function PaywallScreen() {
   const apiUrl = getApiBaseUrl();
   const { subscription_status, setSubscriptionStatus, setTrialStartedAt, setStoreEntitlementActive, email } = usePlayerProfileStore();
   const [busy, setBusy] = useState(false);
+  /**
+   * 2026-09-29 — a redeemed code can land minutes after this screen is gone (the watch outlives it).
+   * safeBack() from here then would pop whatever the player is looking at, so only this screen, still
+   * mounted, may close itself.
+   */
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   /**
    * 2026-09-15 — APP REVIEW, GUIDELINE 2.1(b): "we cannot locate the In-App Purchases, such as
    * SmartPlay Caddie Full — Monthly and ... Annual".
@@ -208,6 +217,26 @@ export default function PaywallScreen() {
     }
   };
 
+  /**
+   * 2026-09-29 — founding / promo codes, redeemed by the STORE (services/billing/redeemCode). The
+   * store vouches for them, so the access survives the 1.0.2 promo-lapse rule. The grant is written
+   * the way the launch read writes it, then confirmed here — only when the store actually says so.
+   */
+  const handleRedeemCode = async () => {
+    if (busy) return;
+    track('redeem_code_tapped', { where: 'paywall' });
+    const r = await startCodeRedemption({
+      onGranted: () => {
+        track('redeem_code_granted', { where: 'paywall' });
+        Alert.alert(t('paywall.alert.code_redeemed'), t('paywall.alert.code_redeemed_body'), [{ text: 'OK' }]);
+        if (mountedRef.current) safeBack();
+      },
+    });
+    if (r === 'unavailable') {
+      Alert.alert(t('paywall.alert.couldnt_open_redeem'), t('paywall.alert.couldnt_open_redeem_body'), [{ text: 'OK' }]);
+    }
+  };
+
   const handleClose = () => {
     safeBack();
   };
@@ -300,6 +329,12 @@ export default function PaywallScreen() {
               {busy ? t('paywall.paywall_screen.one_moment') : trial ? t('paywall.paywall_screen.start_free_trial') : t('paywall.paywall_screen.subscribe')}
             </Text>
           </TouchableOpacity>
+
+          {Platform.OS === 'ios' || Platform.OS === 'android' ? (
+            <TouchableOpacity style={styles.redeemBtn} onPress={() => { void handleRedeemCode(); }} disabled={busy} accessibilityRole="button">
+              <Text style={styles.restoreText}>{t('paywall.paywall_screen.have_a_code')}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={busy}>
             <Text style={styles.restoreText}>{t('paywall.paywall_screen.restore_purchase')}</Text>
@@ -470,6 +505,9 @@ const styles = StyleSheet.create({
   restoreBtn: {
     paddingVertical: 10,
     marginBottom: 24,
+  },
+  redeemBtn: {
+    paddingVertical: 10,
   },
   restoreText: {
     color: '#6b7280',
