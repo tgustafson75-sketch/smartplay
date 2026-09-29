@@ -61,6 +61,7 @@ import { computeWorkoutSwingImpact } from '../../services/practice/workoutSwingI
 import { computeSwingMetricTrend } from '../../services/practice/swingMetricTrend';
 import { collectSelfTrendSwings } from '../../services/practice/selfSwingReads';
 import { longestDriveFrom } from '../../services/round/scoredRoundStats';
+import { recentShotsView } from '../../services/round/recentShots';
 import { useWatchStore } from '../../store/watchStore';
 import { roundTempoBaseline, holeTempoFlag } from '../../services/round/roundSwingRead';
 import { useToastStore } from '../../store/toastStore';
@@ -158,6 +159,7 @@ export default function Dashboard() {
   const realRounds = useMemo(() => roundHistory.filter((r) => !r.simulated), [roundHistory]);
   const deleteRound = useRoundStore((s) => s.deleteRound);
   const allShots = useRoundStore((s) => s.shots);
+  const isSimRound = useRoundStore((s) => s.isSimRound);
   // Conservative practice points (per-drill), surfaced here. The data is the
   // practice side of the future practice→on-course-improvement ledger.
   const practiceTotal = usePracticePointsStore((s) => s.total);
@@ -802,12 +804,26 @@ export default function Dashboard() {
    * Now this is the ONLY owner: it builds the POOL (oldest-first, as stored) and passes it down.
    * ShotTimeline still caps and reverses — one place decides WHICH shots, one decides how they look.
    * [[two-owners-is-the-root-cause]]
+   *
+   * 2026-09-29 (Tim — "It's full of ? and I don't think it's wired correctly") — the pool was
+   * "any row in the live round", and the scorecard's quick-score writes one blank PLACEHOLDER row per
+   * stroke, so a quick-scored round filled the card with "?" icons and dashes. The fallback was the
+   * last round by ARRAY position, which after a scorecard import is an imported round with no shots.
+   * Which shots count, and which round, now come from services/round/recentShots — the same owner
+   * the caddie's request body reads, so the card and the conversation cannot disagree.
    */
-  const recentShotPool = useMemo(() => {
-    if (allShots.length > 0) return allShots;
-    const last = realRounds[realRounds.length - 1];
-    return last?.shots ?? [];
-  }, [allShots, realRounds]);
+  const recentShots = useMemo(
+    () => recentShotsView({ liveShots: allShots, isSimRound, rounds: roundHistory }),
+    [allShots, isSimRound, roundHistory],
+  );
+  const recentShotPool = recentShots.shots;
+  const recentShotsLabel = recentShots.source === 'last_round' && recentShots.roundEndedAt != null
+    ? t('dashboard.recent_shots_last_round', {
+      date: new Date(recentShots.roundEndedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase(),
+    })
+    : recentShots.source === 'this_round'
+      ? t(recentShots.simulated ? 'dashboard.recent_shots_sim_round' : 'dashboard.recent_shots_this_round')
+      : undefined;
 
   // 2026-06-04 — topClubs derivation removed (Kevin's Read inline block
   // that consumed it is replaced by the AI-driven card below).
@@ -1653,10 +1669,12 @@ export default function Dashboard() {
         </View>
         {recentShotPool.length === 0 ? (
           <Text style={[styles.emptyLine, { color: colors.text_muted }]}>
-            {t('dashboard.text.no_shots_logged_yet_log')}
+            {recentShots.hasQuickScoredHoles
+              ? t('dashboard.text.shots_scored_not_logged')
+              : t('dashboard.text.no_shots_logged_yet_log')}
           </Text>
         ) : (
-          <ShotTimeline maxRows={5} shots={recentShotPool} />
+          <ShotTimeline maxRows={5} shots={recentShotPool} label={recentShotsLabel} />
         )}
 
         {/* 2026-06-13 (Tim) — ROUND HISTORY. Completed rounds were persisted to

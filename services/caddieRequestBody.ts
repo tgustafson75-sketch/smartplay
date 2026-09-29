@@ -860,7 +860,10 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     // ── shot context (useVoiceCaddie sent these; useKevin never did) ────────
     holeShots: safe(() => {
-      const all = r.shots ?? [];
+      // 2026-09-29 — recorded shots only: a quick-score placeholder is a stroke count, not a shot,
+      // and reached the brain as a blank "shot N" line on the hole it was scored on.
+      const { recordedShots } = require('./round/recentShots') as typeof import('./round/recentShots');
+      const all: ShotRow[] = recordedShots(r.shots ?? []);
       if (currentHole == null) return [];
       return all
         .filter((s: { hole: number }) => s.hole === currentHole)
@@ -873,17 +876,31 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
           feel: s.swing_feel ?? null,
         }));
     }, []),
-    recentShots: safe(() => (r.shots ?? []).slice(-5).map((s: ShotRow) => ({
-      hole: s.hole,
-      shotIndex: s.shot_in_hole_index ?? null,
-      club: s.club ?? null,
-      shape: s.shape ?? null,
-      direction: s.direction ?? null,
-      outcome: s.outcome ?? null,
-      outcomeText: s.outcome_text ?? null,
-      feel: s.swing_feel ?? null,
-      distance_yards: s.distance_yards ?? null,
-    })), []),
+    /**
+     * 2026-09-29 (Tim — the Dashboard's RECENT SHOTS card "full of ?") — ONE owner for "your recent
+     * shots": services/round/recentShots, which the card reads too.
+     *
+     * This was `r.shots.slice(-5)` raw, so a quick-scored hole sent the brain five blank rows ("club ?")
+     * and pushed the real shots out of the window, and off the course it sent nothing while the card
+     * showed the last round. `recentShots` keeps its meaning — THIS round's shots, what the pattern
+     * read uses — now recorded shots only, with the distance the card shows (said → GPS back-fill →
+     * start/end) and the canonical club. `lastRoundShots` carries what the card shows when this round
+     * has none, in its OWN field, so no server can mistake last week's shots for today's pattern.
+     */
+    ...safe(() => {
+      const { recentShotsView, recentShotsForCaddie } = require('./round/recentShots') as typeof import('./round/recentShots');
+      const view = recentShotsView({ liveShots: r.shots ?? [], isSimRound: !!r.isSimRound, rounds: r.roundHistory ?? [] });
+      return {
+        recentShots: view.source === 'this_round' ? recentShotsForCaddie(view.shots, 5) : [],
+        lastRoundShots: view.source === 'last_round'
+          ? {
+            daysAgo: view.roundEndedAt != null ? Math.max(0, Math.round((Date.now() - view.roundEndedAt) / 86_400_000)) : null,
+            course: view.courseName,
+            shots: recentShotsForCaddie(view.shots, 5),
+          }
+          : null,
+      };
+    }, { recentShots: [], lastRoundShots: null }),
     /** Subjective self-reports, so the caddie reads the room instead of only the scorecard. */
     emotionalLog: safe(() => (r.emotionalLog ?? []).slice(-5).map(
       (e: { state: string; valence?: string; hole?: number }) => ({ state: e.state, valence: e.valence, hole: e.hole }),

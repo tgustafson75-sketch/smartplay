@@ -35,14 +35,19 @@ describe('the section that decides it has shots is the section that draws them',
      * The property, not the spelling: whatever the empty-state gate tests must be the same thing
      * handed to the renderer. A second source for either half is how this broke.
      */
-    const gate = dash.match(/\{(\w+)\.length === 0 \?\s*\(\s*<Text[\s\S]{0,200}no_shots_logged_yet_log/);
+    const gate = dash.match(/\{(\w+)\.length === 0 \?\s*\(\s*<Text[\s\S]{0,400}no_shots_logged_yet_log/);
     expect(gate).not.toBeNull();
     const pool = gate![1];
-    expect(dash).toMatch(new RegExp(`<ShotTimeline maxRows=\\{5\\} shots=\\{${pool}\\} */?>`));
+    expect(dash).toMatch(new RegExp(`<ShotTimeline maxRows=\\{5\\} shots=\\{${pool}\\}[^>]*/?>`));
   });
 
-  it('the pool falls back to the last completed round, so it is not the live round twice', () => {
-    expect(dash).toMatch(/const recentShotPool = useMemo\(\(\) => \{[\s\S]{0,300}realRounds\[realRounds\.length - 1\]/);
+  it('the pool comes from the one owner that also feeds the caddie (services/round/recentShots)', () => {
+    // 2026-09-29 — the fallback to the last completed round moved into recentShotsView, which picks
+    // it by endedAt (an imported round is appended last and has no shots) and is exercised
+    // behaviourally in recent-shots-are-shots-not-question-marks.test.ts.
+    expect(dash).toMatch(/recentShotsView\(\{ liveShots: allShots, isSimRound, rounds: roundHistory \}\)/);
+    expect(dash).toMatch(/const recentShotPool = recentShots\.shots;/);
+    expect(code('services/caddieRequestBody.ts')).toMatch(/recentShotsView\(\{ liveShots: r\.shots/);
   });
 
   it('the dashboard no longer pre-reverses — the renderer owns the order', () => {
@@ -62,7 +67,7 @@ describe('ShotTimeline draws what it is given, and the live round when it is giv
   it('the rows are derived from that one binding, not from the store again', () => {
     // A second `useRoundStore(s => s.shots)` inside the row derivation would restore the bug while
     // leaving the prop in place, which is exactly the shape a careless revert takes.
-    const rowsBlock = timeline.match(/const rows = useMemo\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/)![0];
+    const rowsBlock = timeline.match(/const \{ rows, total \} = useMemo\(\(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/)![0];
     expect(rowsBlock).toMatch(/holeOnly \? shots\.filter/);
     expect(rowsBlock).not.toMatch(/useRoundStore/);
   });

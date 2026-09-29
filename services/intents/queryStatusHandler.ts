@@ -8,6 +8,7 @@ import { decomposeWind, shotBearingDeg } from '../windRelative';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useConversationLog } from '../../store/conversationLogStore';
 import { haversineYards, holeProgressYards, shotDistance } from '../../utils/geoDistance';
+import { recordedShots } from '../round/recentShots';
 import { getCurrentLocation, getGreenCentroid } from '../shotLocationService';
 import { fetchWeatherAt, getCachedWeather } from '../weatherService';
 import { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
@@ -875,7 +876,10 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'shot_distance': {
-        const lastShot = round.shots[round.shots.length - 1];
+        // 2026-09-29 — the last RECORDED shot: a quick-score placeholder or penalty stroke is not a
+        // shot, and answering "I don't have GPS for that shot" about one misreports a real shot.
+        const real = recordedShots(round.shots);
+        const lastShot = real[real.length - 1];
         if (!lastShot) {
           return {
             success: true,
@@ -1185,7 +1189,10 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'pattern': {
-        const recentShots = round.shots.slice(-5);
+        // 2026-09-29 — recorded shots only (services/round/recentShots, the owner the Dashboard card
+        // and the caddie read). Five quick-score placeholders used to answer "Last 5 shots, you're
+        // pretty balanced" — a read of nothing, stated as a finding.
+        const recentShots = recordedShots(round.shots).slice(-5);
         if (recentShots.length === 0) {
           return {
             success: true,
@@ -1195,12 +1202,22 @@ export const queryStatusHandler: IntentHandler = {
           };
         }
         const directions = recentShots.map(s => s.direction).filter(Boolean);
+        if (directions.length === 0) {
+          return {
+            success: true,
+            voice_response: `${recentShots.length === 1 ? 'Your last shot has' : `None of your last ${recentShots.length} shots has`} a direction logged — tell me "pushed it right" or "pulled it left" after a shot and I'll read the pattern.`,
+            side_effects: ['query:pattern:no_direction'],
+            follow_up_needed: false,
+          };
+        }
         const left = directions.filter(d => d === 'left').length;
         const right = directions.filter(d => d === 'right').length;
         const lean = left > right ? 'leaning left' : right > left ? 'leaning right' : 'pretty balanced';
         return {
           success: true,
-          voice_response: `Last ${recentShots.length} shots, you're ${lean}.`,
+          voice_response: directions.length === recentShots.length
+            ? `Last ${recentShots.length} shots, you're ${lean}.`
+            : `Of your last ${recentShots.length} shots, ${directions.length} had a direction logged — you're ${lean}.`,
           side_effects: ['query:pattern'],
           follow_up_needed: false,
         };

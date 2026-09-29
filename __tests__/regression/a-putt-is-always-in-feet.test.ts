@@ -103,9 +103,11 @@ describe('every surface a human reads a putt on says feet', () => {
    */
   it('the timeline asks the owner rather than hardcoding "yds" on every row', () => {
     const st = code('components/caddie/ShotTimeline.tsx');
-    expect(st).toMatch(/shotDistanceDisplay\(shot\.club, shot\.distance_yards(, \w+)?\)/);
+    // 2026-09-29 — the distance is the one services/round/recentShots derives (said → GPS → start/end),
+    // with the club as read from the row; a row with no distance draws no unit at all.
+    expect(st).toMatch(/shotDistanceDisplay\(club, shot\.distanceYards(, \w+)?\)/);
     // the unit comes from the answer, so it cannot be right for irons and wrong for putts
-    expect(st).toMatch(/\{dist\?\.unit \?\? unitLabel\(distanceUnit\)\}/);
+    expect(st).toMatch(/\{dist\.unit\}/);
     expect(st).not.toMatch(/<Text style=\{styles\.distUnit\}>yds<\/Text>/);
   });
 
