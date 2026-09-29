@@ -400,6 +400,9 @@
   },
   "swinglab_smartmotion": {
     "smart_motion": {
+      "frames_found_swing": "已在 {{start}}–{{end}} 秒找到你的挥杆 · {{frames}} 帧",
+      "frames_whole_clip": "片段覆盖 {{start}}–{{end}} 秒 · {{frames}} 帧 — 未能定位挥杆",
+      "frames_missed_top_impact": "这些画面中没有上杆顶点和击球瞬间，因此这次判断的置信度较低。",
       "get_set": "准备"
     }
   },

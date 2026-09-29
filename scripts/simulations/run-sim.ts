@@ -3073,17 +3073,29 @@ check('Analysis speed: pre-warm the lambda on record entry (kills cold-start)',
 // per-frame base64 ~36% so the UPLOAD leg lands faster on weak cellular, without losing
 // the gross-fault read accuracy (golfer fills the frame; face-angle is parked). Full-tier
 // (library/upload detail) stays 800px untouched. Guard against a regression back to 1024+.
-check('Analysis speed: quick-tier payload is lean (3 frames @ 512px) without touching full-tier',
+//
+// 2026-09-29 — SUPERSEDED DELIBERATELY, not deleted. Three frames at fixed 10/55/85% left the top and
+// impact to chance, and `{ width: 512 }` on a portrait clip was really a 512x910 frame. Every tier now
+// sends NINE evenly spaced frames (services/swing/analysisFrames) sized by the LONG edge: 768px at a
+// modest JPEG quality for the quick tier, 800px for full — measured on a 1080x1920 clip at ~2x the old
+// three-frame upload. This guard now pins that shape AND still refuses a regression to 1024px+ frames,
+// a fixed three-slot layout, or width-only resizing.
+check('Analysis payload: nine evenly spaced frames at a 768px long edge (quick) / 800px (full), no 1024px+ frames',
   (() => {
-    const p = read('services/poseDetection.ts');
+    const p = readCode('services/poseDetection.ts');
+    const f = readCode('services/swing/analysisFrames.ts');
     return (
-      /const QUICK_TIER_FRAME_TIME_FRACTIONS = \[0\.10, 0\.55, 0\.85\]/.test(p) &&  // 3 frames
-      /const QUICK_TIER_RESIZE_WIDTH = 512/.test(p) &&                            // shrunk 640→512
-      /const FULL_TIER_RESIZE_WIDTH = 800/.test(p) &&                             // full-tier untouched
-      !/RESIZE_WIDTH = (?:1024|1280)/.test(p)                                     // no regression to huge frames
+      /export const SWING_ANALYSIS_FRAME_COUNT = 9;/.test(f) &&
+      /const QUICK_TIER_LONG_EDGE = 768;/.test(p) &&
+      /const FULL_TIER_LONG_EDGE = 800;/.test(p) &&
+      /resize: longEdgeResize\(thumbDims\.width, thumbDims\.height, longEdge\)/.test(p) &&
+      /samples = analysisSampleTimes\(windowStartMs, windowDurationMs, clipDurForInset, SWING_ANALYSIS_FRAME_COUNT\)/.test(p) &&
+      !/QUICK_TIER_FRAME_TIME_FRACTIONS/.test(p) &&
+      !/resize: \{ width: resizeWidth \}/.test(p) &&
+      !/(?:LONG_EDGE|RESIZE_WIDTH) = (?:1024|1280)/.test(p)
     );
   })(),
-  'the speed-path (SmartMotion / Cage / library Quick) sends 3 frames at 512px — a ~36% lighter upload than 640 — while full-tier library reads keep 800px for detail; no regression to 1024px+ payloads');
+  'every swing read sends nine evenly spaced frames across the swing window, sized by the long edge (768px quick / 800px full) — the top and impact are sampled, not guessed at; no regression to 1024px+ payloads');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
@@ -6583,7 +6595,10 @@ check('Swing localizer: locate_swing API mode + client locator wired into analyz
     /export async function locateSwingWindow/.test(poseSrc) &&
     // 2026-09-01 — analyzeSwing now tries the ON-DEVICE locate first and falls back to this one, so
     // the assertion is that the network locate is still WIRED as the fallback, not that it is first.
-    /if \(!located\) located = await locateSwingWindow/.test(poseSrc) &&
+    // 2026-09-29 — the network locate is gated on the locate PLAN: clips of 2.5-6s are located on
+    // the device only (they used to skip locating entirely); ≥6s still fall back to the network.
+    /const locatePlan = locatePlanFor\(probedDurMs\)/.test(poseSrc) &&
+    /if \(!located && locatePlan === 'full'\) located = await locateSwingWindow/.test(poseSrc) &&
     /locateSwingWindowOnDevice\(clipUri, probedDurMs\)/.test(poseSrc) &&
     /effectiveBoundaries = located/.test(poseSrc),
   'unbounded long uploads run an AI locate pass (find the swing) then analyze a tight window around it — no acoustics, no manual marking');

@@ -400,6 +400,9 @@
   },
   "swinglab_smartmotion": {
     "smart_motion": {
+      "frames_found_swing": "Encontré tu swing entre {{start}} y {{end}} s · {{frames}} fotogramas",
+      "frames_whole_clip": "El clip cubre {{start}}–{{end}} s · {{frames}} fotogramas — no pude ubicar el swing",
+      "frames_missed_top_impact": "La parte alta y el impacto no aparecen en estos fotogramas, así que la lectura es de baja confianza.",
       "get_set": "PREPÁRATE"
     }
   },

@@ -101,6 +101,7 @@ import { useSwingSessionStore, type PrimaryIssue } from '../../store/swingSessio
 import { deriveDrillVerdict } from '../../services/drillVerdict';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { MIN_TRACE_FPS, PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
+import { coverageNote } from '../../services/swing/analysisFrames';
 import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -2597,6 +2598,10 @@ export default function SmartMotion() {
     // so the read no longer flashes a fail state before it lands (cage findings).
     return deriveVerdict(analysis, phase === 'analyzing', swingContact, measuredEvidence);
   }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact, poseRead, measuredEvidence]);
+  const coverageLine = useMemo(
+    () => coverageNote(analysis?.sample_coverage ?? null, analysis?.phases_visible ?? null),
+    [analysis],
+  );
   const faultHeadline = useMemo(() => {
     if (!analysis) return null;
     const f = analysis.primary_fault;
@@ -6862,6 +6867,20 @@ export default function SmartMotion() {
                 <Text style={[styles.insightConf, { color: colors.accent_amber }]}>{locateDegraded === 'dead_host' ? t('swinglab_smartmotion.smart_motion.rough_read_no_connection_while') : t('swinglab_smartmotion.smart_motion.rough_read_i_could_not')}</Text>
               ) : null}
             </View>
+          ) : null}
+
+          {/*
+            2026-09-29 — SAY WHAT THE READ WAS BUILT ON. One muted line: where in the clip the nine
+            frames came from, and — when the model saw neither the top nor impact — that this is why
+            the read is low confidence. The rough-read line above still names a failed locate.
+          */}
+          {coverageLine ? (
+            <Text style={[styles.insightConf, { color: colors.text_muted }]}>
+              {coverageLine.key === 'frames_whole_clip'
+                ? t('swinglab_smartmotion.smart_motion.frames_whole_clip', { start: coverageLine.params.start, end: coverageLine.params.end, frames: coverageLine.params.frames })
+                : t('swinglab_smartmotion.smart_motion.frames_found_swing', { start: coverageLine.params.start, end: coverageLine.params.end, frames: coverageLine.params.frames })}
+              {coverageLine.missedTopAndImpact ? ` ${t('swinglab_smartmotion.smart_motion.frames_missed_top_impact')}` : ''}
+            </Text>
           ) : null}
 
           {analysis.observation ? (

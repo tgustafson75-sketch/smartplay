@@ -2438,6 +2438,9 @@
       "rough_read_no_connection_while": "Rough read — no connection while analysing, so I could not pin the swing in the clip. Re-analyse on signal for a sharper one.",
       "rough_read_i_could_not": "Rough read — I could not pin the swing in the clip this time. Re-analyse for a sharper one.",
       "open_settings": "Open Settings",
+      "frames_found_swing": "Found your swing at {{start}}–{{end}} s · {{frames}} frames",
+      "frames_whole_clip": "Clip covers {{start}}–{{end}} s · {{frames}} frames — the swing wasn't pinned",
+      "frames_missed_top_impact": "The top and impact weren't in these frames, so this is a low-confidence read.",
       "get_set": "GET SET"
     },
     "accessibility_label": {
