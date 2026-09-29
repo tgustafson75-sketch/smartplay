@@ -23,7 +23,8 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QuickTutorial } from '../../components/QuickTutorial';
-import { View, Text, Pressable, ScrollView, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Image, useWindowDimensions, type ImageSourcePropType } from 'react-native';
+import { isBelow, SWINGLAB_FEATURE_STACK_BELOW, SWINGLAB_TAG_STACK_BELOW } from '../../utils/phoneLayout';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -492,6 +493,9 @@ function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
 // the primary reads as the section's headline.
 function SectionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
   const { t } = useTranslation();
+  // 2026-09-29 — at 320 the tag beside the title squeezed it to a sliver; below
+  // SWINGLAB_TAG_STACK_BELOW the tag sits under the title instead.
+  const tagUnder = isBelow(useWindowDimensions().width, SWINGLAB_TAG_STACK_BELOW);
   const title = t('swinglab.card_' + spec.key + '_title', { defaultValue: spec.title });
   const sub = t('swinglab.card_' + spec.key + '_sub', { defaultValue: spec.sub });
   return (
@@ -516,10 +520,10 @@ function SectionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
           <Ionicons name={spec.icon} size={34} color={accent} />
         </View>
         <View style={styles.heroText}>
-          <View style={styles.titleRow}>
+          <View style={[styles.titleRow, tagUnder && styles.titleRowStacked]}>
             {/* 2026-07-28 (Tim — long titles too small next to the tag) — wrap to 2 lines at full size
                 instead of Android-unreliable shrink-to-fit (see LauncherCard note). */}
-            <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={2}>{title}</Text>
+            <Text style={[styles.heroTitle, tagUnder && styles.heroTitleStacked, { color: colors.text_primary }]} numberOfLines={2}>{title}</Text>
             <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
               <Text style={[styles.tagText, { color: accent }]}>{isOwnerOnly(spec.route) ? SHELVED_BADGE : isBeta(spec.route) ? BETA_BADGE : spec.tag}</Text>
             </View>
@@ -532,12 +536,12 @@ function SectionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
   );
 }
 
-function HeroFeature({ icon, label }: { icon: ImageSourcePropType; label: string }) {
+function HeroFeature({ icon, label, stacked }: { icon: ImageSourcePropType; label: string; stacked: boolean }) {
   return (
-    <View style={styles.heroFeat}>
+    <View style={[styles.heroFeat, stacked && styles.heroFeatStacked]}>
       <Image source={icon} style={styles.heroFeatIcon} resizeMode="contain" />
       {/* Fixed light on the always-dark hero card (was theme color → washed out in light mode). */}
-      <Text style={[styles.heroFeatLabel, { color: 'rgba(233,245,233,0.78)' }]} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.heroFeatLabel, stacked && styles.heroFeatLabelStacked, { color: 'rgba(233,245,233,0.78)' }]} numberOfLines={stacked ? 2 : 1}>{label}</Text>
     </View>
   );
 }
@@ -546,6 +550,9 @@ function HeroFeature({ icon, label }: { icon: ImageSourcePropType; label: string
 // Single-card ANALYZE section → uses the brand green base directly (no graduation).
 function SmartMotionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
   const { t } = useTranslation();
+  // 2026-09-29 — three icon+label pairs on one line truncated on every iPhone; below
+  // SWINGLAB_FEATURE_STACK_BELOW each pair is an icon over a 2-line centred label.
+  const featStacked = isBelow(useWindowDimensions().width, SWINGLAB_FEATURE_STACK_BELOW);
   return (
     <Pressable
       onPress={onPress}
@@ -572,9 +579,9 @@ function SmartMotionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
         <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.55)" />
       </View>
       <View style={styles.heroFeatures}>
-        <HeroFeature icon={ICON_FEAT_ANALYSIS} label={t('swinglab.label.swing_analysis')} />
-        <HeroFeature icon={ICON_FEAT_ACOUSTIC} label={t('swinglab.label.acoustic_detection')} />
-        <HeroFeature icon={ICON_FEAT_BODY} label={t('swinglab.label.body_mechanics')} />
+        <HeroFeature icon={ICON_FEAT_ANALYSIS} label={t('swinglab.label.swing_analysis')} stacked={featStacked} />
+        <HeroFeature icon={ICON_FEAT_ACOUSTIC} label={t('swinglab.label.acoustic_detection')} stacked={featStacked} />
+        <HeroFeature icon={ICON_FEAT_BODY} label={t('swinglab.label.body_mechanics')} stacked={featStacked} />
       </View>
     </Pressable>
   );
@@ -639,6 +646,10 @@ const styles = StyleSheet.create({
   },
   cardText: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  // Narrow SectionHero: tag under the title. flex:0 on the title — heroTitle's flex:1 in a COLUMN
+  // with auto height would take a 0 basis and collapse.
+  titleRowStacked: { flexDirection: 'column', alignItems: 'flex-start', gap: 4 },
+  heroTitleStacked: { flex: 0, alignSelf: 'stretch' },
   // Left column: icon with its topic tag stacked underneath. minWidth keeps the title's left edge
   // aligned across cards; a longer tag ("CALIBRATE") sets the width but the icon stays centered.
   iconCol: { alignItems: 'center', gap: 6, minWidth: 52 },
@@ -688,4 +699,6 @@ const styles = StyleSheet.create({
   heroFeat: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
   heroFeatIcon: { width: 18, height: 18 },
   heroFeatLabel: { fontSize: 11, fontWeight: '600' },
+  heroFeatStacked: { flex: 1, flexDirection: 'column', gap: 4 },
+  heroFeatLabelStacked: { textAlign: 'center' },
 });

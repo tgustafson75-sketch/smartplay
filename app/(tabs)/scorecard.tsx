@@ -39,6 +39,7 @@ import type { ShotResult } from '../../store/roundStore';
 import type { RoundRecap } from '../../types/plan';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { getBundledHoles } from '../../data/courses';
+import { fitOneLine } from '../../utils/phoneLayout';
 
 const SCORE_FILL = (diff: number): string => {
   if (diff <= -2) return '#3b82f6'; // eagle blue
@@ -613,7 +614,7 @@ export default function Scorecard() {
         * the player's game. Not mandatory, deliberately — an unanswered hole stays honestly unknown
         * rather than being filled with a guessed two.
         */}
-      <View style={styles.chipsRow}>
+      <View style={[styles.chipsRow, styles.chipsRowWrap]}>
         <Text style={[styles.holeSub, { color: c.text_muted, alignSelf: 'center', marginRight: 6 }]}>
           {t('scorecard.putts_label')}
         </Text>
@@ -647,7 +648,7 @@ export default function Scorecard() {
         * records is WHAT happened, so the round knows you took two drops rather than just that you
         * shot a 6 — which is what the caddie needs to say anything useful about it later.
         */}
-      <View style={styles.chipsRow}>
+      <View style={[styles.chipsRow, styles.chipsRowWrap]}>
         <Text style={[styles.holeSub, { color: c.text_muted, alignSelf: 'center', marginRight: 6 }]}>
           {t('scorecard.penalties_label')}
         </Text>
@@ -703,7 +704,7 @@ export default function Scorecard() {
         ]}
       >
         <View style={styles.holeLeft}>
-          <Text style={[styles.holeNum, { color: isCurrent ? c.accent : c.text_primary }]}>
+          <Text {...fitOneLine()} style={[styles.holeNum, { color: isCurrent ? c.accent : c.text_primary }]}>
             {h.hole}
           </Text>
           <View style={{ flex: 1 }}>
@@ -913,29 +914,29 @@ export default function Scorecard() {
         {hasAnythingToShow && (
           <View style={[styles.summary, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: summaryPadV }]}>
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.score')}</Text>
-              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.score')}</Text>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {totalScore > 0 ? totalScore : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.vs_par')}</Text>
-              <Text style={[styles.summaryValue, { color: scoreVsParColor, fontSize: summaryValueSize }]}>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.vs_par')}</Text>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryValue, { color: scoreVsParColor, fontSize: summaryValueSize }]}>
                 {holesPlayed > 0 ? scoreVsParDisplay : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.holes')}</Text>
-              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>{holesPlayed}</Text>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.holes')}</Text>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>{holesPlayed}</Text>
             </View>
             {roundHeroMoments > 0 && (
               <>
                 <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
                 <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.hero')}</Text>
-                  <Text style={[styles.summaryValue, { color: '#F5A623', fontSize: summaryValueSize }]}>★ {roundHeroMoments}</Text>
+                  <Text {...fitOneLine(0.7)} style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.hero')}</Text>
+                  <Text {...fitOneLine(0.7)} style={[styles.summaryValue, { color: '#F5A623', fontSize: summaryValueSize }]}>★ {roundHeroMoments}</Text>
                 </View>
               </>
             )}
@@ -951,29 +952,29 @@ export default function Scorecard() {
         {holesPlayed > 0 && (
           <View style={[styles.summary, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: summaryPadV, marginTop: 8 }]}>
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.putts')}</Text>
-              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.putts')}</Text>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {stats.totalPutts > 0 ? stats.totalPutts : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.avg_putts')}</Text>
-              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.avg_putts')}</Text>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {stats.avgPutts != null ? stats.avgPutts.toFixed(1) : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.fairway_pct')}</Text>
-              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.fairway_pct')}</Text>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {stats.fairwayPct != null ? `${stats.fairwayPct}%` : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.gir_pct')}</Text>
-              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.gir_pct')}</Text>
+              <Text {...fitOneLine(0.7)} style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {stats.girPct != null ? `${stats.girPct}%` : '—'}
               </Text>
             </View>
@@ -1288,7 +1289,8 @@ const styles = StyleSheet.create({
   holeLeft: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14,
   },
-  holeNum: { fontSize: 22, fontWeight: '900', width: 30, textAlign: 'left' },
+  // 2026-09-29 — minWidth, not width: at fontScale 1.3 a fixed 30 wrapped "18" onto two lines.
+  holeNum: { fontSize: 22, fontWeight: '900', minWidth: 30, textAlign: 'left' },
   holeMeta: { fontSize: 13, fontWeight: '600' },
   holeSub: { fontSize: 11, fontWeight: '500', marginTop: 1 },
   holeRight: { alignItems: 'flex-end', justifyContent: 'center', minWidth: 70 },
@@ -1336,6 +1338,9 @@ const styles = StyleSheet.create({
 
   // Quick score chips (filled, high contrast)
   chipsRow: { flexDirection: 'row', gap: 8, paddingRight: 8 },
+  // 2026-09-29 — the putts (label + 5) and penalties (label + 4) rows are plain Views, not the
+  // score-chip ScrollView: at 320dp (and Spanish at 375) they ran off the card. Wrap instead.
+  chipsRowWrap: { flexWrap: 'wrap', rowGap: 6 },
   // Inline scoring chips, rendered flush under the tapped hole row (inside the hole list).
   // A left accent bar + bottom divider tie it to the row above.
   inlineChipPanel: {

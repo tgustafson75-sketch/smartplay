@@ -25,6 +25,7 @@
 import React from 'react';
 import { Modal, View, Text, Pressable, ScrollView, Alert, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -52,6 +53,7 @@ export function GlobalToolsMenu() {
   const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const isOpen = useToolsMenuStore((s) => s.isOpen);
   const close = useToolsMenuStore((s) => s.close);
   const lastGpsRefreshAt = useLastGpsRefresh();
@@ -228,7 +230,9 @@ export function GlobalToolsMenu() {
       <Pressable style={styles.scrim} onPress={close}>
         <Pressable
           onPress={() => undefined}
-          style={[styles.sheet, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
+          // 2026-09-29 — a flat 28 put the Close row on the iOS home indicator / Android nav bar;
+          // clear the bottom inset (never less than the original 28).
+          style={[styles.sheet, { backgroundColor: colors.surface_elevated, borderColor: colors.border, paddingBottom: Math.max(28, insets.bottom + 12) }]}
         >
           <Text style={[styles.title, { color: colors.text_muted }]}>{t('tools_global_tools_menu.global_tools_menu.tools')}</Text>
 

@@ -24,6 +24,7 @@ import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { useTranslation } from 'react-i18next';
 import { yardageSourceLabel, isLiveYardage, type YardageSource } from '../../services/yardageSource';
 import ZoomableView from '../swinglab/ZoomableView';
+import { MONO_FONT } from '../../theme/fonts';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -747,7 +748,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  playerYardageText: { color: '#F5A623', fontSize: 11, fontWeight: '800', fontFamily: 'monospace' },
+  playerYardageText: { color: '#F5A623', fontSize: 11, fontWeight: '800', fontFamily: MONO_FONT },
   playerYardageBadgeFollow: { top: undefined },
   zoomClip: { overflow: 'hidden', borderRadius: 10 },
   playerYardageTextLarge: { fontSize: 15 },

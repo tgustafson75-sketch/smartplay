@@ -8,6 +8,7 @@ import { useRoundStore } from '../store/roundStore';
 import type { AppContext, VoiceIntent, IntentResult } from '../types/voiceIntent';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 import { getApiBaseUrl } from '../services/apiBase';
+import { MONO_FONT } from '../theme/fonts';
 
 export default function VoiceDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
@@ -217,7 +218,7 @@ const styles = StyleSheet.create({
   code: {
     color: '#d1d5db',
     fontSize: 12,
-    fontFamily: 'monospace',
+    fontFamily: MONO_FONT,
   },
   handlerName: { color: '#00C896', fontSize: 13, fontWeight: '700', marginBottom: 6 },
   examplesLabel: { color: '#6b7280', fontSize: 11, marginTop: 8, marginBottom: 4 },

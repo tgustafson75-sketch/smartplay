@@ -130,8 +130,11 @@ export default function Dashboard() {
   // unchanged.
   const { isWide } = useDeviceLayout();
   const { width: screenW } = useWindowDimensions();
-  // Chart width = screen minus card h-margins (12+12) and card h-padding (14+14).
-  const chartW = Math.max(180, screenW - 52);
+  // Chart width = content width minus card h-margins (12+12), h-padding (14+14) and border (1+1).
+  // 2026-09-29 — was screenW - 52 (the 2dp border was missed, so the chart overhung its card), and
+  // ignored the WIDE_CONTENT_MAX_WIDTH column the content is centred in on wide screens.
+  const contentW = isWide ? Math.min(screenW, WIDE_CONTENT_MAX_WIDTH) : screenW;
+  const chartW = Math.max(180, contentW - 54);
 
   // ─── Round data (useShallow keeps re-renders scoped) ──────────────
   const {
@@ -1254,9 +1257,9 @@ export default function Dashboard() {
         {practiceTotal > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.practiceHeader}>
-              <View style={styles.dashHeadInline}>
+              <View style={[styles.dashHeadInline, { flexShrink: 1 }]}>
               <Image source={DASH_ICON.practicePoints} style={styles.dashIconSm} tintColor={colors.accent_lime} />
-              <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{t('dashboard.text.practice_points')}</Text>
+              <Text style={[styles.practiceLabel, { color: colors.text_primary, flexShrink: 1 }]}>{t('dashboard.text.practice_points')}</Text>
             </View>
               <Text style={[styles.practiceTotal, { color: colors.accent_lime }]}>{practiceTotal}</Text>
             </View>
@@ -1297,8 +1300,8 @@ export default function Dashboard() {
                 <View key={rowIdx} style={{ flexDirection: 'row', marginBottom: 4 }}>
                   {bagClubs.slice(rowIdx * 3, rowIdx * 3 + 3).map((c) => (
                     <View key={c.club} style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline' }}>
-                      <Text style={[styles.bagPillClub, { color: c.measured ? colors.accent_lime : colors.text_primary }]}>{c.club}</Text>
-                      <Text style={[styles.bagPillYds, { color: colors.text_muted }]}>{c.yards != null ? ` ${fmtCompact(c.yards)}` : ' — in bag'}</Text>
+                      <Text numberOfLines={1} style={[styles.bagPillClub, { color: c.measured ? colors.accent_lime : colors.text_primary }]}>{c.club}</Text>
+                      <Text numberOfLines={1} style={[styles.bagPillYds, { color: colors.text_muted, flexShrink: 1 }]}>{c.yards != null ? ` ${fmtCompact(c.yards)}` : ' — in bag'}</Text>
                     </View>
                   ))}
                 </View>
@@ -1432,14 +1435,16 @@ export default function Dashboard() {
             sides, else the "keep logging" building copy. */}
         {activeProgress && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            {/* 2026-09-29 — header + up to five source pills used to be one no-wrap row that ran off the
+                card on a phone; both levels now wrap (a no-op wherever they already fit). */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 6, justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <View style={styles.dashHeadInline}>
                 <Image source={DASH_ICON.progress} style={styles.dashIconSm} tintColor={colors.accent_lime} />
                 <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{t('dashboard.text.progress')}</Text>
               </View>
               {/* Source toggle — only the sources that actually have data are offered. */}
               {progressSources.length > 1 && (
-                <View style={{ flexDirection: 'row', gap: 4 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, flexShrink: 1 }}>
                   {progressSources.map((s) => {
                     const on = s.key === activeProgress.key;
                     return (
@@ -1887,7 +1892,8 @@ function StatTile({
     <View style={[styles.statTile, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
       {icon ? <Ionicons name={icon} size={18} color={toneColor} style={{ marginBottom: 2 }} /> : null}
       <Text style={[styles.statTileValue, { color: toneColor }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{value}</Text>
-      <Text style={[styles.statTileLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+      {/* 2026-09-29 — two lines, centred: at 0.7 of one line "SHOTS LOGGED" still clipped on a phone. */}
+      <Text style={[styles.statTileLabel, { color: colors.text_muted, textAlign: 'center' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </View>
   );
 }

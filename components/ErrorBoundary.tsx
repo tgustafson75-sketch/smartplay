@@ -21,6 +21,7 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import i18n from '../i18n';
+import { MONO_FONT } from '../theme/fonts';
 
 /**
  * 2026-09-13 — localized, but NOT through useTranslation: this is a class component because error
@@ -134,8 +135,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: { color: '#6b7280', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
-  errorText: { color: '#fca5a5', fontSize: 14, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
-  codeText: { color: '#d1d5db', fontSize: 11, lineHeight: 16, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  errorText: { color: '#fca5a5', fontSize: 14, fontWeight: '700', fontFamily: MONO_FONT },
+  codeText: { color: '#d1d5db', fontSize: 11, lineHeight: 16, fontFamily: MONO_FONT },
   btn: {
     backgroundColor: '#00C896',
     borderRadius: 10,

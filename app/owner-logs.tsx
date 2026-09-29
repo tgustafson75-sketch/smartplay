@@ -32,6 +32,7 @@ import { useRoundStore } from '../store/roundStore';
 // the same recent-event context the post-run review would use.
 import { subscribeHarnessEvents } from '../services/simulatedGPS';
 import { getApiBaseUrl } from '../services/apiBase';
+import { MONO_FONT } from '../theme/fonts';
 
 function formatTimestamp(ms: number): string {
   const d = new Date(ms);
@@ -576,8 +577,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   kindChipText: { color: '#ffffff', fontSize: 9, fontWeight: '900', letterSpacing: 0.6 },
-  stageText: { fontSize: 11, fontWeight: '700', fontFamily: 'monospace' },
-  detailsText: { fontSize: 11, lineHeight: 15, fontFamily: 'monospace', marginTop: 2 },
+  stageText: { fontSize: 11, fontWeight: '700', fontFamily: MONO_FONT },
+  detailsText: { fontSize: 11, lineHeight: 15, fontFamily: MONO_FONT, marginTop: 2 },
   triageRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -600,7 +601,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
   },
-  triageResultText: { fontSize: 12, lineHeight: 17, fontFamily: 'monospace' },
+  triageResultText: { fontSize: 12, lineHeight: 17, fontFamily: MONO_FONT },
   footer: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,

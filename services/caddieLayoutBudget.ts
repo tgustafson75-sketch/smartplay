@@ -201,6 +201,8 @@ export const ASK_BAR_CHROME = {
   gap: 6,
   /** input paddingHorizontal ×2. */
   inputPad: 8,
+  /** CaddieBottomBar bar borderWidth 1.5 ×2 — 2026-09-29, was missing from the sum. */
+  border: 3,
 } as const;
 
 /** Width left for the placeholder once the bar's fixed furniture is paid for. */
@@ -208,11 +210,14 @@ export function askBarTextWidth(W: number, opts: { micVisible: boolean }): numbe
   const c = ASK_BAR_CHROME;
   const children = opts.micVisible ? 4 : 3;
   const fixed =
-    c.outerPad + c.barPad + c.backChevron + c.trailing + c.inputPad +
+    c.outerPad + c.barPad + c.border + c.backChevron + c.trailing + c.inputPad +
     (opts.micVisible ? c.mic : 0) +
     c.gap * (children - 1);
   return Math.max(0, W - fixed);
 }
+
+/** The ask-bar input's base fontSize (CaddieBottomBar `input`). The OS multiplies it by fontScale. */
+export const ASK_BAR_FONT_SIZE = 16;
 
 /**
  * Average glyph advance as a fraction of font size, for the system sans at 16pt. Deliberately a
@@ -229,7 +234,7 @@ const GLYPH_RATIO = 0.52;
  * languages whose full phrase is longer than English's. Trimming is language-agnostic and adds
  * nothing to the catalogue. Never returns empty: one word plus an ellipsis beats a blank field.
  */
-export function fitAskPlaceholder(text: string, availableWidth: number, fontSize = 16): string {
+export function fitAskPlaceholder(text: string, availableWidth: number, fontSize = ASK_BAR_FONT_SIZE): string {
   const per = fontSize * GLYPH_RATIO;
   const fits = (s: string) => s.length * per <= availableWidth;
   if (fits(text)) return text;

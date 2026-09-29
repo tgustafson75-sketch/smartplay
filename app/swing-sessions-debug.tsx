@@ -36,6 +36,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import type { FillerCategory } from '../types/filler';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 import { getApiBaseUrl } from '../services/apiBase';
+import { MONO_FONT } from '../theme/fonts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -693,7 +694,7 @@ const styles = StyleSheet.create({
   storageDumpText: {
     color: '#c2cad4',
     fontSize: 10,
-    fontFamily: 'monospace',
+    fontFamily: MONO_FONT,
   },
 
   // Video player

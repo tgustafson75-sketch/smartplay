@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10,
   },
-  backBtn: { width: 60 },
+  backBtn: { minWidth: 60 }, // minWidth: "← Back" wrapped inside a fixed 60 at a large system font
   backText: { color: '#00C896', fontSize: 16, fontWeight: '600' },
   headerTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
   content: { padding: 16, paddingBottom: 60 },

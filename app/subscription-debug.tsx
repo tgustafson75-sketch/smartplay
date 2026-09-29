@@ -15,6 +15,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { trialDaysLeft } from '../services/featureAccess';
 import { forcePaywall } from '../services/paywallGuard';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
+import { MONO_FONT } from '../theme/fonts';
 
 export default function SubscriptionDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
@@ -202,13 +203,13 @@ const styles = StyleSheet.create({
   stateKey: {
     color: '#6b7280',
     fontSize: 12,
-    fontFamily: 'monospace',
+    fontFamily: MONO_FONT,
     flex: 1,
   },
   stateVal: {
     color: '#00C896',
     fontSize: 12,
-    fontFamily: 'monospace',
+    fontFamily: MONO_FONT,
     flex: 2,
     textAlign: 'right',
   },

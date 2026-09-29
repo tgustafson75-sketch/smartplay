@@ -30,6 +30,7 @@ import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore
 
 import type { Scenario, ScenarioCategory } from '../services/harness/scenarios';
 import type { ScenarioReport } from '../services/harness/assert';
+import { MONO_FONT } from '../theme/fonts';
 
 // 2026-05-25 — Per-row crash boundary. Without this, ONE bad scenario
 // (e.g. a non-string in detail / oversized error / weird unicode) takes
@@ -153,7 +154,7 @@ export default function HarnessScreen() {
             Scenarios module failed to load. Force-quit + reopen if you just received an OTA. If this
             persists, the error below points at the import that crashed.
           </Text>
-          <Text selectable style={{ color: '#c2cad4', fontSize: 11, marginTop: 16, fontFamily: 'monospace' }}>
+          <Text selectable style={{ color: '#c2cad4', fontSize: 11, marginTop: 16, fontFamily: MONO_FONT }}>
             {_scenariosLoadError}
           </Text>
         </ScrollView>

@@ -18,7 +18,6 @@ import {
   TextInput,
   Alert,
   Linking,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -609,10 +608,9 @@ export default function Settings() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      {/* 2026-09-29 — no KeyboardAvoidingView here any more. GlobalCaddieBar is visible on this route
+          and lifts itself by the keyboard height, which already shrinks the screen area above it; an
+          iOS-only 'padding' KAV on top of that was a double lift (Android never had one). */}
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
@@ -629,7 +627,7 @@ export default function Settings() {
             <Text style={[styles.backText, { color: colors.accent }]}>{t('settings.text.back')}</Text>
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text_primary }]}>{t('settings.text.settings')}</Text>
-          <View style={{ width: 60 }} />
+          <View style={{ minWidth: 60 }} />
         </View>
 
         {/* 2026-05-18 — Search bar. Filters sections by title + body
@@ -1709,7 +1707,7 @@ export default function Settings() {
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>
               {t('labels.meta_glasses_setup')}
             </Text>
-            <Text style={[styles.aboutValue, { color: colors.text_primary, lineHeight: 18 }]}>
+            <Text style={[styles.aboutValue, { color: colors.text_primary, lineHeight: 18, textAlign: 'left' }]}>
               {t('labels.meta_glasses_instructions', { caddieName })}
             </Text>
           </View>
@@ -1981,7 +1979,6 @@ export default function Settings() {
         <View style={{ height: 40 }} />
 
       </ScrollView>
-      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -2338,7 +2335,8 @@ const styles = StyleSheet.create({
     color: '#00C896',
     fontSize: 16,
     fontWeight: '600',
-    width: 60,
+    // 2026-09-29 — minWidth: a translated or large-font "Back" wrapped inside a fixed 60.
+    minWidth: 60,
   },
   title: {
     color: '#ffffff',
@@ -2525,14 +2523,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1e3a28',
   },
+  // 2026-09-29 — values ("Contact support ›", the build stamp) ran off-screen on a phone: the value
+  // may now shrink and wrap, right-aligned, and the label keeps a gap from it.
   aboutLabel: {
     color: '#6b7280',
     fontSize: 14,
+    marginRight: 12,
   },
   aboutValue: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+    flexShrink: 1,
+    textAlign: 'right',
   },
   watchInfo: {
     marginTop: 10,

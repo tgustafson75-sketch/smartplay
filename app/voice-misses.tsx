@@ -24,6 +24,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useVoiceMissStore, type VoiceMissEntry, type VoiceMissType } from '../store/voiceMissStore';
 import { useAgentBrainStats } from '../store/agentBrainStats';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { MONO_FONT } from '../theme/fonts';
 
 function formatTimestamp(ms: number): string {
   const d = new Date(ms);
@@ -296,7 +297,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   errorText: {
     fontSize: 11,
-    fontFamily: 'monospace',
+    fontFamily: MONO_FONT,
     marginTop: 2,
   },
   footer: {

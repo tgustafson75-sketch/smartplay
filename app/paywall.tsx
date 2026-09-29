@@ -223,7 +223,7 @@ export default function PaywallScreen() {
       </TouchableOpacity>
 
       <Animated.View style={[styles.content, { opacity: fadeIn }]}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
           <Image
             source={
@@ -295,6 +295,18 @@ export default function PaywallScreen() {
             ) : null}
           </View>
 
+          <Text style={styles.legalText}>
+            {t('paywall.paywall_screen.subscription_automatically_renews_unless_can')}
+          </Text>
+
+        </ScrollView>
+
+        {/* 2026-09-29 — the CTA used to be the LAST thing in the scroll: ~340dp below the fold on an
+            iPhone SE at a large system font, and below it even at 1.0 on a 932dp phone. It now sits in
+            a footer outside the ScrollView, with Restore and the legal links kept directly under it
+            (3.1.2). Anything else that belongs beside Restore (e.g. a redeem-code link) goes in here,
+            between Restore and the legal links row. */}
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
           <TouchableOpacity style={styles.ctaBtn} onPress={handleSubscribe} activeOpacity={0.88} disabled={busy}>
             <Text style={styles.ctaText}>
               {busy ? t('paywall.paywall_screen.one_moment') : trial ? t('paywall.paywall_screen.start_free_trial') : t('paywall.paywall_screen.subscribe')}
@@ -319,12 +331,7 @@ export default function PaywallScreen() {
               <Text style={styles.restoreText}>{t('paywall.paywall_screen.terms_of_service')}</Text>
             </TouchableOpacity>
           </View>
-
-          <Text style={styles.legalText}>
-            {t('paywall.paywall_screen.subscription_automatically_renews_unless_can')}
-          </Text>
-
-        </ScrollView>
+        </View>
       </Animated.View>
     </View>
   );
@@ -345,6 +352,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: {
+    flex: 1,
+  },
+  // flex:1 so the scroll takes only the space the pinned footer leaves; without it the ScrollView
+  // sizes to its content and pushes the footer off-screen.
+  scroll: {
     flex: 1,
   },
   scrollContent: {
@@ -469,18 +481,29 @@ const styles = StyleSheet.create({
   },
   restoreBtn: {
     paddingVertical: 10,
-    marginBottom: 24,
+    marginBottom: 4,
   },
   restoreText: {
     color: '#6b7280',
     fontSize: 13,
     textDecorationLine: 'underline',
   },
+  // Pinned under the scroll (see the render). Same 24 side padding as scrollContent. restoreBtn and
+  // legalLinksRow bottom margins were trimmed (24 -> 4, 16 -> 0) when they moved in here, so the
+  // pinned block stays short on an SE at a large font.
+  footer: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    backgroundColor: '#060f09',
+    borderTopWidth: 1,
+    borderTopColor: '#1e3a28',
+  },
   legalLinksRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
   },
   legalLinkSep: {
     color: '#6b7280',

@@ -42,6 +42,7 @@ import { useOffCourseStore } from '../services/offCourseDetector';
 import { runAuditV2 } from '../services/audit/scenarioRunner';
 import type { AuditReport } from '../services/audit/types';
 import { holePar } from '../services/smartFinderService';
+import { MONO_FONT } from '../theme/fonts';
 const PEBBLE_MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
 const MENIFEE_MOCK_ROUND: MockRound = require('../__mocks__/menifeeRound.json');
 
@@ -82,7 +83,7 @@ function BundleBadge() {
     : '—';
   return (
     <Text style={{
-      color: '#c2cad4', fontSize: 10, fontFamily: 'monospace',
+      color: '#c2cad4', fontSize: 10, fontFamily: MONO_FONT,
       paddingHorizontal: 6, paddingVertical: 3,
       backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 4,
       marginBottom: 8, alignSelf: 'flex-start',
@@ -470,7 +471,7 @@ export default function GpsTestScreen() {
                       const chipColor = offset < 0 ? '#00C896' : offset === 0 ? colors.text_primary : offset === 1 ? '#F5A623' : '#ef4444';
                       return (
                         <View key={h} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                          <Text style={{ color: chipColor, fontSize: 11, fontFamily: 'monospace' }}>
+                          <Text style={{ color: chipColor, fontSize: 11, fontFamily: MONO_FONT }}>
                             H{h}:{s}
                           </Text>
                         </View>
@@ -515,13 +516,13 @@ export default function GpsTestScreen() {
                 const time = new Date(e.ts).toLocaleTimeString();
                 return (
                   <View key={`${e.ts}-${i}`} style={{ flexDirection: 'row', paddingVertical: 2 }}>
-                    <Text style={{ color: c, fontSize: 10, fontFamily: 'monospace', width: 80 }}>
+                    <Text style={{ color: c, fontSize: 10, fontFamily: MONO_FONT, width: 80 }}>
                       [{e.kind}]
                     </Text>
-                    <Text style={{ color: colors.text_muted, fontSize: 10, fontFamily: 'monospace', width: 70 }}>
+                    <Text style={{ color: colors.text_muted, fontSize: 10, fontFamily: MONO_FONT, width: 70 }}>
                       {time}
                     </Text>
-                    <Text style={{ color: colors.text_primary, fontSize: 10, fontFamily: 'monospace', flex: 1 }}>
+                    <Text style={{ color: colors.text_primary, fontSize: 10, fontFamily: MONO_FONT, flex: 1 }}>
                       {e.detail}
                     </Text>
                   </View>
@@ -590,10 +591,10 @@ export default function GpsTestScreen() {
             </TouchableOpacity>
             {auditRunning || auditReport ? (
               <View style={{ marginTop: 8 }}>
-                <Text style={{ color: colors.text_muted, fontSize: 11, fontFamily: 'monospace' }}>
+                <Text style={{ color: colors.text_muted, fontSize: 11, fontFamily: MONO_FONT }}>
                   {auditProgress.msg} · {Math.round(auditProgress.fraction * 100)}%
                 </Text>
-                <Text style={{ color: colors.text_muted, fontSize: 11, fontFamily: 'monospace', marginTop: 2 }}>
+                <Text style={{ color: colors.text_muted, fontSize: 11, fontFamily: MONO_FONT, marginTop: 2 }}>
                   ✓ {auditProgress.tally.passed} passed · ✗ {auditProgress.tally.failed} failed
                 </Text>
                 {auditReport ? (
@@ -604,10 +605,10 @@ export default function GpsTestScreen() {
                           width: 8, height: 8, borderRadius: 4,
                           backgroundColor: s.overall === 'pass' ? '#00C896' : s.overall === 'warn' ? '#F5A623' : '#ef4444',
                         }} />
-                        <Text style={{ color: colors.text_primary, fontSize: 11, fontFamily: 'monospace', flex: 1 }}>
+                        <Text style={{ color: colors.text_primary, fontSize: 11, fontFamily: MONO_FONT, flex: 1 }}>
                           {s.name}
                         </Text>
-                        <Text style={{ color: colors.text_muted, fontSize: 10, fontFamily: 'monospace' }}>
+                        <Text style={{ color: colors.text_muted, fontSize: 10, fontFamily: MONO_FONT }}>
                           {s.assertions.filter(a => a.passed).length}/{s.assertions.length}
                         </Text>
                       </View>

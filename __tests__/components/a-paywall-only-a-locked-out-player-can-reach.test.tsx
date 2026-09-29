@@ -20,6 +20,7 @@
  */
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from '../../i18n/locales/en.json';
@@ -66,7 +67,12 @@ describe('the purchase screen is reachable by a player who has lost nothing', ()
 
   it('the tools menu offers a route to the paywall that asks no entitlement question', () => {
     const { GlobalToolsMenu } = require('../../components/tools/GlobalToolsMenu');
-    render(<GlobalToolsMenu />);
+    // The menu clears the bottom safe-area inset (2026-09-29); the app root provides the insets.
+    render(
+      <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
+        <GlobalToolsMenu />
+      </SafeAreaProvider>,
+    );
 
     const row = screen.getByText('Subscription');
     fireEvent.press(row);
