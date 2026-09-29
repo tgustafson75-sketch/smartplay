@@ -104,6 +104,10 @@ import { MIN_TRACE_FPS, TARGET_CAPTURE_FPS } from '../../services/capture/captur
 import { capturedFpsForClip } from '../../services/capture/clipFps';
 import { coverageNote } from '../../services/swing/analysisFrames';
 import {
+  aboveDeck, HUD_MAX_FONT_SCALE, MODE_FADE_LABEL_OFFSET_DP, modeFadeLabelWidth, railWidth, reviewBarLayout, reviewOverlayInset,
+  showReviewRails, toolCardMaxHeight,
+} from '../../services/swing/smartMotionLayout';
+import {
   acceptBallDeparture, ballRegionFromDetection, ballRegionFromFeet, nextBallRegion,
   type BallRegionSource, type SourcedBallRegion,
 } from '../../services/swing/ballRegion';
@@ -1058,6 +1062,12 @@ export default function SmartMotion() {
   // not forced on every open. (Superseded the 2026-07-07 "default to ½" experiment above.)
   const [playbackRate, setPlaybackRate] = useState(1); // review speed (1 / .5 / .25); starts real-time
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
+  /**
+   * 2026-09-29 (narrow-phone audit #11) — the deck is content-height (chips, club bar, controls and
+   * font scale all change it), so overlays that must clear it measure it instead of guessing a fixed
+   * offset. services/swing/smartMotionLayout.aboveDeck keeps the old offset until it is measured.
+   */
+  const [deckHeight, setDeckHeight] = useState(0);
   // Status-perimeter pulse — a thin border around the video that ties to the
   // analysis phase (green active/done, amber while thinking), like the caddie
   // face box. Subtle opacity loop; native-driven so it's cheap.
@@ -5565,6 +5575,9 @@ export default function SmartMotion() {
 
   const isReview = phase === 'review';
 
+  const reviewBar = reviewBarLayout(windowWidth);
+  const reviewBtnSize = reviewBar.button !== 46 ? { width: reviewBar.button, height: reviewBar.button, borderRadius: reviewBar.button / 2 } : null;
+  const reviewIconSize = reviewBar.button !== 46 ? { width: reviewBar.button, height: reviewBar.button } : null;
   // ── action button ──
   // Universal control bar — clean translucent icons. Setup: Record. Recording:
   // Stop. Review: Play/Pause · Slow-mo · Save · Delete · Record-again.
@@ -5579,20 +5592,22 @@ export default function SmartMotion() {
       // Review controls as matching green-circle badges (Tim's art): play/pause ·
       // slow-mo · save · delete · record-again. Each uses its own circle (no border);
       // slow-mo fills when slowed + keeps a tiny rate tag so ½/¼ stays visible.
-      <View style={styles.barRow}>
-        <TactilePressable onPress={() => void togglePlay()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
+      /* 2026-09-29 (narrow-phone audit #1) — six 46dp buttons + 8dp gaps + a flex spacer overflowed a
+         320dp phone; below 400dp they are 40dp, 4dp apart, spread edge to edge (smartMotionLayout). */
+      <View style={[styles.barRow, { gap: reviewBar.gap }, reviewBar.spread && styles.barRowSpread]}>
+        <TactilePressable onPress={() => void togglePlay()} style={[styles.toolBtnBare, reviewBtnSize]} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
           {videoPaused
-            ? <Image source={ICON_CTRL.playpause} style={styles.toolIconFull} resizeMode="contain" />
-            : <Ionicons name="pause" size={40} color="rgba(255,255,255,0.9)" />}
+            ? <Image source={ICON_CTRL.playpause} style={[styles.toolIconFull, reviewIconSize]} resizeMode="contain" />
+            : <Ionicons name="pause" size={Math.min(40, reviewBar.button - 6)} color="rgba(255,255,255,0.9)" />}
         </TactilePressable>
-        <TactilePressable onPress={cycleSpeed} style={[styles.toolBtnBare, playbackRate < 1 && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
-          <Image source={ICON_CTRL.slowmo} style={styles.toolIconFull} resizeMode="contain" />
-          {playbackRate < 1 ? <Text style={styles.barRateTag}>{playbackRate === 0.5 ? '½' : '¼'}</Text> : null}
+        <TactilePressable onPress={cycleSpeed} style={[styles.toolBtnBare, reviewBtnSize, playbackRate < 1 && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
+          <Image source={ICON_CTRL.slowmo} style={[styles.toolIconFull, reviewIconSize]} resizeMode="contain" />
+          {playbackRate < 1 ? <Text style={styles.barRateTag} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{playbackRate === 0.5 ? '½' : '¼'}</Text> : null}
         </TactilePressable>
         {/* 2026-06-13 (Tim) — RE-ANALYZE the kept clip instead of re-recording.
             Glows on a NO-READ so the failure state points you here, not at a
             wasted re-swing. */}
-        <TactilePressable onPress={reanalyze} disabled={!clipUri} style={[styles.toolBtnBare, !!analysisError && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.re_analyze_this_swing')}>
+        <TactilePressable onPress={reanalyze} disabled={!clipUri} style={[styles.toolBtnBare, reviewBtnSize, !!analysisError && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.re_analyze_this_swing')}>
           <Ionicons name="refresh" size={24} color={analysisError ? colors.accent : '#fff'} />
         </TactilePressable>
         {/* 2026-07-07 (Tim — "still hard to start a new session") — the two decisions
@@ -5600,19 +5615,19 @@ export default function SmartMotion() {
             first (persistReviewToLibrary in beginNextRecording), so it's one obvious
             tap to keep rolling without losing anything. */}
         <View style={styles.ctrlLabeled}>
-          <TactilePressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.save_to_library')}>
-            <Image source={ICON_CTRL.save} style={styles.toolIconFull} resizeMode="contain" />
+          <TactilePressable onPress={confirmSave} style={[styles.toolBtnBare, reviewBtnSize]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.save_to_library')}>
+            <Image source={ICON_CTRL.save} style={[styles.toolIconFull, reviewIconSize]} resizeMode="contain" />
           </TactilePressable>
-          <Text style={styles.ctrlLabelText}>{t('swinglab_smartmotion.smart_motion.save')}</Text>
+          <Text style={styles.ctrlLabelText} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('swinglab_smartmotion.smart_motion.save')}</Text>
         </View>
-        <TactilePressable onPress={discardSwing} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.delete_swing')}>
-          <Image source={ICON_CTRL.delete} style={styles.toolIconFull} resizeMode="contain" />
+        <TactilePressable onPress={discardSwing} style={[styles.toolBtnBare, reviewBtnSize]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.delete_swing')}>
+          <Image source={ICON_CTRL.delete} style={[styles.toolIconFull, reviewIconSize]} resizeMode="contain" />
         </TactilePressable>
         <View style={styles.ctrlLabeled}>
-          <TactilePressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.new_set_saves_this_set')}>
-            <Image source={ICON_CTRL.record} style={styles.toolIconFull} resizeMode="contain" />
+          <TactilePressable onPress={() => beginNextRecording()} style={[styles.toolBtnBare, reviewBtnSize]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.new_set_saves_this_set')}>
+            <Image source={ICON_CTRL.record} style={[styles.toolIconFull, reviewIconSize]} resizeMode="contain" />
           </TactilePressable>
-          <Text style={[styles.ctrlLabelText, { color: '#88F700' }]}>{t('swinglab_smartmotion.smart_motion.new_set')}</Text>
+          <Text style={[styles.ctrlLabelText, { color: '#88F700' }]} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('swinglab_smartmotion.smart_motion.new_set')}</Text>
         </View>
       </View>
     ) : phase === 'setup' ? (
@@ -5692,7 +5707,7 @@ export default function SmartMotion() {
                 onPress={() => void selectSwing(i)}
                 style={[styles.reelChip, { borderColor: sel ? tone : 'rgba(255,255,255,0.3)', backgroundColor: sel ? tone : 'rgba(0,0,0,0.5)' }]}
               >
-                <Text style={[styles.reelChipText, { color: sel ? '#06281b' : '#fff' }]}>{s.index}</Text>
+                <Text style={[styles.reelChipText, { color: sel ? '#06281b' : '#fff' }]} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{s.index}</Text>
               </Pressable>
             );
           })}
@@ -5877,32 +5892,39 @@ export default function SmartMotion() {
         {/* LEFT RAIL — ball/result metric badges (review): tempo · ball speed · ball
             result. Mirrors the right rail so the metrics flank the video and the
             centre stays clear (Tim). Honest "—" until measured. Hide-toggle gated. */}
-        {isReview && showResults && !isPutt ? (
-          <View style={[styles.leftRail, { top: insets.top + 60, width: isNarrow ? 100 : 124 }]} pointerEvents="none">
+        {/* 2026-09-29 (narrow-phone audit #2/#5) — 112dp below 400 wide (100 truncated "BALL SPEED"), and
+            no floating rails at all over a video box too short to hold them. */}
+        {isReview && showResults && !isPutt && showReviewRails(rootSize.h) ? (
+          <View style={[styles.leftRail, { top: insets.top + 60, width: railWidth(windowWidth) }]} pointerEvents="none">
             {leftMetrics.map((m) => (
               <View key={m.key} style={styles.metricBadgeCard}>
                 <Image source={m.img} style={styles.metricBadgeImg} resizeMode="contain" />
                 <View style={styles.metricBadgeText}>
-                  <Text style={styles.metricBadgeValue} numberOfLines={1}>
+                  <Text style={styles.metricBadgeValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
                     {m.value ?? '—'}{m.value != null && m.unit ? <Text style={styles.metricBadgeUnit}> {m.unit}</Text> : null}
                   </Text>
-                  <Text style={styles.metricBadgeLabel} numberOfLines={1}>{m.label}</Text>
+                  <Text style={styles.metricBadgeLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{m.label}</Text>
                 </View>
               </View>
             ))}
+            {effortPct != null ? (
+              <View key="effort" style={styles.metricBadgeCard}>
+                <View style={styles.metricBadgeText}>
+                  <Text style={styles.metricBadgeValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
+                    {effortPct}%<Text style={styles.metricBadgeUnit}> shot</Text>
+                  </Text>
+                  <Text style={styles.metricBadgeLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('swinglab_smartmotion.smart_motion.effort')}</Text>
+                </View>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
         {/* EFFORT chip — declared shot effort from ball→target geometry (a partial
             shot). Honest: directly measured, no faked carry. The read is graded
             against this intended effort, so a deliberate half-swing isn't a "fault". */}
-        {isReview && showResults && !isPutt && effortPct != null ? (
-          <View style={[styles.effortPill, { top: insets.top + 150 }]} pointerEvents="none">
-            <Text style={styles.tempoPillLabel}>{t('swinglab_smartmotion.smart_motion.effort')}</Text>
-            <Text style={[styles.tempoPillValue, { color: '#88F700' }]}>{effortPct}%</Text>
-            <Text style={styles.tempoPillUnit}>shot</Text>
-          </View>
-        ) : null}
+        {/* 2026-09-29 (narrow-phone audit #4) — EFFORT now renders as the last card of the LEFT RAIL
+            (above): as a separate pill at a fixed top it sat on rail cards 2-3 at every width. */}
 
         {/* Smart Capture — tap exposed video to freeze + mark up. */}
         {isReview && clipUri ? (
@@ -6076,6 +6098,18 @@ export default function SmartMotion() {
           </Pressable>
           <CaddieMicBadge size={36} />
           <SmartMotionHeader mode={angle} isPutt={isPutt} style={{ flex: 1, borderBottomWidth: 0, paddingVertical: 0, paddingHorizontal: 6 }} />
+          {/* 2026-09-29 (narrow-phone audit #9) — below 400dp the results eye sits IN the bar; as a
+              floating button it covered the header subtitle at 320/344dp. Wider screens keep it floating. */}
+          {isReview && isNarrow ? (
+            <Pressable
+              onPress={() => setShowResults((v) => !v)}
+              style={[styles.overlayToggleInline, { backgroundColor: showResults ? 'rgba(6,15,9,0.7)' : 'rgba(124,224,79,0.9)' }]}
+              accessibilityRole="button"
+              accessibilityLabel={showResults ? 'Hide result overlays for a clean view' : 'Show result overlays'}
+            >
+              <Ionicons name={showResults ? 'eye-outline' : 'eye-off-outline'} size={20} color={showResults ? colors.accent : '#06281b'} />
+            </Pressable>
+          ) : null}
           <View style={styles.dotsRow}>
             {Array.from({ length: pageCount }).map((_, i) => (
               <View key={i} style={[styles.dot, { backgroundColor: page === i ? colors.accent : 'rgba(255,255,255,0.35)' }]} />
@@ -6089,16 +6123,9 @@ export default function SmartMotion() {
             Lives top-left, mirrors the setup-tools chevron on the right. */}
         {/* 2026-06-29 (Tim) — REVIEW keeps the floating eye toggle; in setup/recording
             the deck's flag button now owns show/hide targeting (deck = control center). */}
-        {phase === 'review' && (ballArea || targetPoint) ? (
-          <TactilePressable
-            onPress={() => setTargetingVisible((v) => !v)}
-            style={[styles.targetingToggle, { top: insets.top + 76 }]}
-            accessibilityRole="button"
-            accessibilityLabel={targetingVisible ? 'Hide targeting overlay' : 'Show targeting overlay'}
-          >
-            <Ionicons name={targetingVisible ? 'eye-outline' : 'eye-off-outline'} size={18} color={colors.accent} />
-          </TactilePressable>
-        ) : null}
+        {/* 2026-09-29 (narrow-phone audit #4) — the REVIEW targeting eye is gone. It toggled an overlay
+            that is hard-disabled in review (`false && …` above) and sat on rail card 1 at every width —
+            a control that did nothing, covering a reading. */}
 
         {/* 2026-06-29 (Tim) — TALK-TO-CADDIE mic. SmartMotion is the SAME caddie brain
             as every tab: tap and say "record my swing", "driver, 3 swings", or
@@ -6131,9 +6158,9 @@ export default function SmartMotion() {
             pill sits for non-drills (free in drill mode), above the tab bar. Shows
             through setup + recording so a capture reads as "this is the X drill". */}
         {isDrill && (phase === 'setup' || phase === 'recording') ? (
-          <Animated.View style={[styles.drillBanner, { bottom: insets.bottom + (isNarrow ? 138 : 64), opacity: drillBannerOpacity }]} pointerEvents="none">
-            <Text style={styles.drillBannerKicker}>{`DRILL${drillShotCount ? ` · ${drillShotCount} SWINGS` : ''}`}</Text>
-            <Text style={styles.drillBannerName} numberOfLines={1}>
+          <Animated.View style={[styles.drillBanner, { bottom: aboveDeck(deckHeight, insets.bottom + (isNarrow ? 138 : 64)), opacity: drillBannerOpacity }]} pointerEvents="none">
+            <Text style={styles.drillBannerKicker} numberOfLines={1} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{`DRILL${drillShotCount ? ` · ${drillShotCount} SWINGS` : ''}`}</Text>
+            <Text style={styles.drillBannerName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
               {(typeof drillName === 'string' && drillName.trim() ? drillName.trim() : 'Practice').toUpperCase()}
             </Text>
           </Animated.View>
@@ -6145,7 +6172,7 @@ export default function SmartMotion() {
             (green got-it / amber closer / orange not-yet). Honest, directional. */}
         {isDrill && isReview && drillVerdict ? (
           <View
-            style={[styles.drillCheckCard, { bottom: insets.bottom + (isNarrow ? 138 : 64), borderLeftColor: drillVerdictColor }]}
+            style={[styles.drillCheckCard, { bottom: reviewOverlayInset(windowHeight, insets.bottom) + (isNarrow ? 138 : 64), borderLeftColor: drillVerdictColor }]}
             pointerEvents="none"
           >
             <Text style={styles.drillCheckLine} numberOfLines={4}>{drillVerdict.line}</Text>
@@ -6168,7 +6195,11 @@ export default function SmartMotion() {
               <Ionicons name={railExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.accent} />
             </TactilePressable>
             {railExpanded ? (
-              <View style={styles.toolCard}>
+              /* 2026-09-29 (narrow-phone audit #8) — capped to the space below the chevron and scrollable,
+                 so its last rows cannot run off an SE-sized screen at font scale 1.3. On a tall screen the
+                 cap is above the card's natural height and nothing changes. */
+              <View style={[styles.toolCard, { maxHeight: toolCardMaxHeight(windowHeight, insets.top, insets.bottom) }]}>
+              <ScrollView contentContainerStyle={styles.toolCardScroll} bounces={false} showsVerticalScrollIndicator={false}>
                 <Text style={styles.toolCardHeader}>{t('swinglab_smartmotion.smart_motion.setup_tools')}</Text>
                 <ToolCardRow
                   icon={<Image source={ICON_RAIL.calibrate} style={styles.toolCardIcon} resizeMode="contain" />}
@@ -6276,6 +6307,7 @@ export default function SmartMotion() {
                     }}
                   />
                 ) : null}
+              </ScrollView>
               </View>
             ) : null}
           </View>
@@ -6297,7 +6329,7 @@ export default function SmartMotion() {
           <View
             style={[
               styles.framingPill,
-              { bottom: insets.bottom + 96, backgroundColor: framing.status === 'framed' ? 'rgba(0,200,150,0.92)' : 'rgba(18,20,24,0.86)' },
+              { bottom: aboveDeck(deckHeight, insets.bottom + 96), backgroundColor: framing.status === 'framed' ? 'rgba(0,200,150,0.92)' : 'rgba(18,20,24,0.86)' },
             ]}
             pointerEvents="none"
           >
@@ -6317,16 +6349,16 @@ export default function SmartMotion() {
             Same honest sources (effortRaw / estCarry / aimRead). See the deck below. */}
 
         {/* RIGHT RAIL — floating metric cards (review) */}
-        {isReview && showResults && !isPutt ? (
-          <View style={[styles.rightRail, { top: insets.top + 60, width: isNarrow ? 100 : 124 }]} pointerEvents="none">
+        {isReview && showResults && !isPutt && showReviewRails(rootSize.h) ? (
+          <View style={[styles.rightRail, { top: insets.top + 60, width: railWidth(windowWidth) }]} pointerEvents="none">
             {rightMetrics.map((m) => (
               <View key={m.key} style={styles.metricBadgeCard}>
                 <Image source={m.img} style={styles.metricBadgeImg} resizeMode="contain" />
                 <View style={styles.metricBadgeText}>
-                  <Text style={styles.metricBadgeValue} numberOfLines={1}>
+                  <Text style={styles.metricBadgeValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
                     {m.value ?? '—'}{m.value != null && m.unit ? <Text style={styles.metricBadgeUnit}>{m.unit}</Text> : null}
                   </Text>
-                  <Text style={styles.metricBadgeLabel} numberOfLines={1}>{m.label}</Text>
+                  <Text style={styles.metricBadgeLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{m.label}</Text>
                 </View>
               </View>
             ))}
@@ -6348,7 +6380,7 @@ export default function SmartMotion() {
           it, rather than filling the slot with a number.
         */}
         {isReview && showResults && isDrill && focusRead ? (
-          <View style={[styles.shotShapeCard, { bottom: insets.bottom + 150 }]} pointerEvents="none">
+          <View style={[styles.shotShapeCard, { bottom: reviewOverlayInset(windowHeight, insets.bottom) + 150 }]} pointerEvents="none">
             <Text style={styles.shotShapeTitle}>
               {focusRead.measured ? '✓ ' : ''}{focusRead.label.toUpperCase()}
             </Text>
@@ -6359,7 +6391,7 @@ export default function SmartMotion() {
         {/* SHOT-SHAPE drill verdict — intended vs the launch we actually read
             (origin → departure). Honest: launch height + direction, never roll. */}
         {isReview && showResults && shotShapeVerdict && shotShapeDef ? (
-          <View style={[styles.shotShapeCard, { bottom: insets.bottom + 150 }]} pointerEvents="none">
+          <View style={[styles.shotShapeCard, { bottom: reviewOverlayInset(windowHeight, insets.bottom) + 150 }]} pointerEvents="none">
             <Text style={styles.shotShapeTitle}>
               {shotShapeVerdict.match === 'on' ? '✓ ' : ''}{shotShapeDef.name.toUpperCase()}
             </Text>
@@ -6385,7 +6417,7 @@ export default function SmartMotion() {
            * Silence is the defect here, not the maths. [[no-deferred-wiring-placeholders]] and
            * [[illustration-data-points]] both say the same thing: degrade visibly, never blankly.
            */
-          <View style={[styles.shotShapeCard, { bottom: insets.bottom + 150 }]} pointerEvents="none">
+          <View style={[styles.shotShapeCard, { bottom: reviewOverlayInset(windowHeight, insets.bottom) + 150 }]} pointerEvents="none">
             <Text style={styles.shotShapeTitle}>{shotShapeDef.name.toUpperCase()}</Text>
             <Text style={styles.shotShapeFeedback}>{ballArea ? t('swinglab_smartmotion.smart_motion.couldn_t_read_the_ball') : t('swinglab_smartmotion.smart_motion.mark_the_ball_before_you')}</Text>
           </View>
@@ -6398,7 +6430,7 @@ export default function SmartMotion() {
             one-liner instead of a fabricated arc. */}
         {isReview && showResults && angle === 'down_the_line' && !isPutt
           && (shotTrace || (ballPathPoints != null && !ballTrace)) ? (
-          <View style={[styles.traceCaption, { bottom: insets.bottom + 116 }]} pointerEvents="none">
+          <View style={[styles.traceCaption, { bottom: reviewOverlayInset(windowHeight, insets.bottom) + 116 }]} pointerEvents="none">
             <Text style={styles.traceCaptionText} numberOfLines={2}>
               {shotTrace
                 ? (shotTrace.note ?? shotTrace.headline)
@@ -6409,7 +6441,7 @@ export default function SmartMotion() {
 
         {/* SHOW/HIDE RESULTS — clears every result overlay for a clean frame to
             screenshot/share (Tim's Smart Capture), or declutter the center video. */}
-        {isReview ? (
+        {isReview && !isNarrow ? (
           <Pressable
             onPress={() => setShowResults((v) => !v)}
             style={[styles.overlayToggle, { top: insets.top + 8, backgroundColor: showResults ? 'rgba(6,15,9,0.7)' : 'rgba(124,224,79,0.9)' }]}
@@ -6486,7 +6518,9 @@ export default function SmartMotion() {
              panel closes — so the whole-app layout freeze is not disturbed.
              [[layout-theme-voice-lock-2026-07-29]] */
           phase === 'setup' && railExpanded ? styles.bottomPanelHiddenForTools : null,
-        ]}>
+        ]}
+        onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) setDeckHeight(h); }}
+        >
           {/* The fade exists to blend the floating deck INTO the camera behind it. In review the deck
               is opaque and in flow with nothing behind it, so the gradient would only tint the panel. */}
           {!isReview ? (
@@ -6611,11 +6645,11 @@ export default function SmartMotion() {
                       accessibilityRole="button"
                       accessibilityLabel={`${c.title}: ${c.value ?? 'not measured'}. Tap for detail.`}
                     >
-                      <Text style={[styles.gridCardLabel, { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={1}>{c.title}</Text>
-                      <Text style={[styles.gridCardValue, { color: c.tone ?? '#F1F5F9' }]} numberOfLines={1} adjustsFontSizeToFit>
+                      <Text style={[styles.gridCardLabel, { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={1} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{c.title}</Text>
+                      <Text style={[styles.gridCardValue, { color: c.tone ?? '#F1F5F9' }]} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
                         {c.value ?? '—'}
                       </Text>
-                      <Text style={[styles.gridCardNote, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={2}>{c.note}</Text>
+                      <Text style={[styles.gridCardNote, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={2} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{c.note}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -6647,8 +6681,8 @@ export default function SmartMotion() {
         {phase === 'setup' && !isPutt && effortRaw != null ? (
             <View style={styles.planRow}>
               <View style={styles.planCard}>
-                <Text style={styles.planLabel}>{t('swinglab_smartmotion.smart_motion.effort')}</Text>
-                <Text style={styles.planValue} numberOfLines={1}>{effortRaw != null ? `${effortRaw}%` : '—'}</Text>
+                <Text style={styles.planLabel} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('swinglab_smartmotion.smart_motion.effort')}</Text>
+                <Text style={styles.planValue} numberOfLines={1} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{effortRaw != null ? `${effortRaw}%` : '—'}</Text>
                 <View style={styles.planSeg}>
                   {Array.from({ length: 6 }).map((_, i) => {
                     const filled = effortRaw != null && i < Math.round((effortRaw / 100) * 6);
@@ -6657,9 +6691,9 @@ export default function SmartMotion() {
                 </View>
               </View>
               <View style={styles.planCard}>
-                <Text style={styles.planLabel}>{t('swinglab_smartmotion.smart_motion.carry')}</Text>
-                <Text style={styles.planValue} numberOfLines={1}>{estCarry != null ? `~${estCarry}` : '—'}</Text>
-                <Text style={styles.planUnit}>{estCarry != null ? unitLabel(liveDistanceUnit()) : ''}</Text>
+                <Text style={styles.planLabel} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('swinglab_smartmotion.smart_motion.carry')}</Text>
+                <Text style={styles.planValue} numberOfLines={1} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{estCarry != null ? `~${estCarry}` : '—'}</Text>
+                <Text style={styles.planUnit} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{estCarry != null ? unitLabel(liveDistanceUnit()) : ''}</Text>
               </View>
               {/* 2026-08-19 — AIM read the angle between the ball box and the target the player
                   dragged. That guideline is hidden now, so the only aim it could report is the
@@ -6668,11 +6702,12 @@ export default function SmartMotion() {
                   [[illustration-data-points]] */}
               {aimRead && isPutt ? (
                 <View style={styles.planCard}>
-                  <Text style={styles.planLabel}>{t('swinglab_smartmotion.smart_motion.aim')}</Text>
+                  <Text style={styles.planLabel} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('swinglab_smartmotion.smart_motion.aim')}</Text>
                   <Text
                     style={[styles.planValue, styles.planValueText, { color: aimRead === 'STRAIGHT' ? colors.accent : '#f5c451' }]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
+                    maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}
                   >
                     {aimRead}
                   </Text>
@@ -6685,7 +6720,7 @@ export default function SmartMotion() {
               deck row. Non-drill setup only (drills set their own swing count). */}
           {!isDrill && phase === 'setup' ? (
             <View style={styles.swingRow}>
-              <Text style={styles.swingRowLabel}>{t('swinglab_smartmotion.smart_motion.swings')}</Text>
+              <Text style={styles.swingRowLabel} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('swinglab_smartmotion.smart_motion.swings')}</Text>
               {([null, 1, 3, 5] as const).map((n) => {
                 const active = targetSwings === n;
                 return (
@@ -6696,7 +6731,7 @@ export default function SmartMotion() {
                     accessibilityRole="button"
                     accessibilityLabel={n == null ? 'Open swing count' : `${n} swings`}
                   >
-                    <Text style={[styles.swingRowChipText, active && { color: '#06140b' }]}>{n == null ? 'OPEN' : String(n)}</Text>
+                    <Text style={[styles.swingRowChipText, active && { color: '#06140b' }]} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{n == null ? 'OPEN' : String(n)}</Text>
                   </TactilePressable>
                 );
               })}
@@ -6778,9 +6813,11 @@ export default function SmartMotion() {
             // floating eye toggle did in setup, so the deck is the control center).
             <View style={styles.controlsRowTriple}>
               <View style={{ justifyContent: 'center' }}>
-                <Animated.Text style={[styles.modeFadeLabelLeft, { opacity: modeFadeOpacity, color: colors.accent }]} pointerEvents="none" numberOfLines={1}>
-                  {modeFadeText}
-                </Animated.Text>
+                <Animated.View style={[styles.modeFadeLabelWrap, { width: modeFadeLabelWidth(windowWidth), opacity: modeFadeOpacity }]} pointerEvents="none">
+                  <Text style={[styles.modeFadeLabelText, { color: colors.accent }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
+                    {modeFadeText}
+                  </Text>
+                </Animated.View>
                 <TactilePressable
                   haptic="medium"
                   onPress={cycleMode}
@@ -6817,7 +6854,7 @@ export default function SmartMotion() {
             </View>
           ) : (
             <View style={styles.controlsRow}>
-              <View style={{ flex: 1 }} />
+              {isReview && !reviewBar.spacer ? null : <View style={{ flex: 1 }} />}
               {actionBtn}
             </View>
           )}
@@ -6850,6 +6887,10 @@ export default function SmartMotion() {
       style={{ width: windowWidth, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 14, paddingTop: insets.top + 14, paddingBottom: insets.bottom + 24, gap: 10 }}
       showsVerticalScrollIndicator={false}
+      // 2026-09-29 (narrow-phone audit #10) — the feel / coach-note inputs live on this page; without
+      // this the keyboard covers the field being typed into on a short phone.
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
     >
       <View style={styles.cardHeaderRow}>
         <Ionicons name="bulb-outline" size={16} color={colors.accent} />
@@ -7185,7 +7226,7 @@ export default function SmartMotion() {
           float the shared status strip over the camera instead: it shows the caddie's Listening/
           Thinking/spoken-feedback text (previously audio-only on this screen), clear of the controls.
           Absolute + zIndex → overlays; pointerEvents=none → never blocks the capture UI. */}
-      <CaddieStatusStrip floating bottomOffset={insets.bottom + 140} />
+      <CaddieStatusStrip floating bottomOffset={aboveDeck(deckHeight, insets.bottom + 140)} />
       <ScrollView
         ref={pagerRef}
         horizontal
@@ -7302,7 +7343,9 @@ const styles = StyleSheet.create({
   // 2026-06-26 (Tim) — DRILL identity banner. Canonical SmartMotion icon green
   // (#88F700) + heavy uppercase + wide tracking = a deliberately DIFFERENT look
   // from the rest of the HUD so the drill reads at a glance while recording.
-  drillBanner: { position: 'absolute', alignSelf: 'center', alignItems: 'center', zIndex: 6, paddingHorizontal: 20, paddingVertical: 7, borderRadius: 14, backgroundColor: 'rgba(6,20,11,0.74)', borderWidth: 1.5, borderColor: '#88F700' },
+  // 2026-09-29 (narrow-phone audit #12) — no width cap: "INCONSISTENT CHIPPING" at 21pt is ~390dp, so the
+  // banner ran off both edges of a 344dp Fold cover screen (and a 390dp iPhone). Capped, and the name shrinks.
+  drillBanner: { position: 'absolute', alignSelf: 'center', alignItems: 'center', maxWidth: '92%', zIndex: 6, paddingHorizontal: 20, paddingVertical: 7, borderRadius: 14, backgroundColor: 'rgba(6,20,11,0.74)', borderWidth: 1.5, borderColor: '#88F700' },
   drillBannerKicker: { color: '#88F700', fontSize: 10, fontWeight: '700', letterSpacing: 4, marginBottom: 2 },
   drillBannerName: { color: '#FFFFFF', fontSize: 21, fontWeight: '900', letterSpacing: 1.5 },
   drillCheckCard: { position: 'absolute', alignSelf: 'center', maxWidth: '86%', zIndex: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(6,20,11,0.88)', borderWidth: 1, borderLeftWidth: 4, borderColor: 'rgba(255,255,255,0.12)' },
@@ -7324,14 +7367,11 @@ const styles = StyleSheet.create({
 
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
   framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
-  framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  // 2026-09-29 (narrow-phone audit #6) — shrink inside the 88% pill instead of bleeding out of it.
+  framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3, flexShrink: 1, textAlign: 'center' },
   aimReadoutDivider: { width: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.2)' },
   // Tempo data pill — vertical, left edge.
   tempoPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
-  tempoPillLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
-  tempoPillValue: { fontSize: 22, fontWeight: '900' },
-  tempoPillUnit: { color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '700' },
-  effortPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
   // Setup tool rail — translucent icon buttons on the right edge.
   toolRail: { position: 'absolute', right: 10, gap: 12, zIndex: 7, alignItems: 'center' },
   toolBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
@@ -7367,9 +7407,15 @@ const styles = StyleSheet.create({
   },
   toolCardHeader: { color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '900', letterSpacing: 1.3, marginBottom: 4, marginLeft: 4 },
   toolCardIcon: { width: 34, height: 34 },
+  toolCardScroll: { gap: 2 },
   modeCycleBtn: { width: 50, height: 50, borderRadius: 25, borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
   modeCycleImg: { width: 42, height: 42 },
-  modeFadeLabelLeft: { position: 'absolute', right: 62, width: 150, height: 54, textAlign: 'right', textAlignVertical: 'center', fontSize: 13, fontWeight: '900', letterSpacing: 1 },
+  // 2026-09-29 (narrow-phone audit #7) — was `right: 62` inside a 50dp wrapper hugging the left edge,
+  // i.e. entirely off-screen at every width. Now beside the button, toward the centre, sized to the gap
+  // before the record button (smartMotionLayout.modeFadeLabelWidth) — inside the row, so the deck's
+  // overflow:hidden can never clip it and it never lands on the swing-count row above.
+  modeFadeLabelWrap: { position: 'absolute', left: MODE_FADE_LABEL_OFFSET_DP, top: 0, bottom: 0, justifyContent: 'center' },
+  modeFadeLabelText: { fontSize: 13, fontWeight: '900', letterSpacing: 1, textAlign: 'left' },
   setupHintLine: { fontSize: 12, fontWeight: '800', textAlign: 'center', paddingVertical: 2 },
   recDot: { width: 10, height: 10, borderRadius: 5 },
   recText: { color: '#fff', fontWeight: '800', fontSize: 13 },
@@ -7450,8 +7496,11 @@ const styles = StyleSheet.create({
   actionBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
   // Universal control bar — translucent icon buttons.
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // 2026-09-29 — narrow review bar: take the row's width and spread the buttons across it.
+  barRowSpread: { flex: 1, justifyContent: 'space-between' },
   barBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   barRateTag: { position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#88F700' },
+  overlayToggleInline: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(124,224,79,0.5)' },
   overlayToggle: { position: 'absolute', right: 46, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', zIndex: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.5)' },
   // 2026-06-15 (Tim — shot-shape drills) — intended-vs-actual launch card.
   shotShapeCard: { position: 'absolute', alignSelf: 'center', maxWidth: '88%', backgroundColor: 'rgba(6,15,9,0.86)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, zIndex: 7 },

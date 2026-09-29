@@ -22,6 +22,7 @@
 
 import React from 'react';
 import { useDistanceFormat } from '../../hooks/useDistanceUnit';
+import { HUD_MAX_FONT_SCALE } from '../../services/swing/smartMotionLayout';
 import {
   View,
   Text,
@@ -111,8 +112,11 @@ export function SmartMotionHeader({
   return (
     <View style={[styles.header, { borderBottomColor: colors.border }, style]}>
       <View style={styles.headerBrand}>
-        <Text numberOfLines={1} style={[styles.brandWordmark, { color: colors.text_primary }]}>{t('smartmotion_smart_motion_hud.smart_motion_header.smartmotion')}</Text>
-        <Text numberOfLines={1} style={[styles.brandSub, { color: colors.accent }]}>{subtitle}</Text>
+        {/* 2026-09-29 (narrow-phone audit #13) — at 344dp in review the bar also holds back, mic, eye and
+            dots, leaving ~150dp: "FULL SWING ANALYSIS" (~156dp at 10pt) was cut to "FULL SWING ANALY…".
+            It shrinks to fit now, and stops growing at the HUD font-scale cap. */}
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE} style={[styles.brandWordmark, { color: colors.text_primary }]}>{t('smartmotion_smart_motion_hud.smart_motion_header.smartmotion')}</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE} style={[styles.brandSub, { color: colors.accent }]}>{subtitle}</Text>
       </View>
       {onSettings ? (
         <Pressable onPress={onSettings} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('smartmotion_smart_motion_hud.accessibility_label.settings')}>
@@ -458,7 +462,7 @@ export function AcousticPickupCard({
           style={[styles.acousticBadge, !active && { opacity: 0.6 }]}
           resizeMode="contain"
         />
-        <Text style={[styles.acousticTitle, { color: colors.text_muted }]}>{t('smartmotion_smart_motion_hud.acoustic_pickup_card.acoustic_pickup')}</Text>
+        <Text style={[styles.acousticTitle, { color: colors.text_muted }]} numberOfLines={1} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('smartmotion_smart_motion_hud.acoustic_pickup_card.acoustic_pickup')}</Text>
       </View>
       <View style={[styles.meterTrack, { backgroundColor: colors.surface }]}>
         <View style={[styles.meterFill, { width: pct, backgroundColor: accent, opacity: active ? 1 : 0.5 }]} />
@@ -652,10 +656,10 @@ export function FooterChips({
   // (Tim's 08-18 capture). Same class as the fit-profile ladder column and the strike-confirmed line.
   const Chip = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
     <View style={styles.chip}>
-      <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>
+      <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
         {label}{sub ? <Text style={{ fontWeight: '600' }}> · {sub}</Text> : null}
       </Text>
-      <Text style={[styles.chipValue, { color: '#88F700' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+      <Text style={[styles.chipValue, { color: '#88F700' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>
         {value}
       </Text>
     </View>
@@ -664,8 +668,8 @@ export function FooterChips({
     <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
       {onClubPress ? (
         <Pressable onPress={onClubPress} style={styles.chip} accessibilityRole="button" accessibilityLabel={t('smartmotion_smart_motion_hud.accessibility_label.set_club')}>
-          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>{t('scorecard.col_club')}</Text>
-          <Text style={[styles.chipValue, { color: club ? '#88F700' : 'rgba(255,255,255,0.55)' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{club ?? 'Tag ▾'}</Text>
+          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{t('scorecard.col_club')}</Text>
+          <Text style={[styles.chipValue, { color: club ? '#88F700' : 'rgba(255,255,255,0.55)' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{club ?? 'Tag ▾'}</Text>
         </Pressable>
       ) : (
         <Chip label={t('scorecard.col_club')} value={club ?? '—'} />
@@ -740,14 +744,15 @@ const styles = StyleSheet.create({
   acousticCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
   acousticHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   acousticBadge: { width: 26, height: 26 },
-  acousticTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  // 2026-09-29 (narrow-phone audit #6) — shrink within the row instead of bleeding out of the card.
+  acousticTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, flexShrink: 1 },
   meterTrack: { height: 10, borderRadius: 5, marginTop: 10, marginBottom: 2, overflow: 'visible', justifyContent: 'center' },
   meterFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 5 },
   meterNeedle: { position: 'absolute', top: -3, bottom: -3, width: 3, borderRadius: 2, marginLeft: -1.5 },
   acousticStatus: { fontSize: 11, fontWeight: '700', marginTop: 6 },
 
   verdict: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16 },
-  verdictText: { fontSize: 13, fontWeight: '900', letterSpacing: 1 },
+  verdictText: { fontSize: 13, fontWeight: '900', letterSpacing: 1, flexShrink: 1, textAlign: 'center' },
 
   guideRoot: { alignItems: 'center', justifyContent: 'center' },
   guideLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
