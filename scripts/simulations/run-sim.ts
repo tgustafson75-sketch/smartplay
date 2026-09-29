@@ -1678,7 +1678,9 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
     // 2026-06-13 — ball box now lives as a labeled row in the collapsible setup
     // tools CARD (single tools icon → card), not the old right-edge rail button.
-    /title=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
+    // 2026-09-29 — renamed "Ball position": the region is found automatically and this row is the
+    // optional adjust affordance, not a setup step.
+    /title=\{placeBallMode \? 'Tap your ball' : 'Ball position'\}/.test(smSrc) &&
     // 2026-06-14 — departure effect is now per-swing (cached by index, recomputed off
     // the SELECTED swing's strike); deps dropped `ballDeparture` (the old run-once guard).
     // 2026-08-12 — and dropped `showSkeleton`: the pose-skeleton toggle must not decide whether
@@ -1691,7 +1693,10 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
     /const videoLocated = \(seg\?\.peakDb \?\? 0\) === 0;/.test(smSrc) &&
     // 2026-07-04 (drift reconcile) — acceptance deliberately LOOSENED from
     // confidence==='high' to !== 'low' (high-only threw away good medium reads).
-    /videoLocated[\s\S]{0,200}r\.departed && r\.confidence !== 'low' && r\.ball_present_before/.test(smSrc),
+    // 2026-09-29 — the acceptance moved, unchanged, into services/swing/ballRegion.acceptBallDeparture
+    // (which also discounts an unmeasured default ball region); assert the rule there and the wiring here.
+    /acceptBallDeparture\(r, \{ videoLocated, regionSource: ballAreaSourceRef\.current \}\)/.test(smSrc) &&
+    /if \(opts\.videoLocated\) return r\.departed && r\.confidence !== 'low' && r\.ball_present_before \? r : null;/.test(read('services/swing/ballRegion.ts')),
   'default reference box + verifier runs under Motion (fast default), per-swing; video-located swings degrade to a not-low-confidence trace instead of going dark');
 
 // ─── White-screen guard: geometry-driven top-down maps must reject a NON-FINITE hole
@@ -6419,9 +6424,15 @@ check('Acoustic card always tappable to (re)calibrate',
   /Re-calibrate acoustics, 10 strikes/.test(smSrc),
   'tapping the pill opens calibration whether or not already calibrated');
 
-check('Ball box shown by default + confirmatory (never gates)',
-  /DEFAULT_BALL_BOX = \{/.test(smSrc) && /toolRail/.test(smSrc),
-  'default reference box, optional, never blocks recording/analysis');
+// 2026-09-29 (Tim — "hide and make user not have to move ball box") — was 'Ball box shown by default'.
+// The premise flipped deliberately: the region is still DERIVED by default (default rig → feet proxy →
+// detected ball, services/swing/ballRegion) and still never gates, but it is no longer ON SCREEN in the
+// full-swing flow until the player asks. Asserting the old premise would now block the fix.
+check('Ball box derived by default, hidden until asked for, confirmatory (never gates)',
+  /DEFAULT_BALL_BOX = \{/.test(smSrc) && /toolRail/.test(smSrc) &&
+    /const \[ballBoxShown, setBallBoxShown\] = useState\(false\);/.test(smSrc) &&
+    /phase === 'setup' && draftBall && \(isPutt \|\| ballBoxShown \|\| placeBallMode\) \?/.test(smSrc),
+  'the ball region is found automatically and fed to every consumer; the box is off screen in the default full-swing flow, optional to adjust, and never blocks recording/analysis');
 
 check('Hands-free voice record (start/stop) wired',
   exists('services/smartMotionRecordBus.ts') &&
@@ -9018,7 +9029,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /export function EditableCageTargets/.test(targetingSrc) &&
       /PanResponder\.create/.test(targetingSrc) &&
       /onChangeBallArea\(b\)/.test(targetingSrc) &&            // commit on release, not per-frame
-      /phase === 'setup' && draftBall \? \(/.test(smSrc2) &&    // draggable in setup
+      // 2026-09-29 — still draggable in setup, but only once revealed (hidden by default; see ballRegion).
+      /phase === 'setup' && draftBall && \(isPutt \|\| ballBoxShown \|\| placeBallMode\) \? \(/.test(smSrc2) &&
       /<EditableCageTargets/.test(smSrc2) &&
       /onChangeBallArea=\{\(a\) => \{ if \(sessionId\) setSessionBallArea\(sessionId, a\); \}\}/.test(smSrc2), // review commits to session
     'EditableCageTargets drags each marker with a PanResponder, smooth via local state, committing to the session only on release; wired draggable in setup (draftBall) and review (session) — so a box the Samsung record-crop nudged off can be fixed on the real recorded frame and stick');
@@ -13158,7 +13170,8 @@ check('LOCK: the smarter ball box can only ever improve on the feet proxy, never
     const api = read('api/ball-departure.ts');
     // The proxy is applied FIRST and unconditionally; the real locate is fire-and-forget on top.
     const proxyFirst = (() => {
-      const iProxy = sm.indexOf("setDraftBall({ x: res.feetCenter.x");
+      // 2026-09-29 — the proxy now lands through the ballRegion precedence (a detection outranks it).
+      const iProxy = sm.indexOf('applyBallRegion(ballRegionFromFeet(res.feetCenter))');
       const iLocate = sm.indexOf('locateBallInSetupFrame');
       return iProxy > -1 && iLocate > iProxy;
     })();

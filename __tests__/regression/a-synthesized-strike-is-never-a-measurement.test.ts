@@ -18,6 +18,7 @@
  * This guards the SHAPE, not the three instances: any surface that reads the field must first ask
  * how the strike was found. [[run-the-second-pass-yourself]] [[smartmotion-contact-honesty]]
  */
+import { acceptBallDeparture } from '../../services/swing/ballRegion';
 import fs from 'fs';
 import path from 'path';
 
@@ -72,7 +73,15 @@ describe('the readers that were already honest stay honest', () => {
 
   it('BALL DEPARTURE gates a video-located swing on confidence', () => {
     expect(sm).toMatch(/const videoLocated = \(seg\?\.peakDb \?\? 0\) === 0;/);
-    expect(sm).toMatch(/videoLocated\s*\n?\s*\? \(r && r\.departed && r\.confidence !== 'low' && r\.ball_present_before \? r : null\)/);
+    // 2026-09-29 — the rule moved, unchanged, into services/swing/ballRegion.acceptBallDeparture.
+    // Asserted as BEHAVIOUR there, and as wiring here.
+    expect(sm).toMatch(/acceptBallDeparture\(r, \{ videoLocated, regionSource: ballAreaSourceRef\.current \}\)/);
+    const opts = { videoLocated: true, regionSource: 'detected' as const };
+    expect(acceptBallDeparture({ departed: true, confidence: 'low', ball_present_before: true }, opts)).toBeNull();
+    expect(acceptBallDeparture({ departed: false, confidence: 'high', ball_present_before: true }, opts)).toBeNull();
+    expect(acceptBallDeparture({ departed: true, confidence: 'medium', ball_present_before: false }, opts)).toBeNull();
+    const good = { departed: true, confidence: 'medium' as const, ball_present_before: true };
+    expect(acceptBallDeparture(good, opts)).toBe(good);
   });
 });
 

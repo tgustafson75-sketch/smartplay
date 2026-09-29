@@ -47,11 +47,11 @@ export const SCREEN_HELP: Record<string, ScreenHelp> = {
     title: 'Smart Motion',
     icon: 'camera-outline',
     lines: [
-      'Dock the phone, line up the ball box, and hit record.',
+      'Dock the phone so I can see you head to feet, and hit record — I find the ball myself.',
       'Swing — I detect the strike and analyze your motion.',
       'Review the read, then re-record or save it to your library.',
     ],
-    spoken: "Smart Motion is your swing camera. Line up the ball, hit record, take your swing, and I'll read it back.",
+    spoken: "Smart Motion is your swing camera. Stand the phone where it can see all of you, hit record, take your swing, and I'll read it back.",
   },
   scorecard: {
     key: 'scorecard',

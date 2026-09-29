@@ -315,6 +315,10 @@ export interface SwingSession {
    *  Both fields are session-scoped (cage setup persists across the
    *  many swings in one session) and null when unset. */
   ball_area_norm?: { x: number; y: number; r: number } | null;
+  /** 2026-09-29 — where ball_area_norm came from (services/swing/ballRegion): the player, a ball
+   *  detected in a setup frame, the pose proxy under the feet, or the unmeasured default. Absent on
+   *  sessions saved before it existed, which reads as unknown and changes nothing. */
+  ball_area_source?: import('../services/swing/ballRegion').BallRegionSource | null;
   target_norm?: { x: number; y: number } | null;
   /** 2026-06-24 — Smart Tempo result. The honest backswing:downswing ratio
    *  read computed by services/smartTempo.computeTempo from the player's three
@@ -646,7 +650,12 @@ interface SwingSessionState {
    *  frame) for sessions with no analysis fault-frame. Pass null to clear. */
   setSessionThumbnail: (sessionId: string, uri: string | null) => void;
   /** 2026-05-27 — Fix EO: cage targeting setters. Pass null to clear. */
-  setSessionBallArea: (sessionId: string, area: { x: number; y: number; r: number } | null) => void;
+  setSessionBallArea: (
+    sessionId: string,
+    area: { x: number; y: number; r: number } | null,
+    /** 2026-09-29 — optional; omitted = unknown (the behaviour before sources existed). */
+    source?: import('../services/swing/ballRegion').BallRegionSource | null,
+  ) => void;
   setSessionTarget: (sessionId: string, target: { x: number; y: number } | null) => void;
   /** 2026-05-24 — Persist the display-quality diagnostic fault frame
    *  metadata on a session after analyzeSwing returns successfully.
@@ -1587,7 +1596,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
        * on a just-captured (still ACTIVE) session was silently dropped. Normalisation hoisted so the
        * two collections can't drift apart in how they clamp.
        */
-      setSessionBallArea: (sessionId, area) => {
+      setSessionBallArea: (sessionId, area, source) => {
         const normalized = area == null ? null : (() => {
           const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
           return {
@@ -1600,10 +1609,10 @@ export const useSwingSessionStore = create<SwingSessionState>()(
         })();
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
-            session.id !== sessionId ? session : { ...session, ball_area_norm: normalized }
+            session.id !== sessionId ? session : { ...session, ball_area_norm: normalized, ball_area_source: normalized ? source ?? null : null }
           ),
           activeSession: s.activeSession?.id === sessionId && s.activeSession
-            ? { ...s.activeSession, ball_area_norm: normalized }
+            ? { ...s.activeSession, ball_area_norm: normalized, ball_area_source: normalized ? source ?? null : null }
             : s.activeSession,
         }));
       },

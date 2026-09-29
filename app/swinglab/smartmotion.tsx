@@ -102,6 +102,10 @@ import { deriveDrillVerdict } from '../../services/drillVerdict';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { MIN_TRACE_FPS, PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
 import { coverageNote } from '../../services/swing/analysisFrames';
+import {
+  acceptBallDeparture, ballRegionFromDetection, ballRegionFromFeet, nextBallRegion,
+  type BallRegionSource, type SourcedBallRegion,
+} from '../../services/swing/ballRegion';
 import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -950,6 +954,21 @@ export default function SmartMotion() {
   // analysis. Tap to nudge it if their ball sits somewhere else. Persisted into
   // the session on ingest for the strike verifier.
   const [draftBall, setDraftBall] = useState<{ x: number; y: number; r: number } | null>(DEFAULT_BALL_BOX);
+  /**
+   * 2026-09-29 (Tim — "hide and make user not have to move ball box… no other app makes you do a
+   * setup") — WHERE draftBall CAME FROM (services/swing/ballRegion). The region is derived for the
+   * player — default rig → pose proxy under the feet → the ball detected in a setup frame — and a
+   * lower source never replaces a higher one, so a real detection is no longer overwritten by the
+   * feet proxy on the next framed tick. Travels into the session so consumers know an unmeasured
+   * default from a measurement.
+   */
+  const ballSourceRef = useRef<BallRegionSource>('default');
+  /**
+   * The ball box is NOT on screen in the default full-swing flow. It is still computed and still feeds
+   * every consumer; the player only sees it when they ask (setup tools → Ball position, or the deck
+   * flag). Putting keeps its visible cup — there the flag IS the task.
+   */
+  const [ballBoxShown, setBallBoxShown] = useState(false);
   // 2026-06-12 — draft TARGET for DTL setup: a draggable aim point (the floating
   // end of the ball→target line, like SmartVision). Shown only in DTL (no flight
   // to aim face-on / in a putt). Carries into the session on ingest.
@@ -993,7 +1012,8 @@ export default function SmartMotion() {
     if (dtlDefaultAppliedRef.current || userMovedBallRef.current) return;
     if (angle !== 'down_the_line' || isPutt) return;
     const rig = defaultDtlRig(swingerHandedness);
-    setDraftBall(rig.ball);
+    // Only the DEFAULT is replaced by the default rig — never a derived or placed region.
+    if (ballSourceRef.current === 'default') setDraftBall(rig.ball);
     // (putt mode returned above) — DTL swing target sits up the frame, effort-capped.
     setDraftTarget({ x: rig.target.x, y: Math.max(EFFORT_TOP_CAP, rig.target.y) });
     dtlDefaultAppliedRef.current = true;
@@ -1034,6 +1054,15 @@ export default function SmartMotion() {
   }, [statusPulse]);
   const draftBallRef = useRef<typeof draftBall>(null);
   useEffect(() => { draftBallRef.current = draftBall; }, [draftBall]);
+  /** The one way a derived or placed region lands — through the precedence in services/swing/ballRegion. */
+  const applyBallRegion = useCallback((candidate: SourcedBallRegion) => {
+    const current = draftBallRef.current ? { region: draftBallRef.current, source: ballSourceRef.current } : null;
+    const next = nextBallRegion(current, candidate);
+    if (next === current) return;
+    ballSourceRef.current = next.source;
+    draftBallRef.current = next.region;   // synchronously, so a second update this tick ranks against it
+    setDraftBall(next.region);
+  }, []);
 
   // 2026-06-11 — Framing Coach loop. While lining up (SETUP), grab a preview frame
   // every ~900ms, run ON-DEVICE pose, and evaluate whether the golfer is fully in
@@ -1140,7 +1169,7 @@ export default function SmartMotion() {
                   // handedness-aware DTL default, not just the legacy center box.)
                   const isDefault = !userMovedBallRef.current;
                   if (isDefault) {
-                    setDraftBall({ x: res.feetCenter.x, y: Math.min(0.92, res.feetCenter.y + 0.04), r: DEFAULT_BALL_BOX.r });
+                    applyBallRegion(ballRegionFromFeet(res.feetCenter));
                     /**
                      * 2026-08-19 (Tim — "strengthen the ball detection and the ball detection area").
                      * The line above is a PROXY: it puts the box under the detected FEET, which is
@@ -1163,7 +1192,7 @@ export default function SmartMotion() {
                           const { locateBallInSetupFrame } = await import('../../services/swing/ballDeparture');
                           const found = await locateBallInSetupFrame(b64);
                           if (found && !cancelled && !userMovedBallRef.current) {
-                            setDraftBall({ x: found.x, y: found.y, r: DEFAULT_BALL_BOX.r });
+                            applyBallRegion(ballRegionFromDetection(found));
                             console.log('[smartmotion] ball located from setup frame', JSON.stringify(found));
                           }
                         } catch { /* proxy stands */ }
@@ -1229,7 +1258,8 @@ export default function SmartMotion() {
     };
     timer = setTimeout(() => void tick(), 700); // let the camera settle first
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [phase, scanningClub]);
+    // applyBallRegion is a stable useCallback([]) — listing it never re-runs the loop.
+  }, [phase, scanningClub, applyBallRegion]);
   // Acoustic impact time of the first swing — needed by the camera verifier,
   // which runs from an effect once the clip + ball spot are both available.
   const firstStrikeMsRef = useRef<number | null>(null);
@@ -1562,6 +1592,9 @@ export default function SmartMotion() {
   const setSessionBallArea = useSwingSessionStore(s => s.setSessionBallArea);
   const setSessionTarget = useSwingSessionStore(s => s.setSessionTarget);
   const ballArea = cageSession?.ball_area_norm ?? null;
+  // 2026-09-29 — read by the departure effect at call time (a ref, like ballAreaRef).
+  const ballAreaSourceRef = useRef<BallRegionSource | null>(null);
+  ballAreaSourceRef.current = cageSession?.ball_area_source ?? null;
   const targetPoint = cageSession?.target_norm ?? null;
 
   // 2026-07-06 (MOAT Phase 2 — the judge) — grade the drill set against the fault
@@ -1995,9 +2028,9 @@ export default function SmartMotion() {
         // were thrown away unless confidence was HIGH (plus departed + ball-present).
         // The ball IS visible at the range; accept MEDIUM+ so a real, seen departure
         // draws its launch instead of nothing. Still drop genuinely-low reads.
-        const accepted = videoLocated
-          ? (r && r.departed && r.confidence !== 'low' && r.ball_present_before ? r : null)
-          : (r ?? null);
+        // 2026-09-29 — one rule, services/swing/ballRegion.acceptBallDeparture: the video-located rule
+        // above unchanged, and the same discount for a ball region nobody measured (the default).
+        const accepted = acceptBallDeparture(r, { videoLocated, regionSource: ballAreaSourceRef.current });
         ballDepartureCacheRef.current[selectedSwing] = accepted;
         setBallDeparture(accepted);
         // 2026-07-24 (full-app audit, root E) — PERSIST the duff. detectBallDeparture
@@ -2942,7 +2975,7 @@ export default function SmartMotion() {
         // Carry the pre-record ball box + (DTL) target into the session so the
         // targeting overlay, ball-trace, and effort grading use them in review.
         if (draftBallRef.current) {
-          setSessionBallArea(sessionId, draftBallRef.current);
+          setSessionBallArea(sessionId, draftBallRef.current, ballSourceRef.current);
         }
         if (angle === 'down_the_line' && !puttModeRef.current && draftTargetRef.current) {
           setSessionTarget(sessionId, draftTargetRef.current);
@@ -3683,6 +3716,8 @@ export default function SmartMotion() {
     setFeelText('');
     setFeelReply(null);
     setDraftBall(DEFAULT_BALL_BOX); // keep the default reference box after Record again
+    ballSourceRef.current = 'default';
+    setBallBoxShown(false);
     // Re-arm the DTL handedness rig + pose ball-auto-anchor for the next capture.
     // Without this, the first clip "consumes" both refs and every later "Record
     // again" / hands-free loop loses the outer-third partition + auto-anchor. The
@@ -5913,7 +5948,7 @@ export default function SmartMotion() {
         {/* SETUP / RECORDING — the ball box is the SINGLE target origin: the
             target line runs straight up from the ball box (one unified anchor,
             no duplicate static box). Shown while lining up and while recording. */}
-        {phase === 'setup' && draftBall ? (
+        {phase === 'setup' && draftBall && (isPutt || ballBoxShown || placeBallMode) ? (
           // SETUP — DRAG to anchor the ball box AND (DTL only) the TARGET. The ball→
           // target aim line + the live effort/direction readout update as you drag the
           // floating target end (Tim: "the target's not moveable + no readout"). No
@@ -5938,7 +5973,7 @@ export default function SmartMotion() {
                */
               target={isPutt ? draftTarget : null}
               targetKind={isPutt ? 'cup' : 'aim'}
-              onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
+              onChangeBallArea={(a) => { userMovedBallRef.current = true; applyBallRegion({ region: a, source: 'user' }); }}
               onChangeTarget={(t) => {
                 // 2026-09-12 — a tap is a CORRECTION and outranks the detector for this setup, the
                 // same way userMovedBallRef has always outranked the ball auto-locate. Without this
@@ -5952,7 +5987,7 @@ export default function SmartMotion() {
               onDragActiveChange={setTargetsDragging}
             />
           </Animated.View>
-        ) : phase === 'recording' && draftBall ? (
+        ) : phase === 'recording' && draftBall && (isPutt || ballBoxShown) ? (
           // RECORDING — display only (you're swinging; no dragging mid-record).
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: targetingOpacity }]} pointerEvents="none">
             <CageTargetingOverlay ballArea={draftBall} target={isPutt ? draftTarget : null} launchDir={null} targetKind={isPutt ? 'cup' : 'aim'} />
@@ -5965,7 +6000,7 @@ export default function SmartMotion() {
               const { locationX, locationY } = e.nativeEvent;
               if (rootSize.w > 0 && rootSize.h > 0) {
                 userMovedBallRef.current = true;
-                setDraftBall({ x: locationX / rootSize.w, y: locationY / rootSize.h, r: 0.07 });
+                applyBallRegion({ region: { x: locationX / rootSize.w, y: locationY / rootSize.h, r: 0.07 }, source: 'user' });
               }
               setPlaceBallMode(false);
             }}
@@ -6109,10 +6144,10 @@ export default function SmartMotion() {
                 />
                 <ToolCardRow
                   icon={<Image source={ICON_RAIL.ballbox} style={styles.toolCardIcon} resizeMode="contain" />}
-                  title={placeBallMode ? 'Tap your ball' : 'Ball box'}
-                  desc="Place the ball marker on the frame"
+                  title={placeBallMode ? 'Tap your ball' : 'Ball position'}
+                  desc="Found automatically — tap to adjust"
                   active={placeBallMode}
-                  onPress={() => { setPlaceBallMode((v) => !v); setRailExpanded(false); }}
+                  onPress={() => { setPlaceBallMode((v) => !v); setBallBoxShown(true); setRailExpanded(false); }}
                 />
                 <ToolCardRow
                   icon={<Image source={ICON_ENV[effectiveMode]} style={styles.toolCardIcon} resizeMode="contain" />}
@@ -6705,14 +6740,22 @@ export default function SmartMotion() {
                 </TactilePressable>
               </View>
               {actionBtn}
+              {/* 2026-09-29 — in a full swing the flag reveals the (hidden, auto-found) ball position for
+                  anyone who wants to check or adjust it; in putting it still shows/hides the cup. */}
               <TactilePressable
                 haptic="medium"
-                onPress={() => setTargetingVisible((v) => !v)}
-                style={[styles.flagBtn, { borderColor: targetingVisible ? colors.accent : 'rgba(136,247,0,0.35)' }]}
+                onPress={() => {
+                  if (isPutt) { setTargetingVisible((v) => !v); return; }
+                  setTargetingVisible(true);
+                  setBallBoxShown((v) => !v);
+                }}
+                style={[styles.flagBtn, { borderColor: (isPutt ? targetingVisible : ballBoxShown) ? colors.accent : 'rgba(136,247,0,0.35)' }]}
                 accessibilityRole="button"
-                accessibilityLabel={targetingVisible ? 'Hide aim target' : 'Show aim target'}
+                accessibilityLabel={isPutt
+                  ? (targetingVisible ? 'Hide aim target' : 'Show aim target')
+                  : (ballBoxShown ? 'Hide ball position' : 'Show ball position')}
               >
-                <Ionicons name="flag" size={24} color={targetingVisible ? colors.accent : 'rgba(255,255,255,0.6)'} />
+                <Ionicons name="flag" size={24} color={(isPutt ? targetingVisible : ballBoxShown) ? colors.accent : 'rgba(255,255,255,0.6)'} />
               </TactilePressable>
             </View>
           ) : (
