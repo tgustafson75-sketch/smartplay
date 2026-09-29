@@ -8,6 +8,13 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### 2026-09-30 — Wear 1031 (watch-shapes fix) submitted: `wear:production`, 100%, 1030 excluded. Managed
+> publishing ON — nothing is public until Tim presses Publish after approval. The listing went out with it
+> (name "SmartPlay Caddie: Golf GPS AI"; recap + history import free; satellite hole views paid; trial
+> sentence kept at the live "14-day free trial").
+> **1.0.2 RELEASE-DAY LIST (Play):** (1) change the trial sentence to "1-month free trial"; (2) change the
+> Play subscription offers to 1 month — both at the same time as 1.0.2 goes live.
+
 > ### ⚠️ LATEST — 2026-09-29. 1.0.2 STORE BUILD candidate on LOCAL branch `release-1.0.2-polish` (NOT pushed, NO OTA — binary only).
 > Contains: 1.0.2 monetization (already on main at 9313287f), caddie-tab yardage/L1 live+zoom/plan card/pace
 > of play/round-data icon, tee times + store promo codes, Dashboard recent shots, two-row data strip with
