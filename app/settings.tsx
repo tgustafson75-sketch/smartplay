@@ -1526,7 +1526,7 @@ export default function Settings() {
               it on. Helps Tim see which features get used. */}
           <ToggleRow
             label={t('settings.label.help_improve_smartplay')}
-            sub="Share anonymous usage — which features you use, never your name, scores, or location. Off by default."
+            sub="Share anonymous usage — which features you use, never your name, email, scores, or location. On by default; turn off anytime."
             value={analyticsOptIn}
             onValueChange={confirmToggle('Anonymous usage sharing', setAnalyticsOptIn)}
           />

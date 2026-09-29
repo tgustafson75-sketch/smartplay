@@ -23,6 +23,7 @@ import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services
 import { devLog } from '../services/devLog';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
 import { noteUserTurn, getUserTurnEpoch } from '../services/userTurnClock';
+import { noteCaddieTurn } from '../services/funnelEvents';
 import { abortVoiceWarmup } from '../services/voiceWarmup';
 // 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
 // mic and the earbud/badge path keep the same conversation + reset together.
@@ -118,6 +119,9 @@ export function useCaddieTabMic({
     // proactive line stands down, and hand the warmups' connections to it.
     noteUserTurn();
     abortVoiceWarmup();
+    // 1.0.2 funnel. Typed and SmartMotion turns land here directly; a voice turn already fired from
+    // its own path, and the event fires once per install either way.
+    noteCaddieTurn('typed');
     const turnEpoch = getUserTurnEpoch();
 
     // 2026-07-06 (Tim — "less predictive, more narrative to build a database") —

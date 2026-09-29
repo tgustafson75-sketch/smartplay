@@ -1,12 +1,15 @@
 /**
  * SmartPlay Caddie — usage telemetry client (off-device data layer · Phase A).
  *
- * Sends coarse, OPT-IN, ANONYMOUS usage events to `${getApiBaseUrl()}/api/usage`,
+ * Sends coarse, ANONYMOUS usage events to `${getApiBaseUrl()}/api/usage`,
  * which writes them into the isolated `smartplay` Supabase schema.
  *
  * Contract (honesty + safety):
- *   • OPT-IN ONLY. Gated on settingsStore.analyticsOptIn (default FALSE). When
- *     off, track() is a no-op — nothing is buffered, nothing is sent.
+ *   • ONE TOGGLE. Gated on settingsStore.analyticsOptIn — ON by default for installs from 1.0.2,
+ *     unchanged for existing installs (2026-09-28). When off, track() is a no-op — nothing is
+ *     buffered, nothing is sent. The Settings row says so.
+ *   • WHAT A BATCH CARRIES: { events: [{ event, props, ts }], anonId }. Nothing else — no email
+ *     (removed 2026-09-28), no device id, no location. The server stores anon_id, event, props, ts.
  *   • ANONYMOUS. We attach a random, locally-generated id persisted in
  *     AsyncStorage. It is NOT a device fingerprint — it's a throwaway opaque
  *     string that resets if the user clears app data.
@@ -88,16 +91,10 @@ async function ensureAnonId(): Promise<string> {
 }
 
 /** Profile user id (email), only if the user has set one. May be null. */
-function getUserId(): string | null {
-  try {
-    // Dynamic require avoids a hard module cycle at import time.
-    const mod = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
-    const email = mod.usePlayerProfileStore.getState().email;
-    return typeof email === 'string' && email.trim() ? email.trim() : null;
-  } catch {
-    return null;
-  }
-}
+// 2026-09-28 (1.0.2) — getUserId() is gone. It attached the player's EMAIL as user_id to every batch,
+// while the Settings row promised "never your name" — and with the toggle now on by default for new
+// installs, that is an identifier the App Privacy / Data safety answers would have to declare as
+// linked to the player. Usage is keyed by the random per-install anonId only.
 
 function ensureInit(): void {
   if (initialized) return;
@@ -144,7 +141,6 @@ export async function flushUsage(): Promise<void> {
     buffer = buffer.slice(batch.length);
 
     const id = await ensureAnonId();
-    const userId = getUserId();
 
     const res = await fetch(`${getApiBaseUrl()}/api/usage`, {
       method: 'POST',
@@ -152,7 +148,6 @@ export async function flushUsage(): Promise<void> {
       body: JSON.stringify({
         events: batch,
         anonId: id,
-        ...(userId ? { userId } : {}),
       }),
       // 2026-07-06 (audit) — bound the wait (~1.5× the route's 10s maxDuration);
       // telemetry is best-effort, a stalled flush should die quietly, not hang.

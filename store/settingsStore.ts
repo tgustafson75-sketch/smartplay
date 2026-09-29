@@ -595,7 +595,9 @@ export const useSettingsStore = create<SettingsState>()(
       // was a source of inconsistency and single-key breakage.
       aiProvider: 'openai' as const,
       // 2026-06-24 — Usage telemetry OPT-IN, default OFF.
-      analyticsOptIn: false,
+      // 2026-09-28 (1.0.2) — ON for NEW installs (the funnel events need a denominator). Existing installs
+      // keep whatever they have: the value is persisted, and v16's migration seeded FALSE for anyone older.
+      analyticsOptIn: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       // 2026-06-04 — Coach Mode toggle setter.

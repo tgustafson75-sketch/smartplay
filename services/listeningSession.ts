@@ -10,6 +10,7 @@ import { conversationalBrainTurn } from './conversationalBrain';
 import { askCaddie } from './caddieBrain';
 import { abortVoiceWarmup } from './voiceWarmup';
 import { noteUserTurn } from './userTurnClock';
+import { noteCaddieTurn } from './funnelEvents';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from './featureAccess';
 import { getDialog } from './dialogEngine';
 import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
@@ -877,6 +878,7 @@ async function openSession() {
    * still waiting on the brain stands down instead of speaking over this one.
    */
   noteUserTurn();
+  noteCaddieTurn('earbud'); // 1.0.2 funnel: first_caddie_turn (fires once)
 
   // Audio routing safety: if route is the phone speaker AND the user hasn't
   // opted into "Voice on phone speaker", suppress TTS — show text instead.
@@ -1861,6 +1863,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   // 2026-09-28 — the typed / watch path is a real turn too, and it goes straight to the network.
   noteUserTurn();
   abortVoiceWarmup();
+  noteCaddieTurn('typed'); // 1.0.2 funnel: first_caddie_turn (fires once)
   // 2026-07-25 (Tim — "give all mics a universal state display; not sure he's going to answer") — this
   // TYPED / watch path never drove the shared listening state, so the universal status strip showed
   // nothing after you hit send. Set 'thinking' now (strip shows "Thinking…" immediately) and reset to

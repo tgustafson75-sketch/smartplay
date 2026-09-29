@@ -813,7 +813,11 @@ function AppNavigator() {
        * also did — stamp when this player first opened the app — is still wanted (the first_open
        * funnel event and "when did they start with us"), so it is kept here on its own.
        */
-      if (!first_opened_at) usePlayerProfileStore.setState({ first_opened_at: Date.now() });
+      if (!first_opened_at) {
+        usePlayerProfileStore.setState({ first_opened_at: Date.now() });
+        // 1.0.2 funnel: the first launch of this install (services/funnelEvents).
+        try { (require('../services/funnelEvents') as typeof import('../services/funnelEvents')).noteFirstOpen(); } catch { /* never blocks boot */ }
+      }
       if (plan.setStatus) setSubscriptionStatus(plan.setStatus);
       return true;
     };

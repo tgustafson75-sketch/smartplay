@@ -296,8 +296,9 @@ We collect the minimum needed to make each feature work, and we tell you in the 
 ## 2. Where the data lives
 
 * **On your device** — profile, round history, practice history, and swing videos are stored locally until you uninstall the App or delete them in-app.
-* **Our backend** — a serverless API handles transient request/response state for AI features. No persistent user records are stored on our backend today; request logs are kept 30 days or less.
+* **Our backend** — a serverless API handles transient request/response state for AI features. Apart from optional cloud backup and anonymous usage (below), no user records are stored on our backend; request logs are kept 30 days or less.
 * **Optional cloud backup** — if you turn on backup, an encrypted snapshot of your data is stored so you can restore it. It is keyed to a passphrase only you know, and it is opt-in.
+* **Anonymous usage (on by default)** — which features are used (for example that a round was started or the caddie was asked something), with a random ID generated on your device, the time, and small details of the event. Never your name, email, scores, or location. Stored in our Supabase database. Turn it off in Settings → Help improve SmartPlay; nothing is sent while it is off.
 
 ## 3. Third-party processors
 
@@ -312,7 +313,7 @@ We send data to the following providers solely to deliver the feature you reques
 * **Vercel** — hosting of our backend.
 * **Sentry** — crash stack traces, breadcrumb logs, device and app version, for stability diagnostics.
 * **Google (Maps Platform)** — course search queries and coordinates, for course discovery.
-* **Supabase** — storage for optional, opt-in encrypted cloud backup.
+* **Supabase** — storage for optional, opt-in encrypted cloud backup, and for anonymous usage events.
 * **Apple App Store / Google Play** — app distribution and, where applicable, subscription billing.
 
 We do not currently use third-party analytics or advertising networks. If we add any, we will update this policy and notify you in-app.

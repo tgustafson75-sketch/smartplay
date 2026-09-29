@@ -4,6 +4,7 @@ import { Audio } from 'expo-av';
 import { Vibration, Alert, Linking, AppState } from 'react-native';
 import { prewarmVoice, abortVoiceWarmup } from '../services/voiceWarmup';
 import { noteUserTurn } from '../services/userTurnClock';
+import { noteCaddieTurn } from '../services/funnelEvents';
 import { mayTalkToCaddie, takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
 import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
@@ -1554,6 +1555,7 @@ export const useVoiceCaddie = ({
     // connection slots. It also covers the VAD auto-listen, which never goes through handleMicPress.
     noteUserTurn();
     abortVoiceWarmup();
+    noteCaddieTurn(source === 'vad' ? 'vad' : 'mic'); // 1.0.2 funnel: first_caddie_turn (fires once)
     // 2026-06-29 (fix A) — THE round-one fix. Read the live host at call-time so
     // transcribe / reachability-ping / health / brain all use the host the app
     // already failed over to (the boot host_failover proved it knows the custom

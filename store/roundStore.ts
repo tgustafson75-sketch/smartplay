@@ -1469,6 +1469,11 @@ export const useRoundStore = create<RoundState>()(
         // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
         try {
           require('../services/usageTelemetry').track('round_started', { holes: holes.length, mode: options.mode ?? 'free_play' });
+          // 1.0.2 funnel: first_round / second_round — real rounds only, a sim round is not a round played.
+          if (options.simulated !== true) {
+            (require('../services/funnelEvents') as typeof import('../services/funnelEvents'))
+              .noteRoundStarted({ holes: holes.length, mode: options.mode ?? 'free_play' });
+          }
         } catch { /* telemetry never throws */ }
         // FIX B6 — hole 1 voice intro. startRound sets currentHole:1 via direct
         // set() which bypasses setCurrentHole's TTS block (prevHole===clamped guard
