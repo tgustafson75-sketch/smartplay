@@ -17,6 +17,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import { DEFAULT_USE_VISION_CAMERA } from '../services/capture/captureFlags';
+import type { ReviewedSwingRead } from '../services/swing/analysisFrames';
 
 interface CaptureEngineState {
   /** When true, the swing path records via vision-camera (high-fps). */
@@ -97,8 +98,9 @@ interface CaptureEngineState {
    * an upload). Null when no clip is being reviewed. Readers that judge a recorded clip (the caddie's
    * capture-quality line) read this instead of capturedFps, which describes the live camera. Not persisted.
    */
-  reviewingClip: { fps: number | null } | null;
-  setReviewingClip: (clip: { fps: number | null } | null) => void;
+  reviewingClip: { fps: number | null; read?: ReviewedSwingRead | null } | null;
+  /** `read` — what the analysis on screen was built on (coverage, phases seen, confidence), for the caddie. */
+  setReviewingClip: (clip: { fps: number | null; read?: ReviewedSwingRead | null } | null) => void;
 }
 
 export const useCaptureEngineStore = create<CaptureEngineState>()(
@@ -122,7 +124,9 @@ export const useCaptureEngineStore = create<CaptureEngineState>()(
       setHighSpeedAvailable: (on) => set({ highSpeedAvailable: on === true }),
       reviewingClip: null,
       setReviewingClip: (clip) => set({
-        reviewingClip: clip ? { fps: typeof clip.fps === 'number' && Number.isFinite(clip.fps) && clip.fps > 0 ? clip.fps : null } : null,
+        reviewingClip: clip
+          ? { fps: typeof clip.fps === 'number' && Number.isFinite(clip.fps) && clip.fps > 0 ? clip.fps : null, read: clip.read ?? null }
+          : null,
       }),
     }),
     {

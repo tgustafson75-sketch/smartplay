@@ -1795,8 +1795,13 @@ export default function SmartMotion() {
    */
   useEffect(() => {
     const reviewing = clipUri != null && (phase === 'review' || phase === 'analyzing');
-    useCaptureEngineStore.getState().setReviewingClip(reviewing ? { fps: clipFps } : null);
-  }, [clipUri, phase, clipFps]);
+    // 2026-09-29 — and what the read on screen was built on (coverage, phases seen, confidence), so
+    // "did it see my whole swing?" / "why low confidence?" are answerable (caddie_request swing_read).
+    const read = analysis
+      ? { coverage: analysis.sample_coverage ?? null, phases_visible: analysis.phases_visible ?? null, confidence: analysis.confidence ?? null }
+      : null;
+    useCaptureEngineStore.getState().setReviewingClip(reviewing ? { fps: clipFps, read } : null);
+  }, [clipUri, phase, clipFps, analysis]);
   useEffect(() => () => { useCaptureEngineStore.getState().setReviewingClip(null); }, []);
   // 2026-07-07 — ref mirrors so runAnalysis (a stable callback) reads the CURRENT
   // measured signals at call time without dep churn (same pattern as ballAreaRef).

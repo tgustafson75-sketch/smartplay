@@ -168,3 +168,50 @@ export function coverageNote(
     missedTopAndImpact: !!phases && !phases.top && !phases.impact,
   };
 }
+
+/**
+ * 2026-09-29 — WHAT THE READ ON SCREEN WAS BUILT ON, FOR THE CADDIE.
+ *
+ * The review shows the coverage line and the confidence, and the server records which phases the model
+ * saw — but none of it reached the brain, so "did it see my whole swing?" and "why is it low
+ * confidence?" were questions the caddie could only guess at. This is the one line it gets, built from
+ * the same facts the screen shows. Null when there is nothing measured to say.
+ */
+export type ReviewedSwingRead = {
+  coverage: SampleCoverage | null;
+  phases_visible: { address: boolean; top: boolean; impact: boolean; finish: boolean } | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+};
+
+const PHASES = ['address', 'top', 'impact', 'finish'] as const;
+
+export function swingReadForCaddie(
+  read: ReviewedSwingRead | null | undefined,
+  capturedFps: number | null | undefined,
+): string | null {
+  const parts: string[] = [];
+  const cov = read?.coverage ?? null;
+  if (cov && cov.frames > 0 && Number.isFinite(cov.start_sec) && Number.isFinite(cov.end_sec)) {
+    parts.push(cov.whole_clip
+      ? `${cov.frames} frames spread across ${cov.start_sec.toFixed(1)}-${cov.end_sec.toFixed(1)} s of the clip — the swing was NOT pinned, so the frames may straddle it`
+      : `${cov.frames} frames from ${cov.start_sec.toFixed(1)}-${cov.end_sec.toFixed(1)} s, where the swing was found`);
+  }
+  const pv = read?.phases_visible ?? null;
+  if (pv) {
+    const seen = PHASES.filter((p) => pv[p]);
+    const missed = PHASES.filter((p) => !pv[p]);
+    parts.push(missed.length === 0
+      ? 'all four phases seen (address, top, impact, finish)'
+      : `phases seen: ${seen.length ? seen.join(', ') : 'none'}; NOT seen: ${missed.join(', ')}`);
+  }
+  const conf = read?.confidence ?? null;
+  if (conf) {
+    parts.push(conf === 'low' && pv && !pv.top && !pv.impact
+      ? 'confidence LOW because neither the top nor impact was in the frames'
+      : `confidence ${conf}`);
+  }
+  const fps = typeof capturedFps === 'number' && Number.isFinite(capturedFps) && capturedFps > 0 ? Math.round(capturedFps) : null;
+  if (parts.length === 0 && fps == null) return null;
+  parts.push(fps != null ? `captured at ${fps} fps` : 'capture frame rate unknown');
+  return `${parts.join('; ')}.`;
+}

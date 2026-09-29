@@ -962,6 +962,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return captureQualityLine(fpsInScope(st.reviewingClip, st.capturedFps));
     }, null),
     /**
+     * 2026-09-29 — what the swing read ON SCREEN was built on: where in the clip its nine frames came
+     * from, which phases the model actually saw, the confidence and why, and the clip's captured frame
+     * rate. The review shows all of it; without this the caddie could only guess at "did it see my
+     * whole swing?". Null when no analysed clip is under review.
+     */
+    swing_read: safe(() => {
+      const { swingReadForCaddie } = require('./swing/analysisFrames') as typeof import('./swing/analysisFrames');
+      const { useCaptureEngineStore } = require('../store/captureEngineStore') as typeof import('../store/captureEngineStore');
+      const clip = useCaptureEngineStore.getState().reviewingClip;
+      return clip ? swingReadForCaddie(clip.read, clip.fps) : null;
+    }, null),
+    /**
      * 2026-09-12 — how his balls actually compare on the card.
      *
      * Sent only once there is something real to say: services/ballPerformance returns a null
