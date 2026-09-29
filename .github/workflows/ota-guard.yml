@@ -75,6 +75,10 @@ jobs:
           # app.json / app.config.* — plugins, permissions, entitlements, bundle ids.
           echo "$CHANGED" | grep -qE '^app\.(json|config\.(js|ts|cjs|mjs))$' && HITS="${HITS}app config (plugins / permissions / entitlements / bundle id)"$'\n' || true
 
+          # 2026-09-29 — react-native.config.js decides which native modules autolink into the binary
+          # (Health Connect's native half is excluded there). Editing it is a native change.
+          echo "$CHANGED" | grep -qE '^react-native\.config\.(js|cjs|mjs|ts)$' && HITS="${HITS}react-native.config (autolinking: which native modules are in the binary)"$'\n' || true
+
           # eas.json — build profiles.
           echo "$CHANGED" | grep -qE '^eas\.json$' && HITS="${HITS}eas.json build profiles"$'\n' || true
 

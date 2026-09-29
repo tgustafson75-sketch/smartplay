@@ -65,7 +65,8 @@ describe('the EXPO_PUBLIC narrowing is safe', () => {
     // every other key must still reach the hash
     expect(pf).toMatch(/h\.update\(easJsonNativeSurface\(\)\)/);
     // and eas.json must no longer be hashed as raw bytes, or the narrowing does nothing
-    expect(pf).toMatch(/const NATIVE_FILES = \['app\.json', 'app\.config\.js', 'app\.config\.ts'\];/);
+    // 2026-09-29 — react-native.config.js joined the list: it controls autolinking.
+    expect(pf).toMatch(/const NATIVE_FILES = \['app\.json', 'app\.config\.js', 'app\.config\.ts', 'react-native\.config\.js'\];/);
   });
 
   it('a non-EXPO_PUBLIC env change still moves the fingerprint', () => {

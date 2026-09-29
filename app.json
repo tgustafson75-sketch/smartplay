@@ -109,7 +109,15 @@
         "@sentry/react-native",
         {
           "organization": "smartplay-ai",
-          "project": "smartplay-caddie-mobile"
+          "project": "smartplay-caddie-mobile",
+          "experimental_android": {
+            "enableAndroidGradlePlugin": true,
+            "includeProguardMapping": true,
+            "autoUploadProguardMapping": true,
+            "uploadNativeSymbols": false,
+            "autoUploadNativeSymbols": false,
+            "includeNativeSources": false
+          }
         }
       ],
       [
@@ -118,7 +126,10 @@
           "android": {
             "minSdkVersion": 29,
             "compileSdkVersion": 36,
-            "targetSdkVersion": 36
+            "targetSdkVersion": 36,
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "# SmartPlay R8 keep rules (2026-09-29). Everything below is reached by reflection, JNI or a class name in a manifest, which R8 cannot see.\n# Our own native modules from android-native/ (MediaPipePose, BluetoothMediaButton, WearSwingBridge, MetaWearables, MetaCaddyVoiceHandler).\n-keep class com.smartplaycaddie.** { *; }\n-keep class com.smartplaycaddy.** { *; }\n# Expo headless app loader: named ONLY in expo-modules-core's manifest meta-data, so R8 deletes it. expo-task-manager's TaskService calls getAppLoader().loadApp() when a background-location event arrives with the app process dead; stripped, that is an NPE (verified missing from the first R8 build, 2026-09-29).\n-keep class expo.modules.adapters.react.apploader.** { *; }\n# MediaPipe tasks-vision: JNI into libmediapipe_tasks_vision_jni plus protobuf-lite graph configs read reflectively.\n-keep class com.google.mediapipe.** { *; }\n-keep class * extends com.google.protobuf.GeneratedMessageLite { *; }\n-dontwarn com.google.mediapipe.**\n-dontwarn com.google.protobuf.**\n# react-native-vision-camera ships no consumer rules.\n-keep class com.mrousavy.camera.** { *; }\n# RevenueCat RN bridge and hybrid mappings (billing).\n-keep class com.revenuecat.purchases.react.** { *; }\n-keep class com.revenuecat.purchases.hybridcommon.** { *; }\n# Sentry RN bridge (io.sentry core ships its own rules).\n-keep class io.sentry.react.** { *; }\n# Meta Wearables DAT (glasses profile only; absent from store builds).\n-keep class com.meta.wearable.** { *; }\n-dontwarn com.meta.wearable.**"
           }
         }
       ],

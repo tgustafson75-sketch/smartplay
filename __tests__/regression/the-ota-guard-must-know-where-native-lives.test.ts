@@ -76,6 +76,8 @@ describe('the OTA guard knows where native code actually lives', () => {
     expect(workflowSteps).toContain('app\\.(json|config');
     expect(workflowSteps).toContain("'^eas\\.json$'");
     expect(workflowSteps).toContain('dependency changes');
+    // 2026-09-29 — autolinking config decides which native modules are compiled in.
+    expect(workflowSteps).toContain("'^react-native\\.config\\.(js|cjs|mjs|ts)$'");
   });
 
   it('config plugins and patches count — both change the native build without touching ios/ or android/', () => {

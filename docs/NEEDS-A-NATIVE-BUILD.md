@@ -83,6 +83,32 @@ wholesale.
 
 ## R8 / ProGuard is OFF — Google Play says 2% obfuscation · **added 2026-09-18, parked by Tim**
 
+> **2026-09-29 — ON, on branch `android-r8-sdk-refresh` (rides the next store build).** `app.json` →
+> `expo-build-properties` now sets `enableProguardInReleaseBuilds`, `enableShrinkResourcesInReleaseBuilds`
+> and `extraProguardRules`; the Sentry plugin's `experimental_android` uploads the R8 mapping on the
+> production profile only (`SENTRY_DISABLE_AUTO_UPLOAD=false` there). Proven on a local
+> `assembleRelease` (debug-signed) on an API 35 emulator: 89.8% of 29,223 classes renamed in the final
+> build's mapping.txt (was ~2%). That final build also carries the SDK moves below and was cold-launched
+> through onboarding, the bag camera and Caddie home with zero ClassNotFound / NoSuchMethod / FATAL in
+> logcat; RevenueCat's native bridge answered (BILLING_UNAVAILABLE on the emulator, i.e. the call
+> reached Play Billing 8.3.0 through the minified hybrid mappings).
+> **The first R8 build found a real release-only defect:** R8 deleted
+> `expo.modules.adapters.react.apploader.RNHeadlessAppLoader` (named only in expo-modules-core's
+> manifest meta-data), which `expo-task-manager` calls as `getAppLoader().loadApp()` when a
+> background-location event arrives with the app process dead — an NPE on the round's background GPS.
+> Kept now; re-verified (on the build before the SDK bumps, same keep rules) by killing the process
+> mid-round and watching the restarted `LocationTaskService` boot the headless JS and handle jobs; the
+> final build's mapping keeps `RNHeadlessAppLoader` unrenamed and its cold start logs no
+> "Cannot initialize app loader" (the first R8 build logged it 34 times). Guarded by
+> `__tests__/regression/r8-keep-rules-cover-what-r8-cannot-see.test.ts`.
+> **Not reachable on the emulator, so still owed on a device:** a SmartMotion capture (vision-camera +
+> MediaPipe are behind Pro), an earbud tap, a watch swing, a real sandbox purchase.
+> Health Connect's native half is also OUT of the Android binary now (`react-native.config.js`).
+> **SDKs moved for the Play SDK Index warnings:** `@sentry/react-native` 7.2.0 → 7.13.0 (sentry-android
+> 8.21.1 → 8.32.0; `expo.install.exclude` stops `expo install --fix` pulling it back to Expo 54's
+> ~7.2.0 pin) and `react-native-purchases` 10.8.1 → 10.10.2 (purchases-hybrid-common 18.33.1 → 19.3.1,
+> purchases-android 10.22.1, Play Billing 8.3.0). Guarded by `__tests__/regression/play-sdk-index-floors.test.ts`.
+
 Play Console, release 25 (1.0.0): *"DEX code optimization is below our threshold — Obfuscation (2%).
 Percentages under 25% in any category may impact your visibility and publishing capabilities. Fix by
 Feb 2027."*
