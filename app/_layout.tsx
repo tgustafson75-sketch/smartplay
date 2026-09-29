@@ -488,8 +488,14 @@ function AppNavigator() {
    */
   useEffect(() => {
     let cancelled = false;
+    // 2026-09-28 — the 2.5s timer and the hydration callback BOTH called remind(), so an owner whose
+    // profile hydrated first saw the toast twice. Once per launch means once.
+    let settled = false;
     const remind = () => {
       if (cancelled) return false;
+      if (settled) return true;
+      if (!usePlayerProfileStore.persist?.hasHydrated?.()) return false; // email not loaded yet — wait for hydration
+      settled = true;
       try {
         const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
         if (!prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email)) return true;  // settled: not the owner

@@ -1,6 +1,7 @@
 import type { VoiceIntent, AppContext, IntentConfidence } from '../types/voiceIntent';
 import type { Persona, VoiceGender } from '../lib/persona';
 import { isDegraded, recordFailure, recordSuccess } from './voiceCircuitBreaker';
+import { markEndpointWarmed } from './apiBase';
 
 export async function parseVoiceIntent(
   text: string,
@@ -70,6 +71,7 @@ export async function parseVoiceIntent(
       return failure(text);
     }
     recordSuccess('voice-intent');
+    markEndpointWarmed('/api/voice-intent');
 
     const data = await res.json() as {
       intent_type?: string;

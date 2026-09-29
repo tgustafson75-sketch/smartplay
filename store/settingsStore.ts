@@ -657,10 +657,6 @@ export const useSettingsStore = create<SettingsState>()(
           try {
             const voiceMod = require('../services/voiceService');
             voiceMod.stopSpeaking?.()?.catch?.(() => {});
-            // 2026-07-27 (24h audit) — re-render the offline ack/"didn't catch that" clips in the NEW
-            // persona's voice. Cache is keyed by persona, so without this the acks fall back to the
-            // robotic OS voice until the next startup warmup. Best-effort, fire-and-forget.
-            voiceMod.prewarmOfflineVoiceClips?.()?.catch?.(() => {});
           } catch { /* ignore */ }
         }
         set({
@@ -668,6 +664,16 @@ export const useSettingsStore = create<SettingsState>()(
           voiceGender: gender,
           caddieAssignments: { round: p, practice: p, drills: p, play: p },
         });
+        // 2026-07-27 (24h audit) — re-render the offline ack/"didn't catch that" clips in the NEW
+        // persona's voice. Cache is keyed by persona, so without this the acks miss until the next
+        // startup warmup. 2026-09-28 — AFTER set(): prewarmOfflineVoiceClips reads the persona from
+        // the store synchronously, so calling it before set() rendered the OLD persona's clips.
+        if (prev !== p) {
+          try {
+            (require('../services/voiceService') as { prewarmOfflineVoiceClips?: () => Promise<void> })
+              .prewarmOfflineVoiceClips?.()?.catch?.(() => {});
+          } catch { /* ignore */ }
+        }
         // 2026-05-19 — Persona handoff welcome. When the active caddie
         // changes (manual or via team handoff), the new persona briefly
         // introduces themselves so the user knows who's on the bag now.

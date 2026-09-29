@@ -72,6 +72,20 @@ function goWarm(reason: string): void {
   console.log('[audio] → warm (' + reason + ')');
 }
 
+/**
+ * 2026-09-28 — "idle" was inferred from the last noteAudioActivity(), which only speak() and the
+ * shared capture called. The caddie tab's replies play through speakFromBase64 and its tap recording
+ * never went through capture, so 90s after any speak() a normal conversation still looked idle and
+ * goCold flipped the session (silent-mode playback off, recording off) under a live reply or a live
+ * recording. Asking whether audio is actually in use is the check that cannot drift.
+ */
+function audioInUse(): boolean {
+  try {
+    const v = require('./voiceService') as typeof import('./voiceService');
+    return v.isSpeaking() || v.isCapturing() || v.isExternalMicActive();
+  } catch { return false; }
+}
+
 /** Called from voiceService whenever TTS or capture begins. */
 export function noteAudioActivity(reason = 'tts_or_capture'): void {
   lastActivityAt = Date.now();
@@ -87,6 +101,7 @@ export function initAudioLifecycle(): void {
   if (idleTimer) return;
   idleTimer = setInterval(() => {
     if (state === 'warm' && lastActivityAt > 0 && Date.now() - lastActivityAt > IDLE_TEARDOWN_MS) {
+      if (audioInUse()) { lastActivityAt = Date.now(); return; }
       void goCold('idle_90s');
     }
   }, 15_000);

@@ -34,7 +34,11 @@ describe('there is one way to ask the caddie to speak unprompted', () => {
   });
 
   it('history is seeded only when asked — an aside must not pollute the thread', () => {
-    expect(brain).toMatch(/if \(opts\?\.seedHistory\) setConversationHistory/);
+    // 2026-09-28 — one settle step owns this now (and the behaviour is tested for real in
+    // the-first-ask-after-launch.test.ts): the directive always comes out, the line is seeded only
+    // when asked.
+    expect(brain).toMatch(/return settleProactiveTurn\(directive, turn, epoch, !!opts\?\.seedHistory\);/);
+    expect(brain).toMatch(/if \(seedHistory\) setConversationHistory/);
   });
 });
 

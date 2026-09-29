@@ -769,7 +769,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       // 2026-09-23 — the word "json" must appear in the messages or OpenAI's json_object mode answers
       // 400 — which is what EVERY warmup in the production logs did. The warmup never warmed anything.
-      await completeJSON(warmProvider, 'fast', WARMUP_SYSTEM, [{ role: 'user', content: WARMUP_USER }], { maxTokens: 5 });
+      // 2026-09-28 — and with the REAL schema. The live call uses strict json_schema, whose first use
+      // pays a one-time schema-processing cost; warming json_object mode left that cost on the first
+      // real ask. Five tokens of truncated output is fine: nothing reads it.
+      await completeJSON(warmProvider, 'fast', WARMUP_SYSTEM, [{ role: 'user', content: WARMUP_USER }], { maxTokens: 5, schema: VOICE_INTENT_SCHEMA });
       console.log(`[voice-intent] warmup completed (${warmProvider} SDK hot)`);
     } catch (e) {
       console.log('[voice-intent] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));

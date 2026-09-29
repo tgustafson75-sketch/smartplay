@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
 import { Vibration, Alert, Linking, AppState } from 'react-native';
 import { prewarmVoice, abortVoiceWarmup } from '../services/voiceWarmup';
+import { noteUserTurn } from '../services/userTurnClock';
 import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
 import { endsAsQuestion } from '../services/voice/endsAsQuestion';
@@ -59,7 +60,7 @@ import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
 import { generatePatternInsights } from '../services/patternDetection';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail, noteVoiceTurnStarted } from '../services/voiceErrorLog';
-import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markEndpointWarmed, isEndpointWarmed, getConnectionEvidence } from '../services/apiBase';
+import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWarmed, getConnectionEvidence } from '../services/apiBase';
 import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 
 // ─── CONSTANTS ────────────────────────────
@@ -179,7 +180,8 @@ const CLOUD_FAILURES_BEFORE_OFFER = 3;
 // connection isn't yet confirmed warm; every warm turn keeps the tight 30s. Abort still falls back to
 // the local responder, so a genuinely dead network still fails fast enough.
 const COLD_BRAIN_TIMEOUT_MS = 48000;
-const brainTimeoutMs = (): number => (isConnectionWarmed() ? BRAIN_TIMEOUT_MS : COLD_BRAIN_TIMEOUT_MS);
+// 2026-09-28 — per function: the boot ping flipped the shared flag, so the cold brain got the warm budget.
+const brainTimeoutMs = (): number => (isEndpointWarmed('/api/kevin') ? BRAIN_TIMEOUT_MS : COLD_BRAIN_TIMEOUT_MS);
 // 2026-06-23 — 25s → 30s. Kevin's per-round AI timeout is now 12s and the
 // realistic worst-case (cold round + local-short-circuit tool rounds) is ~20s.
 // The CLIENT must be the OUTER bound so a healthy-but-slow brain isn't aborted
@@ -1532,6 +1534,10 @@ export const useVoiceCaddie = ({
       }
     }
     const source = opts?.source ?? 'manual';
+    // 2026-09-28 — a turn is about to hit the network: THIS is where warmups hand back their
+    // connection slots. It also covers the VAD auto-listen, which never goes through handleMicPress.
+    noteUserTurn();
+    abortVoiceWarmup();
     // 2026-06-29 (fix A) — THE round-one fix. Read the live host at call-time so
     // transcribe / reachability-ping / health / brain all use the host the app
     // already failed over to (the boot host_failover proved it knows the custom
@@ -2769,7 +2775,13 @@ export const useVoiceCaddie = ({
      * without ever reaching the network. The optimisation was causing the failure it was added to
      * prevent. A real turn now RELEASES warmup connections instead of adding to them.
      */
-    try { abortVoiceWarmup(); } catch { /* non-fatal */ }
+    /**
+     * 2026-09-28 — the tap records the TURN; it no longer aborts the warmups. Recording holds no
+     * socket, so cancelling here bought nothing and dropped the queued brain warmup the reply was
+     * about to need. The abort now fires in processAudioUri, the moment the upload starts. The turn
+     * stamp is what makes a late opener / proactive line stand down instead of landing on this one.
+     */
+    noteUserTurn();
 
     // 2026-07-18 (Tim — haptic feedback so you feel the caddie mic register your tap). Best-effort,
     // wrapped — never blocks or affects the voice flow.
@@ -3051,8 +3063,8 @@ export const useVoiceCaddie = ({
     // capture tap means voice is imminent, so warm now even if a passive warm ran
     // recently (overlaps the speech, kills cold-first-tap lag).
     // 2026-08-12 — same reversal as above: hand the connection slots to the capture, don't compete
-    // with it. See services/voiceWarmup for the timing evidence.
-    abortVoiceWarmup();
+    // with it. See services/voiceWarmup for the timing evidence. (2026-09-28: at upload time now —
+    // processAudioUri — because the recording in between uses no connection.)
     try {
       // Phase BM — cache the mic permission grant in a module-level flag so
       // every subsequent tap skips the 30-80ms IPC roundtrip to the OS

@@ -5146,3 +5146,49 @@ We need correct images not no images where appropriate."
 - Reviewed (5th review): 3 defects fixed (no-signal recovery, bad cached file → live, one-frame flash); `retry=1`
   verified accepted by Mapbox (one request). Gates: tsc, lint 0, jest 5,542, sim all pass.
 - SHIPPED: main `94b99a11`, OTA group `95e36634-ac61-4730-a343-1ca5bb660db0`.
+
+## Day 128 — 2026-09-28 — the first ask: warmups that never warmed, and a greeting that ate the tap
+
+Tim: "a first ask of the caddie delay and … some racing or missing voice". Three parallel audits
+(server warmup, first-turn voice path, boot/greeting) + own verification. Branch
+`firstask-2026-09-28`, LOCAL ONLY — held for the one reviewed release.
+
+**Delay — fixed:**
+- Boot `__ping__` marked `/api/kevin` warm → the real brain+TTS warmup was skipped all session.
+  Ping now marks the connection only; kevin moved to the first warmup pair.
+- Warmth never expired → 240s heartbeat + foreground re-warm were no-ops after boot; resumed app hit
+  cold Lambdas on WARM budgets. Warmth now time-stamped (5 min TTL); warmup re-pings anything older
+  than 60s; real kevin / voice-intent successes refresh it.
+- Intent + brain budgets on the earbud/typed path keyed off the global flag → per-endpoint.
+- Warmup abort moved from mic-open to the upload (recording holds no socket); abort before hydration
+  now actually stops the batch; offline-clip render waits out a live conversation, one timer at a time.
+- Server: brain rounds + TTS could run 24s + 10s against the phone's 30s. Both now measured from the
+  request; TTS gets what is left (skipped if <1.5s — client voices the text itself).
+- voice-intent warmup now uses the real json_schema.
+
+**Racing / missing voice — fixed:**
+- Opener stamped `userInitiated` → first tap during it stopped Kevin and never opened the mic (the
+  08-12 trap door, back since 07-25). Now unsolicited (also honours Quiet L1).
+- Opener + every proactive line not re-checked after the brain await → landed on the first turn;
+  opener REPLACED history, wiping the first exchange. New `services/userTurnClock` epoch; stale lines
+  stay silent; history edits remove only the directive exchange.
+- primeMicPipeline bail-outs ran its finally (audio → speech mode) under a live capture.
+- Custom-caddie clip deadlocked the speak queue (queued call from inside a queued body).
+- speakDeviceNotice claimed a speech id on a silent cache miss → dropped the reply loading at the time.
+- Persona switch rendered offline clips in the OLD persona; dedupe now per voice.
+- audioLifecycle 90s cold switch could fire mid-reply / mid-recording.
+- Re-tap while thinking silently dropped the second question → queued; stale reply shown, not spoken.
+- OTA launch reload could fire under the first ask (avatar mic invisible to its gate) →
+  `services/updateApplyGate`, re-asked every 2s in the window and at the moment of reload.
+- Greeting completion now resolves on every exit (opener no longer waits its 10s net); greeting can
+  no longer start playing after a skip. Owner checklist toast no longer shows twice.
+
+**Gates:** tsc clean, lint 0, jest 5,572, sim all pass. New `__tests__/regression/the-first-ask-after-launch.test.ts`
+(20 behavioural tests; 14 fail on the pre-fix tree, the 6 that pass pin kept behaviour). 5 sim guards
+re-anchored deliberately, each break-tested red.
+
+**Not fixed (honest scope):** first real turn still pays the Sonnet prompt-cache write (cannot warm
+without the real prompt); reply still blocks on full TTS (the known ~5s text→voice gap, contract
+change); upstream TLS likely cold again after Lambda freeze; transcribe warmup does not touch Deepgram;
+no Vercel region pinning. Nothing verified on device. **Critical path: PATH 4 VOICE** (and PATH 1
+greeting→Caddie handoff).

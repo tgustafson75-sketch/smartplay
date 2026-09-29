@@ -1,4 +1,5 @@
-import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from './apiBase';
+import { getApiBaseUrl, markEndpointWarmed, endpointWarmAgeMs } from './apiBase';
+import { msSinceUserTurn } from './userTurnClock';
 import { useSettingsStore } from '../store/settingsStore';
 /**
  * 2026-06-04 — Pre-warm the FOUR voice-pipeline Vercel functions in
@@ -19,16 +20,30 @@ import { useSettingsStore } from '../store/settingsStore';
 const WARMUP_DEDUPE_MS = 30_000;
 let lastWarmupAt = 0;
 
+/**
+ * 2026-09-28 — ORDER IS PRIORITY. At concurrency 2 the list drains in pairs, and a real turn aborts
+ * whatever has not been sent, so the tail is what gets dropped. kevin sat LAST — the one warmup that
+ * wakes the brain AND the reply's voice — and was the one most often never sent. The first thing a
+ * voice turn calls leads (transcribe), the most expensive cold start follows it (kevin), and the
+ * standalone TTS function (used for notices, not the reply) goes last.
+ */
 const WARMUP_PATHS = [
-  '/api/voice',
   '/api/transcribe',
+  '/api/kevin',
   '/api/voice-intent',
+  '/api/voice',
   // 2026-08-23 — /api/pipecat-turn removed from the warm list. It has no client callers left:
   // every surface now posts the one payload to /api/kevin. Warming it spent a request and a cold
   // start on a Lambda nothing was about to call — and [[warm-the-lambda-you-are-about-to-call]]
   // is the exact bug that cost the first turn of every round in August, in the other direction.
-  '/api/kevin',
 ] as const;
+
+/**
+ * A function that answered this recently is certainly still awake — skip it. Anything older is
+ * pinged again, which is what lets the 240s heartbeat actually keep the chain warm. (It used to skip
+ * any function that had EVER answered, so after boot the heartbeat did nothing at all.)
+ */
+export const WARMUP_SKIP_MS = 60_000;
 
 /**
  * Wait until settingsStore has finished loading from AsyncStorage, then
@@ -90,6 +105,9 @@ const WARMUP_CONCURRENCY = 2;
 /** Offline-clip rendering is housekeeping for a future outage. It must never compete with the
  *  player's first tap, so it waits until well past the cold-start window. */
 const OFFLINE_CLIP_WARM_DELAY_MS = 45_000;
+/** If the player started a turn within this window, the clip render waits and tries again. */
+const OFFLINE_CLIP_QUIET_MS = 60_000;
+let offlineClipTimer: ReturnType<typeof setTimeout> | null = null;
 const WARMUP_TIMEOUT_MS = 8_000;
 let warmupAbort: AbortController | null = null;
 
@@ -150,15 +168,28 @@ export function prewarmVoice(force = false): void {
    * seconds of a launch — the one window where the player is most likely to tap the mic. Deferred
    * well past the cold-start window, and skipped entirely if a real turn is in progress.
    */
-  setTimeout(() => {
-    void import('./voiceService').then((m) => m.prewarmOfflineVoiceClips()).catch(() => {});
-  }, OFFLINE_CLIP_WARM_DELAY_MS);
+  /**
+   * 2026-09-28 — the paragraph above promised "skipped entirely if a real turn is in progress", and
+   * nothing implemented it; every non-deduped prewarmVoice also scheduled ANOTHER render timer. One
+   * pending timer at a time now, and a render that would start inside a live conversation waits.
+   */
+  scheduleOfflineClipRender(OFFLINE_CLIP_WARM_DELAY_MS);
+
+  /**
+   * 2026-09-28 — the controller is created NOW, not after hydration. It used to be assigned inside
+   * the .then below, so an abort that arrived first (an earbud tap during boot) found null, did
+   * nothing, and the batch started afterwards anyway — competing with the turn that aborted it. A
+   * newer batch also used to overwrite the controller and orphan the older one; it now supersedes it.
+   */
+  if (warmupAbort) { try { warmupAbort.abort(); } catch { /* already settled */ } }
+  const batch = new AbortController();
+  warmupAbort = batch;
+  const signal = batch.signal;
 
   // Wait for hydration so we read the user's actual persisted provider,
   // not the in-memory default that exists before AsyncStorage loads.
   void getProvider().then(async (aiProvider) => {
-    warmupAbort = new AbortController();
-    const signal = warmupAbort.signal;
+    if (signal.aborted) return;
     /**
      * 2026-08-20 — CRITICAL ENDPOINTS GET RETRIES; THE REST STAY OPPORTUNISTIC.
      *
@@ -185,8 +216,9 @@ export function prewarmVoice(force = false): void {
       for (const delay of attemptDelays(path)) {
         if (signal.aborted) return;
         if (delay) await new Promise(r => setTimeout(r, delay));
-        // Already proven awake (another caller, or an earlier attempt) — nothing to do.
-        if (isEndpointWarmed(path)) return;
+        // Proven awake moments ago (another caller, or a real turn) — nothing to do.
+        const age = endpointWarmAgeMs(path);
+        if (age !== null && age < WARMUP_SKIP_MS) return;
         const ok = await warmupOnce(path);
         if (ok) {
           // Record WHICH function answered. This is what lets the voice path give a genuinely cold
@@ -226,6 +258,29 @@ export function prewarmVoice(force = false): void {
       }
     });
     await Promise.all(workers);
+    if (warmupAbort === batch) warmupAbort = null;
     if (!signal.aborted) console.log('[voiceWarmup] endpoints warmed (provider:', aiProvider, ')');
   });
+}
+
+function scheduleOfflineClipRender(delayMs: number): void {
+  if (offlineClipTimer) return;
+  offlineClipTimer = setTimeout(() => {
+    offlineClipTimer = null;
+    const since = msSinceUserTurn();
+    let speaking = false;
+    try { speaking = (require('./voiceService') as typeof import('./voiceService')).isSpeaking(); } catch { /* treat as idle */ }
+    if (speaking || (since !== null && since < OFFLINE_CLIP_QUIET_MS)) {
+      scheduleOfflineClipRender(OFFLINE_CLIP_QUIET_MS);
+      return;
+    }
+    void import('./voiceService').then((m) => m.prewarmOfflineVoiceClips()).catch(() => {});
+  }, delayMs);
+}
+
+/** Test seam — drop the batch and any pending clip timer. Never called by the app. */
+export function __resetVoiceWarmupForTest(): void {
+  lastWarmupAt = 0;
+  warmupAbort = null;
+  if (offlineClipTimer) { clearTimeout(offlineClipTimer); offlineClipTimer = null; }
 }

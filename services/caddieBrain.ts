@@ -27,7 +27,7 @@
  * essentially all the time; one real attempt that reports honestly when it fails beats four
  * attempts that quietly hand back a worse caddie.
  */
-import { getApiBaseUrl } from './apiBase';
+import { getApiBaseUrl, markEndpointWarmed } from './apiBase';
 import { mayTalkToCaddie } from './featureAccess';
 import { buildCaddieRequestBody, type CaddieRequestExtras } from './caddieRequestBody';
 import { appendConversationTurn } from './voice/conversationHistory';
@@ -77,6 +77,9 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
       body: JSON.stringify(body),
     });
     if (!res.ok) return null;
+    // 2026-09-28 — a real answer is the best proof the brain is awake; it refreshes the warmth the
+    // budgets read (and spares the next heartbeat a redundant warmup).
+    markEndpointWarmed('/api/kevin');
 
     const raw = (await res.json()) as {
       text?: string;

@@ -32,7 +32,8 @@
 import { askCaddie } from './caddieBrain';
 import { markAdviceTurnStart } from './adviceFreshness';
 import { mayTalkToCaddie } from './featureAccess';
-import { setConversationHistory, clearConversationHistory } from './voice/conversationHistory';
+import { setConversationHistory, clearConversationHistory, getConversationHistory, removeConversationExchange } from './voice/conversationHistory';
+import { getUserTurnEpoch } from './userTurnClock';
 import { useSettingsStore } from '../store/settingsStore';
 
 export interface BrainReply {
@@ -42,6 +43,8 @@ export interface BrainReply {
   toolActions: unknown[];
   /** Which brain answered — telemetry / debugging. There is only one now. */
   source: 'kevin' | 'none';
+  /** A proactive line whose moment passed: the player started a turn while it was generating. */
+  stale?: boolean;
 }
 
 const NO_ANSWER: BrainReply = { text: null, audioBase64: null, toolActions: [], source: 'none' };
@@ -126,6 +129,7 @@ export async function generateProactiveLine(
   directive: string,
   opts?: { timeoutMs?: number; seedHistory?: boolean },
 ): Promise<BrainReply> {
+  const epoch = getUserTurnEpoch();
   const turn = await askCaddie({
     message: directive,
     language: useSettingsStore.getState().language ?? 'en',
@@ -133,7 +137,30 @@ export async function generateProactiveLine(
     overrides: { is_proactive: true, isRoundActive: false },
   });
   if (!turn?.text) return NO_ANSWER;
-  if (opts?.seedHistory) setConversationHistory([{ role: 'assistant', content: turn.text }]);
+  return settleProactiveTurn(directive, turn, epoch, !!opts?.seedHistory);
+}
+
+/**
+ * 2026-09-28 — what happens to a proactive line when the brain answers, in ONE place.
+ *
+ * askCaddie appended the DIRECTIVE as a user turn. The player never said it, so that exchange always
+ * comes out — precisely, not by replacing the whole history, which is what used to wipe a real
+ * exchange the player had while this was generating (and left a non-seeding aside's directive in the
+ * thread for good). Then: if the player started a turn since we asked, the moment has passed — the
+ * line is STALE and nobody speaks it. Otherwise an opener is kept as the caddie's last word.
+ */
+function settleProactiveTurn(
+  directive: string,
+  turn: { text: string; audioBase64: string | null; toolActions: unknown[] },
+  epochAtAsk: number,
+  seedHistory: boolean,
+): BrainReply {
+  removeConversationExchange(directive, turn.text);
+  if (getUserTurnEpoch() !== epochAtAsk) {
+    console.log('[caddie] proactive line dropped — the player started talking while it generated');
+    return { ...NO_ANSWER, stale: true };
+  }
+  if (seedHistory) setConversationHistory([...getConversationHistory(), { role: 'assistant', content: turn.text }]);
   return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
 }
 
@@ -164,9 +191,11 @@ export async function generateProactiveOpener(
   const ask = opts?.gapHint
     ? `There is ONE thing worth mentioning, briefly and naturally, in your own words — never as a script, never as a list: ${opts.gapHint} Put it as an OFFER, not a question: say it is there for when they want it, and leave the door open. It must NOT end in a question mark. If they do not pick it up, let it go.`
     : 'Do NOT ask a question. Do not end on a question mark, and do not ask what they want to work on or how anything felt. Greet them and leave the door open as a STATEMENT — the shape is "when you are ready, I am here to help you practise or take that work to the course". Warm, unhurried, and asking nothing of them.';
+  const epoch = getUserTurnEpoch();
+  const message = `The player just opened the app and is on the caddie home screen (not in a round). Greet them as their caddie and open the conversation — warm, natural, one or two sentences, by name if you know it. If you know their game, you may nod to it. Never read a script. ${ask}`;
   const turn = await askCaddie({
     // A directive, NOT a player utterance — is_proactive tells the brain the player didn't ask.
-    message: `The player just opened the app and is on the caddie home screen (not in a round). Greet them as their caddie and open the conversation — warm, natural, one or two sentences, by name if you know it. If you know their game, you may nod to it. Never read a script. ${ask}`,
+    message,
     language: useSettingsStore.getState().language ?? 'en',
     timeoutMs: opts?.timeoutMs ?? 12_000,
     overrides: { is_proactive: true, isRoundActive: false },
@@ -174,10 +203,8 @@ export async function generateProactiveOpener(
   if (!turn?.text) return NO_ANSWER;
   /**
    * Seed the shared history with ONLY the caddie's opener (assistant turn). askCaddie appended the
-   * DIRECTIVE as a user turn — replacing the history here drops it, which is deliberate: the player
-   * never said that sentence, and leaving it in makes the caddie answer the instruction instead of
-   * the person.
+   * DIRECTIVE as a user turn — it is dropped, which is deliberate: the player never said that
+   * sentence, and leaving it in makes the caddie answer the instruction instead of the person.
    */
-  setConversationHistory([{ role: 'assistant', content: turn.text }]);
-  return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
+  return settleProactiveTurn(message, turn, epoch, true);
 }

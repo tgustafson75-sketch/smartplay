@@ -60,7 +60,7 @@ import type { ToolAction } from '../../types/toolAction';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, speakChunked, speakFromBase64, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, primeMicPipeline, speakDeviceNotice } from '../../services/voiceService';
+import { speak, speakChunked, speakFromBase64, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, isCapturing, isExternalMicActive, primeMicPipeline, speakDeviceNotice } from '../../services/voiceService';
 import { answerOffline } from '../../services/offlineCaddie';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
@@ -168,12 +168,50 @@ const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: nu
  * carries a directive, the caddie writes the line, and the fixed `message` is the offline fallback
  * so a proactive moment never goes silent. [[feels-like-a-real-caddie]] [[caddie-failsafe-no-walls]]
  */
-async function proactiveLineFor(trigger: { directive: string; message: string }): Promise<string> {
+async function proactiveLineFor(trigger: { directive: string; message: string }): Promise<string | null> {
   try {
     const r = await generateProactiveLine(trigger.directive, { timeoutMs: 8_000 });
+    // 2026-09-28 — stale means the player started talking while this generated. The offline fallback
+    // is for "the brain could not answer", not "the moment passed"; speaking it would land on the turn.
+    if (r.stale) return null;
     return r.text || trigger.message;
   } catch {
     return trigger.message;
+  }
+}
+
+/** The mic or the speaker is already in use — a proactive line must not start now. */
+function voiceChannelBusy(): boolean {
+  return isSpeaking() || isCapturing() || isExternalMicActive();
+}
+
+/**
+ * 2026-09-28 — one way to voice a proactive trigger (first-tee handoff, hole-change lines, front-nine
+ * summary). Every copy set 'proactive' and spoke with no look at the mic, then reset the screen to
+ * 'idle' when the line ended — overwriting the 'thinking' / 'listening' of a turn the player had
+ * started meanwhile. Now a stale line or a busy channel stays silent, and only OUR state is reset.
+ */
+async function speakProactiveTrigger(
+  trigger: { directive: string; message: string },
+  apiUrl: string,
+  setCaddieResponse: (s: string) => void,
+  setVoiceState: (next: VoiceState | ((prev: VoiceState) => VoiceState)) => void,
+): Promise<void> {
+  const line = await proactiveLineFor(trigger);
+  if (!line) return;
+  if (voiceChannelBusy()) {
+    console.log('[caddie] proactive line dropped: the mic or the speaker is busy');
+    return;
+  }
+  setCaddieResponse(line);
+  setVoiceState('proactive');
+  const backToIdle = () => setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev));
+  const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
+  if (voiceEnabled) {
+    await speak(line, vg, lang, apiUrl).catch(() => {});
+    backToIdle();
+  } else {
+    setTimeout(backToIdle, 3000);
   }
 }
 
@@ -920,19 +958,7 @@ export default function CaddieTab() {
           });
           if (trigger) {
             markProactiveFired(trigger.id);
-            void (async () => {
-            const line = await proactiveLineFor(trigger);
-            setCaddieResponse(line);
-            setVoiceState('proactive');
-            const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
-            if (voiceEnabled) {
-              speak(line, vg, lang, apiUrl)
-                .catch(() => {})
-                .finally(() => setVoiceState('idle'));
-            } else {
-              setTimeout(() => setVoiceState('idle'), 3000);
-            }
-            })();
+            void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState);
           }
         }, 2500);
         return () => {
@@ -1012,8 +1038,11 @@ export default function CaddieTab() {
             "and how much time they realistically have to play and practise. Two sentences at most.",
             { timeoutMs: 9_000, seedHistory: true },
           );
+          // 2026-09-28 — the player spoke first; the interview opener would land on their turn.
+          if (brain.stale) return;
           if (brain.text) opener = brain.text;
         } catch { /* fall through to the fixed line — the interview must still ask something */ }
+        if (voiceChannelBusy()) return;
         setCaddieResponse(opener);
         const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
         if (voiceEnabled) {
@@ -1021,7 +1050,7 @@ export default function CaddieTab() {
           speak(opener, vg, lang, apiUrl)
             .catch(() => {})
             .finally(() => {
-              setVoiceState('idle');
+              setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev));
               // Hand the mic to the player so the answer is heard without hunting for a
               // button — hands-free is the product. Best-effort; a failure just means a tap.
               try { handleMicPressRef.current(); } catch { /* best-effort */ }
@@ -1316,9 +1345,9 @@ export default function CaddieTab() {
     const line = "Let's take the trouble out of play for a bit — I'll give you the club that covers it, and we'll pick our spot to be aggressive again.";
     setCaddieResponse(line);
     const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
-    if (ve) {
+    if (ve && !voiceChannelBusy()) {
       setVoiceState('proactive');
-      speak(line, vg, lang, apiUrl).catch(() => {}).finally(() => setVoiceState('idle'));
+      speak(line, vg, lang, apiUrl).catch(() => {}).finally(() => setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev)));
     }
   }, [riskEasedAt, isRoundActive, apiUrl]);
 
@@ -1495,19 +1524,7 @@ export default function CaddieTab() {
     });
     if (trigger) {
       markProactiveFired(trigger.id);
-      void (async () => {
-      const line = await proactiveLineFor(trigger);
-      setCaddieResponse(line);
-      setVoiceState('proactive');
-      const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
-      if (ve) {
-        speak(line, vg, lang, apiUrl)
-          .catch(() => {})
-          .finally(() => setVoiceState('idle'));
-      } else {
-        setTimeout(() => setVoiceState('idle'), 3000);
-      }
-      })();
+      void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState);
     }
    
   }, [_scores, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
@@ -1549,19 +1566,7 @@ export default function CaddieTab() {
     // Only act on the front-nine milestone here (no per-hole transition auto-fire anymore).
     if (trigger && trigger.id === 'front_9_summary') {
       markProactiveFired(trigger.id);
-      void (async () => {
-      const line = await proactiveLineFor(trigger);
-      setCaddieResponse(line);
-      setVoiceState('proactive');
-      const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
-      if (ve) {
-        speak(line, vg, lang, apiUrl)
-          .catch(() => {})
-          .finally(() => setVoiceState('idle'));
-      } else {
-        setTimeout(() => setVoiceState('idle'), 3000);
-      }
-      })();
+      void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState);
     }
    
   }, [currentHole, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
@@ -1855,12 +1860,30 @@ export default function CaddieTab() {
           persona: liveSettings.caddiePersonality, gap: gap?.key ?? null,
         });
         const r = await generateProactiveOpener({ gapHint: gap?.hint });
-        if (r.text) {
+        /**
+         * 2026-09-28 (Tim — "a first ask delay … racing or missing voice") — TWO first-tap defects
+         * lived in these few lines.
+         *
+         * 1. The opener was stamped userInitiated:true. handleMicPress reads that as "a reply you
+         *    asked for", so a tap during the opener only STOPPED it and never opened the mic — the
+         *    08-12 trap door, reopened on 07-25 when the opener moved to the brain. The caddie spoke
+         *    first; a tap over him means "I'm answering you". Unsolicited now, which also lets Quiet
+         *    (L1) keep it quiet, as the central gate's own comment always claimed.
+         * 2. Nothing re-checked the world after the ~12s brain await. The player's first tap landed
+         *    in that gap and the opener arrived on top of their turn. generateProactiveOpener now
+         *    returns stale when a turn began; a live mic that is not a "turn" yet (VAD arming, a
+         *    SmartMotion capture) is checked here.
+         */
+        if (r.text && (isSpeaking() || isCapturing() || isExternalMicActive())) {
+          console.log('[caddie] opener dropped: the mic or the speaker got there first');
+          openerPlayedThisProcess = true;
+          claimOpenerSlot();
+        } else if (r.text) {
           if (r.audioBase64) {
-            await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
+            await speakFromBase64(r.audioBase64, { caption: r.text }).catch(() => undefined);
           } else {
             // No TTS came back but we have the text (still seeded into history) — voice it.
-            await speak(r.text, liveSettings.voiceGender, liveSettings.language ?? 'en', getApiBaseUrl(), { userInitiated: true })?.catch?.(() => undefined);
+            await speak(r.text, liveSettings.voiceGender, liveSettings.language ?? 'en', getApiBaseUrl())?.catch?.(() => undefined);
           }
           // Set the flag ONLY after a real opener landed. A failure leaves it false so the next
           // launch / hot-reload retries cleanly (same guarantee the mp3 path had).
@@ -1875,6 +1898,10 @@ export default function CaddieTab() {
               void sg.markGapAsked(gap.key);
             } catch { /* a missed mark only means it may come round again later */ }
           }
+        } else if (r.stale) {
+          // The player is already talking to us — that IS the opening. Never retry this process.
+          openerPlayedThisProcess = true;
+          claimOpenerSlot();
         } else {
           console.log('[caddie] opener skipped: brain returned no text (staying silent, not canned)');
         }

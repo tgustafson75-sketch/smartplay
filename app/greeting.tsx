@@ -165,6 +165,7 @@ export default function GreetingScreen() {
   // transition dropped; greeting now fades out + router.replace).
 
   const skippedRef = useRef(false);
+  const unmountedRef = useRef(false);
   const completedRef = useRef(false);
   // Phase V.7 — track auto-advance timers so skip can cancel them.
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -426,6 +427,15 @@ export default function GreetingScreen() {
         const assetMod = getGreetingAssetForPersona(caddiePersonality, greeting);
         const asset = Asset.fromModule(assetMod);
         await asset.downloadAsync();
+        /**
+         * 2026-09-28 — the player may have skipped, or the 10s net may have moved on, while the asset
+         * was loading. Playing now would start the greeting on the Caddie tab — stamped
+         * userInitiated, so the first tap there would only stop it and never open the mic.
+         */
+        if (skippedRef.current || unmountedRef.current) {
+          _greetingCompleteResolve?.();
+          return;
+        }
         if (!asset.localUri) {
           console.warn('[greeting] asset has no localUri:', { persona: caddiePersonality, greeting });
           scheduleAdvance(2000);
@@ -493,9 +503,16 @@ export default function GreetingScreen() {
   // naturally so we don't risk clipping the last syllable.
   useEffect(() => {
     return () => {
+      unmountedRef.current = true;
       if (!naturalEndRef.current) {
         void stopSpeaking('screen:greeting').catch(() => {});
       }
+      /**
+       * 2026-09-28 — the greeting is gone, so it is complete, however it ended. The success path was
+       * the only one that resolved this; the playback-error, no-localUri, 10s-net and skip paths all
+       * left the Caddie opener waiting out its own 10s safety race — straight into the first ask.
+       */
+      _greetingCompleteResolve?.();
     };
   }, []);
 

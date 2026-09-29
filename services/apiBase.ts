@@ -234,17 +234,44 @@ export function getConnectionEvidence(): ConnectionEvidence {
  * So warmth is now tracked per endpoint. Marking one warm still implies the NETWORK is warm — a
  * round trip completed — but it no longer claims anything about the other functions.
  */
-const warmedEndpoints = new Set<string>();
+/**
+ * 2026-09-28 — AND WARMTH EXPIRES. This was a Set, written once and never cleared, so "answered
+ * this session" stood in for "awake now". Two defects followed from that one shape:
+ *
+ *   - The 240s keep-warm heartbeat and the foreground re-warm skip any endpoint already marked, so
+ *     after the first successful warm they did nothing for the rest of the process. Vercel idles a
+ *     Lambda after minutes, so the first ask after the app sat in the background hit cold functions.
+ *   - Those cold functions were then handed the WARM (shorter) budgets, because the flag said warm.
+ *
+ * Now each mark carries its time. A function counts as warm for budgets for ENDPOINT_WARM_TTL_MS,
+ * and warmup re-pings anything not proven within WARMUP_SKIP_MS, so the heartbeat really heartbeats.
+ */
+const warmedEndpoints = new Map<string, number>();
+/** How long an answer from a function still proves it awake. Under Vercel's idle spin-down. */
+export const ENDPOINT_WARM_TTL_MS = 5 * 60_000;
 
 /** Record that a specific serverless function answered — it is awake, not just reachable. */
 export function markEndpointWarmed(path: string): void {
-  warmedEndpoints.add(path);
+  warmedEndpoints.set(path, Date.now());
   markConnectionWarmed();
 }
 
-/** Has THIS function answered this session? Budgets for a given call must ask about THAT call. */
+/** ms since THIS function last answered, or null if it has not this session. */
+export function endpointWarmAgeMs(path: string): number | null {
+  const at = warmedEndpoints.get(path);
+  return at === undefined ? null : Date.now() - at;
+}
+
+/** Has THIS function answered recently enough to still be awake? Budgets must ask about THAT call. */
 export function isEndpointWarmed(path: string): boolean {
-  return warmedEndpoints.has(path);
+  const age = endpointWarmAgeMs(path);
+  return age !== null && age < ENDPOINT_WARM_TTL_MS;
+}
+
+/** Test seam — forget every mark. Never called by the app. */
+export function __resetEndpointWarmthForTest(): void {
+  warmedEndpoints.clear();
+  connectionWarmed = false;
 }
 
 /** Flip the warmed flag after any successful cloud round-trip (transcribe/brain), so subsequent
@@ -315,9 +342,14 @@ export function warmBackendConnection(): Promise<void> {
         if (await pingHost(activeBase, 5000)) {
           connectionWarmed = true;
           healedThisSession = true;
-          // This ping proves /api/kevin is awake — and ONLY that. Recording which function answered
-          // is what stops the voice path inferring that transcribe is warm too.
-          warmedEndpoints.add('/api/kevin');
+          /**
+           * 2026-09-28 — this used to mark /api/kevin warm, and that is why the brain was never
+           * warmed. kevin.ts answers '__ping__' BEFORE the brain or TTS are touched, so the ping
+           * proves the Lambda and the socket, nothing more. But voiceWarmup skips any endpoint
+           * already marked, and it reached kevin last — after this ping had long landed — so the
+           * real mode:'warmup' (LLM + TTS) never ran, for the whole session. The first ask paid a
+           * cold brain and a cold voice every time. The ping marks the CONNECTION only.
+           */
           noteRoundTripOk(Date.now() - t0);
           return;
         }

@@ -9,6 +9,7 @@ import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail'
 import { conversationalBrainTurn } from './conversationalBrain';
 import { askCaddie } from './caddieBrain';
 import { abortVoiceWarmup } from './voiceWarmup';
+import { noteUserTurn } from './userTurnClock';
 import { getDialog } from './dialogEngine';
 import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
@@ -24,7 +25,7 @@ import { precheckLocalIntent } from './localIntentPrecheck';
 import { resolvePendingCourseUtterance } from './pendingDisambiguation';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
-import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
+import { getApiBaseUrl, isEndpointWarmed, markEndpointWarmed, getConnectionEvidence } from './apiBase';
 import { tryAnswerOpenQuestion } from './pendingPuttAsk';
 import { isFlagEnabled } from '../store/flagStore';
 // 2026-08-06 (Tim — "no more pre-canned speech; use a subtle earcon, no words" during the think gap). The
@@ -53,7 +54,9 @@ const GOTIT_EARCON_MS = 180;
 // The FIRST turn after launch is cold on the Lambda + provider SDK + tool rounds; a fixed 30s aborts it.
 // Give the brain a longer budget until the connection is confirmed warm; warm turns keep the tight bound.
 const COLD_KEVIN_FETCH_TIMEOUT_MS = 48000;
-const kevinTimeout = (): number => (isConnectionWarmed() ? KEVIN_FETCH_TIMEOUT_MS : COLD_KEVIN_FETCH_TIMEOUT_MS);
+// 2026-09-28 — per FUNCTION, like transcribe since 08-20. isConnectionWarmed() is flipped by the boot
+// ping and by ANY success, so a never-touched brain or classifier got the warm budget and aborted cold.
+const kevinTimeout = (): number => (isEndpointWarmed('/api/kevin') ? KEVIN_FETCH_TIMEOUT_MS : COLD_KEVIN_FETCH_TIMEOUT_MS);
 
 // 2026-07-04 (clean-audit) — the external-URL allowlist moved to
 // services/voice/conversationalToolDispatch.ts (the one tool dispatcher);
@@ -85,7 +88,7 @@ const INTENT_FETCH_TIMEOUT_MS = 8_000;
 // connecting." Deterministic first-turn failure. Give the classifier the same cold budget until the
 // connection is confirmed warm (warmup completed OR a prior request succeeded); warm turns keep 8s.
 const COLD_INTENT_FETCH_TIMEOUT_MS = 22_000;
-const intentTimeout = (): number => (isConnectionWarmed() ? INTENT_FETCH_TIMEOUT_MS : COLD_INTENT_FETCH_TIMEOUT_MS);
+const intentTimeout = (): number => (isEndpointWarmed('/api/voice-intent') ? INTENT_FETCH_TIMEOUT_MS : COLD_INTENT_FETCH_TIMEOUT_MS);
 // 2026-06-23 (smoke-test) — match useVoiceCaddie BRAIN_TIMEOUT_MS (30s) so the
 // active-listen path doesn't abort a healthy-but-slow brain the tap path would keep.
 
@@ -856,8 +859,12 @@ async function openSession() {
    * 2026-08-12 — was `prewarmVoice(true)`. Same reversal as the on-screen mic: firing five warmup
    * POSTs here saturated the per-host connection pool at exactly the moment the earbud turn needed
    * it. Release them instead. See services/voiceWarmup for the millisecond-level evidence.
+   *
+   * 2026-09-28 — the release moved to the upload itself (voiceService.captureUtteranceDetailed); the
+   * capture window uses no connection. Opening the session records the TURN, so a proactive line
+   * still waiting on the brain stands down instead of speaking over this one.
    */
-  abortVoiceWarmup();
+  noteUserTurn();
 
   // Audio routing safety: if route is the phone speaker AND the user hasn't
   // opted into "Voice on phone speaker", suppress TTS — show text instead.
@@ -1272,6 +1279,7 @@ async function openSession() {
           ...customCaddieFields(),
         }),
       }, intentTimeout());
+      if (parseRes.ok) markEndpointWarmed('/api/voice-intent');
       if (!parseRes.ok) {
         // 2026-07-06 (voice-lifecycle audit #8a) — this was a SILENT return: the user
         // heard the opener, spoke, and got dead air. Speak the honest failure line
@@ -1838,6 +1846,9 @@ function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
 export async function handleTranscribedUtterance(utterance: string): Promise<void> {
   const text = (utterance ?? '').trim();
   if (!text) return;
+  // 2026-09-28 — the typed / watch path is a real turn too, and it goes straight to the network.
+  noteUserTurn();
+  abortVoiceWarmup();
   // 2026-07-25 (Tim — "give all mics a universal state display; not sure he's going to answer") — this
   // TYPED / watch path never drove the shared listening state, so the universal status strip showed
   // nothing after you hit send. Set 'thinking' now (strip shows "Thinking…" immediately) and reset to
@@ -1885,6 +1896,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           ...customCaddieFields(),
         }),
       }, intentTimeout());
+      if (parseRes.ok) markEndpointWarmed('/api/voice-intent');
       /**
        * 2026-08-26 — A CLASSIFIER FAILURE IS NOT THE END OF THE TURN.
        *

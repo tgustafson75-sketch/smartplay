@@ -33,21 +33,29 @@ const VOICE = code('services/voiceService.ts');
 const SESSION = read('services/listeningSession.ts');
 
 describe('priming never runs underneath a live or opening session', () => {
+  /**
+   * 2026-09-28 — the guards moved into primeMustWait(), which primeMicPipeline asks BEFORE its try
+   * (a bail from inside the try still ran the finally's audio-mode flip). The behaviour — no audio
+   * change when a session is in flight — is now tested for real in
+   * the-first-ask-after-launch.test.ts; these pin that the guard is still consulted first.
+   */
+  const waitFn = () => VOICE.slice(VOICE.indexOf('function primeMustWait'), VOICE.indexOf('export async function primeMicPipeline'));
+
   it('primeMicPipeline bails when a listening session is in flight', () => {
     const at = VOICE.indexOf('export async function primeMicPipeline');
     expect(at).toBeGreaterThan(-1);
     const body = VOICE.slice(at, at + 1400);
-    expect(body).toMatch(/isSessionInFlight\(\)/);
-    // and it must bail BEFORE it touches the audio route or creates a recording
-    const bail = body.indexOf('isSessionInFlight()');
+    expect(waitFn()).toMatch(/isSessionInFlight\(\)/);
+    // and it must bail BEFORE it touches the audio route or creates a recording — and before the try
+    const bail = body.indexOf('if (primeMustWait()) return;');
+    expect(bail).toBeGreaterThan(-1);
+    expect(bail).toBeLessThan(body.indexOf('micPipelinePrimed = true;')); // i.e. before the try whose finally flips audio
     expect(bail).toBeLessThan(body.indexOf('configureAudioForRecording'));
     expect(bail).toBeLessThan(body.indexOf('Audio.Recording.createAsync'));
   });
 
   it('keeps the older guards too — this narrowed nothing', () => {
-    const at = VOICE.indexOf('export async function primeMicPipeline');
-    const body = VOICE.slice(at, at + 1400);
-    expect(body).toMatch(/isSpeaking\(\) \|\| isCapturing\(\)/);
+    expect(waitFn()).toMatch(/isSpeaking\(\) \|\| isCapturing\(\)/);
   });
 
   it('still restores speech mode on the way out, for the runs that DO prime', () => {

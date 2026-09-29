@@ -8,6 +8,12 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-28. First-ask sweep on LOCAL branch `firstask-2026-09-28` (NOT pushed, NOT OTA'd).
+> 16 defects behind "first ask delayed / racing or missing voice" fixed — warmups that never warmed the
+> brain, warmth that never expired, an opener that ate the first tap and landed on the first turn, a
+> server budget longer than the phone's. Detail: SPRINT-LOG Day 128. Ships with the one reviewed release
+> when Tim says go (it includes `api/` changes, so a push deploys the server). Next: device check PATH 4.
+
 > ### ⚠️ LATEST — 2026-09-24. SHIPPED: main `94b99a11` + OTA `95e36634` (hole images: real tiles everywhere, bundled-photo code gone, no-signal recovers), on top of `81f6fd09` + OTA `3348170d` (unify pipeline, Mapbox scale fix, Course Cloud pre-fix AI rows ignored, zero lint). Not yet verified on device.
 > Tim: hold everything and ship ONE reviewed release when he says go. One course pipeline (surveyed data kept
 > as verified data inside it), Play/picker list only the player's courses, and the Mapbox scale fix (was 2×

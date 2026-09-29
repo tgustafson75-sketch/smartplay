@@ -12,6 +12,9 @@ import {
 import { useRoundStore } from '../store/roundStore';
 import { useListeningSessionStore } from '../store/listeningSessionStore';
 import { useTranslation } from 'react-i18next';
+import { mayAutoApplyUpdate, AUTO_APPLY_WINDOW_MS } from '../services/updateApplyGate';
+import { msSinceUserTurn } from '../services/userTurnClock';
+import { isSpeaking, isCapturing, isExternalMicActive } from '../services/voiceService';
 
 /**
  * Auto-update banner. Ported from V3 components/UpdateAvailableBanner.
@@ -66,10 +69,33 @@ export function UpdateAvailableBanner() {
   const autoAppliedRef = useRef(false);
   const applyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [applying, setApplying] = useState(false);
+  const [autoCancelled, setAutoCancelled] = useState(false);
+  /**
+   * 2026-09-28 — the gate now also waits out the opener and any turn, and the opener is usually
+   * speaking at the moment an update finishes downloading. Asked once, that would push nearly every
+   * launch-time update to the manual banner. So while an update is ready inside the window, ask again
+   * every couple of seconds: it applies in the first quiet moment, and never under a conversation.
+   */
+  const [gateTick, setGateTick] = useState(0);
+  useEffect(() => {
+    if (!status?.ready || autoAppliedRef.current) return;
+    const id = setInterval(() => {
+      setGateTick((n) => n + 1); // the last tick past the window re-renders so the manual banner can show
+      if (autoAppliedRef.current || Date.now() - mountedAtRef.current >= AUTO_APPLY_WINDOW_MS) clearInterval(id);
+    }, 2_000);
+    return () => clearInterval(id);
+  }, [status]);
   useEffect(() => {
     if (autoAppliedRef.current) return;
-    const sinceLaunchMs = Date.now() - mountedAtRef.current;
-    if (status?.ready && !inRound && !voiceActive && sinceLaunchMs < 20_000) {
+    const gate = () => mayAutoApplyUpdate({
+      ready: status?.ready === true,
+      inRound: useRoundStore.getState().isRoundActive,
+      sessionActive: useListeningSessionStore.getState().state !== 'idle',
+      audioBusy: isSpeaking() || isCapturing() || isExternalMicActive(),
+      msSinceUserTurn: msSinceUserTurn(),
+      sinceLaunchMs: Date.now() - mountedAtRef.current,
+    });
+    if (gate()) {
       autoAppliedRef.current = true;
       setApplying(true);
       /**
@@ -78,13 +104,22 @@ export function UpdateAvailableBanner() {
        * `autoAppliedRef` short-circuits every later run and the update would never apply at all.
        * The process is going away; there is nothing to leak into.
        */
-      applyTimerRef.current = setTimeout(() => { void applyUpdate(); }, OVERLAY_MS);
+      applyTimerRef.current = setTimeout(() => {
+        // Asked again: a tap can land inside the overlay. Then the manual banner offers it instead.
+        if (!gate()) { setApplying(false); setAutoCancelled(true); return; }
+        void applyUpdate();
+      }, OVERLAY_MS);
     }
-  }, [status, inRound, voiceActive]);
+  }, [status, inRound, voiceActive, gateTick]);
 
   const slide = useState(() => new Animated.Value(-120))[0];
   // Don't flash the manual banner during the cold-start auto-apply window.
-  const visible = status?.ready === true && !dismissed && !inRound && !voiceActive && !autoAppliedRef.current;
+  // While the launch auto-apply can still happen (inside the window, the player has not started talking),
+  // keep the manual banner down — it would flash and then vanish under the reload overlay.
+  const autoStillPossible = !autoAppliedRef.current && msSinceUserTurn() === null
+    && Date.now() - mountedAtRef.current < AUTO_APPLY_WINDOW_MS;
+  const visible = status?.ready === true && !dismissed && !inRound && !voiceActive
+    && (!autoAppliedRef.current || autoCancelled) && !autoStillPossible;
 
   useEffect(() => {
     Animated.spring(slide, {

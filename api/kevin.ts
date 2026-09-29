@@ -11,6 +11,7 @@ import { allowInference } from './_inferLimit';
 // (nova for Serena, onyx for the rest).
 import { getCaddieName, getCharacterSpec, personaInputFrom } from '../lib/persona';
 import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
+import { BRAIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 // 2026-06-24 — APP-FEATURE CATALOG. Makes the caddie aware of the app's real
 // tools/cards/drills (e.g. Smart Tempo) so they can name them and open them via
 // the open tools. Shared client+server module under services/.
@@ -202,8 +203,23 @@ const TERSE_ACKS: Record<string, string> = {
 /** Whole-turn budget for the brain's model rounds. Below the client's 30s warm abort, with margin
  *  for the prompt build, TTS and the network — see runAgenticLoop's deadlineAt. */
 export const BRAIN_TURN_BUDGET_MS = 24_000;
+/**
+ * 2026-09-28 — THE TURN BUDGET ENDED BEFORE THE TURN DID. deadlineAt capped the model rounds at 24s
+ * from the start of the loop, and then the reply's voice was rendered AFTER it with its own 10s
+ * timeout — so a slow first turn (cold brain, full prompt-cache write) could spend 24s + 10s against
+ * a phone that stops listening at 30s. The answer was paid for and never heard.
+ *
+ * Both are now measured from when the REQUEST arrived: the rounds stop in time to leave the voice
+ * TTS_RESERVE_MS, and the voice gets whatever is left of the phone's window. A voice that cannot fit
+ * is skipped and the text goes back in time — the phone renders the voice itself from the text.
+ */
+export const TTS_RESERVE_MS = 5_000;
+export const RESPONSE_MARGIN_MS = 1_000;
+/** Below this, a TTS render cannot finish inside the window — return text now instead. */
+const MIN_TTS_MS = 1_500;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const requestStartedAt = Date.now();
   if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -2688,8 +2704,11 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
       return 'Action triggered.';
     };
 
-    // OpenAI-only with a bounded RETRY (Tim — "make sure OpenAI is warm and retries if an
-    // initial failure happens"). OpenAI is warmed at boot via the mode:'warmup' path above;
+    // 2026-09-28 — the brain is pinned to 'anthropic' (see `provider` above), and until today the
+    // mode:'warmup' path above almost never ran: the client's boot '__ping__' marked /api/kevin warm
+    // first and the warmup skipped it. It runs now (services/voiceWarmup, services/apiBase).
+    // Original note: bounded RETRY (Tim — "make sure OpenAI is warm and retries if an
+    // initial failure happens"). Warmed at boot via the mode:'warmup' path above;
     // but a Vercel lambda can go cold mid-round, so a transient blip / cold-start gets ONE
     // retry — bounded so the RETRY can't run past the client's 20s voice abort (a late attempt-2
     // that finishes after the client gave up just burns lambda time). A hard failure falls through
@@ -2713,7 +2732,10 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
           const remainMs = 19_000 - (Date.now() - startedLoop);
           // 2026-09-23 — deadlineAt: one budget for the whole TURN (every round, both attempts), set
           // inside the phone's 30s warm window so no paid round finishes after the player hung up.
-          const deadlineAt = startedLoop + BRAIN_TURN_BUDGET_MS;
+          const deadlineAt = Math.min(
+            startedLoop + BRAIN_TURN_BUDGET_MS,
+            requestStartedAt + BRAIN_FETCH_TIMEOUT_MS - TTS_RESERVE_MS - RESPONSE_MARGIN_MS,
+          );
           const attemptOpts = attempt === 1
             ? { ...loopOpts, deadlineAt }
             : { ...loopOpts, deadlineAt, timeoutMs: Math.max(3_000, Math.min(loopOpts.timeoutMs, remainMs - 1_000)) };
@@ -2891,6 +2913,10 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
      * true and must not be relied on: the device voice was removed today (Tim: "I don't wanna ever
      * hear it again"). audioBase64 null now means the caddie stays SILENT with the answer on screen.
      *
+     * 2026-09-28 — CORRECTION: not silent. Every caller (useCaddieTabMic.processTurn, listeningSession,
+     * useVoiceCaddie) falls back to speak(text), which renders the persona voice through /api/voice.
+     * That is what makes skipping a TTS that cannot fit the phone's window (tts_budget_spent) safe.
+     *
      * KNOWN, NOT YET FIXED — this is the ~5s gap Tim reports between the text appearing and the voice
      * starting. The whole response is blocked on TTS finishing: we await the full speech synthesis and
      * the entire arrayBuffer before returning, so the client cannot render text until the audio is
@@ -2903,13 +2929,15 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
     try {
       // A caller that will not play the audio must not pay to generate it.
       if (skip_tts) throw new Error('skip_tts');
+      const ttsBudgetMs = requestStartedAt + BRAIN_FETCH_TIMEOUT_MS - RESPONSE_MARGIN_MS - Date.now();
+      if (ttsBudgetMs < MIN_TTS_MS) throw new Error(`tts_budget_spent (${ttsBudgetMs}ms left)`);
       const ttsResponse = await openai.audio.speech.create({
         model: 'gpt-4o-mini-tts',
         voice: ttsVoice,
         input: text,
         instructions: KEVIN_TTS_INSTRUCTIONS,
         // NOTE: no `speed` — gpt-4o-mini-tts rejects it (500). Pace lives in the instructions.
-      });
+      }, { timeout: Math.min(10_000, ttsBudgetMs) });
       const arrayBuffer = await ttsResponse.arrayBuffer();
       audioBase64 = Buffer.from(arrayBuffer).toString('base64');
     } catch (ttsErr) {

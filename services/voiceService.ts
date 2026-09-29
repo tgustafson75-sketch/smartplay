@@ -644,6 +644,9 @@ export const captureUtteranceDetailed = async (
      * audio again: two transcriptions billed, two uploads off a phone on cell data, for one spoken
      * sentence. The controller is returned now and whoever loses is aborted.
      */
+    // 2026-09-28 — the upload is where a turn first needs a connection, so it is where warmups
+    // yield. (Aborting at session open dropped the queued brain warmup for nothing.)
+    try { (require('./voiceWarmup') as typeof import('./voiceWarmup')).abortVoiceWarmup(); } catch { /* non-fatal */ }
     const doFetch = (timeoutMs: number): { res: Promise<Response>; abort: () => void } => {
       const controller = new AbortController();
       const cancelTimer = setTimeout(() => controller.abort(), timeoutMs);
@@ -775,34 +778,50 @@ export const configureAudioForSpeech =
 // is speaking or a real capture is live, fully best-effort (never throws/blocks), and
 // restores speaker mode after so the next TTS/opener is unaffected.
 let micPipelinePrimed = false;
+/**
+ * 2026-09-28 — every bail-out in primeMicPipeline RETURNED FROM INSIDE ITS TRY, so the `finally` below still ran
+ * configureAudioForSpeech() — flipping the session out of record mode on exactly the paths that bail
+ * BECAUSE someone is recording or opening a session. That is the 09-12 fix undone by its own shape.
+ * Guards now decide before the try; the finally only restores a mode this function actually changed.
+ * The tap-path recorder (isExternalMicActive) and a turn started in the last few seconds — a tap still
+ * awaiting its recording — are guarded too: the prime runs right after the opener, when taps land.
+ */
+const PRIME_AFTER_TURN_QUIET_MS = 5_000;
+function primeMustWait(): boolean {
+  if (isSpeaking() || isCapturing() || isExternalMicActive()) return true;
+  if (isRecentUserTurn()) return true;
+  /**
+   * 2026-09-12 (Tim — "Kevin is stuck listening after a question from him I answered") — AND NOT
+   * WHILE A SESSION IS OPENING.
+   *
+   * `isCapturing()` only goes true once the recording actually starts, which is several awaits
+   * deep inside openSession(). A caller that opens a session and then primes — which is exactly
+   * what the caddie tab's opener began doing on 2026-09-11 when it started opening the mic after a
+   * question — slips through this guard in the window between the two. Priming then creates a
+   * SECOND Audio.Recording alongside the real one and, worse, its `finally` puts the audio session
+   * back into SPEECH mode underneath a session that is trying to record. The capture records
+   * nothing, so VAD never sees end-of-speech and the turn never ends: the session sits in
+   * 'listening' until the 150s dormancy watchdog force-closes it.
+   *
+   * sessionInFlight is set SYNCHRONOUSLY at the top of toggle(), before its first await, so this
+   * check closes the window rather than narrowing it. Lazy require: listeningSession imports this
+   * module, so a static import here is a cycle.
+   */
+  try {
+    const ls = require('./listeningSession') as typeof import('./listeningSession');
+    if (ls.isSessionInFlight()) return true;
+  } catch { /* if we cannot tell, the guards above still apply */ }
+  return false;
+}
+
 export async function primeMicPipeline(): Promise<void> {
   if (micPipelinePrimed) return;
+  let perm: { granted: boolean };
+  try { perm = await Audio.getPermissionsAsync(); } catch { return; }
+  if (!perm.granted) return;                   // can't prime without permission — retry later
+  if (primeMustWait()) return;                 // don't fight TTS / a capture / a turn — retry later
+  micPipelinePrimed = true;                    // commit only once we're actually priming
   try {
-    const perm = await Audio.getPermissionsAsync();
-    if (!perm.granted) return;                 // can't prime without permission — retry later
-    if (isSpeaking() || isCapturing()) return; // don't fight TTS / a live capture — retry later
-    /**
-     * 2026-09-12 (Tim — "Kevin is stuck listening after a question from him I answered") — AND NOT
-     * WHILE A SESSION IS OPENING.
-     *
-     * `isCapturing()` only goes true once the recording actually starts, which is several awaits
-     * deep inside openSession(). A caller that opens a session and then primes — which is exactly
-     * what the caddie tab's opener began doing on 2026-09-11 when it started opening the mic after a
-     * question — slips through this guard in the window between the two. Priming then creates a
-     * SECOND Audio.Recording alongside the real one and, worse, its `finally` puts the audio session
-     * back into SPEECH mode underneath a session that is trying to record. The capture records
-     * nothing, so VAD never sees end-of-speech and the turn never ends: the session sits in
-     * 'listening' until the 150s dormancy watchdog force-closes it.
-     *
-     * sessionInFlight is set SYNCHRONOUSLY at the top of toggle(), before its first await, so this
-     * check closes the window rather than narrowing it. Lazy require: listeningSession imports this
-     * module, so a static import here is a cycle.
-     */
-    try {
-      const ls = require('./listeningSession') as typeof import('./listeningSession');
-      if (ls.isSessionInFlight()) return;
-    } catch { /* if we cannot tell, fall through — the guards above still apply */ }
-    micPipelinePrimed = true;                  // commit only once we're actually priming
     await configureAudioForRecording();
     const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
     try { await recording.stopAndUnloadAsync(); } catch { /* no-op */ }
@@ -810,9 +829,20 @@ export async function primeMicPipeline(): Promise<void> {
   } catch (e) {
     console.log('[voice] mic prime skipped (non-fatal):', e);
   } finally {
-    // Leave the session back in speaker mode so the next opener/TTS isn't stuck in record.
-    try { await configureAudioForSpeech(); } catch { /* no-op */ }
+    // Leave the session back in speaker mode so the next opener/TTS isn't stuck in record — unless a
+    // real capture started while we were priming. Its own setup put the session in record mode, and
+    // flipping it back underneath that capture is the silent-first-recording defect.
+    if (!(isCapturing() || isExternalMicActive() || isRecentUserTurn())) {
+      try { await configureAudioForSpeech(); } catch { /* no-op */ }
+    }
   }
+}
+
+function isRecentUserTurn(): boolean {
+  try {
+    const since = (require('./userTurnClock') as typeof import('./userTurnClock')).msSinceUserTurn();
+    return since !== null && since < PRIME_AFTER_TURN_QUIET_MS;
+  } catch { return false; }
 }
 
 // ─── SINGLETON SPEECH STATE ───────────────
@@ -1423,8 +1453,12 @@ export async function speakDeviceNotice(
       catch (e) { console.log('[voice] offline persona clip play failed — device TTS:', e); }
     }
   } catch { /* cache is additive — a miss means the silent breadcrumb path, not device TTS */ }
-  const noticeId = claimSpeechId('device_notice');
-  await deviceSpeakFallback(text, language, noticeId, gender);
+  /**
+   * 2026-09-28 — this used to CLAIM a speech id first. The fallback speaks nothing, so the claim's only
+   * effect was to make whatever else was mid-fetch stale: a reply loading at that moment was dropped
+   * without a sound. A notice that cannot play must not silence one that can. Breadcrumb only.
+   */
+  await deviceSpeakFallback(text, language, currentSpeechId, gender);
 }
 
 /**
@@ -1446,11 +1480,18 @@ export async function prewarmOfflineVoiceClips(): Promise<void> {
 // Same singleton semantics as speak/speakFromBase64 — naturally cancelled
 // when the real response calls either of those functions.
 
-export const playLocalFile = async (
+/**
+ * 2026-09-28 — the body, un-queued. speak() plays a custom-caddie clip from INSIDE its own queued
+ * body; calling the queued playLocalFile there chained a new job behind the job that was awaiting it,
+ * so neither could finish and every later utterance waited forever — permanent silence until restart
+ * for anyone with a recorded custom line. Code already running in the queue calls this directly.
+ */
+const playLocalFileNow = async (
   source: string | number,
   knownDurationMs?: number,
   opts?: SpeakOpts,
-): Promise<void> => enqueueSpeak(async () => {
+): Promise<void> => {
+  noteAudioActivity('local_clip');
   // Phase V.7 — same Quiet/route guard as speak() so filler clips don't
   // play when voice is disabled or routed to the phone speaker.
   if (!isVoiceAllowed(opts)) return;
@@ -1573,7 +1614,13 @@ export const playLocalFile = async (
     }
     console.log('[voice] playLocalFile error:', err);
   }
-});
+};
+
+export const playLocalFile = async (
+  source: string | number,
+  knownDurationMs?: number,
+  opts?: SpeakOpts,
+): Promise<void> => enqueueSpeak(() => playLocalFileNow(source, knownDurationMs, opts));
 
 // ─── SPEAK FROM BASE64 ────────────────────
 
@@ -1601,6 +1648,7 @@ function logCaddieLine(text: string | null | undefined): void {
 }
 
 export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise<void> => enqueueSpeak(async () => {
+  noteAudioActivity('tts_base64');
   /**
    * 2026-08-26 — THE CONVERSATION LOG WAS READING ONLY THE DEGRADED HALF OF EVERY ROUND.
    *
@@ -1950,7 +1998,7 @@ export const speak = async (
     notifyCaption(null);
     notifySpeaking(false);
     try {
-      await playLocalFile(customClipUri, undefined, opts);
+      await playLocalFileNow(customClipUri, undefined, opts);
     } catch (e) {
       // File existed at probe but playback still threw — unusual but
       // possible (corrupt header / format mismatch). Log + return; the

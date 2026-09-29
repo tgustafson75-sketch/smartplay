@@ -21,6 +21,8 @@ import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
 import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { devLog } from '../services/devLog';
+import { noteUserTurn, getUserTurnEpoch } from '../services/userTurnClock';
+import { abortVoiceWarmup } from '../services/voiceWarmup';
 // 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
 // mic and the earbud/badge path keep the same conversation + reset together.
 import { clearConversationHistory } from '../services/voice/conversationHistory';
@@ -69,6 +71,14 @@ export function useCaddieTabMic({
   // shared pipecat history (last-writer-wins), double-award points, and log two
   // turns. This ref makes processTurn re-entrancy-safe at the true chokepoint.
   const turnInFlightRef = useRef(false);
+  /**
+   * 2026-09-28 — a question asked while the previous one is still thinking is QUEUED, not dropped.
+   * The re-entrancy guard used to `return` with a devLog, so an impatient re-tap during a slow first
+   * turn recorded, transcribed and then vanished — no speech, no text, state left on 'thinking'.
+   * Latest wins: it runs the moment the current turn releases.
+   */
+  const pendingTurnRef = useRef<string | null>(null);
+  const processTurnRef = useRef<((t: string) => Promise<void>) | null>(null);
 
   /**
    * 2026-08-23 — the Phase-3 WebSocket scaffold is GONE (openSession / closeSession / pushMessage /
@@ -97,10 +107,17 @@ export function useCaddieTabMic({
     // 2026-07-06 (voice-parity F2) — block a re-entrant turn. If one is already in
     // flight, drop this call rather than start a second that races history/points.
     if (turnInFlightRef.current) {
-      devLog('[pipecat] turn already in flight — ignoring re-entrant call');
+      devLog('[pipecat] turn already in flight — queued behind it');
+      pendingTurnRef.current = transcript;
+      noteUserTurn();
       return;
     }
     turnInFlightRef.current = true;
+    // 2026-09-28 — a real turn (typed, SmartMotion, or the voice path's hand-off): stamp it so a late
+    // proactive line stands down, and hand the warmups' connections to it.
+    noteUserTurn();
+    abortVoiceWarmup();
+    const turnEpoch = getUserTurnEpoch();
 
     // 2026-07-06 (Tim — "less predictive, more narrative to build a database") —
     // capture the user's spoken turn to the conversation log NOW, before any tool
@@ -202,9 +219,18 @@ export function useCaddieTabMic({
       try { require('../store/pointsStore').usePointsStore.getState().addPoints(3, 'caddie_interaction'); } catch { /* best-effort */ }
 
       spokeResponse = true;
-      onVoiceStateChange?.('speaking');
       onKevinSpoke?.(text);
       recordKevinTurn(text);
+      /**
+       * 2026-09-28 — the player has started ANOTHER turn while this one was thinking. Playing this
+       * reply now would flip the audio session to playback under their live recording (iOS stops
+       * capturing) and talk over them. Show it, don't say it, and let the queued turn answer.
+       */
+      if (getUserTurnEpoch() !== turnEpoch) {
+        devLog('[caddie] reply superseded by a newer turn — caption only');
+        return;
+      }
+      onVoiceStateChange?.('speaking');
       try {
         const settings = useSettingsStore.getState();
         /**
@@ -243,8 +269,12 @@ export function useCaddieTabMic({
     } finally {
       // 2026-07-06 (voice-parity F2) — always release so the NEXT tap/turn works.
       turnInFlightRef.current = false;
+      const next = pendingTurnRef.current;
+      pendingTurnRef.current = null;
+      if (next) void processTurnRef.current?.(next);
     }
   }, [onKevinSpoke, onReadyToListen, onToolAction, onVoiceStateChange]);
+  processTurnRef.current = processTurn;
 
   /**
    * Phase 2 full pipeline: audio URI → Whisper STT → processTurn → speak.

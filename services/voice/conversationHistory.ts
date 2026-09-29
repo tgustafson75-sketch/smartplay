@@ -43,6 +43,22 @@ export function appendConversationTurn(userText: string, assistantText: string):
   ].slice(-MAX_MESSAGES);
 }
 
+/**
+ * Remove ONE exchange askCaddie appended — the most recent user/assistant pair matching both texts —
+ * leaving everything around it. 2026-09-28: proactive lines used to REPLACE the whole history to drop
+ * their directive, which also wiped any real exchange the player had while the line was generating.
+ */
+export function removeConversationExchange(userText: string, assistantText: string): void {
+  for (let i = history.length - 2; i >= 0; i--) {
+    const u = history[i];
+    const a = history[i + 1];
+    if (u.role === 'user' && u.content === userText && a.role === 'assistant' && a.content === assistantText) {
+      history = [...history.slice(0, i), ...history.slice(i + 2)];
+      return;
+    }
+  }
+}
+
 /** Wipe the shared history (round boundary / explicit reset). */
 export function clearConversationHistory(): void {
   history = [];

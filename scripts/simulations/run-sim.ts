@@ -3127,11 +3127,14 @@ check('Smart Motion: re-analyze the kept clip + auto-update on cold start (Tim)'
        * [[guards-by-element-not-blanket-suppression]] [[a-guard-can-enforce-a-stale-premise]]
        */
       /autoAppliedRef\.current = true;/.test(upd) &&
-      /applyTimerRef\.current = setTimeout\(\(\) => \{ void applyUpdate\(\); \}, OVERLAY_MS\)/.test(upd) &&
+      /applyTimerRef\.current = setTimeout\(\(\) => \{[\s\S]{0,200}?void applyUpdate\(\);[\s\S]{0,40}?\}, OVERLAY_MS\)/.test(upd) &&
       /const \[applying, setApplying\] = useState\(false\)/.test(upd) &&   // the overlay it reloads behind
-
-      /sinceLaunchMs < 20_000/.test(upd) &&
-      /!inRound && !voiceActive/.test(upd)
+      // 2026-09-28 — the launch window and the not-mid-round / not-mid-voice conditions moved into
+      // services/updateApplyGate (which also now sees the avatar mic, the opener and a started turn).
+      /mayAutoApplyUpdate\(\{/.test(upd) &&
+      /i\.sinceLaunchMs >= AUTO_APPLY_WINDOW_MS/.test(read('services/updateApplyGate.ts')) &&
+      /AUTO_APPLY_WINDOW_MS = 20_000/.test(read('services/updateApplyGate.ts')) &&
+      /i\.inRound \|\| i\.sessionActive \|\| i\.audioBusy/.test(read('services/updateApplyGate.ts'))
     );
   })(),
   'failed read → re-analyze the saved clip; OTA auto-applies on launch (not mid-round), no manual tap');
@@ -4889,8 +4892,10 @@ check('Voice: mic/capture pipeline primed once off-path (first-tap warm)',
     return (
       /export async function primeMicPipeline/.test(vs) &&
       /await Audio\.getPermissionsAsync\(\)/.test(vs) &&
-      /if \(isSpeaking\(\) \|\| isCapturing\(\)\) return;/.test(vs) &&
-      /micPipelinePrimed = true;/.test(vs) &&
+      // 2026-09-28 — the guards live in primeMustWait(), asked BEFORE the try (a bail inside it still
+      // ran the finally's audio-mode flip). Behaviour: __tests__/regression/the-first-ask-after-launch.
+      /if \(isSpeaking\(\) \|\| isCapturing\(\) \|\| isExternalMicActive\(\)\) return true;/.test(vs) &&
+      /if \(primeMustWait\(\)\) return;\s*micPipelinePrimed = true;/.test(readCode('services/voiceService.ts')) &&
       /void primeMicPipeline\(\);/.test(caddie)
     );
   })(),
@@ -4910,7 +4915,11 @@ check('Voice: dead-zone failures SPEAK via device TTS (not just a silent text bu
       // generation counter grew a single named claimer. The INTENT is that the notice claims the
       // voice and then speaks under that same claim — assert the pair, which is stronger than the
       // name it used to match. [[break-test-every-guard-you-write]]
-      /const noticeId = claimSpeechId\('device_notice'\);\s*await deviceSpeakFallback\(text, language, noticeId, gender\)/.test(vs) &&
+      // 2026-09-28 — the claim pair this pinned was the defect. The fallback has spoken NOTHING since
+      // 2026-08-22, so claiming a speech id first only made a reply loading at that moment stale and
+      // silent. The notice now runs under the current id and claims nothing. Assert both halves.
+      /await deviceSpeakFallback\(text, language, currentSpeechId, gender\);/.test(vs) &&
+      !/claimSpeechId\('device_notice'\)/.test(vs) &&
       /if \(voiceEnabled\) void speakDeviceNotice\(/.test(vc) &&
       /(can't reach|not reaching|lost) the network/i.test(vc) // refreshed: message reworded (Phase A offline-degrade); feature intact
     );
@@ -17467,11 +17476,16 @@ check(
  */
 {
   const banner = readCode('components/UpdateAvailableBanner.tsx');
-  const autoBlock = banner.slice(banner.indexOf('sinceLaunchMs < 20_000'), banner.indexOf('sinceLaunchMs < 20_000') + 400);
+  // 2026-09-28 — anchored on the gate now (services/updateApplyGate), and the timer asks the gate
+  // again before reloading, so its body is no longer the one-liner. The property is unchanged: between
+  // deciding to apply and the timer there is no reload — it happens only behind the overlay.
+  const autoAt = banner.indexOf('if (gate()) {');
+  const autoBlock = autoAt < 0 ? '' : banner.slice(autoAt, autoAt + 600);
+  const beforeTimer = autoBlock.slice(0, Math.max(0, autoBlock.indexOf('applyTimerRef.current = setTimeout(')));
   check('UPDATE: a self-reload never happens without telling the player it is happening',
     /setApplying\(true\)/.test(autoBlock) &&
-      /applyTimerRef\.current = setTimeout\(\(\) => \{ void applyUpdate\(\); \}, OVERLAY_MS\)/.test(autoBlock) &&
-      !/^\s*void applyUpdate\(\);\s*$/m.test(autoBlock) &&          // the old bare reload is gone
+      /applyTimerRef\.current = setTimeout\(\(\) => \{[\s\S]{0,200}?void applyUpdate\(\);[\s\S]{0,40}?\}, OVERLAY_MS\)/.test(autoBlock) &&
+      beforeTimer.length > 0 && !/applyUpdate\(/.test(beforeTimer) &&  // the old bare reload is gone
       /if \(applying\) \{/.test(banner) &&                            // ...and the overlay renders
       saysToPlayer(banner, 'Updating SmartPlay') && saysToPlayer(banner, 'Back in a second'),
     'the cold-start auto-apply raises a full-screen branded overlay and reloads behind it after OVERLAY_MS, so the runtime teardown reads as the app doing something rather than dying; the manual banner button still reloads immediately, which is fine because the player just pressed it');
@@ -18094,7 +18108,12 @@ check(
   const budget = Number((/export const BRAIN_TURN_BUDGET_MS = ([\d_]+);/.exec(kevin)?.[1] ?? 'NaN').replace(/_/g, ''));
   const client = Number((/export const BRAIN_FETCH_TIMEOUT_MS = ([\d_]+);/.exec(readCode('constants/voiceTimeouts.ts'))?.[1] ?? 'NaN').replace(/_/g, ''));
   check('BRAIN: every model round of a turn finishes inside the phone\'s window',
-    budget > 0 && budget <= client - 4_000 && /deadlineAt = startedLoop \+ BRAIN_TURN_BUDGET_MS;/.test(kevin) &&
+    budget > 0 && budget <= client - 4_000 &&
+      // 2026-09-28 — and measured from the REQUEST, with the voice's share reserved: the rounds used to
+      // end at 24s from the loop start and TTS then took up to 10s more against a 30s phone.
+      /const deadlineAt = Math\.min\(\s*startedLoop \+ BRAIN_TURN_BUDGET_MS,\s*requestStartedAt \+ BRAIN_FETCH_TIMEOUT_MS - TTS_RESERVE_MS - RESPONSE_MARGIN_MS,\s*\);/.test(kevin) &&
+      /const ttsBudgetMs = requestStartedAt \+ BRAIN_FETCH_TIMEOUT_MS - RESPONSE_MARGIN_MS - Date\.now\(\);/.test(kevin) &&
+      /\}, \{ timeout: Math\.min\(10_000, ttsBudgetMs\) \}\);/.test(kevin) &&
       /\{ \.\.\.loopOpts, deadlineAt \}/.test(kevin),
     `turn budget ${budget}ms must sit at least 4s under the ${client}ms client abort and reach both attempts — three 14s rounds ran 42s against a 30s phone`);
   const retry = voice.slice(voice.indexOf('const ourTimeout ='), voice.indexOf('const retryRes = await fetch('));

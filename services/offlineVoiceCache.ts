@@ -176,6 +176,8 @@ export function resolveCachedOfflineClipUri(text: string, gender: Gender, person
 }
 
 let warmInFlight: Promise<void> | null = null;
+/** Which voice the in-flight pass is rendering. */
+let warmInFlightFor: string | null = null;
 
 /**
  * Ensure every fixed offline line is cached as a persona-voice mp3 for `gender`. Idempotent + best-
@@ -183,7 +185,18 @@ let warmInFlight: Promise<void> | null = null;
  * when online) and saved. Never throws. De-duped so concurrent callers share one pass.
  */
 export function ensureOfflineClipsCached(gender: Gender, persona: string): Promise<void> {
-  if (warmInFlight) return warmInFlight;
+  /**
+   * 2026-09-28 — de-duped by VOICE, not globally. A persona switch during a pass used to join the OLD
+   * persona's pass and render nothing for the new one, so every notice in the new voice was a cache
+   * miss (silent) until the next launch. A different voice now queues its own pass behind this one.
+   */
+  const want = `${persona}:${gender}`;
+  if (warmInFlight && warmInFlightFor === want) return warmInFlight;
+  if (warmInFlight) {
+    const prior = warmInFlight;
+    return prior.catch(() => undefined).then(() => ensureOfflineClipsCached(gender, persona));
+  }
+  warmInFlightFor = want;
   warmInFlight = (async () => {
     const apiBase = getApiBaseUrl();
     for (const line of OFFLINE_LINES) {
@@ -243,7 +256,7 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
         }
       }
     } catch { /* listing unavailable — the fingerprint alone already prevents stale playback */ }
-  })().finally(() => { warmInFlight = null; });
+  })().finally(() => { warmInFlight = null; warmInFlightFor = null; });
   return warmInFlight;
 }
 
