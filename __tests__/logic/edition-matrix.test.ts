@@ -76,8 +76,8 @@ describe('subscriptions are ON — the wall exists, and it is in the right place
     // It was hardcoded to 7 here while the paywall promised 14 in three places. That bug was
     // invisible while the switch was off and would have landed on people who had just paid.
     expect(trialDaysLeft(null)).toBeNull();
-    expect(trialDaysLeft(Date.now())).toBe(PRICING.trialDays);
-    expect(trialDaysLeft(Date.now() - 13 * DAY)).toBe(PRICING.trialDays - 13);
+    expect(trialDaysLeft(Date.now())).toBe(PRICING.legacyAppTrialDays);
+    expect(trialDaysLeft(Date.now() - 13 * DAY)).toBe(PRICING.legacyAppTrialDays - 13);
     // Floors at zero rather than going negative — an expired clock reads 0 days, never "-16 days".
     expect(trialDaysLeft(Date.now() - 30 * DAY)).toBe(0);
   });

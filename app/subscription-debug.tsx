@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Sentry from '@sentry/react-native';
+import { PRICING } from '../lib/pricing';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { trialDaysLeft } from '../services/featureAccess';
 import { forcePaywall } from '../services/paywallGuard';
@@ -84,12 +85,13 @@ export default function SubscriptionDebugScreen() {
         <TouchableOpacity
           style={styles.btn}
           onPress={() => {
-            const sevenDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
-            usePlayerProfileStore.setState({ trial_started_at: sevenDaysAgo, subscription_status: 'trial' });
-            Alert.alert('Done', 'trial_started_at set 8 days ago — reopen app to expire.');
+            // 2026-09-28 — was 8 days, from the 7-day era: it could not expire a 14-day legacy trial.
+            const pastLegacyTrial = Date.now() - (PRICING.legacyAppTrialDays + 1) * 24 * 60 * 60 * 1000;
+            usePlayerProfileStore.setState({ trial_started_at: pastLegacyTrial, subscription_status: 'trial' });
+            Alert.alert('Done', `trial_started_at set ${PRICING.legacyAppTrialDays + 1} days ago — reopen app to expire.`);
           }}
         >
-          <Text style={styles.btnText}>Force expire (set trial 8 days ago)</Text>
+          <Text style={styles.btnText}>Force expire legacy trial</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

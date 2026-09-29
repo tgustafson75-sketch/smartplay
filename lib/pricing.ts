@@ -59,7 +59,15 @@ export const PRICING = {
     productId: 'com.smartplaycaddie.app.full.annual',
     savingsPct: 34,
   },
-  trialDays: 14,
+  /**
+   * 2026-09-28 (1.0.2) — RENAMED from `trialDays` so no paywall copy can reach for it again. The app
+   * no longer grants a trial; this is the length of the LEGACY 14-day app trial, kept only so trials
+   * already running count down and expire on their dates (featureAccess.trialDaysLeft, the
+   * TRIAL_DURATION_MS expiry in app/_layout.tsx) — and as the offset purchases.trialStartFromCustomerInfo
+   * encodes a store trial's expiry into trial_started_at with, so that same countdown reads it right.
+   * Trial WORDING comes from the store's introductory offer (services/billing/introOffer).
+   */
+  legacyAppTrialDays: 14,
 } as const;
 
 /**

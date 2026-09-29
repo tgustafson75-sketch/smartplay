@@ -1299,9 +1299,13 @@
       "restore_purchase": "Restore Purchase",
       "privacy_policy": "Privacy Policy",
       "terms_of_service": "Terms of Service",
-      "subscription_automatically_renews_unless_can": "Subscription automatically renews unless cancelled at least 24 hours before the end of the trial period.",
-      "free_for_days": "Free for {{trialDays}} days",
-      "day_free_trial_cancel_anytime": "{{paywall_subhead}}{{n}} {{trial_days}}-day free trial. Cancel anytime.",
+      "subscription_automatically_renews_unless_can": "Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.",
+      "free_for_period": "Free for {{period}}",
+      "free_trial_cancel_anytime": "{{paywall_subhead}}{{n}}{{trial}} free trial. Cancel anytime.",
+      "cancel_anytime": "{{paywall_subhead}}{{n}}Cancel anytime.",
+      "start_free_trial": "Start Free Trial",
+      "subscribe": "Subscribe",
+      "one_moment": "One moment…",
       "save_pct": "Save {{savingsPct}}%"
     }
   },

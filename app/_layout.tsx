@@ -185,7 +185,7 @@ if (sentryDsn) {
  * while the paywall still advertised a fortnight. [[two-owners-is-the-root-cause]]
  * [[guard-the-shape-not-the-file-list]]
  */
-const TRIAL_DURATION_MS = PRICING.trialDays * 24 * 60 * 60 * 1000;
+const TRIAL_DURATION_MS = PRICING.legacyAppTrialDays * 24 * 60 * 60 * 1000;
 
 // Inner layout reads theme and guards onboarding
 // 2026-05-20 — Day 1 / Fix 3: central debug-route gate. Single source
@@ -618,10 +618,10 @@ function AppNavigator() {
   // routing after hydration. A guard here fires before AsyncStorage hydrates,
   // races against index.tsx's redirect, and corrupts the nav stack.
 
-  // Trial lifecycle: init on first open, expire after 7 days.
-  // Owner override: if the user's email (or EXPO_PUBLIC_OWNER_EMAIL env)
-  // matches the owner allow-list, grant lifetime instead of starting a
-  // trial. Lifetime accounts skip the expire check entirely.
+  // Trial lifecycle (services/billing/trialLifecycle): since 1.0.2 no app trial is started — a legacy
+  // app trial already running expires after PRICING.legacyAppTrialDays (14). Owner override: if the
+  // user's email (or EXPO_PUBLIC_OWNER_EMAIL env) matches the owner allow-list, grant lifetime.
+  // Lifetime accounts skip the expire check entirely.
   //
   // Subscriptions kill-switch (services/featureAccess.SUBSCRIPTIONS_ENABLED):
   // when false, the entire trial lifecycle is short-circuited — every user

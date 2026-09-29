@@ -4545,7 +4545,7 @@ check('LOCK: the trial length has ONE owner',
     const body = src.slice(open, end + 1)
       .replace(/\/\*[\s\S]*?\*\//g, ' ')
       .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
-    if (!/PRICING\.trialDays/.test(body)) return false;
+    if (!/PRICING\.legacyAppTrialDays/.test(body)) return false;
     // Strip the one legitimate arithmetic constant, then no integer may remain.
     const stripped = body.replace(/24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/g, ' ');
     const strays = stripped.match(/\b\d+\b/g)?.filter((n) => n !== '0');
@@ -4564,13 +4564,13 @@ check('LOCK: the trial length has ONE owner',
     const layout = readCode('app/_layout.tsx');
     const dur = layout.match(/const\s+TRIAL_DURATION_MS\s*=\s*([^;]+);/);
     if (!dur) { console.log('   _layout: TRIAL_DURATION_MS not found'); return false; }
-    if (!/PRICING\.trialDays/.test(dur[1])) {
+    if (!/PRICING\.legacyAppTrialDays/.test(dur[1])) {
       console.log(`   _layout owns a second trial length: TRIAL_DURATION_MS = ${dur[1].trim()}`);
       return false;
     }
     return true;
   })(),
-  'both the trial COUNTDOWN (featureAccess) and the trial EXPIRY (_layout TRIAL_DURATION_MS) derive from PRICING.trialDays — neither carries a day count of its own');
+  'both the trial COUNTDOWN (featureAccess) and the trial EXPIRY (_layout TRIAL_DURATION_MS) derive from PRICING.legacyAppTrialDays — neither carries a day count of its own');
 
 check('LOCK: the stated yardage has ONE owner of what counts as a yardage',
   /**

@@ -28,7 +28,9 @@ import {
   purchasePackage,
   restorePurchases,
   billingAvailable,
+  getTrialOffers,
 } from '../services/billing/purchases';
+import { trialAdjective, trialDuration, trialSpokenLine, type FreeTrial } from '../services/billing/introOffer';
 import { useTranslation } from 'react-i18next';
 
 export default function PaywallScreen() {
@@ -50,6 +52,13 @@ export default function PaywallScreen() {
    * found one, because only one was ever for sale. This is the selector. [[reachable-not-just-wired]]
    */
   const [plan, setPlan] = useState<'monthly' | 'annual'>('monthly');
+  /**
+   * 2026-09-28 (1.0.2) — the trial each plan would start, FROM THE STORE (services/billing/introOffer).
+   * null until loaded and whenever there is no offer or the player is not eligible — and null means
+   * no trial wording anywhere on this screen and a CTA that says Subscribe.
+   */
+  const [trialOffers, setTrialOffers] = useState<Record<'monthly' | 'annual', FreeTrial | null>>({ monthly: null, annual: null });
+  const trial = trialOffers[plan];
   /**
    * 2026-08-30 — OWNER PREVIEW, so this screen can be photographed.
    *
@@ -87,17 +96,28 @@ export default function PaywallScreen() {
     Animated.timing(fadeIn, { toValue: 1, duration: 500, useNativeDriver: true }).start();
     track('paywall_viewed', { subscription_status });
 
+    // The spoken line waits for the store's answer (bounded) so it can only name a trial that exists.
+    let cancelled = false;
+    const offersP = getTrialOffers().catch(() => ({ monthly: null, annual: null }));
+    void offersP.then((o) => { if (!cancelled) setTrialOffers(o); });
     if (voiceEnabled) {
       const delay = setTimeout(async () => {
+        const o = await Promise.race([
+          offersP,
+          new Promise<{ monthly: null; annual: null }>((r) => setTimeout(() => r({ monthly: null, annual: null }), 2500)),
+        ]);
+        if (cancelled) return;
+        const offer = o.monthly;
         await configureAudioForSpeech();
         await speak(
-          `Full ${caddieName} for ${PRICING.monthly.displayPrice} a month, or ${PRICING.annual.displayPrice} a year. ${PRICING.trialDays} days on me.`,
+          `Full ${caddieName} for ${PRICING.monthly.displayPrice} a month, or ${PRICING.annual.displayPrice} a year.${offer ? ` ${trialSpokenLine(offer)}` : ''}`,
           voiceGender, language, apiUrl,
           { userInitiated: true },
         );
       }, 800);
-      return () => clearTimeout(delay);
+      return () => { cancelled = true; clearTimeout(delay); };
     }
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -228,7 +248,11 @@ export default function PaywallScreen() {
           />
 
           <Text style={styles.headline}>{paywallHeadline(caddieName)}</Text>
-          <Text style={styles.subhead}>{t('paywall.paywall_screen.day_free_trial_cancel_anytime', { paywall_subhead: PAYWALL_SUBHEAD, n: '\n', trial_days: PRICING.trialDays })}</Text>
+          <Text style={styles.subhead}>
+            {trial
+              ? t('paywall.paywall_screen.free_trial_cancel_anytime', { paywall_subhead: PAYWALL_SUBHEAD, n: '\n', trial: trialAdjective(trial) })
+              : t('paywall.paywall_screen.cancel_anytime', { paywall_subhead: PAYWALL_SUBHEAD, n: '\n' })}
+          </Text>
 
           <View style={styles.featureList}>
             {FEATURES.map(f => (
@@ -278,11 +302,15 @@ export default function PaywallScreen() {
               })}
             </View>
 
-            <Text style={styles.pricingTrial}>{t('paywall.paywall_screen.free_for_days', { trialDays: PRICING.trialDays })}</Text>
+            {trial ? (
+              <Text style={styles.pricingTrial}>{t('paywall.paywall_screen.free_for_period', { period: trialDuration(trial) })}</Text>
+            ) : null}
           </View>
 
           <TouchableOpacity style={styles.ctaBtn} onPress={handleSubscribe} activeOpacity={0.88} disabled={busy}>
-            <Text style={styles.ctaText}>{busy ? 'One moment…' : 'Start Free Trial'}</Text>
+            <Text style={styles.ctaText}>
+              {busy ? t('paywall.paywall_screen.one_moment') : trial ? t('paywall.paywall_screen.start_free_trial') : t('paywall.paywall_screen.subscribe')}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={busy}>

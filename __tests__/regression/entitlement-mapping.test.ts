@@ -129,19 +129,19 @@ describe('the trial clock belongs to the store, and starts at the purchase', () 
     const started = trialStartFromCustomerInfo(
       info({ isActive: true, periodType: 'TRIAL', expirationDateMillis: expires }),
     );
-    expect(started).toBe(expires - PRICING.trialDays * DAY);
+    expect(started).toBe(expires - PRICING.legacyAppTrialDays * DAY);
   });
 
   it('feeds the ONE countdown a start that makes it right', () => {
     // The bug this closes: initTrial() stamps trial_started_at at FIRST APP OPEN, and app/(tabs)/
     // caddie.tsx counts down from it. Under IAP the trial begins at PURCHASE. Someone who installs,
     // plays for a fortnight, then subscribes would be told their new trial had already expired.
-    expect(PRICING.trialDays).toBe(14);
+    expect(PRICING.legacyAppTrialDays).toBe(14);
     const expires = Date.now() + 14 * DAY;
     const started = trialStartFromCustomerInfo(
       info({ isActive: true, periodType: 'TRIAL', expirationDateMillis: expires }),
     )!;
-    const daysLeft = PRICING.trialDays - Math.floor((Date.now() - started) / DAY);
+    const daysLeft = PRICING.legacyAppTrialDays - Math.floor((Date.now() - started) / DAY);
     expect(daysLeft).toBe(14);
   });
 

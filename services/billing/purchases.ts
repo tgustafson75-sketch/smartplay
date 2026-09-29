@@ -47,6 +47,7 @@
 import { Platform } from 'react-native';
 import { PRICING } from '../../lib/pricing';
 import type { SubscriptionStatus } from '../../store/playerProfileStore';
+import { freeTrialFromPackage, type FreeTrial, type IntroEligibility } from './introOffer';
 
 /**
  * Report a failure we are deliberately swallowing. Never throws — a reporting problem must not
@@ -336,7 +337,9 @@ export function trialStartFromCustomerInfo(
   if (String(active.periodType ?? '').toUpperCase() !== 'TRIAL') return null;
   const ms = active.expirationDateMillis;
   if (typeof ms !== 'number' || !Number.isFinite(ms)) return null;
-  return ms - PRICING.trialDays * 24 * 60 * 60 * 1000;
+  // Encoded against the legacy app-trial length so the one countdown (featureAccess.trialDaysLeft) and
+  // the one expiry rung both land exactly on the store's expiry, whatever length the store offer is.
+  return ms - PRICING.legacyAppTrialDays * 24 * 60 * 60 * 1000;
 }
 
 /**
@@ -431,6 +434,46 @@ export function selectPackageForPlan(packages: readonly unknown[], plan: Purchas
     (p) => (p as { product?: { identifier?: string } })?.product?.identifier === wantedProductId,
   );
   return byProductId ?? null;
+}
+
+/**
+ * 2026-09-28 (1.0.2) — the free trial each plan would actually start for THIS player, from the store.
+ * The paywall's trial wording and CTA read this and nothing else (see services/billing/introOffer).
+ * Any failure answers "no trial" for that plan: saying nothing about a trial is always honest; naming
+ * one the store will not give is not.
+ */
+export async function getTrialOffers(): Promise<Record<PurchasablePlan, FreeTrial | null>> {
+  const none: Record<PurchasablePlan, FreeTrial | null> = { monthly: null, annual: null };
+  const packages = await getPackages();
+  if (!packages.length) return none;
+  const chosen: Record<PurchasablePlan, unknown | null> = {
+    monthly: selectPackageForPlan(packages, 'monthly'),
+    annual: selectPackageForPlan(packages, 'annual'),
+  };
+  const eligibility: Record<string, IntroEligibility> = {};
+  if (Platform.OS === 'ios') {
+    const Purchases = sdk();
+    const ids = (Object.values(chosen) as unknown[])
+      .map((p) => (p as { product?: { identifier?: string } } | null)?.product?.identifier)
+      .filter((id): id is string => typeof id === 'string');
+    try {
+      const res = (await Purchases?.checkTrialOrIntroductoryPriceEligibility?.(ids)) as
+        Record<string, { status?: number }> | undefined;
+      for (const id of ids) {
+        const st = res?.[id]?.status;
+        eligibility[id] = st === 2 ? 'eligible' : st === 1 ? 'ineligible' : st === 3 ? 'none' : 'unknown';
+      }
+    } catch (e) {
+      reportSilentFailure(e, { where: 'checkTrialOrIntroductoryPriceEligibility' });
+    }
+  }
+  const out = { ...none };
+  for (const plan of ['monthly', 'annual'] as const) {
+    const pkg = chosen[plan];
+    const id = (pkg as { product?: { identifier?: string } } | null)?.product?.identifier ?? '';
+    out[plan] = pkg ? freeTrialFromPackage(pkg, Platform.OS, eligibility[id] ?? 'unknown') : null;
+  }
+  return out;
 }
 
 export type PurchaseOutcome =

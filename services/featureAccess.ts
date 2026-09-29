@@ -35,8 +35,10 @@ import { PRICING } from '../lib/pricing';
  * --------------------------------------------------------
  * App Store guideline 3.1.1: in-app digital subscriptions REQUIRE Apple IAP.
  * Stripe inside the app is a rejection. Stripe is correct for web/direct sales
- * and a US link-out only. No billing SDK exists in this project today, so a paid
- * launch is blocked on that regardless of what this file says.
+ * and a US link-out only. Billing runs through RevenueCat (services/billing/purchases.ts)
+ * and the gates below are LIVE — SUBSCRIPTIONS_ENABLED is on and pinned by the edition-matrix test.
+ * (2026-09-28: this used to say no billing SDK existed and a paid launch was blocked — false since
+ * 1.0 shipped with billing on.)
  */
 
 /** A capability that can be gated. */
@@ -67,9 +69,8 @@ export type FeatureKey =
 export type Edition = 'lite' | 'pro';
 
 /**
- * Global kill-switch. FALSE = every feature unlocked, no trial, paywall is a
- * no-op. Flip to true only alongside a real IAP integration (RevenueCat is the
- * standard wrapper) — and only when Tim says the clock may start.
+ * Global kill-switch. FALSE = every feature unlocked and the paywall is a no-op; TRUE = the edition
+ * gates below are enforced.
  */
 /**
  * 2026-09-03 (Tim, launch build) — THE CLOCK STARTS.
@@ -78,13 +79,13 @@ export type Edition = 'lite' | 'pro';
  * a paid app, and the binary has to match the paperwork that was filed. Both stores now hold their
  * real RevenueCat keys — the test-store key that gated this is deleted, not commented out.
  *
- * What changes for a player: a fresh install gets a 14-day TRIAL, which grants Pro, so nobody meets
- * a paywall on day one. Starting a round stays lite forever — the front door is never walled. On
- * expiry a player drops to lite and loses SmartVision, SmartFinder and advanced voice, but keeps
- * every round, every stat and their bag; we do not hold a player's own data hostage.
+ * What changes for a player: starting a round stays lite forever — the front door is never walled.
+ * Without Pro a player has lite and no SmartVision, SmartFinder or advanced voice, but keeps every
+ * round, every stat and their bag; we do not hold a player's own data hostage.
  *
- * Two features built today stop being dormant with this line: referral rewards now redeem, and the
- * light-use trial extension can fire. Both were written knowing this switch was coming.
+ * 2026-09-28 (1.0.2) — the app no longer grants a trial: a fresh install is 'free' (lite), and the
+ * store's introductory offer, started from the plans screen, is the only trial. The light-use
+ * extension is removed. Referral rewards still redeem.
  */
 export const SUBSCRIPTIONS_ENABLED = true;
 
@@ -175,8 +176,9 @@ export function trialDaysLeft(trial_started_at: number | null): number | null {
   /**
    * 2026-08-29 — WAS A HARDCODED 7, AND lib/pricing.ts SAYS 14.
    *
-   * The paywall promises "14-day free trial" in three separate places, reads PRICING.trialDays for
-   * all of them, and then this gate cut the caddie off on day 7. It was invisible only while billing
+   * The paywall promised "14-day free trial" in three separate places, read PRICING.trialDays for
+   * all of them, and then this gate cut the caddie off on day 7. (2026-09-28: the paywall now reads
+   * the store's offer; the constant is PRICING.legacyAppTrialDays and serves this countdown only.) It was invisible only while billing
    * was still off, and would have landed the moment the switch flipped — on the people who had just
    * paid, which is the worst possible audience for it.
    *
@@ -188,7 +190,7 @@ export function trialDaysLeft(trial_started_at: number | null): number | null {
    * `trialDaysLeftFromCustomerInfo` reads the real expiry from the entitlement; this local count is
    * the fallback for when the store cannot be reached.
    */
-  return Math.max(0, PRICING.trialDays - Math.floor(elapsed / (24 * 60 * 60 * 1000)));
+  return Math.max(0, PRICING.legacyAppTrialDays - Math.floor(elapsed / (24 * 60 * 60 * 1000)));
 }
 
 /** Features in an edition — for the marketing/comparison surface, not gating. */
