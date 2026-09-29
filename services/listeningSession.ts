@@ -10,6 +10,7 @@ import { conversationalBrainTurn } from './conversationalBrain';
 import { askCaddie } from './caddieBrain';
 import { abortVoiceWarmup } from './voiceWarmup';
 import { noteUserTurn } from './userTurnClock';
+import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from './featureAccess';
 import { getDialog } from './dialogEngine';
 import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
@@ -755,7 +756,18 @@ async function deliverBrainReply(opts: {
     try { flashCaption?.(line, ms); return true; } catch { return false; }
   };
 
-  const text = reply.text?.trim() || null;
+  let text = reply.text?.trim() || null;
+
+  /**
+   * 2026-09-28 (1.0.2) — no answer because the PLAN declined the turn (featureAccess.mayTalkToCaddie),
+   * not because anything failed. Off-round the paywall is already open and says its own piece; in a
+   * round the caddie says the plans will show after it. Either way, never the failure line.
+   */
+  if (!text) {
+    const block = takeCaddiePaywallBlock();
+    if (block && !block.deferred) return;
+    if (block?.deferred) text = CADDIE_PAYWALL_DEFERRED_LINE;
+  }
 
   // 1 — The caddie answered. Say it.
   if (text) {

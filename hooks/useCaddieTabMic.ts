@@ -21,6 +21,7 @@ import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
 import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { devLog } from '../services/devLog';
+import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
 import { noteUserTurn, getUserTurnEpoch } from '../services/userTurnClock';
 import { abortVoiceWarmup } from '../services/voiceWarmup';
 // 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
@@ -183,6 +184,24 @@ export function useCaddieTabMic({
        * lost, tell him the truth in one line, and stop.
        */
       if (!turn) {
+        /**
+         * 2026-09-28 (1.0.2) — declined for the PLAN, not a lost connection. Off-round the paywall has
+         * already opened (it speaks for itself); in a round it waits for the end, and the caddie says
+         * so instead of "I lost you".
+         */
+        const block = takeCaddiePaywallBlock();
+        if (block) {
+          if (block.deferred) {
+            const s0 = useSettingsStore.getState();
+            onVoiceStateChange?.('speaking');
+            onKevinSpoke?.(CADDIE_PAYWALL_DEFERRED_LINE);
+            if (s0.voiceEnabled) {
+              await speak(CADDIE_PAYWALL_DEFERRED_LINE, s0.voiceGender, s0.language, getApiBaseUrl(), { userInitiated: true }).catch(() => undefined);
+            }
+          }
+          onVoiceStateChange?.('idle');
+          return;
+        }
         const settings = useSettingsStore.getState();
         const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
         onVoiceStateChange?.('speaking');

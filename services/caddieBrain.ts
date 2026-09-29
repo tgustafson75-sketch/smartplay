@@ -58,7 +58,8 @@ export interface AskCaddieOptions extends CaddieRequestExtras {
 export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | null> {
   // 2026-08-25 — the one caddie access gate (services/featureAccess.mayTalkToCaddie). Inert while
   // subscriptions are off; when they are on, a blocked turn raises the paywall rather than going quiet.
-  if (!mayTalkToCaddie()) return null;
+  // A turn the player asked for raises the paywall; a proactive one (is_proactive) stays silent.
+  if (!mayTalkToCaddie({ userInitiated: !opts.overrides?.is_proactive })) return null;
   const { timeoutMs, skipTts, signal, ...extras } = opts;
 
   const controller = new AbortController();

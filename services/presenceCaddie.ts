@@ -79,6 +79,7 @@ interface PresenceFillOpts {
  * re-asks during the same drought.
  */
 export async function presenceFill(opts: PresenceFillOpts): Promise<string | null> {
+  // Proactive — never raises the paywall (see featureAccess.mayTalkToCaddie).
   if (!mayTalkToCaddie()) return null;
   const { trigger, context } = opts;
   const now = Date.now();

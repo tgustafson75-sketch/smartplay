@@ -4,6 +4,7 @@ import { Audio } from 'expo-av';
 import { Vibration, Alert, Linking, AppState } from 'react-native';
 import { prewarmVoice, abortVoiceWarmup } from '../services/voiceWarmup';
 import { noteUserTurn } from '../services/userTurnClock';
+import { mayTalkToCaddie, takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
 import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
 import { endsAsQuestion } from '../services/voice/endsAsQuestion';
@@ -1398,6 +1399,21 @@ export const useVoiceCaddie = ({
         // brain, speak, then check if Kevin asked ANOTHER question —
         // recurse via this same loop so a multi-turn back-and-forth
         // works ("you good?" → "actually one more thing" → ...).
+        /**
+         * 2026-09-28 (1.0.2) — this follow-up turn reached /api/kevin through sendToBrain's own fetch
+         * with NO plan gate: a lite player's follow-ups were free caddie turns. Gated like every other
+         * path — off-round the paywall opens, in a round the caddie says the plans come after it.
+         */
+        if (!mayTalkToCaddie({ userInitiated: true })) {
+          const block = takeCaddiePaywallBlock();
+          if (block?.deferred) {
+            onResponseReceived(CADDIE_PAYWALL_DEFERRED_LINE);
+            wrappedOnVoiceStateChange('speaking');
+            await speakResponse(CADDIE_PAYWALL_DEFERRED_LINE);
+          }
+          wrappedOnVoiceStateChange('idle');
+          return;
+        }
         recordUserTurn(trimmed);
         wrappedOnVoiceStateChange('thinking');
         const reply = await sendToBrain(trimmed);

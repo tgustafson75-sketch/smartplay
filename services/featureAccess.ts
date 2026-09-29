@@ -219,20 +219,61 @@ export function featuresIn(edition: Edition): FeatureKey[] {
  * caddie that simply stops answering reads as broken, which is the opposite of what a paywall is
  * for.
  */
-export function mayTalkToCaddie(): boolean {
+export function mayTalkToCaddie(opts?: { userInitiated?: boolean }): boolean {
   try {
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     const status = prof.usePlayerProfileStore.getState().subscription_status;
     if (canAccess('voice_advanced', status)) return true;
-    try {
-      const { triggerPaywall } = require('./paywallGuard') as typeof import('./paywallGuard');
-      // No navigate function here — the paywall guard defers to the round-aware path, and the
-      // screens that own navigation raise it themselves. This is the signal, not the UI.
-      void triggerPaywall('voice_advanced', () => { /* screens own navigation */ });
-    } catch { /* the gate's answer must not depend on the paywall rendering */ }
+    /**
+     * 2026-09-28 (1.0.2) — THE LITE CADDIE WENT MUTE INSTEAD OF SHOWING THE PAYWALL.
+     *
+     * This passed triggerPaywall an EMPTY navigate ("screens own navigation"). No screen did, so off a
+     * round nothing opened, askCaddie returned null, and every surface spoke its failure line — "That
+     * one got away from me" — to a player whose only problem was the plan. Now a turn the PLAYER
+     * started opens /paywall (off-round) or records the post-round deferral (in-round), and the
+     * caller asks takeCaddiePaywallBlock() what to say. Proactive speech (the opener, presence lines)
+     * passes no userInitiated and stays quietly off: a paywall thrown up by the app talking to itself
+     * would be the worst possible first impression.
+     */
+    if (opts?.userInitiated) raiseCaddiePaywall();
     return false;
   } catch {
     // An access check must never be the reason the caddie goes quiet.
     return true;
   }
 }
+
+/** What the caddie says when a lite player asks him something mid-round (the paywall waits). */
+export const CADDIE_PAYWALL_DEFERRED_LINE =
+  "That's a SmartPlay Full feature — I'll show you the plans after the round.";
+
+/** One paywall per burst: a surface's retry of the same blocked turn must not stack a second one. */
+const CADDIE_BLOCK_WINDOW_MS = 10_000;
+let caddieBlock: { at: number; deferred: boolean } | null = null;
+
+function raiseCaddiePaywall(): void {
+  const now = Date.now();
+  if (caddieBlock && now - caddieBlock.at < CADDIE_BLOCK_WINDOW_MS) { caddieBlock.at = now; return; }
+  try {
+    const guard = require('./paywallGuard') as typeof import('./paywallGuard');
+    caddieBlock = { at: now, deferred: guard.selectIsRoundActive() };
+    void guard.triggerPaywall('voice_advanced', () => {
+      try { (require('expo-router') as typeof import('expo-router')).router.push('/paywall' as never); } catch { /* no router in tests */ }
+    });
+  } catch { /* the gate's answer must not depend on the paywall rendering */ }
+}
+
+/**
+ * Did the caddie just decline a turn because of the plan? Consumed once. `deferred` means a round is
+ * on and the paywall waits for its end — say CADDIE_PAYWALL_DEFERRED_LINE; otherwise the paywall has
+ * opened and the surface should say nothing (the plans screen speaks for itself).
+ */
+export function takeCaddiePaywallBlock(): { deferred: boolean } | null {
+  if (!caddieBlock || Date.now() - caddieBlock.at > CADDIE_BLOCK_WINDOW_MS) return null;
+  const b = caddieBlock;
+  caddieBlock = null;
+  return { deferred: b.deferred };
+}
+
+/** Test seam. Never called by the app. */
+export function __resetCaddieBlockForTest(): void { caddieBlock = null; }

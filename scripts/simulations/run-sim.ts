@@ -12561,7 +12561,9 @@ check('LOCK: every caddie sender passes through the one access gate',
     const gated = SENDERS.every((f) => {
       const src = readCode(f);
       // Imports it AND calls it — an unused import is not a gate.
-      return /from '\.\/featureAccess'/.test(src) && /mayTalkToCaddie\(\)/.test(src);
+      // 2026-09-28 — the gate now takes { userInitiated } (a player's turn raises the paywall, proactive
+      // speech does not), so match the call with or without arguments.
+      return /from '\.\/featureAccess'/.test(src) && /mayTalkToCaddie\((\{ userInitiated: [^}]+\})?\)/.test(src);
     });
     /**
      * And the list cannot silently get shorter by a module going ungated instead of un-sending.
@@ -15117,7 +15119,9 @@ check('LOCK: the one delivery contract is TOTAL — no combination ends a turn i
     const escapes = body.split('\n').filter((l) => /(^\s*|[;{)]\s*)return;/.test(l)).length;
     const answeredReturns = body.split('\n').filter((l, n, all) => {
       if (!/(^\s*|[;{)]\s*)return;/.test(l)) return false;
-      return /speak\w*\(|caption\(|logVoiceSilentFail/.test(all.slice(Math.max(0, n - 12), n + 1).join('\n'));
+      // 2026-09-28 — a turn the plan declined off-round is handed to the paywall, which is on screen
+      // and speaks for itself; that handoff (takeCaddiePaywallBlock) is an answer, not an escape.
+      return /speak\w*\(|caption\(|logVoiceSilentFail|takeCaddiePaywallBlock\(\)/.test(all.slice(Math.max(0, n - 12), n + 1).join('\n'));
     }).length;
     const noEscapeHatch = escapes === answeredReturns;
     if (!answerNeverDropped) console.log('   a reply that cannot be spoken is dropped rather than shown');

@@ -50,7 +50,7 @@ export async function readScene(input: {
 }): Promise<SceneReadResult | null> {
   if (!input.imageBase64) return null;
   // 2026-08-25 — the one caddie access gate. A scene read is a brain turn with a picture attached.
-  if (!mayTalkToCaddie()) return null;
+  if (!mayTalkToCaddie({ userInitiated: true })) return null; // the player asked for this read
   const settings = useSettingsStore.getState();
   const round = useRoundStore.getState();
   const ctx = buildSceneSensorContext({ targetYards: input.targetYards ?? null });

@@ -66,7 +66,7 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
   try { markAdviceTurnStart(); } catch { /* advisory only — never break a turn over freshness */ }
   // 2026-08-25 — the one caddie access gate. NO_ANSWER is this module's own vocabulary for "the
   // brain did not answer", so every existing caller already handles it correctly.
-  if (!mayTalkToCaddie()) return NO_ANSWER;
+  if (!mayTalkToCaddie({ userInitiated: true })) return NO_ANSWER;
   const timeoutMs = opts?.timeoutMs ?? 15_000;
   // 2026-08-09 (dead-trigger audit) — the user_explicit_stuck team-intel trigger was built,
   // thresholded, given a full suggestion UI, and never called. Conservative phrase gate; the
