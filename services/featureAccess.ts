@@ -259,16 +259,31 @@ export function gatedFeatureForPath(path: string): 'smartfinder' | 'smartvision'
 export const CADDIE_PAYWALL_DEFERRED_LINE =
   "That's a SmartPlay Full feature — I'll show you the plans after the round.";
 
-/** One paywall per burst: a surface's retry of the same blocked turn must not stack a second one. */
+/** How long a block stays readable by the surface that raised it. */
 const CADDIE_BLOCK_WINDOW_MS = 10_000;
+/**
+ * One paywall per BURST — a surface retrying the same blocked turn (listeningSession retries
+ * immediately; a blocked turn never reaches the network) must not stack a second one. 2026-09-29
+ * (review): this used to be the whole 10s window, extended on every hit, so a scene/putt read that
+ * raised a block nobody consumed made the NEXT blocked mic turn open nothing and say nothing.
+ */
+const SAME_BURST_MS = 2_000;
 let caddieBlock: { at: number; deferred: boolean } | null = null;
+let lastRaisedAt = 0;
+let paywallOnScreen = false;
+
+/** The paywall screen reports itself, so a turn made while it is showing does not push a second one. */
+export function setPaywallOnScreen(on: boolean): void { paywallOnScreen = on; }
 
 function raiseCaddiePaywall(): void {
   const now = Date.now();
-  if (caddieBlock && now - caddieBlock.at < CADDIE_BLOCK_WINDOW_MS) { caddieBlock.at = now; return; }
   try {
     const guard = require('./paywallGuard') as typeof import('./paywallGuard');
-    caddieBlock = { at: now, deferred: guard.selectIsRoundActive() };
+    const deferred = guard.selectIsRoundActive();
+    caddieBlock = { at: now, deferred };
+    if (now - lastRaisedAt < SAME_BURST_MS) return;
+    lastRaisedAt = now;
+    if (paywallOnScreen && !deferred) return;
     void guard.triggerPaywall('voice_advanced', () => {
       try { (require('expo-router') as typeof import('expo-router')).router.push('/paywall' as never); } catch { /* no router in tests */ }
     });
@@ -288,4 +303,4 @@ export function takeCaddiePaywallBlock(): { deferred: boolean } | null {
 }
 
 /** Test seam. Never called by the app. */
-export function __resetCaddieBlockForTest(): void { caddieBlock = null; }
+export function __resetCaddieBlockForTest(): void { caddieBlock = null; lastRaisedAt = 0; paywallOnScreen = false; }

@@ -108,7 +108,13 @@ describe('the tab no longer arms the mic at all — belt AND braces', () => {
   });
 
   it('and the guard is in primeMicPipeline itself, not at the call site that tripped it', () => {
-    expect(TAB).not.toMatch(/isSessionInFlight/);
+    // 2026-09-29 — narrowed from "the tab never mentions isSessionInFlight": the tab now reads it for
+    // a different question (is a proactive line about to land on a turn being answered?). What this
+    // guards is that no PRIME call is wrapped in it at the call site.
+    const parts = TAB.split('primeMicPipeline(');
+    const primeSites = parts.slice(1).map((after, i) => parts[i].slice(-300) + after.slice(0, 50));
+    expect(primeSites.length).toBeGreaterThan(0);
+    for (const site of primeSites) expect(site).not.toMatch(/isSessionInFlight/);
     expect(VOICE).toMatch(/isSessionInFlight\(\)/);
   });
 });

@@ -71,3 +71,14 @@ describe('the launch read restores a subscriber a lapsed promo touched mid-fligh
     expect(planEntitlementWrite({ before: 'free', mapped: 'free', now: 'trial' })).toBeNull();
   });
 });
+
+describe('2026-09-29 (review) — a converted store trial is not expired locally', () => {
+  const trialPast = { ...lapsedPromo, promoExpiresAt: null, status: 'trial' as const, trialStartedAt: NOW - 15 * DAY };
+  it('the store vouches for the player → the local expiry rung stands down', () => {
+    expect(planTrialLifecycle({ ...trialPast, storeEntitled: true })).toEqual({});
+  });
+  it('a legacy app trial (store has no opinion) still expires on its date', () => {
+    expect(planTrialLifecycle({ ...trialPast, storeEntitled: false })).toEqual({ setStatus: 'expired' });
+    expect(planTrialLifecycle({ ...trialPast, storeEntitled: null })).toEqual({ setStatus: 'expired' });
+  });
+});

@@ -72,7 +72,9 @@ import { Asset } from 'expo-asset';
 // 2026-07-25 (Tim) — the canned mp3 opener is gone; the opener is now a real brain turn that seeds
 // conversation history (generateProactiveOpener), so replies keep context. getOpenerAssetForPersona
 // (bundled-mp3 opener) is no longer used.
-import { generateProactiveOpener, generateProactiveLine } from '../../services/conversationalBrain';
+import { generateProactiveOpener, proactiveLineOrFallback } from '../../services/conversationalBrain';
+import { noteUserTurn } from '../../services/userTurnClock';
+import { isSessionInFlight } from '../../services/listeningSession';
 import { awaitGreetingComplete } from '../greeting';
 import { isOpenerClaimed, claimOpenerSlot } from '../../services/openerGuard';
 import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
@@ -102,7 +104,7 @@ import AppIcon from '../../components/AppIcon';
 // Tools menu (Tim flagged it as not belonging there). Re-add when the
 // dedicated round-active camera button surfaces it elsewhere.
 import VocabBanner from '../../components/VocabBanner';
-import CaddieDataStrip from '../../components/CaddieDataStrip';
+import CaddieDataStrip, { STRIP_SCORING_ROW_HEIGHT } from '../../components/CaddieDataStrip';
 import HolePlanChip from '../../components/HolePlanChip';
 import { canAccess, trialDaysLeft, SUBSCRIPTIONS_ENABLED, gatedFeatureForPath } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
@@ -174,20 +176,16 @@ const L1_MAP_TOP_CLEAR = 64;
  * so a proactive moment never goes silent. [[feels-like-a-real-caddie]] [[caddie-failsafe-no-walls]]
  */
 async function proactiveLineFor(trigger: { directive: string; message: string }): Promise<string | null> {
-  try {
-    const r = await generateProactiveLine(trigger.directive, { timeoutMs: 8_000 });
-    // 2026-09-28 — stale means the player started talking while this generated. The offline fallback
-    // is for "the brain could not answer", not "the moment passed"; speaking it would land on the turn.
-    if (r.stale) return null;
-    return r.text || trigger.message;
-  } catch {
-    return trigger.message;
-  }
+  // seedHistory: a hole-change line is something the player answers ("what club, then?"), so the
+  // caddie must remember having said it.
+  return proactiveLineOrFallback(trigger.directive, trigger.message, { timeoutMs: 8_000, seedHistory: true });
 }
 
 /** The mic or the speaker is already in use — a proactive line must not start now. */
 function voiceChannelBusy(): boolean {
-  return isSpeaking() || isCapturing() || isExternalMicActive();
+  // isSessionInFlight: a turn the player opened BEFORE this line was asked for is still being
+  // answered (thinking) — the mic and the speaker are both free, but the caddie is mid-reply.
+  return isSpeaking() || isCapturing() || isExternalMicActive() || isSessionInFlight();
 }
 
 /**
@@ -201,10 +199,14 @@ async function speakProactiveTrigger(
   apiUrl: string,
   setCaddieResponse: (s: string) => void,
   setVoiceState: (next: VoiceState | ((prev: VoiceState) => VoiceState)) => void,
+  currentVoiceState: () => VoiceState,
 ): Promise<void> {
   const line = await proactiveLineFor(trigger);
   if (!line) return;
-  if (voiceChannelBusy()) {
+  // The tab's own state catches a tap-path turn still being answered ('thinking'), which the
+  // listening session's in-flight flag does not cover.
+  const tabState = currentVoiceState();
+  if (voiceChannelBusy() || tabState === 'thinking' || tabState === 'listening' || tabState === 'arming') {
     console.log('[caddie] proactive line dropped: the mic or the speaker is busy');
     return;
   }
@@ -252,6 +254,8 @@ export default function CaddieTab() {
    * under the portrait. See services/caddieLayoutBudget.ts for the full autopsy.
    */
   const caddieBarReserve = useCaddieBarReserve();
+  // In a round the data strip has its scoring row; everything above the strip rises by it.
+  const stripHasScoringRow = useRoundStore((s) => s.isRoundActive);
   const budget = useMemo(
     () => caddieLayoutBudget({
       W, H,
@@ -259,8 +263,9 @@ export default function CaddieTab() {
       insetBottom: insets.bottom,
       barReserve: caddieBarReserve,
       tabBarHeight: TAB_BAR_HEIGHT,
+      stripExtraHeight: stripHasScoringRow ? STRIP_SCORING_ROW_HEIGHT : 0,
     }),
-    [W, H, insets.top, insets.bottom, caddieBarReserve],
+    [W, H, insets.top, insets.bottom, caddieBarReserve, stripHasScoringRow],
   )
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   // Phase AU.1 — natural 9:16 frame for Kevin (canonical).
@@ -1014,7 +1019,7 @@ export default function CaddieTab() {
           });
           if (trigger) {
             markProactiveFired(trigger.id);
-            void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState);
+            void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState, () => voiceStateRef.current);
           }
         }, 2500);
         return () => {
@@ -1086,19 +1091,18 @@ export default function CaddieTab() {
         "To start: how'd you get into golf, and how much time do you really have to play and practice these days?";
       const t = setTimeout(() => {
         void (async () => {
-        let opener = OPENER_FALLBACK;
-        try {
-          const brain = await generateProactiveLine(
-            "The player just opened the app onto the 'getting to know your game' card. Open the interview: " +
-            "warm, natural, in your own words, no preamble. Ask ONE question to start — how they got into golf " +
-            "and how much time they realistically have to play and practise. Two sentences at most.",
-            { timeoutMs: 9_000, seedHistory: true },
-          );
-          // 2026-09-28 — the player spoke first; the interview opener would land on their turn.
-          if (brain.stale) return;
-          if (brain.text) opener = brain.text;
-        } catch { /* fall through to the fixed line — the interview must still ask something */ }
-        if (voiceChannelBusy()) return;
+        // 2026-09-28/29 — null means the player spoke first (brain answered OR failed): the interview
+        // opener would land on their turn.
+        const opener = await proactiveLineOrFallback(
+          "The player just opened the app onto the 'getting to know your game' card. Open the interview: " +
+          "warm, natural, in your own words, no preamble. Ask ONE question to start — how they got into golf " +
+          "and how much time they realistically have to play and practise. Two sentences at most.",
+          OPENER_FALLBACK,
+          { timeoutMs: 9_000, seedHistory: true },
+        );
+        if (!opener) return;
+        const s0 = voiceStateRef.current;
+        if (voiceChannelBusy() || s0 === 'thinking' || s0 === 'listening' || s0 === 'arming') return;
         setCaddieResponse(opener);
         const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
         if (voiceEnabled) {
@@ -1501,6 +1505,7 @@ export default function CaddieTab() {
   // fade composes with the silence-driven fade.
 
   const currentPar = getCurrentPar();
+  const stripHolePutts = useRoundStore((s) => s.putts[s.currentHole] ?? null);
 
   // Phase 106 — evaluate round-progress triggers when the active hole
   // changes. Conservative: detector only fires if cumulative score-vs-par
@@ -1580,7 +1585,7 @@ export default function CaddieTab() {
     });
     if (trigger) {
       markProactiveFired(trigger.id);
-      void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState);
+      void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState, () => voiceStateRef.current);
     }
    
   }, [_scores, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
@@ -1622,7 +1627,7 @@ export default function CaddieTab() {
     // Only act on the front-nine milestone here (no per-hole transition auto-fire anymore).
     if (trigger && trigger.id === 'front_9_summary') {
       markProactiveFired(trigger.id);
-      void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState);
+      void speakProactiveTrigger(trigger, apiUrl, setCaddieResponse, setVoiceState, () => voiceStateRef.current);
     }
    
   }, [currentHole, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
@@ -2364,6 +2369,14 @@ export default function CaddieTab() {
       case 'navigate_replace':
         // Used after end_round so the back button doesn't return to the
         // active-caddie screen — replace instead of push.
+        // 2026-09-29 (review) — gated by pathname like 'navigate': a replace is still a way into a paid tool.
+        {
+          const gated = gatedFeatureForPath(action.path);
+          if (gated && !canAccess(gated, usePlayerProfileStore.getState().subscription_status)) {
+            void triggerPaywall(gated, () => router.push('/paywall' as never));
+            break;
+          }
+        }
         router.replace(action.path as never);
         break;
       case 'open_url': {
@@ -2673,6 +2686,8 @@ export default function CaddieTab() {
   const { isListening: _vadListening } = useVoiceActivityDetection({
     enabled: vadEnabled,
     onSpeechStart: () => {
+      // The player started talking — a proactive line generating now must not land on this turn.
+      noteUserTurn();
       setKevinEmotion('listening');
       setVoiceState('listening');
     },
@@ -4160,6 +4175,17 @@ export default function CaddieTab() {
              [[two-owners-is-the-root-cause]] */
           yardageSource={yardageReadout.source}
           paceLine={paceLineText}
+          // 2026-09-29 (Tim: "Scoring is very hard with a small screen") — the scoring row. Same
+          // logScore / logPutts seam as the scorecard and the shot sheet; the ghost follows the
+          // score exactly as the sheet's Log Hole does. Hole advance stays the player's call.
+          par={currentPar ?? null}
+          holeScore={_scores[currentHole] ?? null}
+          holePutts={stripHolePutts}
+          onScoreStep={(next) => {
+            logScore(currentHole, next);
+            useGhostStore.getState().updateHole(currentHole, next);
+          }}
+          onPuttsStep={(next) => logPutts(currentHole, next)}
           // 2026-05-19 — totalScore/scoreVsPar wiring temporarily removed.
           // Strip displays STROKE only (per Tim's "don't show score in
           // the data bar, scoring goes in the expandable tool arrow"

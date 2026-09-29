@@ -574,13 +574,15 @@ export const useVoiceCaddie = ({
   // 2026-08-06 (Tim — "Only one Recording object" mic collision): let voiceService.captureUtterance see
   // whether THIS tap path is holding the mic, so a follow-up capture bails instead of racing the session.
   useEffect(() => {
-    registerExternalMicCheck(() => recordingRef.current !== null);
+    const leaveMicCheck = registerExternalMicCheck(() => recordingRef.current !== null);
     // 2026-08-17 (Tim — "the Caddie mic acts just like an earbud tap… completely broken behavior").
     // Knowing this path held the mic wasn't enough — the listening session had no way to TAKE it.
     // Hand it over on demand instead of letting the other path talk to a busy microphone.
     // Indirected through a ref so this mount-once effect always calls the CURRENT implementation.
     registerExternalMicRelease(() => releaseMicRef.current());
-    return () => { registerExternalMicCheck(null); registerExternalMicRelease(null); };
+    // Leave the SET with our own check only — register(null) cleared every holder's, so an unmount
+    // here made the audio meter and impact detector invisible as mic holders. (2026-09-29 review)
+    return () => { leaveMicCheck(); registerExternalMicRelease(null); };
   }, []);
   const isProcessingRef = useRef(false);
   /**
@@ -1128,6 +1130,9 @@ export const useVoiceCaddie = ({
         throw new Error(`brain_http_${res.status}`);
       }
       recordVoiceEndpointSuccess('kevin');
+      // 2026-09-29 (review) — a real answer proves the brain awake; without this the follow-up path sat
+      // on the 48s cold budget for the whole conversation.
+      markEndpointWarmed('/api/kevin');
       const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; toolActions?: ToolAction[] | null; error?: string; errorType?: string };
 
       // 2026-07-06 (voice-parity F3) — the brain endpoint returns a graceful HTTP
@@ -2794,12 +2799,12 @@ export const useVoiceCaddie = ({
      * prevent. A real turn now RELEASES warmup connections instead of adding to them.
      */
     /**
-     * 2026-09-28 — the tap records the TURN; it no longer aborts the warmups. Recording holds no
-     * socket, so cancelling here bought nothing and dropped the queued brain warmup the reply was
-     * about to need. The abort now fires in processAudioUri, the moment the upload starts. The turn
-     * stamp is what makes a late opener / proactive line stand down instead of landing on this one.
+     * 2026-09-28 — the tap no longer aborts the warmups (recording holds no socket; the abort fires in
+     * processAudioUri when the upload starts). 2026-09-29 (review) — and the TURN is stamped in the
+     * START branch below, not here: this spot is also reached by taps that only stop speech, by the
+     * SmartMotion early return and by force-close, and stamping those made a reply that was still
+     * thinking go caption-only for a turn that never happened.
      */
-    noteUserTurn();
 
     // 2026-07-18 (Tim — haptic feedback so you feel the caddie mic register your tap). Best-effort,
     // wrapped — never blocks or affects the voice flow.
@@ -3083,6 +3088,8 @@ export const useVoiceCaddie = ({
     // 2026-08-12 — same reversal as above: hand the connection slots to the capture, don't compete
     // with it. See services/voiceWarmup for the timing evidence. (2026-09-28: at upload time now —
     // processAudioUri — because the recording in between uses no connection.)
+    // A recording is starting: this IS a new player turn — a late opener or proactive line stands down.
+    noteUserTurn();
     try {
       // Phase BM — cache the mic permission grant in a module-level flag so
       // every subsequent tap skips the 30-80ms IPC roundtrip to the OS

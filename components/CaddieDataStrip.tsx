@@ -61,7 +61,39 @@ export interface CaddieDataStripProps {
   // null = no scores yet → fall back to STROKE display.
   totalScore?: number | null;
   scoreVsPar?: number | null;
+  /**
+   * 2026-09-29 (Tim: "Should bottom data bar be two rows? Scoring is very hard with a small screen
+   * and we could put a couple more relevant data points.") — THE SCORING ROW. When onScoreStep is
+   * given the strip grows a second row: SCORE and PUTTS steppers for the current hole, written
+   * straight to the round (the same logScore / logPutts seam the scorecard uses), plus STROKE. The
+   * first row gains PAR. Still no running total — his standing "mentals matter" call.
+   */
+  par?: number | null;
+  holeScore?: number | null;
+  holePutts?: number | null;
+  onScoreStep?: (next: number) => void;
+  onPuttsStep?: (next: number) => void;
   onPress: () => void;
+}
+
+/** The scoring row's height — the caddie tab's layout budget lifts everything above the strip by it. */
+export const STRIP_SCORING_ROW_HEIGHT = 50;
+
+/**
+ * One tap from blank is the common case, not a count from zero: + sets par (− one under), then each
+ * tap moves one. Bounded 1..15.
+ */
+export function stepHoleScore(current: number | null | undefined, dir: 1 | -1, par: number | null | undefined): number {
+  const p = typeof par === 'number' && par > 0 ? par : 4;
+  if (current == null || current <= 0) return dir > 0 ? p : Math.max(1, p - 1);
+  return Math.min(15, Math.max(1, current + dir));
+}
+
+/** Blank + is a two-putt, blank − a one-putt. Never below 0, never above the hole's score. */
+export function stepHolePutts(current: number | null | undefined, dir: 1 | -1, score: number | null | undefined): number {
+  const cap = typeof score === 'number' && score > 0 ? score : 10;
+  if (current == null) return Math.min(cap, dir > 0 ? 2 : 1);
+  return Math.min(cap, Math.max(0, current + dir));
 }
 
 export default function CaddieDataStrip({
@@ -82,6 +114,11 @@ export default function CaddieDataStrip({
   // expandable tool arrow only.
   totalScore: _totalScore = null,
   scoreVsPar: _scoreVsPar = null,
+  par = null,
+  holeScore = null,
+  holePutts = null,
+  onScoreStep,
+  onPuttsStep,
   onPress,
 }: CaddieDataStripProps) {
   const { t } = useTranslation();
@@ -362,17 +399,65 @@ export default function CaddieDataStrip({
   // STRING ("254 (+5)") at the full 20px, so it wrapped to a second line in the narrow cell and
   // collided with the header. Carry the delta SEPARATELY and render it as a small inline span (like
   // the grid layout already does), and force the value to a single line.
-  const cells: { label: string; value: string; delta: number | null; fontSize: number }[] = [
-    { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', delta: playsLike != null && playsLikeDelta ? playsLikeDelta : null, fontSize: 20 },
-    { label: 'TARGET', value: targetDirection,                             delta: null, fontSize: 14 },
-    { label: lastCellLabel, value: lastCellValue,                          delta: null, fontSize: 20 },
-  ];
+  const twoRow = typeof onScoreStep === 'function';
+  const cells: { label: string; value: string; delta: number | null; fontSize: number }[] = twoRow
+    ? [
+        { label: 'PAR',    value: par != null ? String(par) : '—',              delta: null, fontSize: 20 },
+        { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', delta: playsLike != null && playsLikeDelta ? playsLikeDelta : null, fontSize: 20 },
+        { label: 'TARGET', value: targetDirection,                             delta: null, fontSize: 14 },
+      ]
+    : [
+        { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', delta: playsLike != null && playsLikeDelta ? playsLikeDelta : null, fontSize: 20 },
+        { label: 'TARGET', value: targetDirection,                             delta: null, fontSize: 14 },
+        { label: lastCellLabel, value: lastCellValue,                          delta: null, fontSize: 20 },
+      ];
+  const stepper = (
+    label: string,
+    value: number | null,
+    onMinus: () => void,
+    onPlus: () => void,
+    testID: string,
+  ) => (
+    <View style={styles.scoreCell} testID={testID}>
+      <Text style={styles.cellLabel} maxFontSizeMultiplier={1.2}>{label}</Text>
+      <View style={styles.stepRow}>
+        <Pressable
+          onPress={onMinus}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${label.toLowerCase()} down`}
+          style={styles.stepBtn}
+          testID={`${testID}-minus`}
+        >
+          <Ionicons name="remove" size={20} color="rgba(0,200,150,0.9)" />
+        </Pressable>
+        <Text style={[styles.cellValue, styles.stepValue]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+          {value != null ? String(value) : '—'}
+        </Text>
+        <Pressable
+          onPress={onPlus}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${label.toLowerCase()} up`}
+          style={styles.stepBtn}
+          testID={`${testID}-plus`}
+        >
+          <Ionicons name="add" size={20} color="rgba(0,200,150,0.9)" />
+        </Pressable>
+      </View>
+    </View>
+  );
+  const tap = (fn: () => void) => () => {
+    void Haptics.selectionAsync().catch(() => undefined);
+    fn();
+  };
 
   return (
     <Animated.View
       style={[
         styles.wrapper,
         { bottom: bottomOffset, opacity: mountedOpacity, transform: [{ scale: pressScale }] },
+        twoRow && { height: 84 + STRIP_SCORING_ROW_HEIGHT },
       ]}
     >
       <Pressable
@@ -454,6 +539,28 @@ export default function CaddieDataStrip({
             style={styles.chevronHint}
           />
         </View>
+        {twoRow && (
+          <View style={styles.scoreRow}>
+            {stepper(
+              'SCORE', holeScore,
+              tap(() => onScoreStep!(stepHoleScore(holeScore, -1, par))),
+              tap(() => onScoreStep!(stepHoleScore(holeScore, 1, par))),
+              'strip-score',
+            )}
+            <View style={styles.scoreDivider} />
+            {stepper(
+              'PUTTS', holePutts,
+              tap(() => onPuttsStep?.(stepHolePutts(holePutts, -1, holeScore))),
+              tap(() => onPuttsStep?.(stepHolePutts(holePutts, 1, holeScore))),
+              'strip-putts',
+            )}
+            <View style={styles.scoreDivider} />
+            <View style={styles.strokeCell}>
+              <Text style={styles.cellLabel} maxFontSizeMultiplier={1.2}>{lastCellLabel}</Text>
+              <Text style={[styles.cellValue, { fontSize: 20 }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{lastCellValue}</Text>
+            </View>
+          </View>
+        )}
         {yardageSource && (
           <View
             style={[
@@ -502,14 +609,14 @@ export default function CaddieDataStrip({
             stays at 84 in the layout sense. Tap routes the same as the
             rest of the strip (expand cockpit). */}
         {paceLine ? (
-          <View style={styles.ghostStripe}>
+          <View style={[styles.ghostStripe, twoRow && { bottom: STRIP_SCORING_ROW_HEIGHT + 1 }]}>
             <Ionicons name="timer-outline" size={9} color="#a78bfa" />
             <Text style={styles.ghostStripeText} numberOfLines={1} maxFontSizeMultiplier={1.1}>
               {ghostLine ? `${paceLine} · ${ghostLine}` : paceLine}
             </Text>
           </View>
         ) : ghostLine ? (
-          <View style={styles.ghostStripe}>
+          <View style={[styles.ghostStripe, twoRow && { bottom: STRIP_SCORING_ROW_HEIGHT + 1 }]}>
             <Ionicons name="footsteps-outline" size={9} color="#a78bfa" />
             <Text style={styles.ghostStripeText} numberOfLines={1} maxFontSizeMultiplier={1.1}>
               {ghostLine}
@@ -573,6 +680,28 @@ const styles = StyleSheet.create({
     // them. Values are single-line now, so there's vertical room for this.
     paddingTop: 10,
   },
+  // ── Scoring row (two-row strip) ──────────
+  scoreRow: {
+    height: STRIP_SCORING_ROW_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(107, 125, 114, 0.35)',
+  },
+  scoreCell: { flex: 1.3, alignItems: 'center', justifyContent: 'center' },
+  strokeCell: { flex: 0.8, alignItems: 'center', justifyContent: 'center' },
+  scoreDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: 'rgba(107, 125, 114, 0.35)' },
+  stepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  stepBtn: {
+    width: 32,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 200, 150, 0.12)',
+  },
+  stepValue: { fontSize: 20, minWidth: 30, textAlign: 'center' },
   cell: {
     flex: 1,
     alignItems: 'center',

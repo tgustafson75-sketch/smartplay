@@ -18076,7 +18076,8 @@ check(
       // end at 24s from the loop start and TTS then took up to 10s more against a 30s phone.
       /const deadlineAt = Math\.min\(\s*startedLoop \+ BRAIN_TURN_BUDGET_MS,\s*requestStartedAt \+ BRAIN_FETCH_TIMEOUT_MS - TTS_RESERVE_MS - RESPONSE_MARGIN_MS,\s*\);/.test(kevin) &&
       /const ttsBudgetMs = requestStartedAt \+ BRAIN_FETCH_TIMEOUT_MS - RESPONSE_MARGIN_MS - Date\.now\(\);/.test(kevin) &&
-      /\}, \{ timeout: Math\.min\(10_000, ttsBudgetMs\) \}\);/.test(kevin) &&
+      // 2026-09-29 — and the SIGNAL too: `timeout` alone stops at headers; the body read was unbounded.
+      /\}, \{ timeout: Math\.min\(10_000, ttsBudgetMs\), signal: AbortSignal\.timeout\(Math\.min\(10_000, ttsBudgetMs\)\) \}\);/.test(kevin) &&
       /\{ \.\.\.loopOpts, deadlineAt \}/.test(kevin),
     `turn budget ${budget}ms must sit at least 4s under the ${client}ms client abort and reach both attempts — three 14s rounds ran 42s against a 30s phone`);
   const retry = voice.slice(voice.indexOf('const ourTimeout ='), voice.indexOf('const retryRes = await fetch('));

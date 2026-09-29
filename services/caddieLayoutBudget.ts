@@ -89,6 +89,13 @@ export interface CaddieChrome {
   barReserve: number;
   /** The tab row's height, 0 on screens without one. */
   tabBarHeight: number;
+  /**
+   * 2026-09-29 (Tim: "Should bottom data bar be two rows? Scoring is very hard with a small screen")
+   * — extra height the in-round data strip adds above its single-row 84dp (its scoring row). The
+   * corner box, round controls and everything cleared by bubbleClearance rise by exactly this, so
+   * nothing sits on the strip. 0 = the one-row strip (no round).
+   */
+  stripExtraHeight?: number;
 }
 
 export interface CaddieBudget {
@@ -162,7 +169,7 @@ export function caddieLayoutBudget(chrome: CaddieChrome): CaddieBudget {
 
   const heroTop = insetTop + 12;
   const ctaBottom = Math.round(CTA_GAP * scale) + ownedBottomInset;
-  const cornerBottom = ctaBottom + Math.round((CTA_HEIGHT + CTA_BREATH) * scale);
+  const cornerBottom = ctaBottom + Math.round((CTA_HEIGHT + CTA_BREATH) * scale) + Math.max(0, chrome.stripExtraHeight ?? 0);
 
   return {
     heroTop,

@@ -26,7 +26,7 @@
 
 import React from 'react';
 import { StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -143,12 +143,18 @@ export default function ZoomableView({
     ],
   }));
 
+  // 2026-09-29 — the app root has NO GestureHandlerRootView (app/smartvision.tsx wraps its own), and a
+  // GestureDetector outside one throws in dev and recognises nothing in release. That is why this
+  // component's zoom and tap-to-play never worked on swing detail (Tim, 06-23: "NONE play"). It now
+  // carries its own root, so every caller works wherever it is mounted.
   return (
-    <GestureDetector gesture={root}>
-      <Animated.View style={[styles.container, style, animatedStyle]}>
-        {children}
-      </Animated.View>
-    </GestureDetector>
+    <GestureHandlerRootView style={[styles.container, style]}>
+      <GestureDetector gesture={root}>
+        <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
+          {children}
+        </Animated.View>
+      </GestureDetector>
+    </GestureHandlerRootView>
   );
 }
 

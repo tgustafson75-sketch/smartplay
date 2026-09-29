@@ -62,6 +62,26 @@ describe('THE BUG: a voice navigate to /smartfinder?… on lite', () => {
   });
 });
 
+describe('a navigate_replace to a paid tool is gated the same way', () => {
+  const replaces = () => routerMock.__calls.filter((c) => c.method === 'replace').map((c) => c.args[0]);
+  it('THE BUG: lite → the paywall, never a replace into the tool', async () => {
+    usePlayerProfileStore.setState({ subscription_status: 'free' } as never);
+    dispatchConversationalToolActions([{ type: 'navigate_replace', path: '/smartvision?hole=3' }]);
+    await flush();
+    expect(replaces()).toEqual([]);
+    expect(pushes()).toEqual(['/paywall']);
+  });
+  it('an ungated replace (the recap after end-round) still replaces', async () => {
+    usePlayerProfileStore.setState({ subscription_status: 'free' } as never);
+    dispatchConversationalToolActions([{ type: 'navigate_replace', path: '/recap/abc' }]);
+    await flush();
+    expect(replaces()).toEqual(['/recap/abc']);
+  });
+  it('the Caddie tab switch gates it by pathname too', () => {
+    expect(code('app/(tabs)/caddie.tsx')).toMatch(/case 'navigate_replace':[\s\S]{0,200}?gatedFeatureForPath\(action\.path\)/);
+  });
+});
+
 describe('measure-scan is a paid call', () => {
   it('lite: no request, the existing "keep your read" answer', async () => {
     usePlayerProfileStore.setState({ subscription_status: 'free' } as never);

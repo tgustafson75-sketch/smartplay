@@ -169,6 +169,9 @@ let siblings: Sibling[] = [];
 let siblingsFor: string | null = null;
 let resolving: Promise<void> | null = null;
 let failedAt = 0;
+let failures = 0;
+/** The course the failure count belongs to — a new course starts a fresh count. */
+let failuresFor: string | null = null;
 /**
  * 2026-09-28 (Tim's Hemet round: two "Course search unavailable — check connection" errors at holes 3
  * and 14, on a single-course club). A FAILED lookup is asked again after this long. An EMPTY one — the
@@ -180,6 +183,12 @@ let failedAt = 0;
  * spot filed a player-facing connection error for a lookup the player never asked for.
  */
 export const RETRY_AFTER_FAILURE_MS = 3 * 60 * 1000;
+/**
+ * 2026-09-29 (review) — and a failure is retried a bounded number of times per round. A course in a
+ * dead zone used to be searched every 3 minutes for the whole round (~80 background searches in four
+ * hours) for a check that only matters on multi-layout properties.
+ */
+export const MAX_LOOKUP_FAILURES = 3;
 
 /** The lookup could not be completed (network, quota) — distinct from "this course has no siblings". */
 export class SiblingLookupFailed extends Error {}
@@ -270,20 +279,21 @@ function tick(): void {
     if (siblingsFor !== activeId) {
       if (!resolving) {
         siblingsFor = activeId;
+        if (failuresFor !== activeId) { failuresFor = activeId; failures = 0; }
         siblings = [];
         state = INITIAL_STATE;
         resolving = resolveSiblings(activeId, round.activeCourse ?? '')
           // An answer, empty or not, is settled for this course.
-          .then((s) => { if (siblingsFor === activeId) { siblings = s; failedAt = 0; } })
+          .then((s) => { if (siblingsFor === activeId) { siblings = s; failedAt = 0; failures = 0; } })
           // A failure waits RETRY_AFTER_FAILURE_MS. (It used to clear siblingsFor, which re-asked on the
           // very next 4s tick for as long as the course had no signal.)
-          .catch(() => { if (siblingsFor === activeId) { siblings = []; failedAt = Date.now(); } })
+          .catch(() => { if (siblingsFor === activeId) { siblings = []; failedAt = Date.now(); failures += 1; } })
           .finally(() => { resolving = null; });
       }
       return;
     }
     if (!siblings.length) {
-      if (failedAt && Date.now() - failedAt > RETRY_AFTER_FAILURE_MS) { siblingsFor = null; failedAt = 0; }
+      if (failedAt && failures < MAX_LOOKUP_FAILURES && Date.now() - failedAt > RETRY_AFTER_FAILURE_MS) { siblingsFor = null; failedAt = 0; }
       return;
     }
     const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
@@ -350,6 +360,8 @@ export function stopLayoutVerifier(): void {
   siblings = [];
   siblingsFor = null;
   failedAt = 0;
+  failures = 0;
+  failuresFor = null;
 }
 
 /** Test seam: run one poll synchronously, and inject resolved siblings. */

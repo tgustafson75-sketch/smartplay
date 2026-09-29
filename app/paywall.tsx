@@ -21,7 +21,7 @@ import { track } from '../services/analytics';
 import { PRICING, paywallHeadline, PAYWALL_SUBHEAD } from '../lib/pricing';
 import { safeBack } from '../services/safeBack';
 import { getCaddieName } from '../lib/persona';
-import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
+import { SUBSCRIPTIONS_ENABLED, setPaywallOnScreen } from '../services/featureAccess';
 import { getApiBaseUrl } from '../services/apiBase';
 import {
   getPackages,
@@ -43,6 +43,11 @@ export default function PaywallScreen() {
   const apiUrl = getApiBaseUrl();
   const { subscription_status, setSubscriptionStatus, setTrialStartedAt, setStoreEntitlementActive, email } = usePlayerProfileStore();
   const [busy, setBusy] = useState(false);
+  // 2026-09-29 — tell the caddie gate the plans are already on screen (no second paywall on top).
+  useEffect(() => {
+    setPaywallOnScreen(true);
+    return () => setPaywallOnScreen(false);
+  }, []);
   /**
    * 2026-09-29 — a redeemed code can land minutes after this screen is gone (the watch outlives it).
    * safeBack() from here then would pop whatever the player is looking at, so only this screen, still

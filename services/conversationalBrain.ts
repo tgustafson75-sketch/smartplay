@@ -141,6 +141,28 @@ export async function generateProactiveLine(
 }
 
 /**
+ * 2026-09-29 (review) — a proactive line WITH its offline fallback, in one place. Both callers (the
+ * hole-change / first-tee triggers and the get-to-know opener) checked "did the player start a turn?"
+ * only when the brain ANSWERED; when it failed or timed out they spoke the fixed fallback line over
+ * the turn the player had started meanwhile. The epoch is checked after every outcome. Null = silent.
+ */
+export async function proactiveLineOrFallback(
+  directive: string,
+  fallback: string,
+  opts?: { timeoutMs?: number; seedHistory?: boolean },
+): Promise<string | null> {
+  const epoch = getUserTurnEpoch();
+  let line = fallback;
+  try {
+    const r = await generateProactiveLine(directive, opts);
+    if (r.stale) return null;
+    if (r.text) line = r.text;
+  } catch { /* the fallback stands — a proactive moment never goes silent for want of a brain */ }
+  if (getUserTurnEpoch() !== epoch) return null;
+  return line;
+}
+
+/**
  * 2026-09-28 — what happens to a proactive line when the brain answers, in ONE place.
  *
  * askCaddie appended the DIRECTIVE as a user turn. The player never said it, so that exchange always

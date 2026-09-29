@@ -19,6 +19,9 @@ import { getApiBaseUrl } from '../services/apiBase';
 
 // ─── TYPES ────────────────────────────────
 
+/** A hole left again within this long was a look ahead, not an arrival — see setCurrentHole. */
+const HOLE_PREVIEW_MS = 3 * 60_000;
+
 export interface CourseHole {
   hole: number;
   par: number;
@@ -2473,7 +2476,9 @@ export const useRoundStore = create<RoundState>()(
         console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
         // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
         try {
-          require('../services/usageTelemetry').track('round_completed', { holesPlayed, totalScore: total });
+          // 2026-09-29 (review) — no totalScore: the Settings row and all four privacy copies say usage
+          // never includes scores, and since 1.0.2 this is on by default for new installs.
+          require('../services/usageTelemetry').track('round_completed', { holesPlayed });
         } catch { /* telemetry never throws */ }
         // Phase 405 wave 3 — visible round-end confirmation.
         try {
@@ -2902,8 +2907,21 @@ export const useRoundStore = create<RoundState>()(
           const green = greenForHole(prevHole);
           if (green) get().closeHoleEndLocation(prevHole, green);
           // Pace of play: the first arrival on a hole is its start. A revisit keeps the first stamp.
-          if (state.isRoundActive && (state.holeStartedAt ?? {})[clamped] == null) {
-            set({ holeStartedAt: { ...(state.holeStartedAt ?? {}), [clamped]: Date.now() } });
+          // 2026-09-29 (review) — stepping BACK drops the stamps of holes beyond it that are only
+          // moments old: those were a look ahead (the strip arrows), and a preview stamp would later
+          // read as the real arrival, making the round look minutes faster than it is. A hole the
+          // player actually spent time on keeps its stamp.
+          if (state.isRoundActive) {
+            const stamps = { ...(state.holeStartedAt ?? {}) };
+            if (clamped < prevHole) {
+              const now = Date.now();
+              for (const k of Object.keys(stamps)) {
+                const h = Number(k);
+                if (h > clamped && now - stamps[h] < HOLE_PREVIEW_MS) delete stamps[h];
+              }
+            }
+            if (stamps[clamped] == null) stamps[clamped] = Date.now();
+            set({ holeStartedAt: stamps });
           }
         }
         const holeData = state.courseHoles.find(h => h.hole === clamped);

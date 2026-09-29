@@ -296,7 +296,9 @@ describe('it is wired to the caddie AND to the screen, from ONE composer', () =>
   it('the chip renders NOTHING rather than a placeholder when there is no plan', () => {
     // A chip that shows a plan on an unmapped hole would be inventing one, and it is read at a
     // glance and trusted.
-    expect(chip).toMatch(/if \(!plan \|\| !visible \|\| plan\.steps\.length === 0\) return null;/);
+    // 2026-09-29 — the condition is named (`shown`) so the hidden card can also report height 0.
+    expect(chip).toMatch(/const shown = !!plan && visible && plan\.steps\.length > 0;/);
+    expect(chip).toMatch(/if \(!shown\) return null;/);
   });
 
   it('the chip clears the strip entirely, whatever the strip is doing', () => {

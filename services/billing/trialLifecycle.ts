@@ -136,7 +136,14 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
   if (status === 'free' && trialStartedAt && now - trialStartedAt <= trialDurationMs) {
     return { setStatus: 'trial' };
   }
-  if (status === 'trial' && trialStartedAt && now - trialStartedAt > trialDurationMs) {
+  /**
+   * 2026-09-29 (review) — NOT when the store vouches for the player. A STORE trial's start is encoded
+   * as expiry − 14 days (purchases.trialStartFromCustomerInfo), so this rung fires at exactly the store
+   * expiry — the moment a trial that converted to paid is still 'trial' locally until the next store
+   * read lands. Opened offline on the course, the player would be dropped to lite right after being
+   * charged. A store-entitled player's status is the store's to change (the launch read does it).
+   */
+  if (status === 'trial' && trialStartedAt && now - trialStartedAt > trialDurationMs && input.storeEntitled !== true) {
     return { setStatus: 'expired' };
   }
   return {};

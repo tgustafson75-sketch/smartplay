@@ -74,9 +74,27 @@ describe('the round records when each hole started', () => {
     useRoundStore.getState().setCurrentHole(2);
     const at2 = useRoundStore.getState().holeStartedAt[2];
     expect(typeof at2).toBe('number');
-    useRoundStore.getState().setCurrentHole(1);
-    useRoundStore.getState().setCurrentHole(2);
-    expect(useRoundStore.getState().holeStartedAt[2]).toBe(at2);
+    // Played hole 2 for ten minutes, went back to fix hole 1's score, came forward: 2 keeps its stamp.
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(at2 + 10 * MIN);
+    try {
+      useRoundStore.getState().setCurrentHole(1);
+      useRoundStore.getState().setCurrentHole(2);
+      expect(useRoundStore.getState().holeStartedAt[2]).toBe(at2);
+    } finally { nowSpy.mockRestore(); }
+  });
+
+  it('THE BUG: a quick look ahead does not become the next hole\'s start', () => {
+    const holes = Array.from({ length: 18 }, (_, i) => ({ hole: i + 1, par: 4, distance: 380 })) as never;
+    let now = T0;
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      useRoundStore.getState().startRound('Test', holes, { nineHoleMode: false, isCompetition: false, notes: '', goal: null, courseId: 't', courseLocation: null } as never);
+      now += 5 * MIN; useRoundStore.getState().setCurrentHole(2);   // on the tee of 2
+      now += 20_000;  useRoundStore.getState().setCurrentHole(3);   // peek at 3 with the arrow
+      now += 20_000;  useRoundStore.getState().setCurrentHole(2);   // back to 2
+      now += 12 * MIN; useRoundStore.getState().setCurrentHole(3);  // really arrive at 3
+      expect(useRoundStore.getState().holeStartedAt[3]).toBe(now);
+    } finally { nowSpy.mockRestore(); }
   });
 });
 

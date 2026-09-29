@@ -216,7 +216,9 @@ export const BRAIN_TURN_BUDGET_MS = 24_000;
  * is skipped and the text goes back in time — the phone renders the voice itself from the text.
  */
 export const TTS_RESERVE_MS = 5_000;
-export const RESPONSE_MARGIN_MS = 1_000;
+// 2026-09-29 (review) — 1s → 3s. requestStartedAt is taken after Lambda init and the upload, and the
+// phone's 30s window also has to carry a ~100–300KB base64 reply back down; 1s did not cover that.
+export const RESPONSE_MARGIN_MS = 3_000;
 /** Below this, a TTS render cannot finish inside the window — return text now instead. */
 const MIN_TTS_MS = 1_500;
 
@@ -2987,7 +2989,9 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
         input: text,
         instructions: KEVIN_TTS_INSTRUCTIONS,
         // NOTE: no `speed` — gpt-4o-mini-tts rejects it (500). Pace lives in the instructions.
-      }, { timeout: Math.min(10_000, ttsBudgetMs) });
+      // 2026-09-29 (review) — `timeout` alone only bounds the request until HEADERS arrive (the SDK
+      // clears its timer then); the streamed body read below was unbounded. The signal bounds both.
+      }, { timeout: Math.min(10_000, ttsBudgetMs), signal: AbortSignal.timeout(Math.min(10_000, ttsBudgetMs)) });
       const arrayBuffer = await ttsResponse.arrayBuffer();
       audioBase64 = Buffer.from(arrayBuffer).toString('base64');
     } catch (ttsErr) {

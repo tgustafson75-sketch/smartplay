@@ -73,6 +73,10 @@ async function settingsReady(): Promise<void> {
 async function fireOnce(event: FunnelEvent, props: Record<string, unknown>): Promise<void> {
   const s = await load();
   if (s.fired.includes(event)) return;
+  // 2026-09-29 (review) — the funnel is for installs that STARTED on this build. first_open only fires
+  // on a first launch, so an install that updated from 1.0.1 never has it, and its next round is not
+  // its "first_round". Without this, every upgrader's first round after the update read as a new player.
+  if (event !== 'first_open' && !s.fired.includes('first_open')) return;
   s.fired.push(event);
   await save();
   await settingsReady();

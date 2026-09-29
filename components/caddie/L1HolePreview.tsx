@@ -125,6 +125,7 @@ function MaybeZoom({ enabled, box, onSingleTap, children }: {
   enabled: boolean; box: { width: number; height: number }; onSingleTap?: () => void; children: React.ReactNode;
 }) {
   if (!enabled) return <>{children}</>;
+  // ZoomableView carries its own GestureHandlerRootView (the app root has none).
   return (
     <View style={[box, styles.zoomClip]}>
       <ZoomableView style={box} maxScale={4} onSingleTap={onSingleTap}>

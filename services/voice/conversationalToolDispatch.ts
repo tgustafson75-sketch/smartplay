@@ -195,7 +195,12 @@ function dispatchOne(a: AnyAction): void {
       }
       break;
     case 'navigate_replace':
-      if (typeof a.path === 'string' && a.path.length > 0) router.replace(a.path as never);
+      if (typeof a.path === 'string' && a.path.length > 0) {
+        // 2026-09-29 (review) — same pathname gate as 'navigate'; a replace must not be the way round it.
+        const gated = (require('../featureAccess') as typeof import('../featureAccess')).gatedFeatureForPath(a.path);
+        if (gated) gatedOpen(gated, a.path);
+        else router.replace(a.path as never);
+      }
       break;
     case 'open_smartvision':
       gatedOpen('smartvision', '/smartvision');

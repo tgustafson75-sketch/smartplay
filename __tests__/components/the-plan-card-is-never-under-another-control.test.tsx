@@ -46,4 +46,13 @@ describe('the plan card', () => {
     fireEvent(wrap, 'layout', { nativeEvent: { layout: { height: 61.6, width: 300, x: 0, y: 0 } } });
     expect(onH).toHaveBeenCalledWith(62);
   });
+
+  it('THE BUG: a card that goes away reports no height, so the map above drops back down', () => {
+    const onH = jest.fn();
+    const r = render(<HolePlanChip plan={PLAN} budgetLine={BUDGET} onHeightChange={onH} />);
+    const wrap = r.UNSAFE_getAllByType(View)[0];
+    fireEvent(wrap, 'layout', { nativeEvent: { layout: { height: 62, width: 300, x: 0, y: 0 } } });
+    r.rerender(<HolePlanChip plan={PLAN} budgetLine={BUDGET} onHeightChange={onH} visible={false} />);
+    expect(onH).toHaveBeenLastCalledWith(0);
+  });
 });

@@ -18,7 +18,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { askCaddie } from '../services/caddieBrain';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
-import { speak } from '../services/voiceService';
+import { speak, isCapturing, isExternalMicActive } from '../services/voiceService';
 import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { devLog } from '../services/devLog';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
@@ -151,6 +151,11 @@ export function useCaddieTabMic({
         }
         onVoiceStateChange?.('idle');
         turnInFlightRef.current = false;
+        // 2026-09-29 (review) — this early return sits outside the try/finally that drains the queue, so
+        // a question asked during the putt reply was stranded (and ran stale after the NEXT turn).
+        const next = pendingTurnRef.current;
+        pendingTurnRef.current = null;
+        if (next) void processTurnRef.current?.(next);
         return;
       }
     }
@@ -249,7 +254,12 @@ export function useCaddieTabMic({
        * reply now would flip the audio session to playback under their live recording (iOS stops
        * capturing) and talk over them. Show it, don't say it, and let the queued turn answer.
        */
-      if (getUserTurnEpoch() !== turnEpoch) {
+      /**
+       * 2026-09-29 (review) — only when a newer turn is REALLY there: one queued behind this one, or a
+       * mic that is live right now. The epoch alone also moves for taps that never became a turn, and
+       * then the answer the player was waiting for went unspoken.
+       */
+      if (getUserTurnEpoch() !== turnEpoch && (pendingTurnRef.current !== null || isCapturing() || isExternalMicActive())) {
         devLog('[caddie] reply superseded by a newer turn — caption only');
         return;
       }
@@ -274,7 +284,9 @@ export function useCaddieTabMic({
       onVoiceStateChange?.('idle');
 
       // Auto-listen: always in continuous mode; on any question otherwise.
-      if (text.trim() && onReadyToListen) {
+      // 2026-09-29 (review) — a queued question answers next; opening the mic here would put its reply
+      // on top of a live recording.
+      if (text.trim() && onReadyToListen && pendingTurnRef.current === null) {
         const { continuousConversationMode } = useSettingsStore.getState();
         const isQuestion = endsAsQuestion(text);
         // 2026-06-30 (Tim) — a sign-off ("I'm good, thanks" / "that's all") must END the

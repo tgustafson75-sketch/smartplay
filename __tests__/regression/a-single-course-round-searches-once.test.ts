@@ -25,7 +25,7 @@ jest.mock('../../services/golfCourseApi', () => {
 });
 
 import { useRoundStore } from '../../store/roundStore';
-import { _tickForTests, stopLayoutVerifier, resolveSiblings, SiblingLookupFailed, RETRY_AFTER_FAILURE_MS } from '../../services/layoutVerifier';
+import { _tickForTests, stopLayoutVerifier, resolveSiblings, SiblingLookupFailed, RETRY_AFTER_FAILURE_MS, MAX_LOOKUP_FAILURES } from '../../services/layoutVerifier';
 
 const hemetCard = {
   id: 'hemet', club_name: 'Hemet Golf Club', course_name: 'Hemet Golf Club',
@@ -90,6 +90,14 @@ describe('THE BUG: a single-course round searches once, not every ten minutes', 
     expect(mockSearch).toHaveBeenCalledTimes(2);
     for (let i = 0; i < 10; i++) { now += RETRY_AFTER_FAILURE_MS + 1; _tickForTests(); await flush(); }
     expect(mockSearch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('a course in a dead zone is not searched all round', () => {
+  it('THE BUG: failures are retried a bounded number of times, then the round stops asking', async () => {
+    mockSearch.mockResolvedValue(failedRow);
+    for (let i = 0; i < 80; i++) { _tickForTests(); await flush(); now += RETRY_AFTER_FAILURE_MS + 1; } // four hours
+    expect(mockSearch).toHaveBeenCalledTimes(MAX_LOOKUP_FAILURES);
   });
 });
 

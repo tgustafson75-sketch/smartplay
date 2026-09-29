@@ -43,6 +43,8 @@ describe('each funnel event fires once per install, with only its declared field
   });
 
   it('first_round then second_round, and a third round sends nothing new', async () => {
+    await fireAndFlush(() => noteFirstOpen());
+    sent.length = 0;
     await fireAndFlush(() => noteRoundStarted({ holes: 18, mode: 'free_play' }));
     await fireAndFlush(() => noteRoundStarted({ holes: 9, mode: 'break_90' }));
     await fireAndFlush(() => noteRoundStarted({ holes: 18, mode: 'free_play' }));
@@ -53,6 +55,7 @@ describe('each funnel event fires once per install, with only its declared field
   });
 
   it('first_caddie_turn fires on whichever input path comes first, once', async () => {
+    await fireAndFlush(() => noteFirstOpen());
     await fireAndFlush(() => { noteCaddieTurn('earbud'); noteCaddieTurn('mic'); noteCaddieTurn('typed'); });
     const turns = events().filter((e) => e.event === 'first_caddie_turn');
     expect(turns).toHaveLength(1);
@@ -64,6 +67,13 @@ describe('each funnel event fires once per install, with only its declared field
     __resetFunnelForTest(); // a new process, same storage
     await fireAndFlush(() => noteFirstOpen());
     expect(events().filter((e) => e.event === 'first_open')).toHaveLength(1);
+  });
+});
+
+describe('an install that updated from 1.0.1 is not a new player', () => {
+  it('no first_open on this install → its next round and caddie turn are not funnel events', async () => {
+    await fireAndFlush(() => { noteRoundStarted({ holes: 18, mode: 'free_play' }); noteCaddieTurn('mic'); });
+    expect(events().filter((e) => e.event !== 'first_open')).toHaveLength(0);
   });
 });
 

@@ -19,7 +19,7 @@
  * an unmapped hole would be inventing one, and this is read at a glance and trusted.
  * [[illustration-data-points]] [[no-deferred-wiring-placeholders]]
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { liveDistanceUnit, toDisplayDistance } from '../services/distanceUnits';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -60,9 +60,13 @@ export default function HolePlanChip({
   const theme = useTheme();
   const c = theme.colors;
   const [open, setOpen] = useState(false);
+  const shown = !!plan && visible && plan.steps.length > 0;
+  // A hidden card has no height: without this the parent kept the last measured one and the map
+  // above stayed lifted over an empty band.
+  useEffect(() => { if (!shown) onHeightChange?.(0); }, [shown, onHeightChange]);
 
   // No plan is a real answer, and the honest one. Render nothing rather than a shell.
-  if (!plan || !visible || plan.steps.length === 0) return null;
+  if (!shown) return null;
 
   const target = plan.playingFor === 'par' ? t('holeplan.par') : `${plan.targetScore}`;
 

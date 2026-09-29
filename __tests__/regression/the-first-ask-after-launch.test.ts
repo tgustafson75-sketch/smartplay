@@ -343,3 +343,53 @@ describe('the launch-time update reload waits for a quiet app', () => {
     expect(timer.slice(0, 300)).toMatch(/if \(!gate\(\)\)/);
   });
 });
+
+describe('a proactive line that FALLS BACK still yields to the player', () => {
+  const setup = (ask: () => Promise<unknown>) => {
+    let brain!: typeof import('../../services/conversationalBrain');
+    let clock!: typeof import('../../services/userTurnClock');
+    jest.isolateModules(() => {
+      clock = require('../../services/userTurnClock');
+      jest.doMock('../../services/caddieBrain', () => ({ askCaddie: ask }));
+      brain = require('../../services/conversationalBrain');
+    });
+    return { brain, clock };
+  };
+  afterEach(() => jest.dontMock('../../services/caddieBrain'));
+
+  it('THE BUG: the brain times out after the player started talking → silence, not the canned line', async () => {
+    let env!: ReturnType<typeof setup>;
+    env = setup(async () => { env.clock.noteUserTurn(); return null; });
+    expect(await env.brain.proactiveLineOrFallback('Say hi.', 'Fixed line.')).toBeNull();
+  });
+  it('the brain throws after the player started talking → silence', async () => {
+    let env!: ReturnType<typeof setup>;
+    env = setup(async () => { env.clock.noteUserTurn(); throw new Error('network'); });
+    expect(await env.brain.proactiveLineOrFallback('Say hi.', 'Fixed line.')).toBeNull();
+  });
+  it('the brain fails and nobody spoke → the fallback, so the moment is never silent', async () => {
+    const env = setup(async () => null);
+    expect(await env.brain.proactiveLineOrFallback('Say hi.', 'Fixed line.')).toBe('Fixed line.');
+  });
+});
+
+describe('the Caddie tab cannot start a proactive line on a turn it cannot see', () => {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const code = (rel: string) => fs.readFileSync(path.join(__dirname, '../..', rel), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const tab = code('app/(tabs)/caddie.tsx');
+
+  it('VAD hearing speech is a player turn', () => {
+    expect(tab).toMatch(/onSpeechStart: \(\) => \{\s*noteUserTurn\(\);/);
+  });
+  it('a turn still being answered (session in flight, or the tab thinking/listening) blocks the line', () => {
+    expect(tab).toMatch(/function voiceChannelBusy\(\): boolean \{\s*return [^;]*isSessionInFlight\(\)/);
+    expect(tab).toMatch(/voiceChannelBusy\(\) \|\| tabState === 'thinking' \|\| tabState === 'listening' \|\| tabState === 'arming'/);
+  });
+  it('no mic holder unregisters by clearing everyone else (register(null) wipes the whole set)', () => {
+    for (const rel of ['hooks/useVoiceCaddie.ts', 'services/acousticImpactDetector.ts', 'services/swing/audioMetering.ts']) {
+      expect(code(rel)).not.toMatch(/registerExternalMicCheck\(null\)/);
+    }
+  });
+});

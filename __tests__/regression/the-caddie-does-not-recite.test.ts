@@ -51,14 +51,16 @@ describe('the interview opener composes itself', () => {
     expect(caddie).not.toMatch(/const opener =\s*\n?\s*"Alright — let's actually get to know your game/);
   });
 
+  // 2026-09-29 — the ask-then-fallback moved into ONE owner, conversationalBrain.proactiveLineOrFallback
+  // (behaviour tested in the-first-ask-after-launch). These now pin the wiring to it.
   it('it asks the brain first, and seeds the history it will be answered against', () => {
-    expect(caddie).toMatch(/generateProactiveLine\(/);
-    expect(caddie).toMatch(/seedHistory: true/);
+    expect(caddie).toMatch(/proactiveLineOrFallback\([\s\S]{0,600}?OPENER_FALLBACK,\s*\{ timeoutMs: 9_000, seedHistory: true \}/);
   });
 
   it('but it never goes silent — the mic opens straight after', () => {
-    expect(caddie).toMatch(/let opener = OPENER_FALLBACK;/);
-    expect(caddie).toMatch(/if \(brain\.text\) opener = brain\.text;/);
+    const brain = read('services/conversationalBrain.ts');
+    expect(brain).toMatch(/let line = fallback;/);
+    expect(brain).toMatch(/if \(r\.text\) line = r\.text;/);
   });
 });
 
@@ -87,7 +89,8 @@ describe('proactive lines are composed, not recited', () => {
   });
 
   it('and falls back to the fixed line rather than going silent', () => {
-    expect(caddie).toMatch(/return r\.text \|\| trigger\.message;/);
+    // 2026-09-29 — via the one owner; its fallback is behaviour-tested in the-first-ask-after-launch.
+    expect(caddie).toMatch(/return proactiveLineOrFallback\(trigger\.directive, trigger\.message,/);
   });
 });
 
