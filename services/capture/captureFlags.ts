@@ -40,13 +40,20 @@
 export const DEFAULT_USE_VISION_CAMERA = true;
 
 /**
- * Preferred capture frame rate (fps) for swing video. SmartTrace reads the ball's
- * departure over the first frames after impact, so more fps = more launch-window
- * points to fit a direction from. useCameraFormat picks the closest format the
- * device actually supports; very high fps needs good light (range/cage daylight),
- * so the format query degrades gracefully to the device max.
+ * 2026-09-29 — 60 BY DEFAULT, 120 WHEN THE PLAYER ASKS FOR IT.
+ *
+ * The camera used to ASK for 120 on every device and take the highest resolution at whatever rate it
+ * got — on many phones a 4K format, and on most a 120fps format that needs range-daylight to expose
+ * properly. 60fps is what MIN_TRACE_FPS needs for an honest departure trace, it exposes well indoors,
+ * and nearly every phone offers it at 1080p. So the swing camera targets TARGET_CAPTURE_FPS at up to
+ * 1080p, and records at HIGH_SPEED_CAPTURE_FPS only when the player turned it on (captureEngineStore
+ * .highSpeedOptIn) AND the device has a ≤1080p format that reaches it. The selection itself is the
+ * pure services/capture/captureFormat.selectCaptureFormat, so it is tested without a device.
  */
-export const PREFERRED_CAPTURE_FPS = 120;
+export const TARGET_CAPTURE_FPS = 60;
+export const HIGH_SPEED_CAPTURE_FPS = 120;
+/** Never pick a format above 1080p for swing capture — a 60fps request must not land on 4K60. */
+export const MAX_CAPTURE_SHORT_EDGE = 1080;
 
 /**
  * Floor we still consider "high-speed enough" to attempt a drawn departure trace.

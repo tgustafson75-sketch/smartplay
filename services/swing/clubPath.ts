@@ -475,6 +475,12 @@ export async function detectClubPath(args: {
   impactMs?: number | null;
   /** How wrong `impactMs` could be — see clubPathWindow.anchorToleranceMs. Widens the dense band. */
   toleranceMs?: number | null;
+  /**
+   * 2026-09-29 — the rate THIS clip was captured at (services/capture/clipFps), or null when unknown.
+   * clubPathSampleOffsets has taken it since 09-19 and assumed 30 without it — and this, its only
+   * caller, never passed it, so a 120fps swing was sampled as if it were 30.
+   */
+  sourceFps?: number | null;
 }): Promise<ClubPathResult | null> {
   const base = apiUrl();
   if (!base) return null;
@@ -490,7 +496,7 @@ export async function detectClubPath(args: {
   // so it could be tested, and the band it used to compute inline is what put the arc behind the
   // player. The ceiling is still the source frame rate: past that, closer offsets return the same
   // decoded frame.
-  const offsets = clubPathSampleOffsets(startMs, endMs, args.impactMs ?? null, args.toleranceMs ?? 0);
+  const offsets = clubPathSampleOffsets(startMs, endMs, args.impactMs ?? null, args.toleranceMs ?? 0, args.sourceFps ?? null);
 
   // 2026-07-24 (Tim — WHITE-SCREEN crash in the swing library AFTER analysis, ROOT CAUSE) — the
   // frame-extraction retriever and ExoPlayer must never touch the SAME file. The isPlaying/

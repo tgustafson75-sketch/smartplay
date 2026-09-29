@@ -100,7 +100,8 @@ import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDe
 import { useSwingSessionStore, type PrimaryIssue } from '../../store/swingSessionStore';
 import { deriveDrillVerdict } from '../../services/drillVerdict';
 import { useClubBagStore } from '../../store/clubBagStore';
-import { MIN_TRACE_FPS, PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
+import { MIN_TRACE_FPS, TARGET_CAPTURE_FPS } from '../../services/capture/captureFlags';
+import { capturedFpsForClip } from '../../services/capture/clipFps';
 import { coverageNote } from '../../services/swing/analysisFrames';
 import {
   acceptBallDeparture, ballRegionFromDetection, ballRegionFromFeet, nextBallRegion,
@@ -741,6 +742,23 @@ export default function SmartMotion() {
     if (phase === 'setup' || phase === 'recording') prewarmSwingAnalysis();
   }, [phase]);
   const [clipUri, setClipUri] = useState<string | null>(clipUriParam ?? null);
+  /**
+   * 2026-09-29 — THE FRAME RATE OF THE CLIP ON SCREEN (services/capture/clipFps), not of the camera.
+   * captureEngineStore.capturedFps is the live camera: null once it unmounts and about the NEXT
+   * recording. A live recording snapshots it when recording starts; a library/upload clip looks it up
+   * on its session (null = unknown). The ball-trace gate, the club-path schedule, the saved swing and
+   * the caddie's capture-quality line all read THIS.
+   */
+  const [clipFps, setClipFps] = useState<number | null>(null);
+  const clipFpsRef = useRef<number | null>(null);
+  const recordedClipFpsRef = useRef<number | null>(null);
+  const setReviewedClipFps = useCallback((fps: number | null) => {
+    clipFpsRef.current = fps;
+    setClipFps(fps);
+  }, []);
+  useEffect(() => {
+    if (clipUriParam) setReviewedClipFps(capturedFpsForClip(useSwingSessionStore.getState().sessionHistory, clipUriParam));
+  }, [clipUriParam, setReviewedClipFps]);
   // 2026-07-26 (Tim — swing playback crash; device log "Maximum update depth exceeded" from
   // onPlaybackStatusUpdate) — memoize the Video source so it isn't a NEW object literal every render.
   // Playback fires the status callback ~25×/s (progressUpdateIntervalMillis:40 with the skeleton on) →
@@ -1460,6 +1478,9 @@ export default function SmartMotion() {
    * setting lives on their camera and saying it twice is nagging, not honesty.
    */
   const capturedFpsLive = useCaptureEngineStore((s) => s.capturedFps);
+  // 2026-09-29 — the 120fps opt-in, offered only on a device whose camera can actually do it.
+  const highSpeedAvailable = useCaptureEngineStore((s) => s.highSpeedAvailable);
+  const highSpeedOptIn = useCaptureEngineStore((s) => s.highSpeedOptIn);
   const lowFpsNoticeShown = useCaptureEngineStore((s) => s.lowFpsNoticeShown);
   useEffect(() => {
     if (lowFpsNoticeShown) return;
@@ -1498,7 +1519,8 @@ export default function SmartMotion() {
   useEffect(() => {
     if (captureTipShown || lowFpsNoticeShown) return;
     // Already measured and already fine → nothing to ask for.
-    if (capturedFpsLive != null && capturedFpsLive >= PREFERRED_CAPTURE_FPS) {
+    // 2026-09-29 — "already fine" means the 60 target, not the optional 120.
+    if (capturedFpsLive != null && capturedFpsLive >= TARGET_CAPTURE_FPS) {
       useCaptureEngineStore.getState().markCaptureTipShown();
       return;
     }
@@ -1749,10 +1771,23 @@ export default function SmartMotion() {
      * the engine that currently ships. It takes effect exactly where it can be trusted — the
      * vision-camera path, which is what the iPhone Pro Max build turns on.
      */
-    const capturedFps = useCaptureEngineStore.getState().capturedFps;
+    // 2026-09-29 — the rate of the CLIP being reviewed. This read the live camera store, which is null
+    // once the camera unmounts (so a 30fps recording drew the confident line anyway) and describes the
+    // next recording rather than this one.
+    const capturedFps = clipFps;
     if (capturedFps != null && capturedFps < MIN_TRACE_FPS) return null;
     return computeTraceDirection(ballArea, cvToContainer(ballDeparture.departurePoint), targetPoint);
-  }, [angle, isPutt, ballDeparture, ballArea, targetPoint, cvToContainer]);
+  }, [angle, isPutt, ballDeparture, ballArea, targetPoint, cvToContainer, clipFps]);
+  /**
+   * 2026-09-29 — tell the caddie which clip is on screen and at what rate, so "why no ball line?" is
+   * answered about THIS swing (services/caddieRequestBody → capture_quality). Cleared when no clip is
+   * under review and when the screen goes.
+   */
+  useEffect(() => {
+    const reviewing = clipUri != null && (phase === 'review' || phase === 'analyzing');
+    useCaptureEngineStore.getState().setReviewingClip(reviewing ? { fps: clipFps } : null);
+  }, [clipUri, phase, clipFps]);
+  useEffect(() => () => { useCaptureEngineStore.getState().setReviewingClip(null); }, []);
   // 2026-07-07 — ref mirrors so runAnalysis (a stable callback) reads the CURRENT
   // measured signals at call time without dep churn (same pattern as ballAreaRef).
   const tempoRef = useRef(tempo);
@@ -2258,7 +2293,7 @@ export default function SmartMotion() {
         strikeMs: segStrikeMs, toleranceMs: segToleranceMs, confidence: seg.confidence ?? null,
       });
     } catch { /* observation only */ }
-    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, toleranceMs: segToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
+    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, toleranceMs: segToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: clipFpsRef.current })
       .then((r) => {
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a validated arc (detectClubPath returns [] for a clustered
@@ -2915,6 +2950,8 @@ export default function SmartMotion() {
           tag: null,
           swinger,
           perspective,
+          // 2026-09-29 — the rate this clip was captured at (null = unknown), kept with the swing.
+          captured_fps: clipFpsRef.current,
         };
         // 2026-06-12 (phase 1b) — CARVE a multi-swing cage reel into N per-swing library
         // shots (each scrubbing its own window into the master clip), so the session lands
@@ -3390,7 +3427,7 @@ export default function SmartMotion() {
                    * the one he looks at. [[no-half-fixes-enforce-every-surface]]
                    * [[sweep-the-missing-half-not-the-unused-export]]
                    */
-                  const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, impactMs: anchorMs, shouldAbort: () => false, bodyBounds: bodyBoundsFromPose(frames ?? null) });
+                  const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, impactMs: anchorMs, shouldAbort: () => false, bodyBounds: bodyBoundsFromPose(frames ?? null), sourceFps: clipFpsRef.current });
                   const store = useSwingSessionStore.getState();
                   if (arc && arc.points.length >= 3) {
                     store.setSessionClubArc(sessionId, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
@@ -3685,6 +3722,7 @@ export default function SmartMotion() {
     stoppingRef.current = false;
     setSessionId(null);
     setClipUri(null);
+    setReviewedClipFps(null);
     setAnalysis(null);
     setAnalysisError(null);
     setSwingAnalyzing(false); // audit: never leave the per-swing spinner stuck
@@ -3753,7 +3791,7 @@ export default function SmartMotion() {
     setPage(0);
     pagerRef.current?.scrollTo({ x: 0, animated: false });
     setPhase('setup');
-  }, []);
+  }, [setReviewedClipFps]);
 
   const openDrills = useCallback(() => {
     const issue = analysis?.detected_issue && analysis.detected_issue !== 'none' ? analysis.detected_issue : null;
@@ -4250,6 +4288,9 @@ export default function SmartMotion() {
     // Honest "Listening" state: only when a mic track is actually running.
     setMeteringActive(meteringRef.current != null);
 
+    // 2026-09-29 — the rate THIS recording is captured at, read while the camera is still mounted
+    // (its unmount clears capturedFps). Null on expo-camera, which reports none — unknown.
+    recordedClipFpsRef.current = useCaptureEngineStore.getState().capturedFps;
     // Assign the camera promise BEFORE arming timers (avoid the stop race).
     try {
       recordingPromiseRef.current = cameraRef.current.recordAsync({ maxDuration: maxSec }) as Promise<{ uri: string } | undefined>;
@@ -4523,6 +4564,7 @@ export default function SmartMotion() {
         return;
       }
       setClipUri(recorded.uri);
+      setReviewedClipFps(recordedClipFpsRef.current);
       // Remember the strike time; the camera strike-verification runs from an
       // effect once both the clip and a ball spot are available (the ball spot
       // may be a pre-record draft or placed in review).
@@ -4913,7 +4955,7 @@ export default function SmartMotion() {
       // already in state with a Re-analyze affordance, so land on 'review' instead.
       setPhase('review');
     }
-  }, [runAnalysis, appliedCalibration, pipelineNarrate, drillShotCount]);
+  }, [runAnalysis, appliedCalibration, pipelineNarrate, drillShotCount, setReviewedClipFps]);
   // Keep the auto-stop ref pointed at the current stopRecording (audit H1).
   stopRecordingRef.current = stopRecording;
 
@@ -6219,6 +6261,21 @@ export default function SmartMotion() {
                     useToastStore.getState().show(next ? 'Foam / no-ball ON — reading swings on video (no strike needed)' : 'Foam / no-ball off');
                   }}
                 />
+                {/* 2026-09-29 — 60fps is the default; 120 is an opt-in, and only offered on a phone whose
+                    camera can do it (captureEngineStore.highSpeedAvailable, set by the camera itself). */}
+                {highSpeedAvailable ? (
+                  <ToolCardRow
+                    icon={<Ionicons name="speedometer-outline" size={26} color={colors.accent} />}
+                    title={highSpeedOptIn ? '120 fps on' : '120 fps'}
+                    desc={highSpeedOptIn ? 'Sharper club path — best in good light' : 'Record at 120 instead of 60 — needs good light'}
+                    active={highSpeedOptIn}
+                    onPress={() => {
+                      const next = !highSpeedOptIn;
+                      useCaptureEngineStore.getState().setHighSpeedOptIn(next);
+                      useToastStore.getState().show(next ? '120 fps on — best in bright light' : 'Back to 60 fps');
+                    }}
+                  />
+                ) : null}
               </View>
             ) : null}
           </View>

@@ -28,7 +28,7 @@ interface CaptureEngineState {
    * and make sure that we can maximize for that capability").
    *
    * The fps vision-camera ACTUALLY resolved for this device, not the fps we asked for.
-   * PREFERRED_CAPTURE_FPS is a request; useCameraFormat degrades to whatever the phone offers, so
+   * TARGET_CAPTURE_FPS is a request; the format selection degrades to whatever the phone offers, so
    * a 30fps device silently produced a capture that looks identical to a 120fps one downstream.
    *
    * captureFlags has always declared MIN_TRACE_FPS — "the floor we still consider high-speed enough
@@ -82,6 +82,23 @@ interface CaptureEngineState {
    */
   captureTipShown: boolean;
   markCaptureTipShown: () => void;
+  /**
+   * 2026-09-29 — the player's choice to record swings at HIGH_SPEED_CAPTURE_FPS (120). Default OFF:
+   * 60 is the target (captureFlags). Persisted — it is a preference. Honoured only when the device
+   * has a ≤1080p format that reaches 120; otherwise the camera quietly records at 60.
+   */
+  highSpeedOptIn: boolean;
+  setHighSpeedOptIn: (on: boolean) => void;
+  /** Whether THIS device can honour the opt-in — set by the camera, NOT persisted. The toggle shows only when true. */
+  highSpeedAvailable: boolean;
+  setHighSpeedAvailable: (on: boolean) => void;
+  /**
+   * 2026-09-29 — the clip currently under review and the rate it was CAPTURED at (null = unknown, e.g.
+   * an upload). Null when no clip is being reviewed. Readers that judge a recorded clip (the caddie's
+   * capture-quality line) read this instead of capturedFps, which describes the live camera. Not persisted.
+   */
+  reviewingClip: { fps: number | null } | null;
+  setReviewingClip: (clip: { fps: number | null } | null) => void;
 }
 
 export const useCaptureEngineStore = create<CaptureEngineState>()(
@@ -99,6 +116,14 @@ export const useCaptureEngineStore = create<CaptureEngineState>()(
       markClubheadNoticeShown: () => set({ clubheadNoticeShown: true }),
       captureTipShown: false,
       markCaptureTipShown: () => set({ captureTipShown: true }),
+      highSpeedOptIn: false,
+      setHighSpeedOptIn: (on) => set({ highSpeedOptIn: on === true }),
+      highSpeedAvailable: false,
+      setHighSpeedAvailable: (on) => set({ highSpeedAvailable: on === true }),
+      reviewingClip: null,
+      setReviewingClip: (clip) => set({
+        reviewingClip: clip ? { fps: typeof clip.fps === 'number' && Number.isFinite(clip.fps) && clip.fps > 0 ? clip.fps : null } : null,
+      }),
     }),
     {
       name: 'capture-engine-v1',
@@ -111,6 +136,9 @@ export const useCaptureEngineStore = create<CaptureEngineState>()(
         // relaunch is a nag, and this app does not nag. [[no-push-nagging-no-ads]]
         clubheadNoticeShown: s.clubheadNoticeShown,
         captureTipShown: s.captureTipShown,
+        // 2026-09-29 — a preference, so it survives relaunch. highSpeedAvailable and reviewingClip are
+        // properties of this device / this screen and are re-derived, like capturedFps.
+        highSpeedOptIn: s.highSpeedOptIn,
       }) as CaptureEngineState,
       version: 2,
       /**

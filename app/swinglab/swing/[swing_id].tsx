@@ -28,6 +28,7 @@ import * as VideoThumbnails from '../../../utils/videoThumbnail';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import SwingAnalysisSteps from '../../../components/swinglab/SwingAnalysisSteps';
+import { sessionCapturedFps } from '../../../services/capture/clipFps';
 import { useSwingSessionStore, OTHER_PLAYER_ID, type AnalysisStatus, type SwingShot, type SwingSession } from '../../../store/swingSessionStore';
 import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
@@ -171,6 +172,11 @@ export default function SwingDetail() {
   const session = useSwingSessionStore(s =>
     swing_id ? s.sessionHistory.find(x => x.id === swing_id) ?? null : null,
   );
+  /**
+   * 2026-09-29 — the frame rate THIS swing was captured at (null = unknown: an upload, or a swing saved
+   * before the field existed), so the club-path schedule samples it at its real rate, not the 30 floor.
+   */
+  const swingCapturedFps = sessionCapturedFps(session);
   // Coach report export is an instructor tool — gate the button so a
   // golfer can't export a report headed with their own name as the
   // "instructor" (audit). Reactive so a role change in Settings reflects.
@@ -850,7 +856,7 @@ export default function SwingDetail() {
         } catch { /* observation only */ }
         // 2026-09-20 — crop to the player. Tim's Sentry from this very screen read `detected: 2`
         // of fourteen sampled frames, which is what a ~6px clubhead looks like.
-        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) });
+        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: swingCapturedFps });
         try {
           const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
           pipe.noteStage(pipe.runKeyFor(uri, startMs, endMs), 'club',
@@ -959,7 +965,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
    
-  }, [hasPose, poseFrames, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx]);
+  }, [hasPose, poseFrames, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx, swingCapturedFps]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -1295,7 +1301,7 @@ export default function SwingDetail() {
           } catch { /* observation only */ }
           // 2026-09-20 — the re-analyse path gets the crop too. `biomech` was just computed above,
           // so its frames are the freshest bounds available for this clip.
-          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames) });
+          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames), sourceFps: swingCapturedFps });
           // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
           // would drop a valid 3-point arc and persist []. (Dead today under LIBRARY_AUTO_PROCESS=false, but
           // keep it consistent so flipping that flag can't silently lose 3-point arcs.)

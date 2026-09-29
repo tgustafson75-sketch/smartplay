@@ -5747,10 +5747,13 @@ check('SmartTrace capture seam — vision-camera is the default, with real fallb
       /chosenByUser/.test(store) &&                                   // a default on disk is not a choice
       /version: 2,/.test(store) &&                                    // ...and the migration that adopts it
       /onUnavailable/.test(cam) &&                                    // no-device → hand control back
-      /PREFERRED_CAPTURE_FPS = \d+/.test(flags) &&                    // a real high-fps target
+      // 2026-09-29 — 60 is the target, 120 the opt-in; the format is chosen by the pure, tested selector.
+      /export const TARGET_CAPTURE_FPS = 60;/.test(flags) &&
+      /export const HIGH_SPEED_CAPTURE_FPS = 120;/.test(flags) &&
       /audio=\{false\}/.test(cam) &&                                 // off the mic — protects the acoustic anchor
       /recordAsync\(/.test(cam) && /stopRecording\(\)/.test(cam) &&  // mimics CameraView's ref API (drop-in)
-      /useCameraFormat/.test(cam)                                    // picks the device's high-fps format
+      /selectCaptureFormat\(device\?\.formats \?\? \[\], \{ highSpeedOptIn \}\)/.test(cam) && // 60 / opt-in 120, ≤1080p
+      /highSpeedOptIn: s\.highSpeedOptIn/.test(store)                 // the opt-in is persisted
     );
   })(),
   'the vision-camera capture path is the DEFAULT, records video-only to keep the acoustic mic clean, mirrors CameraView as a drop-in, falls back when there is no device, and only adopts the default for players who never chose otherwise');

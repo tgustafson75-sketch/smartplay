@@ -154,6 +154,10 @@ export type SwingTag = 'range' | 'indoor' | 'course' | 'putt' | 'chip' | 'other'
 
 export interface UploadMetadata {
   uploaded_at: number;
+  /** 2026-09-29 — the frame rate the swing camera resolved when THIS clip was recorded. Null/absent
+   *  for uploads, expo-camera captures, and sessions saved before it existed — all read as unknown
+   *  (services/capture/clipFps). */
+  captured_fps?: number | null;
   taken_at?: number | null;     // file metadata; user-editable
   notes?: string | null;
   swinger?: string | null;       // defaults to "Me"
