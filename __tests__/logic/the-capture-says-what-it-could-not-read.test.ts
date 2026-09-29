@@ -16,7 +16,9 @@
 import {
   captureQualityNote, captureQualityLine, clubheadUnreadableNote, beforeFirstCaptureTip,
 } from '../../services/captureQuality';
-import { MIN_TRACE_FPS, PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
+// 2026-09-29 — PREFERRED_CAPTURE_FPS (120) split into TARGET_CAPTURE_FPS (60, the default) and
+// HIGH_SPEED_CAPTURE_FPS (120, opt-in). The tips now lead with 60 and offer 120.
+import { HIGH_SPEED_CAPTURE_FPS, MIN_TRACE_FPS, TARGET_CAPTURE_FPS } from '../../services/capture/captureFlags';
 
 describe('the clubhead note', () => {
   const note = clubheadUnreadableNote();
@@ -41,16 +43,26 @@ describe('the clubhead note', () => {
   it('gives a fix the player can actually act on', () => {
     expect(note.fix).toBeTruthy();
     expect(note.fix).toMatch(/light|further back/i);
-    expect(note.fix).toContain(String(PREFERRED_CAPTURE_FPS));
+    expect(note.fix).toContain(String(HIGH_SPEED_CAPTURE_FPS));
+    // and it says WHERE the switch is — setup tools in-app, the camera app for uploaded clips
+    expect(note.fix).toMatch(/setup tools/);
+    expect(note.fix).toMatch(/camera app for clips you upload/);
   });
 });
 
 describe('the before-first-swing tip', () => {
   const tip = beforeFirstCaptureTip();
 
-  it('asks for the frame rate that unlocks the path', () => {
-    expect(tip).toContain(String(PREFERRED_CAPTURE_FPS));
-    expect(tip).toContain(String(MIN_TRACE_FPS));
+  it('LEADS with 60, and offers 120 as optional', () => {
+    expect(tip).toContain(String(TARGET_CAPTURE_FPS));
+    expect(tip).toContain(String(HIGH_SPEED_CAPTURE_FPS));
+    expect(tip.indexOf(String(TARGET_CAPTURE_FPS))).toBeLessThan(tip.indexOf(String(HIGH_SPEED_CAPTURE_FPS)));
+  });
+
+  it("says the phone's camera-app setting applies to UPLOADED clips — SmartMotion picks its own rate", () => {
+    expect(tip).toMatch(/phone's own camera app and upload/);
+    expect(tip).toMatch(/setup tools/);
+    expect(tip).not.toMatch(/turn that on\./);
   });
 
   /**
@@ -76,7 +88,8 @@ describe('the frame-rate note it sits beside is unchanged', () => {
   });
 
   it('still says nothing when the capture was fine', () => {
-    expect(captureQualityNote(PREFERRED_CAPTURE_FPS).ok).toBe(true);
+    expect(captureQualityNote(TARGET_CAPTURE_FPS).ok).toBe(true);
+    expect(captureQualityNote(HIGH_SPEED_CAPTURE_FPS).ok).toBe(true);
   });
 
   it('still speaks when a measured rate falls short', () => {

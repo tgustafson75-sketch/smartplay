@@ -15,7 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 import { captureQualityNote, captureQualityLine } from '../../services/captureQuality';
-import { MIN_TRACE_FPS, PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
+import { HIGH_SPEED_CAPTURE_FPS, MIN_TRACE_FPS, TARGET_CAPTURE_FPS } from '../../services/capture/captureFlags';
 
 const ROOT = path.join(__dirname, '../..');
 const code = (rel: string) =>
@@ -33,7 +33,8 @@ describe('an UNKNOWN frame rate is never treated as a bad one', () => {
 
   it('says nothing when the capture was good enough', () => {
     expect(captureQualityNote(MIN_TRACE_FPS).ok).toBe(true);
-    expect(captureQualityNote(PREFERRED_CAPTURE_FPS).ok).toBe(true);
+    expect(captureQualityNote(TARGET_CAPTURE_FPS).ok).toBe(true);
+    expect(captureQualityNote(HIGH_SPEED_CAPTURE_FPS).ok).toBe(true);
     expect(captureQualityLine(240)).toBeNull();
   });
 });
@@ -54,7 +55,7 @@ describe('below the floor it says all three things', () => {
 
   it('and the concrete fix, naming the rates that would work', () => {
     expect(note.fix).toContain(String(MIN_TRACE_FPS));
-    expect(note.fix).toContain(String(PREFERRED_CAPTURE_FPS));
+    expect(note.fix).toContain(String(HIGH_SPEED_CAPTURE_FPS));
   });
 
   it('the spoken line leads with what works, not with the limitation', () => {

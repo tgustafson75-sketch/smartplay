@@ -16,6 +16,10 @@ import Anthropic from '@anthropic-ai/sdk';
  * point is that changing them tomorrow now changes the behaviour. [[two-owners-is-the-root-cause]]
  */
 import { ANALYSIS_PROMPT_PLAIN_MIN_HCP, ANALYSIS_PROMPT_TECHNICAL_MAX_HCP } from '../constants/handicapTiers';
+import {
+  anthropicFrameContent, enforcePhaseCoverage, geminiFrameParts, normalizePhasesVisible, openAIFrameContent,
+  type IncomingFrame, type Phase, type PhasesVisible,
+} from './_swingCoverage';
 
 const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
@@ -147,11 +151,24 @@ const SWING_ANALYSIS_SCHEMA = {
     follow_up_question: { type: ['string', 'null'] },
     strengths: { type: 'array', items: { type: 'string' } },
     contact_read: { type: 'string', enum: ['clean', 'fat', 'thin', 'topped', 'unknown'] },
+    // 2026-09-29 — which phases the model actually SAW; enforced in code (api/_swingCoverage).
+    phases_visible: {
+      type: 'object',
+      properties: {
+        address: { type: 'boolean' },
+        top: { type: 'boolean' },
+        impact: { type: 'boolean' },
+        finish: { type: 'boolean' },
+      },
+      required: ['address', 'top', 'impact', 'finish'],
+      additionalProperties: false,
+    },
   },
   required: [
     'detected_issue', 'severity', 'confidence', 'primary_fault',
     'valid_swing', 'fault_frame_index', 'observation', 'cause', 'fix',
     'drill', 'evidence', 'layman_explanation', 'strengths', 'contact_read',
+    'phases_visible',
   ],
   additionalProperties: false,
 } as const;
@@ -176,11 +193,22 @@ const SWING_ANALYSIS_GEMINI_SCHEMA = {
     follow_up_question: { type: Type.STRING, nullable: true },
     strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
     contact_read: { type: Type.STRING, enum: ['clean', 'fat', 'thin', 'topped', 'unknown'] },
+    phases_visible: {
+      type: Type.OBJECT,
+      properties: {
+        address: { type: Type.BOOLEAN },
+        top: { type: Type.BOOLEAN },
+        impact: { type: Type.BOOLEAN },
+        finish: { type: Type.BOOLEAN },
+      },
+      required: ['address', 'top', 'impact', 'finish'],
+    },
   },
   required: [
     'detected_issue', 'severity', 'confidence', 'primary_fault',
     'valid_swing', 'fault_frame_index', 'observation', 'cause', 'fix',
     'drill', 'evidence', 'layman_explanation', 'strengths', 'contact_read',
+    'phases_visible',
   ],
 };
 
@@ -252,6 +280,10 @@ type SwingAnalysisResponse = {
   // it so the verdict never celebrates a mishit as a good swing. Separate from the
   // biomech fault fields on purpose (contact quality ≠ a motion fault).
   contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
+  // 2026-09-29 — which swing phases the frames actually showed, as the model reported them, and the
+  // fault (if any) refused because its phase was not seen. See api/_swingCoverage.
+  phases_visible?: PhasesVisible | null;
+  phase_gate?: { refused: string; missing: Phase[] } | null;
 };
 
 // Phase BL/U1 — Tentative observation mode. Used by the upload pipeline
@@ -288,7 +320,7 @@ Rules:
 // stability, shoulder rock, tempo, and contact location are the
 // load-bearing reads instead. Returns the same JSON shape so the
 // downstream pipeline doesn't fork.
-const PUTT_SYSTEM_PROMPT = `You are a short-game analyst looking at 1-5 frames from a putt or chip recorded by the player. Full-swing fault language ("over the top", "early extension") does NOT apply here — putts and chips are pendulum motions with different load-bearing reads.
+const PUTT_SYSTEM_PROMPT = `You are a short-game analyst looking at a short sequence of frames from a putt or chip recorded by the player. Full-swing fault language ("over the top", "early extension") does NOT apply here — putts and chips are pendulum motions with different load-bearing reads.
 
 For PUTTS, focus on (in priority order):
 1. Head stability — eyes/head should stay still through impact. Movement = loss of strike point.
@@ -359,7 +391,7 @@ Output ONLY a JSON object using the SAME schema as full-swing analysis:
   "cause": "<one sentence: the overall setup read — what stands out about the base. Specific to THIS photo.>",
   "fix": "<the ONE setup adjustment, imperative and concrete, e.g. 'Nudge the ball a half-ball forward, just inside your lead heel.' If the setup is genuinely sound with nothing to change, return a KEEP cue: 'Nothing to change — take that exact setup to the first tee.'>",
   "drill": "<one quick setup rehearsal they can do right now, e.g. 'Set up to an alignment stick on the ground and check your ball is inside your lead heel.'>",
-  "evidence": "<'Frame 1: <the visible setup cue that earned the read>' — cite what you actually see.>",
+  "evidence": "<'Frame 0: <the visible setup cue that earned the read>' — cite what you actually see.>",
   "strengths": ["<0-3 short items naming each fundamental that looks SOUND and is VISIBLE — e.g. 'Neutral grip', 'Athletic stance width', 'Ball position centered', 'Good spine tilt'. Add the causal rule-out where it applies. Empty [] only if the photo is unreadable.>"]
 }
 
@@ -372,13 +404,13 @@ Rules:
 
 const SYSTEM_PROMPT = `You are a swing analyst looking at golf-swing frames captured during a Cage Session. The player wants honest swing-fault classification, not encouragement.
 
-You will see 1-5 frames from a single swing. Identify the most prominent tendency you can see and return it with appropriate confidence. Use the confidence scale to express uncertainty — a low-confidence tendency is more useful than 'none', because the player can confirm or rule it out.
+You will see a sequence of frames from a single swing — usually nine, evenly spaced across the swing window (up to twelve across a long upload). Identify the most prominent tendency you can see and return it with appropriate confidence. Use the confidence scale to express uncertainty — a low-confidence tendency is more useful than 'none', because the player can confirm or rule it out.
 
 TEMPORAL ANALYSIS — CRITICAL. Read this block carefully; previous outputs anchored on the first frame and missed the actual swing.
 
-- The frames you are given are sampled in CHRONOLOGICAL ORDER across ONE golf swing. Frame 1 (index 0) is the EARLIEST in time; the last frame is the LATEST. The intended sampling is roughly address → takeaway → top / transition → impact → follow-through, in that order.
-- You MUST analyze the swing as MOTION, not as a single still. Describe what CHANGES from frame to frame: where the club starts vs. where it ends, how the hips/shoulders/weight shift across the sequence, what happens at transition, what impact looks like, where the follow-through finishes. Your fault diagnosis MUST be supported by what changes across the later frames — not by the appearance of frame 1 alone.
-- Frame 1 is frequently the LEAST informative frame. It may show only the player at address with no swing motion yet, OR — in a POV / glasses-down recording or a botched camera angle — it may show the GROUND, the player's feet, the cart path, the tee box surface, or empty turf with no body visible. NEVER base your diagnosis on frame 1 alone. If frame 1 is uninformative (ground, feet, empty scenery, address-only with no other reads available from it), say so briefly in the observation and base your read on the frames that actually show the swing.
+- The frames you are given are sampled in CHRONOLOGICAL ORDER across ONE golf swing. Each image is preceded by its label, e.g. "Frame 0 — 1240 ms into the clip": the number is the frame's 0-based INDEX — the same index fault_frame_index uses — and the milliseconds are its real time in the clip, so you can see how far apart the frames are. Cite frames by that label in evidence ("Frame 4: ..."). Frame 0 is the EARLIEST in time; the last frame is the LATEST. The intended sampling is roughly address → takeaway → top / transition → impact → follow-through, in that order.
+- You MUST analyze the swing as MOTION, not as a single still. Describe what CHANGES from frame to frame: where the club starts vs. where it ends, how the hips/shoulders/weight shift across the sequence, what happens at transition, what impact looks like, where the follow-through finishes. Your fault diagnosis MUST be supported by what changes across the later frames — not by the appearance of frame 0 alone.
+- Frame 0 is frequently the LEAST informative frame. It may show only the player at address with no swing motion yet, OR — in a POV / glasses-down recording or a botched camera angle — it may show the GROUND, the player's feet, the cart path, the tee box surface, or empty turf with no body visible. NEVER base your diagnosis on frame 0 alone. If frame 0 is uninformative (ground, feet, empty scenery, address-only with no other reads available from it), say so briefly in the observation and base your read on the frames that actually show the swing.
 - When a fault is visible (over-the-top transition, early extension at impact, hip slide on the downswing, reverse pivot, etc.), name WHICH frame index(es) show the fault clearly. The fault_frame_index field below should point to the single most diagnostic frame; if the fault progresses across multiple frames, pick the one where it is most visually obvious so the player has a clean visual anchor.
 - FAULT_FRAME_INDEX MUST SHOW THE SWING. This index becomes the picture the player sees featured in their report, so it MUST point to a frame that clearly shows the player mid-swing (a real swing position — takeaway through follow-through, or a clean address). NEVER set fault_frame_index to an uninformative frame: the ground, the player's feet, the cart path / tee-box surface, empty turf/scenery, a walk-up, or a frame with no visible body. If NO single frame cleanly shows the player in a swing position, return fault_frame_index = -1 rather than featuring a garbage frame.
 - If only the address frame is informative because the later frames are blurry/cropped/unreadable, the correct response is LOW confidence with an observation that says so honestly — not a confident fault claim built from address alone.
@@ -477,6 +509,13 @@ For diagnostic primary_fault values (anything other than 'inconclusive'):
 
 When primary_fault is 'inconclusive': cause/fix/drill/evidence MUST be empty strings "". The honest read is "I'm not sure yet — record a clearer angle / another swing and I'll have more to say." That message goes in observation, NOT in fix/drill.
 
+PHASE COVERAGE — report which swing phases you actually SAW, in phases_visible:
+- address: the player set up over the ball, before the takeaway
+- top: the top of the backswing or the start of the transition
+- impact: the club at the ball, or within one frame of it
+- finish: the follow-through or finish position
+Set a phase true ONLY if at least one frame clearly shows it. Never infer a phase from the frames around it. A fault DEFINED at a phase you did not see cannot be named: over_the_top, casting and reverse_pivot need the top; early_extension and spine_angle_loss need impact; chicken_wing needs impact or the follow-through. When neither the top nor impact is visible, confidence must be low. These rules are enforced after you answer — a fault named without its phase is discarded.
+
 EXPLICIT ANTI-DEFAULT GUARDRAIL: early_extension is the most common fault in golf instruction content and tempting as a safe pick. Do NOT name it without explicit evidence of spine-angle loss OR hip thrust toward the ball in a SPECIFIC FRAME. If the only visible evidence is "swing looks like an amateur swing," return no_dominant_fault. The player gets more value from "no dominant fault, work on tempo" than from a fabricated early_extension call.
 
 Output ONLY a JSON object:
@@ -495,7 +534,8 @@ Output ONLY a JSON object:
   "fix": "<one concrete imperative swing cue. For no_dominant_fault: strongest area to work on next. Empty string '' only when primary_fault is 'inconclusive'.>",
   "drill": "<one specific actionable drill. For no_dominant_fault: maintenance/consistency drill or one targeting the named tendency. Empty string '' only when primary_fault is 'inconclusive'.>",
   "evidence": "<string in the format 'Frame N: <what is visible that earned the call>'. REQUIRED for every diagnostic primary_fault including no_dominant_fault. Empty string '' only when primary_fault is 'inconclusive'.>",
-  "strengths": ["<0-2 short strings naming what this player did WELL in THIS swing — see STRENGTHS rules. Empty array [] when nothing is genuinely observable, or when valid_swing is false.>"]
+  "strengths": ["<0-2 short strings naming what this player did WELL in THIS swing — see STRENGTHS rules. Empty array [] when nothing is genuinely observable, or when valid_swing is false.>"],
+  "phases_visible": { "address": true | false, "top": true | false, "impact": true | false, "finish": true | false }
 }
 
 STRENGTHS — what the player did WELL (2026-06-14, CRITICAL — the app's coaching balance).
@@ -529,7 +569,7 @@ EXAMPLES (use these as the bar — do NOT copy verbatim):
 
 Rules:
 - Default to NAMING what you see at low confidence rather than returning 'none'. The player can rule out a low-confidence read; they cannot act on silence.
-- 'none' is reserved for: unreadable frames OR a swing whose MOTION genuinely looks clean across all 5 frames (no recognizable tendency at all). CRITICAL: 'none' means the MOTION looks clean — it does NOT mean the shot was good. You are judging body/club motion; you usually CANNOT see the quality of ball contact (fat/thin) from these frames. Never write an observation, layman_explanation, or strength that claims the shot, strike, or contact was "good", "clean", "solid", or "pure" — you did not see the ball being struck. Praise only what is visible in the motion (posture, tempo, balance, sequence).
+- 'none' is reserved for: unreadable frames OR a swing whose MOTION genuinely looks clean across all the frames (no recognizable tendency at all). CRITICAL: 'none' means the MOTION looks clean — it does NOT mean the shot was good. You are judging body/club motion; you usually CANNOT see the quality of ball contact (fat/thin) from these frames. Never write an observation, layman_explanation, or strength that claims the shot, strike, or contact was "good", "clean", "solid", or "pure" — you did not see the ball being struck. Praise only what is visible in the motion (posture, tempo, balance, sequence).
 - contact_read: an HONEST strike read. Set it to 'unknown' by DEFAULT — from body-motion frames you almost never see contact. ONLY set 'fat' when there is clear visible evidence the club hit the ground behind the ball (a divot opening up before the ball, the clubhead visibly digging into the turf behind the ball, a steep decelerating chop into the ground); 'thin'/'topped' only when you can see the club catch the ball high / above center or the ball squirting low along the ground. If you cannot actually see the strike, it is 'unknown' — do NOT infer 'clean' from clean-looking motion. 'clean' requires seeing a centered, ball-first strike, which is rare from these angles. When in any doubt: 'unknown'.
 - The observation field is the single sentence the user will hear ("Your hips are moving toward the ball through impact"). Specific, factual, no jargon.
 - fault_frame_index: when detected_issue is anything other than 'none', return the integer index of the frame that most clearly shows the tendency. When detected_issue is 'none', return -1.
@@ -573,10 +613,16 @@ interface AttemptResult {
  * function so the response shape is identical regardless of which
  * model produced it.
  */
-function normalizeAnalysis(
+export function normalizeAnalysis(
   rawText: string,
   framesLength: number,
   mode: 'analysis' | 'tentative',
+  /**
+   * 2026-09-29 — phase coverage applies to FULL-SWING fault reads only. A setup check is one address
+   * frame by design, and a putt or chip has no "top" to see; enforcing there would cap every one of
+   * them at low confidence for missing a phase they were never meant to show.
+   */
+  coverage: { enforce: boolean; language: string } = { enforce: false, language: 'en' },
 ): SwingAnalysisResponse | null {
   if (!rawText) return null;
   let parsed: SwingAnalysisResponse;
@@ -723,6 +769,14 @@ function normalizeAnalysis(
     parsed.detected_issue = 'none';
     parsed.severity = 'none';
     parsed.layman_explanation = '';
+  }
+  // 2026-09-29 — PHASE COVERAGE, last, so it judges the read every other gate has already settled.
+  if (coverage.enforce && mode === 'analysis') {
+    parsed.phases_visible = normalizePhasesVisible(parsed.phases_visible);
+    enforcePhaseCoverage(parsed, coverage.language);
+  } else {
+    parsed.phases_visible = null;
+    parsed.phase_gate = null;
   }
   return parsed;
 }
@@ -1071,17 +1125,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(502).json({ swings: [], error: e instanceof Error ? e.message : 'locate failed' });
       }
     }
-    const frames = (body.frames ?? []) as { b64: string; media_type?: string }[];
+    const frames = (body.frames ?? []) as IncomingFrame[];
     if (!Array.isArray(frames) || frames.length === 0) {
       return res.status(400).json({ error: 'frames[] (1-12 base64 images) required' });
     }
     // 2026-06-09 — cap raised 5 → 12. An untrimmed phone UPLOAD (no acoustics
     // to auto-find the swing) needs enough well-spread frames that the actual
     // swing is captured somewhere in the set; the TEMPORAL ANALYSIS block above
-    // then picks out the swing frames and ignores setup/practice/walk-up. Live
-    // SmartMotion clips stay at 3-5 (they're already windowed on the strike),
-    // so this only widens the unbounded-upload path. Quick-tier 640px frames
-    // keep total payload well under the 9MB guard even at 12.
+    // then picks out the swing frames and ignores setup/practice/walk-up.
+    // 2026-09-29 — windowed reads now send 9 (services/swing/analysisFrames); 12 remains the ceiling
+    // for the unbounded long-upload spread. Nine frames at a 768px long edge are ~0.5MB of base64 —
+    // far inside both the 9MB guard below and Vercel's 4.5MB request-body limit, so neither changes.
     if (frames.length > 12) {
       return res.status(400).json({ error: 'maximum 12 frames per swing' });
     }
@@ -1339,14 +1393,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `Look at the ${frames.length} frame${frames.length === 1 ? '' : 's'} from this swing. Classify the primary fault, return JSON.`;
 
     // Telemetry: frame + text counts (still useful for pipeline diagnostics).
+    // 2026-09-29 — one label per frame plus the prompt text.
     const imageBlocks = frames.length;
-    const textBlocks = 1;
+    const textBlocks = 1 + frames.length;
     console.log('[swing-analysis] image blocks ->',
       imageBlocks,
       '· text blocks ->',
       textBlocks,
       '· mode ->', mode,
       '· short_game ->', isShortGame);
+
+    const coverage = { enforce: mode === 'analysis' && !isSetup && !isShortGame, language };
 
     const systemPrompt = mode === 'tentative'
       ? TENTATIVE_PROMPT
@@ -1370,7 +1427,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const geminiContent = [
           { text: systemPrompt + '\n\n' + userText },
-          ...frames.map(f => ({ inlineData: { mimeType: f.media_type ?? 'image/jpeg', data: f.b64 } })),
+          // 2026-09-29 — every image preceded by "Frame i — N ms into the clip" (api/_swingCoverage).
+          ...geminiFrameParts(frames),
         ];
         // 13s server-side cap: a cold Lambda + complex scene (real driving range,
         // busy background) can push Gemini to 15-25s. Without this the server
@@ -1383,7 +1441,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           config: { temperature: 0.2, maxOutputTokens: 800, responseMimeType: 'application/json', responseSchema: SWING_ANALYSIS_GEMINI_SCHEMA },
         }), 13_000);
         const rawText = (gem.text ?? '').trim();
-        const parsed = normalizeAnalysis(rawText, frames.length, mode);
+        const parsed = normalizeAnalysis(rawText, frames.length, mode, coverage);
         return {
           provider: 'gemini',
           parsed,
@@ -1402,10 +1460,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return { provider: 'openai', parsed: null, rawText: '', error: 'OPENAI_API_KEY not configured', elapsedMs: 0 };
       }
       try {
-        const imageContent = frames.map(f => ({
-          type: 'image_url' as const,
-          image_url: { url: `data:${f.media_type ?? 'image/jpeg'};base64,${f.b64}`, detail: 'high' as const },
-        }));
+        const imageContent = openAIFrameContent(frames);
         const oai = await openaiClient.chat.completions.create({
           model: 'gpt-4o',
           max_tokens: 1000,
@@ -1428,7 +1483,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ],
         });
         const rawText = (oai.choices[0]?.message?.content ?? '').trim();
-        const parsed = normalizeAnalysis(rawText, frames.length, mode);
+        const parsed = normalizeAnalysis(rawText, frames.length, mode, coverage);
         return {
           provider: 'openai',
           parsed,
@@ -1454,15 +1509,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return { provider: 'anthropic', parsed: null, rawText: '', error: 'ANTHROPIC_API_KEY not configured', elapsedMs: 0 };
       }
       try {
-        const imageContent = frames.map(f => ({
-          type: 'image' as const,
-          source: {
-            type: 'base64' as const,
-            // jpeg/png are the real cases; cast to the SDK's media_type union.
-            media_type: (f.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-            data: f.b64,
-          },
-        }));
+        const imageContent = anthropicFrameContent(frames);
         const msg = await anthropicClient.messages.create({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 1000,
@@ -1482,7 +1529,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .map(b => b.text)
           .join('')
           .trim();
-        const parsed = normalizeAnalysis(rawText, frames.length, mode);
+        const parsed = normalizeAnalysis(rawText, frames.length, mode, coverage);
         return {
           provider: 'anthropic',
           parsed,

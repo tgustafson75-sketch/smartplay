@@ -22,7 +22,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCaptureEngineStore } from '../store/captureEngineStore';
-import { PREFERRED_CAPTURE_FPS } from '../services/capture/captureFlags';
+import { HIGH_SPEED_CAPTURE_FPS, TARGET_CAPTURE_FPS } from '../services/capture/captureFlags';
 import {
   getAllNativeModuleHealth,
   recordNativeModuleHealth,
@@ -90,7 +90,7 @@ export default function NativeModulesDebug() {
           </View>
           <Text style={[styles.cardMeta, { color: colors.text_muted }]}>
             {useVisionCamera
-              ? `Vision-camera (SmartTrace, up to ${PREFERRED_CAPTURE_FPS}fps) · video-only, acoustic mic untouched`
+              ? `Vision-camera (SmartTrace, ${TARGET_CAPTURE_FPS}fps · ${HIGH_SPEED_CAPTURE_FPS} opt-in) · video-only, acoustic mic untouched`
               : 'Expo-camera (default, ~30fps) · the proven path'}
           </Text>
           <Text style={[styles.cardReason, { color: colors.text_secondary }]}>

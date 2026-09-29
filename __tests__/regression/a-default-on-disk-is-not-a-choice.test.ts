@@ -18,7 +18,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_USE_VISION_CAMERA, MIN_TRACE_FPS, PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
+import { DEFAULT_USE_VISION_CAMERA, HIGH_SPEED_CAPTURE_FPS, MIN_TRACE_FPS, TARGET_CAPTURE_FPS } from '../../services/capture/captureFlags';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
 
 const ROOT = path.join(__dirname, '../..');
@@ -49,7 +49,9 @@ describe('the engine default is actually on', () => {
 
   it('and the fps floor it makes meaningful is unchanged', () => {
     expect(MIN_TRACE_FPS).toBe(60);
-    expect(PREFERRED_CAPTURE_FPS).toBeGreaterThanOrEqual(MIN_TRACE_FPS);
+    // 2026-09-29 — the default target meets the floor; 120 is the opt-in above it.
+    expect(TARGET_CAPTURE_FPS).toBeGreaterThanOrEqual(MIN_TRACE_FPS);
+    expect(HIGH_SPEED_CAPTURE_FPS).toBeGreaterThan(TARGET_CAPTURE_FPS);
   });
 });
 

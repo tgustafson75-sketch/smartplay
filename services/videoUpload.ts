@@ -1350,6 +1350,10 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
                 endMs: pw.endMs,
                 shouldAbort: () => false,
                 bodyBounds: bodyBoundsFromPose(biomech?.frames ?? null),
+                // 2026-09-29 — the clip's own capture rate (null for an upload = unknown, the 30fps floor).
+                sourceFps: (await import('./capture/clipFps')).sessionCapturedFps(
+                  useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId) ?? null,
+                ),
               });
               if (arc && arc.points.length >= 3) {
                 // rebase window-relative tMs → absolute clip ms (parity with the view overlay)

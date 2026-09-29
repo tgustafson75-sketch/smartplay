@@ -1009,7 +1009,26 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     capture_quality: safe(() => {
       const { captureQualityLine } = require('./captureQuality') as typeof import('./captureQuality');
       const { useCaptureEngineStore } = require('../store/captureEngineStore') as typeof import('../store/captureEngineStore');
-      return captureQualityLine(useCaptureEngineStore.getState().capturedFps);
+      const { fpsInScope } = require('./capture/clipFps') as typeof import('./capture/clipFps');
+      /**
+       * 2026-09-29 — the CLIP under review when there is one. capturedFps is the live camera: null
+       * once it unmounts and about the next recording, so a player asking about the 30fps swing on
+       * screen got nothing, and one reviewing an upload was judged by the camera instead.
+       */
+      const st = useCaptureEngineStore.getState();
+      return captureQualityLine(fpsInScope(st.reviewingClip, st.capturedFps));
+    }, null),
+    /**
+     * 2026-09-29 — what the swing read ON SCREEN was built on: where in the clip its nine frames came
+     * from, which phases the model actually saw, the confidence and why, and the clip's captured frame
+     * rate. The review shows all of it; without this the caddie could only guess at "did it see my
+     * whole swing?". Null when no analysed clip is under review.
+     */
+    swing_read: safe(() => {
+      const { swingReadForCaddie } = require('./swing/analysisFrames') as typeof import('./swing/analysisFrames');
+      const { useCaptureEngineStore } = require('../store/captureEngineStore') as typeof import('../store/captureEngineStore');
+      const clip = useCaptureEngineStore.getState().reviewingClip;
+      return clip ? swingReadForCaddie(clip.read, clip.fps) : null;
     }, null),
     /**
      * 2026-09-12 — how his balls actually compare on the card.

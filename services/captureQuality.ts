@@ -17,7 +17,7 @@
  * DELIBERATELY NOT A NAG. One note, stated once, tied to a real measured shortfall — never a banner,
  * never on a capture that was fine. [[no-push-nagging-no-ads]]
  */
-import { MIN_TRACE_FPS, PREFERRED_CAPTURE_FPS } from './capture/captureFlags';
+import { HIGH_SPEED_CAPTURE_FPS, MIN_TRACE_FPS, TARGET_CAPTURE_FPS } from './capture/captureFlags';
 
 export interface CaptureQualityNote {
   /** True when the capture supports everything we offer to read from it. */
@@ -47,7 +47,12 @@ export function captureQualityNote(capturedFps: number | null | undefined): Capt
     ok: false,
     can: 'I can still read your tempo, your positions and the contact from this',
     missing: `at ${Math.round(capturedFps)} frames a second I can't honestly draw the ball's start direction — the club moves several feet between frames, so I'd be guessing at the line`,
-    fix: `if your camera can record at ${MIN_TRACE_FPS} or ${PREFERRED_CAPTURE_FPS} frames a second, switch it over and I can show you where the ball actually started`,
+    /**
+     * 2026-09-29 — this only fires on a MEASURED rate, and in-app that rate is already the best the
+     * swing camera could get (it asks for 60 itself). So "switch it over" had nothing to switch here;
+     * the lever the player actually has is their phone's own camera app, for clips they upload.
+     */
+    fix: `if your phone's camera app can record at ${TARGET_CAPTURE_FPS} frames a second — or ${HIGH_SPEED_CAPTURE_FPS} — film the swing there and upload it, and I can show you where the ball actually started`,
   };
 }
 
@@ -77,7 +82,7 @@ export function clubheadUnreadableNote(): CaptureQualityNote {
     ok: false,
     can: 'I can read your tempo, your positions and the contact from this',
     missing: "I couldn't pick the clubhead out clearly enough to draw your swing path — it blurs through the downswing",
-    fix: `more light on the club, or record from a step further back — and if your camera can do ${PREFERRED_CAPTURE_FPS} frames a second, that is what makes the path readable`,
+    fix: `more light on the club, or record from a step further back — and if your phone offers ${HIGH_SPEED_CAPTURE_FPS} frames a second, turn it on in setup tools (or in your camera app for clips you upload), because that is what makes the path readable`,
   };
 }
 
@@ -94,8 +99,15 @@ export function clubheadUnreadableNote(): CaptureQualityNote {
  * measured it is a guess dressed as a finding". So it says what unlocks the path; it does not say
  * their camera is slow. A device already on 60 loses nothing by hearing it once.
  */
+/**
+ * 2026-09-29 — LEADS WITH 60, MENTIONS 120 AS OPTIONAL, AND SAYS WHERE EACH SETTING LIVES. The old tip
+ * told everyone to switch their camera to 120 — but SmartMotion's own camera picks its rate itself
+ * (60 by default), so "turn that on" pointed at nothing in-app. The phone's camera-app setting only
+ * matters for clips filmed there and uploaded; the in-app 120 is a switch in setup tools, offered only
+ * on phones that can do it.
+ */
 export function beforeFirstCaptureTip(): string {
-  return `One thing before you swing: if your camera can record at ${PREFERRED_CAPTURE_FPS} frames a second, turn that on. It is what lets me draw the path your clubhead actually took — at ${MIN_TRACE_FPS} the head moves too far between frames to read honestly.`;
+  return `One thing before you swing: I record at ${TARGET_CAPTURE_FPS} frames a second wherever your phone allows it — that is what lets me draw the path your clubhead actually took. And if your camera can record at ${HIGH_SPEED_CAPTURE_FPS}, a switch for it shows up in setup tools. For clips you film in your phone's own camera app and upload, set that app to ${TARGET_CAPTURE_FPS} — or ${HIGH_SPEED_CAPTURE_FPS} if it offers it.`;
 }
 
 /**

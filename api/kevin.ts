@@ -369,6 +369,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ball_performance = null,
       club_variant_insight = null,
       capture_quality = null,
+      swing_read = null,
       physicalLimitation = null,
       goal = null,
       personalBest = null,
@@ -1181,6 +1182,10 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
        */
       if (typeof capture_quality === 'string' && capture_quality.trim()) {
         lines.push(`- What this phone's capture could NOT give you on the last swing, in your own words: ${capture_quality.trim()} Use it if they ask why a reading is absent, or when it explains a gap you are about to leave. Do not lead with it and do not bring it up twice.`);
+      }
+      // 2026-09-29 — what the swing read on their screen was built on. Message side: it changes per swing.
+      if (typeof swing_read === 'string' && swing_read.trim()) {
+        lines.push(`- The swing read on their screen was built from: ${swing_read.trim().slice(0, 400)} Use it when they ask whether it saw their whole swing or why the confidence is what it is; do not recite it unprompted.`);
       }
       if (typeof club_variant_insight === 'string' && club_variant_insight.trim()) {
         lines.push(`- If they ask which of their clubs is working — they own more than one of the same club — this is the answer from their own shots: ${club_variant_insight.trim()} Only say it if asked. Straighter beats longer, and the line already reflects that.`);

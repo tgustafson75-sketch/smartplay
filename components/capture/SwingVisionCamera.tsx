@@ -17,15 +17,14 @@
  * path stays the default until this is proven on-device.
  */
 
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import {
   Camera,
   useCameraDevice,
-  useCameraFormat,
   type VideoFile,
 } from 'react-native-vision-camera';
-import { PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
+import { selectCaptureFormat } from '../../services/capture/captureFormat';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
 import { createRecordingGate, type RecordingGate } from '../../services/capture/recordingGate';
 
@@ -64,15 +63,19 @@ export const SwingVisionCamera = forwardRef<SwingCameraHandle, Props>(function S
   ref,
 ) {
   const device = useCameraDevice(facing);
-  // Prioritize frame rate (SmartTrace's launch window) over resolution, then take
-  // the highest resolution available at that rate. vision-camera resolves to the
-  // closest format the device actually supports — degrades gracefully on phones
-  // that top out below PREFERRED_CAPTURE_FPS.
-  const format = useCameraFormat(device, [
-    { fps: PREFERRED_CAPTURE_FPS },
-    { videoResolution: 'max' },
-  ]);
-  const fps = format ? Math.min(PREFERRED_CAPTURE_FPS, format.maxFps) : undefined;
+  /**
+   * 2026-09-29 — 60fps at up to 1080p by default; 120 only when the player opted in AND this device
+   * has a ≤1080p format that reaches it; otherwise the best rate it has (the low-fps notice then
+   * explains). The choice is the pure services/capture/captureFormat.selectCaptureFormat, tested for
+   * every device shape including "no formats at all" — this component cannot be mounted in a test.
+   */
+  const highSpeedOptIn = useCaptureEngineStore((s) => s.highSpeedOptIn);
+  const choice = useMemo(
+    () => selectCaptureFormat(device?.formats ?? [], { highSpeedOptIn }),
+    [device, highSpeedOptIn],
+  );
+  const format = choice.format ?? undefined;
+  const fps = choice.fps ?? undefined;
   /**
    * 2026-08-26 — publish what we ACTUALLY got. useCameraFormat degrades to the device's best, so
    * asking for 120 and receiving 30 produced a capture indistinguishable from a high-speed one
@@ -83,6 +86,11 @@ export const SwingVisionCamera = forwardRef<SwingCameraHandle, Props>(function S
     useCaptureEngineStore.getState().setCapturedFps(fps ?? null);
     return () => { useCaptureEngineStore.getState().setCapturedFps(null); };
   }, [fps]);
+  /** Whether the 120 opt-in can do anything on this device — the toggle is only offered when it can. */
+  useEffect(() => {
+    useCaptureEngineStore.getState().setHighSpeedAvailable(choice.highSpeedAvailable);
+    return () => { useCaptureEngineStore.getState().setHighSpeedAvailable(false); };
+  }, [choice.highSpeedAvailable]);
 
   const camRef = useRef<Camera>(null);
   // Holds the resolver for the in-flight recordAsync promise; resolved when

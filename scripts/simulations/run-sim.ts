@@ -1678,7 +1678,9 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
     // 2026-06-13 — ball box now lives as a labeled row in the collapsible setup
     // tools CARD (single tools icon → card), not the old right-edge rail button.
-    /title=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
+    // 2026-09-29 — renamed "Ball position": the region is found automatically and this row is the
+    // optional adjust affordance, not a setup step.
+    /title=\{placeBallMode \? 'Tap your ball' : 'Ball position'\}/.test(smSrc) &&
     // 2026-06-14 — departure effect is now per-swing (cached by index, recomputed off
     // the SELECTED swing's strike); deps dropped `ballDeparture` (the old run-once guard).
     // 2026-08-12 — and dropped `showSkeleton`: the pose-skeleton toggle must not decide whether
@@ -1691,7 +1693,10 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
     /const videoLocated = \(seg\?\.peakDb \?\? 0\) === 0;/.test(smSrc) &&
     // 2026-07-04 (drift reconcile) — acceptance deliberately LOOSENED from
     // confidence==='high' to !== 'low' (high-only threw away good medium reads).
-    /videoLocated[\s\S]{0,200}r\.departed && r\.confidence !== 'low' && r\.ball_present_before/.test(smSrc),
+    // 2026-09-29 — the acceptance moved, unchanged, into services/swing/ballRegion.acceptBallDeparture
+    // (which also discounts an unmeasured default ball region); assert the rule there and the wiring here.
+    /acceptBallDeparture\(r, \{ videoLocated, regionSource: ballAreaSourceRef\.current \}\)/.test(smSrc) &&
+    /if \(opts\.videoLocated\) return r\.departed && r\.confidence !== 'low' && r\.ball_present_before \? r : null;/.test(read('services/swing/ballRegion.ts')),
   'default reference box + verifier runs under Motion (fast default), per-swing; video-located swings degrade to a not-low-confidence trace instead of going dark');
 
 // ─── White-screen guard: geometry-driven top-down maps must reject a NON-FINITE hole
@@ -3076,17 +3081,29 @@ check('Analysis speed: pre-warm the lambda on record entry (kills cold-start)',
 // per-frame base64 ~36% so the UPLOAD leg lands faster on weak cellular, without losing
 // the gross-fault read accuracy (golfer fills the frame; face-angle is parked). Full-tier
 // (library/upload detail) stays 800px untouched. Guard against a regression back to 1024+.
-check('Analysis speed: quick-tier payload is lean (3 frames @ 512px) without touching full-tier',
+//
+// 2026-09-29 — SUPERSEDED DELIBERATELY, not deleted. Three frames at fixed 10/55/85% left the top and
+// impact to chance, and `{ width: 512 }` on a portrait clip was really a 512x910 frame. Every tier now
+// sends NINE evenly spaced frames (services/swing/analysisFrames) sized by the LONG edge: 768px at a
+// modest JPEG quality for the quick tier, 800px for full — measured on a 1080x1920 clip at ~2x the old
+// three-frame upload. This guard now pins that shape AND still refuses a regression to 1024px+ frames,
+// a fixed three-slot layout, or width-only resizing.
+check('Analysis payload: nine evenly spaced frames at a 768px long edge (quick) / 800px (full), no 1024px+ frames',
   (() => {
-    const p = read('services/poseDetection.ts');
+    const p = readCode('services/poseDetection.ts');
+    const f = readCode('services/swing/analysisFrames.ts');
     return (
-      /const QUICK_TIER_FRAME_TIME_FRACTIONS = \[0\.10, 0\.55, 0\.85\]/.test(p) &&  // 3 frames
-      /const QUICK_TIER_RESIZE_WIDTH = 512/.test(p) &&                            // shrunk 640→512
-      /const FULL_TIER_RESIZE_WIDTH = 800/.test(p) &&                             // full-tier untouched
-      !/RESIZE_WIDTH = (?:1024|1280)/.test(p)                                     // no regression to huge frames
+      /export const SWING_ANALYSIS_FRAME_COUNT = 9;/.test(f) &&
+      /const QUICK_TIER_LONG_EDGE = 768;/.test(p) &&
+      /const FULL_TIER_LONG_EDGE = 800;/.test(p) &&
+      /resize: longEdgeResize\(thumbDims\.width, thumbDims\.height, longEdge\)/.test(p) &&
+      /samples = analysisSampleTimes\(windowStartMs, windowDurationMs, clipDurForInset, SWING_ANALYSIS_FRAME_COUNT\)/.test(p) &&
+      !/QUICK_TIER_FRAME_TIME_FRACTIONS/.test(p) &&
+      !/resize: \{ width: resizeWidth \}/.test(p) &&
+      !/(?:LONG_EDGE|RESIZE_WIDTH) = (?:1024|1280)/.test(p)
     );
   })(),
-  'the speed-path (SmartMotion / Cage / library Quick) sends 3 frames at 512px — a ~36% lighter upload than 640 — while full-tier library reads keep 800px for detail; no regression to 1024px+ payloads');
+  'every swing read sends nine evenly spaced frames across the swing window, sized by the long edge (768px quick / 800px full) — the top and impact are sampled, not guessed at; no regression to 1024px+ payloads');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
@@ -5733,10 +5750,13 @@ check('SmartTrace capture seam — vision-camera is the default, with real fallb
       /chosenByUser/.test(store) &&                                   // a default on disk is not a choice
       /version: 2,/.test(store) &&                                    // ...and the migration that adopts it
       /onUnavailable/.test(cam) &&                                    // no-device → hand control back
-      /PREFERRED_CAPTURE_FPS = \d+/.test(flags) &&                    // a real high-fps target
+      // 2026-09-29 — 60 is the target, 120 the opt-in; the format is chosen by the pure, tested selector.
+      /export const TARGET_CAPTURE_FPS = 60;/.test(flags) &&
+      /export const HIGH_SPEED_CAPTURE_FPS = 120;/.test(flags) &&
       /audio=\{false\}/.test(cam) &&                                 // off the mic — protects the acoustic anchor
       /recordAsync\(/.test(cam) && /stopRecording\(\)/.test(cam) &&  // mimics CameraView's ref API (drop-in)
-      /useCameraFormat/.test(cam)                                    // picks the device's high-fps format
+      /selectCaptureFormat\(device\?\.formats \?\? \[\], \{ highSpeedOptIn \}\)/.test(cam) && // 60 / opt-in 120, ≤1080p
+      /highSpeedOptIn: s\.highSpeedOptIn/.test(store)                 // the opt-in is persisted
     );
   })(),
   'the vision-camera capture path is the DEFAULT, records video-only to keep the acoustic mic clean, mirrors CameraView as a drop-in, falls back when there is no device, and only adopts the default for players who never chose otherwise');
@@ -6410,9 +6430,15 @@ check('Acoustic card always tappable to (re)calibrate',
   /Re-calibrate acoustics, 10 strikes/.test(smSrc),
   'tapping the pill opens calibration whether or not already calibrated');
 
-check('Ball box shown by default + confirmatory (never gates)',
-  /DEFAULT_BALL_BOX = \{/.test(smSrc) && /toolRail/.test(smSrc),
-  'default reference box, optional, never blocks recording/analysis');
+// 2026-09-29 (Tim — "hide and make user not have to move ball box") — was 'Ball box shown by default'.
+// The premise flipped deliberately: the region is still DERIVED by default (default rig → feet proxy →
+// detected ball, services/swing/ballRegion) and still never gates, but it is no longer ON SCREEN in the
+// full-swing flow until the player asks. Asserting the old premise would now block the fix.
+check('Ball box derived by default, hidden until asked for, confirmatory (never gates)',
+  /DEFAULT_BALL_BOX = \{/.test(smSrc) && /toolRail/.test(smSrc) &&
+    /const \[ballBoxShown, setBallBoxShown\] = useState\(false\);/.test(smSrc) &&
+    /phase === 'setup' && draftBall && \(isPutt \|\| ballBoxShown \|\| placeBallMode\) \?/.test(smSrc),
+  'the ball region is found automatically and fed to every consumer; the box is off screen in the default full-swing flow, optional to adjust, and never blocks recording/analysis');
 
 check('Hands-free voice record (start/stop) wired',
   exists('services/smartMotionRecordBus.ts') &&
@@ -6586,7 +6612,10 @@ check('Swing localizer: locate_swing API mode + client locator wired into analyz
     /export async function locateSwingWindow/.test(poseSrc) &&
     // 2026-09-01 — analyzeSwing now tries the ON-DEVICE locate first and falls back to this one, so
     // the assertion is that the network locate is still WIRED as the fallback, not that it is first.
-    /if \(!located\) located = await locateSwingWindow/.test(poseSrc) &&
+    // 2026-09-29 — the network locate is gated on the locate PLAN: clips of 2.5-6s are located on
+    // the device only (they used to skip locating entirely); ≥6s still fall back to the network.
+    /const locatePlan = locatePlanFor\(probedDurMs\)/.test(poseSrc) &&
+    /if \(!located && locatePlan === 'full'\) located = await locateSwingWindow/.test(poseSrc) &&
     /locateSwingWindowOnDevice\(clipUri, probedDurMs\)/.test(poseSrc) &&
     /effectiveBoundaries = located/.test(poseSrc),
   'unbounded long uploads run an AI locate pass (find the swing) then analyze a tight window around it — no acoustics, no manual marking');
@@ -9006,7 +9035,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /export function EditableCageTargets/.test(targetingSrc) &&
       /PanResponder\.create/.test(targetingSrc) &&
       /onChangeBallArea\(b\)/.test(targetingSrc) &&            // commit on release, not per-frame
-      /phase === 'setup' && draftBall \? \(/.test(smSrc2) &&    // draggable in setup
+      // 2026-09-29 — still draggable in setup, but only once revealed (hidden by default; see ballRegion).
+      /phase === 'setup' && draftBall && \(isPutt \|\| ballBoxShown \|\| placeBallMode\) \? \(/.test(smSrc2) &&
       /<EditableCageTargets/.test(smSrc2) &&
       /onChangeBallArea=\{\(a\) => \{ if \(sessionId\) setSessionBallArea\(sessionId, a\); \}\}/.test(smSrc2), // review commits to session
     'EditableCageTargets drags each marker with a PanResponder, smooth via local state, committing to the session only on release; wired draggable in setup (draftBall) and review (session) — so a box the Samsung record-crop nudged off can be fixed on the real recorded frame and stick');
@@ -13146,7 +13176,8 @@ check('LOCK: the smarter ball box can only ever improve on the feet proxy, never
     const api = read('api/ball-departure.ts');
     // The proxy is applied FIRST and unconditionally; the real locate is fire-and-forget on top.
     const proxyFirst = (() => {
-      const iProxy = sm.indexOf("setDraftBall({ x: res.feetCenter.x");
+      // 2026-09-29 — the proxy now lands through the ballRegion precedence (a detection outranks it).
+      const iProxy = sm.indexOf('applyBallRegion(ballRegionFromFeet(res.feetCenter))');
       const iLocate = sm.indexOf('locateBallInSetupFrame');
       return iProxy > -1 && iLocate > iProxy;
     })();

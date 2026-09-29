@@ -2,12 +2,12 @@ import { getApiBaseUrl } from './apiBase';
 import { mergeSwingDetections } from './swing/swingSegmentation';
 
 /**
- * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each
- * frame is extracted at a normalized time fraction (5%, 30%, 55%, 80%, 95%
- * of the clip — covers address through follow-through), resized + JPEG-
- * compressed via expo-image-manipulator, and returned as base64 ready for
- * the vision endpoint. Each frame carries its own `time_sec` so consumers
- * can anchor detected-issue timestamps for Phase R temporal alignment.
+ * Sample key frames from a swing clip via expo-video-thumbnails — nine evenly
+ * spaced across the swing window (services/swing/analysisFrames), resized by
+ * the long edge + JPEG-compressed via expo-image-manipulator, and returned as
+ * base64 ready for the vision endpoint. Each frame carries its own `time_sec`
+ * (sent as `t_ms`, and printed beside the image server-side) so consumers can
+ * anchor detected-issue timestamps for Phase R temporal alignment.
  *
  * Duration is probed via expo-av before sampling. If the probe fails or
  * returns nothing usable, falls back to a 2-second window (typical cage
@@ -17,6 +17,10 @@ import { mergeSwingDetections } from './swing/swingSegmentation';
 import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
 import { acquireExistingClipCopy, isPooledCopy } from './swing/sharedClipCopy';
 import * as ImageManipulator from 'expo-image-manipulator';
+import {
+  analysisSampleTimes, longEdgeResize, locatePlanFor, sampleCoverage, SWING_ANALYSIS_FRAME_COUNT,
+  NETWORK_LOCATE_MIN_CLIP_MS,
+} from './swing/analysisFrames';
 import { Audio } from 'expo-av';
 import { probeSoundOptions } from './audioPlaybackOptions';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
@@ -116,6 +120,20 @@ export type SwingAnalysis = {
   // camera ball-departure check + the player's feel note) so a chunk is never shown
   // as a good swing. Absent on legacy server deploys → treated as 'unknown'.
   contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
+  /**
+   * 2026-09-29 — which swing phases the model actually SAW in the frames it was sent. Null when the
+   * server did not report it (older deploy, or a non-swing read such as a setup check). The server
+   * enforces it before this arrives: no top AND no impact caps confidence at 'low', and a fault whose
+   * phase was not seen is refused as inconclusive (see phase_gate).
+   */
+  phases_visible?: { address: boolean; top: boolean; impact: boolean; finish: boolean } | null;
+  /** Set when the server refused a named fault because its phase was not in frame. */
+  phase_gate?: { refused: string; missing: string[] } | null;
+  /**
+   * CLIENT-STAMPED by analyzeSwing, never sent by the server: the span of the clip the frames came
+   * from. Rides on the analysis so every cache of it (the per-swing reel included) carries its own.
+   */
+  sample_coverage?: import('./swing/analysisFrames').SampleCoverage | null;
   // 2026-05-24 — Owner-tool telemetry. The server echoes the REAL
   // counts of image + text content blocks it sent to Sonnet so the
   // in-app swing-analysis debug screen can prove the whole pipe
@@ -162,7 +180,7 @@ export type SwingAnalysisResult =
       // path may still succeed independently.
       fault_frame_display_uri?: string | null;
       // 2026-05-24 — Source-clip fraction the fault frame was sampled
-      // at (e.g. 0.40 = early-downswing slot in FRAME_TIME_FRACTIONS).
+      // at (0 = start of the sampled window, 1 = its end).
       // Lets annotation tooling map back to a scrub position on the
       // video timeline.
       fault_frame_fraction?: number | null;
@@ -247,22 +265,16 @@ function logAnalysisTiming(t: AnalysisTiming): void {
   } catch { /* telemetry is never allowed to break an analysis */ }
 }
 
-// Phase AF — re-targeted toward impact zone. Prior fractions
-// [0.05, 0.30, 0.55, 0.80, 0.95] sampled too sparsely around impact (the
-// most diagnostic moment for face/path/attack-angle reads) and the 0.80
-// frame frequently landed past impact on faster swings, leaving the
-// classifier no impact frame to read. New layout: address, mid-backswing,
-// transition, impact, follow-through — three frames clustered around the
-// 60-78% downswing-to-impact window where face angle and contact point
-// are visible.
-const FRAME_TIME_FRACTIONS = [0.08, 0.40, 0.60, 0.75, 0.88];
+// 2026-09-29 — FRAME_TIME_FRACTIONS (the full tier's five impact-clustered slots) is gone, replaced
+// by services/swing/analysisFrames: nine evenly spaced frames for EVERY tier. A fixed layout guesses
+// where impact falls inside the window; an even nine-frame spread does not have to guess.
 const FALLBACK_DURATION_MS = 2000;
 
 // 2026-06-14 (audit #3 — honesty) — `fraction` is the REAL position this frame was
 // sampled at within the swing window (0 = window start, 1 = window end). Carried so
 // the fault-frame fraction reported to the user reflects the actual sampling array
-// used (quick 3-frame / full 5-frame / long-clip even spread) instead of blindly
-// indexing the full-tier FRAME_TIME_FRACTIONS array.
+// used (the nine-frame window spread, or the long-clip even spread) instead of blindly
+// indexing a fixed fraction array.
 export type Frame = { b64: string; media_type: string; time_sec: number; fraction?: number };
 
 // 2026-05-28 — Fix FO: exported so poseAnalysisApi.ts can reuse the
@@ -442,29 +454,26 @@ async function probeDurationOn(clipUri: string): Promise<number> {
 /**
  * Phase BW — accept optional clip boundaries to sample frames from a
  * sub-window of a multi-swing master video. When boundaries are
- * provided, fractions apply WITHIN [startSec, endSec] instead of the
- * whole video. Without boundaries, behavior is unchanged: probe full
- * duration and sample at fixed fractions of the clip.
+ * provided, frames are spread WITHIN [startSec, endSec] instead of the
+ * whole video. Without boundaries, probe the full duration and sample
+ * by clip length (see the branches below).
  */
-// 2026-06-07 — quickTier sampling. Trims default 5-frame extraction
-// to a 3-frame (address / impact / finish) sample with smaller
-// 512px resize for the speed-path callers (SmartMotion, Cage Mode
-// shot review, library Quick uploads). Gemini / OpenAI vision
-// latency scales with image count and payload; 5 → 3 frames saves
-// ~30-45% of model time and ~40% of per-frame upload payload.
-// Used via the optional `quickTier` arg below.
-const QUICK_TIER_FRAME_TIME_FRACTIONS = [0.10, 0.55, 0.85];
-// 2026-06-14 (Tim — analysis speed, "without losing accuracy") — 640 → 512px.
-// The quick-tier read is gross body-fault detection (over-the-top, reverse pivot,
-// early extension) where the golfer fills the frame; that's fully legible at 512px.
-// (Face-angle is the only thing that degrades sub-640, and it's parked — needs
-// 240fps. See face-smash-fps-future.) This cuts the per-frame base64 ~36% on top
-// of the 3-frame sample, so the UPLOAD leg — the real bottleneck on the weak
-// cellular Tim plays in — lands faster. Conservative step within the validated
-// 800→640 accuracy-neutral range; revert to 640 if a clean-session A/B shows drift.
-const QUICK_TIER_RESIZE_WIDTH = 512;
-const QUICK_TIER_COMPRESS = 0.55;
-const FULL_TIER_RESIZE_WIDTH = 800;
+/**
+ * 2026-09-29 — NINE FRAMES, EVENLY SPACED, SIZED BY THE LONG EDGE (services/swing/analysisFrames).
+ *
+ * The quick tier used to send three frames at 10/55/85% of the window at 512px WIDTH. Three frames
+ * across a swing leave the top and impact to chance, and a 512px width on a portrait clip was really
+ * a 512x910 frame. Nine evenly spaced frames at a 768px long edge and a modest JPEG quality cost
+ * roughly twice the old three-frame upload (measured on a 1080x1920 30fps phone clip: ~0.2MB → ~0.45MB
+ * of base64), which the weak-cellular upload leg can carry, and the model now sees the swing rather
+ * than three guesses at it. The full tier keeps its larger frames for library detail.
+ *
+ * Tier still decides SIZE and the server's escalation policy; it no longer decides how many moments
+ * of the swing the model gets to see.
+ */
+const QUICK_TIER_LONG_EDGE = 768;
+const QUICK_TIER_COMPRESS = 0.5;
+const FULL_TIER_LONG_EDGE = 800;
 const FULL_TIER_COMPRESS = 0.65;
 
 export async function extractKeyFrames(
@@ -516,53 +525,40 @@ export async function extractKeyFrames(
   try {
     // When boundaries provided, the swing window is known — skip the
     // whole-clip duration probe and sample within [startSec, endSec].
-    let windowStartMs: number;
-    let windowDurationMs: number;
-    // 2026-05-24 — Tiered sampling by clip length. The default
-    // FRAME_TIME_FRACTIONS = [0.08, 0.40, 0.60, 0.75, 0.88] are
-    // impact-clustered and work for in-app captures (≤4s, swing fills
-    // the clip). Library-uploaded videos vary:
-    //   - 4-10s   : brief preroll then swing — back-window of last 5s
-    //               catches it.
-    //   - 10s+    : instructor demo + the student's swing somewhere in
-    //               the middle or end. Back-window misses mid-clip
-    //               swings entirely. Spread 5 frames evenly across the
-    //               whole clip with a slight back-half tilt; the
-    //               TEMPORAL ANALYSIS prompt block in
-    //               api/swing-analysis.ts already handles "frame N is
-    //               the swing, others are setup/talking" so wide
-    //               spread + the prompt finds the swing wherever it
-    //               lives. Local `frameFractions` so we never mutate
-    //               the module-level const.
+    //
+    // Tiered sampling by clip length when no window is known:
+    //   - ≤4s     : the clip is the swing — spread across the whole clip.
+    //   - 4-10s   : brief preroll then swing — back-window of the last 5s.
+    //   - 10s+    : instructor demo + the student's swing somewhere in the
+    //               middle or end — a duration-scaled spread across the whole
+    //               clip, and the TEMPORAL ANALYSIS prompt block in
+    //               api/swing-analysis.ts picks out the swing frames.
+    // analyzeSwing now LOCATES any clip of 2.5s or more before it gets here, so
+    // the unbounded medium branch is the fallback when that locate found nothing.
     const LONG_CLIP_THRESHOLD_MS = 10_000;
     const MEDIUM_CLIP_THRESHOLD_MS = 4_000;
     const MEDIUM_CLIP_BACK_WINDOW_MS = 5_000;
     // 2026-09-09 — LONG_CLIP_FRACTIONS (a fixed 5-frame spread) deleted: genuinely superseded, not
     // unconnected. The 06-09 long-clip branch below computes a DURATION-SCALED even spread (6-12
     // frames, ~1 per 5s) because a fixed 5 was too sparse for a ~2s swing to land in, which is the
-    // same job done better. It has had no reader since; the comment above still described it.
-    // 2026-06-07 — Quick-tier: 3-frame address/impact/finish sample
-    // for the speed paths (SmartMotion / Cage / library Quick). Saves
-    // ~6-12s of Haiku vision latency vs 5 frames; accuracy on the
-    // impact-clustered swing read is essentially unchanged at this
-    // size.
-    let frameFractions: readonly number[] = quickTier ? QUICK_TIER_FRAME_TIME_FRACTIONS : FRAME_TIME_FRACTIONS;
+    // same job done better.
+    const clipDurForInset = knownDurationMs != null && knownDurationMs > 0 ? knownDurationMs : null;
+    let samples: { tMs: number; fraction: number }[];
     if (boundaries) {
-      windowStartMs = Math.round(boundaries.startSec * 1000);
-      windowDurationMs = Math.round((boundaries.endSec - boundaries.startSec) * 1000);
+      const windowStartMs = Math.round(boundaries.startSec * 1000);
+      const windowDurationMs = Math.round((boundaries.endSec - boundaries.startSec) * 1000);
+      samples = analysisSampleTimes(windowStartMs, windowDurationMs, clipDurForInset, SWING_ANALYSIS_FRAME_COUNT);
       V6('STAGE 2 — extractKeyFrames bounded window', {
         start_sec: boundaries.startSec,
         end_sec: boundaries.endSec,
         window_ms: windowDurationMs,
-        target_fractions: frameFractions,
+        frame_count: samples.length,
       });
     } else {
       const durationMs = knownDurationMs != null && knownDurationMs > 0
         ? knownDurationMs
         : await probeDurationMs(clipUri);
       if (durationMs > LONG_CLIP_THRESHOLD_MS) {
-        windowStartMs = 0;
-        windowDurationMs = durationMs;
         // 2026-06-09 — Acoustics-free upload fix. An untrimmed phone
         // UPLOAD (practice swings + setup + the real swing somewhere in
         // the middle/end, no acoustic window to narrow on) needs the AI
@@ -573,43 +569,41 @@ export async function extractKeyFrames(
         // frame count with clip length (~1 per 5s, 6-12 frames) spread
         // evenly across the whole clip; the TEMPORAL ANALYSIS block in
         // api/swing-analysis.ts then picks out the swing frames and
-        // ignores the setup/walk-up ones. Endpoint cap was raised 5→12
-        // to match. (Bounded live SmartMotion clips are unaffected: they
-        // take the `boundaries` branch above and keep the fast 3-frame
-        // sample inside the known strike window.)
+        // ignores the setup/walk-up ones. Endpoint cap is 12 to match.
         const durSec = durationMs / 1000;
         const n = Math.max(6, Math.min(12, Math.round(durSec / 5)));
         const lo = 0.06;
         const hi = 0.96;
-        frameFractions = Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
+        samples = Array.from({ length: n }, (_, i) => {
+          const fraction = lo + ((hi - lo) * i) / (n - 1);
+          return { tMs: Math.round(durationMs * fraction), fraction };
+        });
         V6('STAGE 2 — extractKeyFrames long-clip duration-scaled spread', {
           duration_ms: durationMs,
           quick_tier: quickTier,
           frame_count: n,
-          target_fractions: frameFractions,
         });
       } else if (durationMs > MEDIUM_CLIP_THRESHOLD_MS) {
-        windowStartMs = Math.max(0, durationMs - MEDIUM_CLIP_BACK_WINDOW_MS);
-        windowDurationMs = durationMs - windowStartMs;
+        const windowStartMs = Math.max(0, durationMs - MEDIUM_CLIP_BACK_WINDOW_MS);
+        const windowDurationMs = durationMs - windowStartMs;
+        samples = analysisSampleTimes(windowStartMs, windowDurationMs, durationMs, SWING_ANALYSIS_FRAME_COUNT);
         V6('STAGE 2 — extractKeyFrames medium-clip back-window', {
           duration_ms: durationMs,
           window_start_ms: windowStartMs,
           window_ms: windowDurationMs,
-          target_fractions: frameFractions,
+          frame_count: samples.length,
         });
       } else {
-        windowStartMs = 0;
-        windowDurationMs = durationMs;
+        samples = analysisSampleTimes(0, durationMs, durationMs, SWING_ANALYSIS_FRAME_COUNT);
         V6('STAGE 2 — extractKeyFrames whole-clip', {
           duration_ms: durationMs,
-          target_fractions: frameFractions,
+          frame_count: samples.length,
         });
       }
     }
     const perFrameOutcomes: { idx: number; t_ms: number; ok: boolean; raw_uri_tail?: string; raw_size?: number; b64_kb?: number; error?: string }[] = [];
     const frames = await Promise.all(
-      frameFractions.map(async (t, i) => {
-        const timeMs = windowStartMs + Math.round(windowDurationMs * t);
+      samples.map(async ({ tMs: timeMs, fraction: t }, i) => {
         try {
           // 2026-06-10 — Robustness: phone camera clips are often VARIABLE frame
           // rate, and Android's MediaMetadataRetriever (behind expo-video-
@@ -638,16 +632,14 @@ export async function extractKeyFrames(
           // success rate on weak range/cart-path signal. Vision analysis
           // still works fine at 800px (Sonnet/OpenAI/Gemini all handle
           // sub-1024 frames cleanly for swing-pose reads).
-          // 2026-06-07 — Quick-tier shrinks per-frame payload to
-          // 640px / 0.55 compress (vs 800/0.65). Cuts base64 from
-          // ~50-90 KB to ~25-45 KB per frame; combined with 3-frame
-          // sampling, the upload drops from ~300-450 KB to ~75-135 KB
-          // — much faster on cellular.
-          const resizeWidth = quickTier ? QUICK_TIER_RESIZE_WIDTH : FULL_TIER_RESIZE_WIDTH;
+          // 2026-09-29 — sized by the LONG edge (see QUICK_TIER_LONG_EDGE). The thumbnail reports its
+          // own dimensions, so a portrait clip is no longer resized by its SHORT side.
+          const longEdge = quickTier ? QUICK_TIER_LONG_EDGE : FULL_TIER_LONG_EDGE;
           const compressQ = quickTier ? QUICK_TIER_COMPRESS : FULL_TIER_COMPRESS;
+          const thumbDims = r as { width?: number; height?: number };
           const m = await ImageManipulator.manipulateAsync(
             r.uri,
-            [{ resize: { width: resizeWidth } }],
+            [{ resize: longEdgeResize(thumbDims.width, thumbDims.height, longEdge) }],
             { compress: compressQ, format: ImageManipulator.SaveFormat.JPEG, base64: true },
           );
           if (!m.base64) {
@@ -677,7 +669,7 @@ export async function extractKeyFrames(
         require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('frame_extraction_empty', {
           uri_scheme: clipUri.split(':')[0],
           uri_tail: clipUri.slice(-44),
-          attempted: frameFractions.length,
+          attempted: samples.length,
           errors: firstErrs,
           bounded: boundaries != null,
         });
@@ -694,7 +686,7 @@ export async function extractKeyFrames(
     const sumKb = kbValues.reduce((a, b) => a + b, 0);
     V6('STAGE 2 — extractKeyFrames done', {
       successful: valid.length,
-      attempted: frameFractions.length,
+      attempted: samples.length,
       bounded: boundaries != null,
       per_frame: perFrameOutcomes,
       payload_summary: kbValues.length > 0 ? {
@@ -729,7 +721,9 @@ const LOCATE_FRAME_COMPRESS = 0.65;
 // 2026-06-29 (Tim) — lowered 12s→6s so SmartMotion/range clips around 8-10s (a real
 // swing buried in a short clip) still get the swing LOCALIZED before pose extraction,
 // instead of being skipped and smearing frames across the whole clip = empty biomech.
-const LOCATE_MIN_CLIP_MS = 6_000;
+// 2026-09-29 — one owner: services/swing/analysisFrames.NETWORK_LOCATE_MIN_CLIP_MS (analyzeSwing's
+// locate plan reads the same number, so the two gates cannot drift apart).
+const LOCATE_MIN_CLIP_MS = NETWORK_LOCATE_MIN_CLIP_MS;
 // 2026-06-11 — bumped 15s → 25s. Telemetry (swing_locate_fallback "Aborted",
 // Jun 10–11) showed the coarse-frame locate pass aborting client-side before a
 // cold /api/swing-analysis Lambda returned. The locate pass is cheap (small
@@ -1395,7 +1389,18 @@ export async function analyzeSwing(
     const tProbe = Date.now();
     probedDurMs = await probeDurationMs(clipUri).catch(() => 0);
     probeMs = Date.now() - tProbe;
-    if (probedDurMs >= LOCATE_MIN_CLIP_MS) {
+    /**
+     * 2026-09-29 — A SHORT CLIP IS LOCATED TOO, ON THE DEVICE.
+     *
+     * Clips under 6s used to skip locating entirely and fall to extractKeyFrames' "last five
+     * seconds" — for Tim's 5.5s full-swing clip that is the whole recording, so most of the frames
+     * landed on address and the walk-off. From 2.5s up the on-device locate runs (a dozen pose reads,
+     * offline, a few seconds); the NETWORK locate stays reserved for the ≥6s clips it was built for,
+     * and a short clip it cannot pin falls back to exactly the sampling it had before, unflagged —
+     * nothing about that fallback is new, so it is not newly "rough".
+     */
+    const locatePlan = locatePlanFor(probedDurMs);
+    if (locatePlan !== 'none') {
       const tLocate = Date.now();
       /**
        * 2026-09-01 — ON DEVICE FIRST, in the analysis itself, so EVERY caller benefits rather than
@@ -1415,13 +1420,15 @@ export async function analyzeSwing(
         const { locateSwingWindowOnDevice } = await import('./swing/onDeviceLocate');
         located = await locateSwingWindowOnDevice(clipUri, probedDurMs);
       } catch { /* on-device is best-effort — the network locate below is the fallback */ }
-      if (!located) located = await locateSwingWindow(clipUri, probedDurMs, {
+      if (!located && locatePlan === 'full') located = await locateSwingWindow(clipUri, probedDurMs, {
         onAbort: (cause) => { locateDegraded = cause; },
       });
       locateMs = Date.now() - tLocate;
       if (located) {
         effectiveBoundaries = located;
         V6('STAGE 2 — using located swing window as boundaries', located);
+      } else if (locatePlan === 'on_device_only') {
+        V6('STAGE 2 — short clip, on-device locate found nothing; sampling by clip length', { dur_ms: probedDurMs });
       } else {
         // The locate pass gave up. Frames now come from the whole clip rather than the swing, so
         // the read that follows is rough — carry the reason out so the player can be told.
@@ -1474,7 +1481,12 @@ export async function analyzeSwing(
 
   const apiUrl = getApiBaseUrl();
   try {
-    const wireFrames = frames.map(({ b64, media_type }) => ({ b64, media_type }));
+    /**
+     * 2026-09-29 — each frame carries its time. The server labels every image "Frame i — N ms into
+     * the clip" before the image itself, so the model reads a SEQUENCE with real spacing instead of
+     * a stack of stills, and its evidence can name the moment it means.
+     */
+    const wireFrames = frames.map(({ b64, media_type, time_sec }) => ({ b64, media_type, t_ms: Math.round(time_sec * 1000) }));
     const totalKB = Math.round(wireFrames.reduce((acc, f) => acc + f.b64.length, 0) / 1024);
     V6('STAGE 3 — POST /api/swing-analysis', {
       frames_count: wireFrames.length,
@@ -1721,6 +1733,8 @@ export async function analyzeSwing(
       frames: frames.length,
       tier: context.tier ?? 'full',
     });
+    // CLIENT-STAMPED: the span the frames actually came from (see SwingAnalysis.sample_coverage).
+    data.sample_coverage = sampleCoverage(frames.map(f => f.time_sec), effectiveBoundaries ?? null, durForExtract ?? null);
     return {
       kind: 'ok',
       analysis: data,

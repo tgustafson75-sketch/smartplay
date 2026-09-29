@@ -143,7 +143,9 @@ describe('the analysis itself locates on-device — every caller benefits', () =
 
   it('analyzeSwing tries the device before the cold Lambda', () => {
     expect(pose).toMatch(/locateSwingWindowOnDevice\(clipUri, probedDurMs\)/);
-    expect(pose).toMatch(/if \(!located\) located = await locateSwingWindow\(clipUri, probedDurMs/);
+    // 2026-09-29 — the network locate now runs only on the 'full' plan (clips ≥6s); a 2.5-6s clip is
+    // located on the device alone. The order — device first, network as the fallback — is unchanged.
+    expect(pose).toMatch(/if \(!located && locatePlan === 'full'\) located = await locateSwingWindow\(clipUri, probedDurMs/);
   });
 
   it('the abort reason is still reported when the network locate DOES run', () => {
