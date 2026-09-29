@@ -26,7 +26,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, Text, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, router as globalRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,6 +63,23 @@ import {
 
 import type { VoiceState } from '../CaddieAvatar';
 import { useTranslation } from 'react-i18next';
+
+/**
+ * 2026-09-28 (1.0.2) — the fallback when the parent supplies no gated opener. It used to be a plain
+ * router.push, i.e. a paid tool with no plan check whenever a parent forgot the prop.
+ */
+function openGated(feature: 'smartfinder' | 'smartvision', path: string): void {
+  try {
+    const { canAccess } = require('../../services/featureAccess') as typeof import('../../services/featureAccess');
+    const { triggerPaywall } = require('../../services/paywallGuard') as typeof import('../../services/paywallGuard');
+    const status = (require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore')).usePlayerProfileStore.getState().subscription_status;
+    if (!canAccess(feature, status)) {
+      void triggerPaywall(feature, () => globalRouter.push('/paywall' as never));
+      return;
+    }
+  } catch { /* gate is best-effort — fall through to open, like the dispatcher's gatedOpen */ }
+  globalRouter.push(path as never);
+}
 
 export interface CockpitCaddieScreenProps {
   /** Current voice pipeline state from useVoiceCaddie (parent owns). */
@@ -496,7 +513,7 @@ export default function CockpitCaddieScreen({
             // floating shortcut uses). Fallback to a plain push only if
             // the prop wasn't supplied.
             if (onOpenSmartFinder) onOpenSmartFinder();
-            else router.push('/smartfinder' as never);
+            else openGated('smartfinder', '/smartfinder');
           }}
         />
 
@@ -507,7 +524,7 @@ export default function CockpitCaddieScreen({
           // if no handler was provided.
           onVision={() => {
             if (onOpenSmartVision) onOpenSmartVision();
-            else router.push('/smartvision' as never);
+            else openGated('smartvision', '/smartvision');
           }}
           onMotion={() => {
             // 2026-06-07 — Smart Motion rebuild: the unified screen

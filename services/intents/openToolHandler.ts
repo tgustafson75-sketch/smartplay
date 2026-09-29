@@ -593,7 +593,12 @@ export const openToolHandler: IntentHandler = {
           '/smartvision': { type: 'open_smartvision' },
           '/smartfinder': { type: 'open_smartfinder' },
         };
-        const act: ToolAction = GATED_ROUTE_ACTION[feature.route] ?? { type: 'navigate', path: feature.route };
+        // 2026-09-28 — matched by PATHNAME, so a catalog route carrying a query is gated too. A bare
+        // route keeps its open_* action; one with a query keeps its full path as a `navigate`, which
+        // both dispatchers now gate by pathname (featureAccess.gatedFeatureForPath).
+        const pathname = feature.route.split(/[?#]/)[0];
+        const act: ToolAction = (pathname === feature.route ? GATED_ROUTE_ACTION[pathname] : undefined)
+          ?? { type: 'navigate', path: feature.route };
         return {
           success: true,
           // 2026-08-06 (Tim — no canned speech; "silent, just open it"): the screen transition IS the

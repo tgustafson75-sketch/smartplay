@@ -27,7 +27,6 @@ import {
   selectPackageForPlan,
   purchasePackage,
   restorePurchases,
-  billingAvailable,
   getTrialOffers,
 } from '../services/billing/purchases';
 import { trialAdjective, trialDuration, trialSpokenLine, type FreeTrial } from '../services/billing/introOffer';
@@ -81,7 +80,6 @@ export default function PaywallScreen() {
     { icon: 'telescope-outline',    label: 'SmartVision',         sub: 'AI hole analysis from satellite and on-course images' },
     { icon: 'videocam-outline',     label: 'SmartMotion',           sub: 'Camera + auto-detect + Phase K analysis · drill picker baked in' },
     { icon: 'mic-outline',          label: 'Voice caddie',        sub: 'Hands-free operation during your round' },
-    { icon: 'stats-chart-outline',  label: 'Round intelligence',  sub: 'Post-round recap, scoring trends, and ghost mode' },
   ];
 
   useEffect(() => {
@@ -138,15 +136,9 @@ export default function PaywallScreen() {
   const handleSubscribe = async () => {
     if (busy) return;
     track('subscribe_tapped', { subscription_status, plan });
-    if (!billingAvailable()) {
-      // Honest, not a fake success. This is the state on a binary built before the billing module.
-      Alert.alert(
-        t('paywall.alert.not_available_yet'),
-        t('paywall.alert.subscriptions_need_the_latest_version'),
-        [{ text: 'OK' }],
-      );
-      return;
-    }
+    // 2026-09-28 (1.0.2) — the "Update from TestFlight" alert is gone: every store binary carries the
+    // billing module, and a production player cannot update from TestFlight. With no billing, the
+    // package list is empty and the "not available yet" alert below answers honestly.
     setBusy(true);
     try {
       const packages = await getPackages();
@@ -191,14 +183,7 @@ export default function PaywallScreen() {
   const handleRestore = async () => {
     if (busy) return;
     track('restore_tapped');
-    if (!billingAvailable()) {
-      Alert.alert(
-        t('paywall.alert.not_available_yet'),
-        t('paywall.alert.restoring_needs_the_latest_version'),
-        [{ text: 'OK' }],
-      );
-      return;
-    }
+    // 2026-09-28 (1.0.2) — the TestFlight alert is gone; restorePurchases answers 'unavailable' itself.
     setBusy(true);
     try {
       const result = await restorePurchases(subscription_status);

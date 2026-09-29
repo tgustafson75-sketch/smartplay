@@ -178,7 +178,12 @@ function dispatchOne(a: AnyAction): void {
       break;
     }
     case 'navigate':
-      if (typeof a.path === 'string' && a.path.length > 0) router.push(a.path as never);
+      if (typeof a.path === 'string' && a.path.length > 0) {
+        // 2026-09-28 — a navigate to a paid tool is gated by PATHNAME, query strings included.
+        const gated = (require('../featureAccess') as typeof import('../featureAccess')).gatedFeatureForPath(a.path);
+        if (gated) gatedOpen(gated, a.path);
+        else router.push(a.path as never);
+      }
       break;
     case 'navigate_replace':
       if (typeof a.path === 'string' && a.path.length > 0) router.replace(a.path as never);

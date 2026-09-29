@@ -243,6 +243,18 @@ export function mayTalkToCaddie(opts?: { userInitiated?: boolean }): boolean {
   }
 }
 
+/**
+ * 2026-09-28 (1.0.2) — the paid feature a ROUTE opens, matched by PATHNAME. Every gate that keyed on
+ * the exact strings '/smartfinder' / '/smartvision' let '/smartfinder?autoread=1&mode=…' (the voice
+ * intents' scene / putt / look reads) and '/smartvision?…' straight past. Query and hash are ignored.
+ */
+export function gatedFeatureForPath(path: string): 'smartfinder' | 'smartvision' | null {
+  const pathname = String(path ?? '').split(/[?#]/)[0].replace(/\/+$/, '');
+  if (pathname === '/smartfinder') return 'smartfinder';
+  if (pathname === '/smartvision') return 'smartvision';
+  return null;
+}
+
 /** What the caddie says when a lite player asks him something mid-round (the paywall waits). */
 export const CADDIE_PAYWALL_DEFERRED_LINE =
   "That's a SmartPlay Full feature — I'll show you the plans after the round.";

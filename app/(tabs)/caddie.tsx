@@ -103,7 +103,7 @@ import AppIcon from '../../components/AppIcon';
 import VocabBanner from '../../components/VocabBanner';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 import HolePlanChip from '../../components/HolePlanChip';
-import { canAccess, trialDaysLeft, SUBSCRIPTIONS_ENABLED } from '../../services/featureAccess';
+import { canAccess, trialDaysLeft, SUBSCRIPTIONS_ENABLED, gatedFeatureForPath } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { subscribeBattery } from '../../services/batteryMonitor';
 import { noteAudioActivity } from '../../services/audioLifecycle';
@@ -2287,6 +2287,15 @@ export default function CaddieTab() {
         // claimed audio/camera on mount (SmartMotion, Cage Mode,
         // SmartFinder). Path is fully constructed (query params
         // already appended) by the handler.
+        // 2026-09-28 — gated by PATHNAME: '/smartfinder?autoread=1&mode=…' from the voice intents used
+        // to open a paid tool on lite. Same check the open_* cases run.
+        {
+          const gated = gatedFeatureForPath(action.path);
+          if (gated && !canAccess(gated, usePlayerProfileStore.getState().subscription_status)) {
+            void triggerPaywall(gated, () => router.push('/paywall' as never));
+            break;
+          }
+        }
         router.push(action.path as never);
         break;
       case 'navigate_replace':

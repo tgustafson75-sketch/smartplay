@@ -1283,11 +1283,9 @@
   "paywall": {
     "alert": {
       "not_available_yet": "Not available yet",
-      "subscriptions_need_the_latest_version": "Subscriptions need the latest version of the app. Update from TestFlight and try again.",
       "the_subscription_is_not_on": "The subscription is not on sale in your region yet.",
       "that_didn_t_go_through": "That didn't go through",
       "nothing_was_charged_give_it": "Nothing was charged. Give it another go, or check your payment method in Settings.",
-      "restoring_needs_the_latest_version": "Restoring needs the latest version of the app. Update from TestFlight and try again.",
       "restored": "Restored",
       "nothing_to_restore": "Nothing to restore",
       "no_active_subscription_on_this": "No active subscription on this Apple ID.",

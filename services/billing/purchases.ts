@@ -31,8 +31,7 @@
  * method either way, so no presence check on the object can tell you anything. The absence only
  * surfaces when a method is CALLED and the SDK's own `throwIfNativeModuleNotAvailable()` fires.
  * That is why `initBilling()` — which wraps the real `configure` call in a try/catch — is the single
- * honest answer to "is billing usable here", and why `billingAvailable()` delegates to it rather
- * than asking whether the module could be required.
+ * honest answer to "is billing usable here" — never whether the module could be required.
  *
  * The lazy require and the LOCK forbidding a static import elsewhere both STAY. A static import puts
  * the SDK on the boot path for every user on every launch, where an SDK regression or an RN upgrade
@@ -182,21 +181,9 @@ export function initBilling(): boolean {
   }
 }
 
-/**
- * Is billing usable on this device right now?
- *
- * 2026-08-29, audit 1 — was `sdk() != null && apiKey() !== ''`, which could answer YES on a binary
- * with no native billing at all: requiring the module succeeds regardless (see the header), so that
- * test only ever proved a key was set. The paywall reads this to choose between "update the app" and
- * carrying on, so a false yes sent the player down the purchase path to a bare offerings list and the
- * message "not on sale in your region yet" — true-sounding, and wrong.
- *
- * Delegating to initBilling() makes it the same question as "did configure() actually work", which
- * is the only version of it the SDK will answer honestly. Idempotent and cheap after the first call.
- */
-export function billingAvailable(): boolean {
-  return initBilling();
-}
+// 2026-09-28 (1.0.2) — billingAvailable() (a one-line wrapper of initBilling) is deleted: its only
+// callers were the paywall's "Update from TestFlight" alerts, removed because no production player can
+// act on them. initBilling() stays the single honest answer to "is billing usable here".
 
 /**
  * Map a RevenueCat CustomerInfo onto the app's SubscriptionStatus.

@@ -49,6 +49,23 @@ const NOT_FOUND: MeasureScanResult = {
  */
 export async function scanForMeasureReference(imageBase64: string, mediaType = 'image/jpeg'): Promise<MeasureScanResult> {
   if (!imageBase64) return NOT_FOUND;
+  /**
+   * 2026-09-28 (1.0.2) — a paid vision call behind a paid tool, and it had no gate of its own: a lite
+   * player who reached SmartFinder by any unguarded door got the inference for free. NOT_FOUND is the
+   * existing "keep your current read" answer, and the two-tap manual path stays available.
+   */
+  try {
+    const { canAccess } = require('./featureAccess') as typeof import('./featureAccess');
+    const status = (require('../store/playerProfileStore') as typeof import('../store/playerProfileStore')).usePlayerProfileStore.getState().subscription_status;
+    if (!canAccess('smartfinder', status)) {
+      // A refused paid feature always OFFERS the upgrade (sim LOCK) — never a dead end.
+      const { triggerPaywall } = require('./paywallGuard') as typeof import('./paywallGuard');
+      void triggerPaywall('smartfinder', () => {
+        try { (require('expo-router') as typeof import('expo-router')).router.push('/paywall' as never); } catch { /* no router in tests */ }
+      });
+      return NOT_FOUND;
+    }
+  } catch { /* an access check must not break the manual read */ }
   try {
     const res = await fetch(`${getApiBaseUrl()}/api/measure-scan`, {
       method: 'POST',
