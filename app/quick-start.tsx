@@ -21,7 +21,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Linking, Alert,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -150,7 +150,6 @@ const CARDS: Card[] = [
 export default function QuickStartScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { colors, spacing, radii } = useTheme();
   const styles = useMemo(() => makeStyles(colors, spacing, radii), [colors, spacing, radii]);
 
@@ -192,7 +191,9 @@ export default function QuickStartScreen() {
         <View style={styles.headerBtn} />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 32 + insets.bottom }]}>
+      {/* 2026-09-29 — flat 32: GlobalCaddieBar is visible on this route and its own paddingBottom owns
+          the home-indicator inset, so + insets.bottom here paid it twice. */}
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 32 }]}>
         <Text style={[styles.lead, { color: colors.text_muted }]}>
           {t('quick_start.quick_start_screen.a_short_reference_for_testers')}
         </Text>

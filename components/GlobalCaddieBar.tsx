@@ -17,6 +17,7 @@ import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { CaddieBottomBar } from './caddie/CaddieBottomBar';
+import { caddieBarKeyboardLift } from '../utils/phoneLayout';
 // 2026-07-26 — the status strip is now a SHARED component so the full-screen capture screens
 // (SmartMotion / Coach lesson) can float it over the camera too (Tim: "bar everywhere logical").
 import { CaddieStatusStrip } from './caddie/CaddieStatusStrip';
@@ -75,7 +76,9 @@ export function GlobalCaddieBar() {
   // too low. Add insets.bottom + a small buffer to the lift. Erring slightly HIGH (a small gap above
   // the keyboard) is fine; erring low hides the input — so bias upward.
   const bottomPad = keyboardHeight > 0 ? 6 : Math.max(insets.bottom, 8) + 6;
-  const lift = keyboardHeight > 0 ? keyboardHeight + insets.bottom + 10 : 0;
+  // 2026-09-29 — that bias is Android-only: iOS's keyboard height already includes the home indicator,
+  // so adding insets.bottom there floated the bar ~44-50dp above the keyboard. See caddieBarKeyboardLift.
+  const lift = caddieBarKeyboardLift(Platform.OS, keyboardHeight, insets.bottom);
   return (
     <View style={[styles.wrap, { paddingBottom: bottomPad, marginBottom: lift, backgroundColor: colors.background }]}>
       <CaddieStatusStrip />

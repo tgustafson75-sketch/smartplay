@@ -1110,7 +1110,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10,
   },
-  backBtn: { width: 60 },
+  backBtn: { minWidth: 60 }, // minWidth: "← Back" wrapped inside a fixed 60 at a large system font
   backText: { color: '#00C896', fontSize: 16, fontWeight: '600' },
   headerTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
   // Phase 406 wave 2 — graceful-landscape recap. The FlatList content

@@ -2,6 +2,7 @@ import React from 'react';
 import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { MONO_FONT } from '../../theme/fonts';
 
 /**
  * HoleBrandBadge — the SmartPlay-branded neon-green hole chip that sits in the UPPER-RIGHT corner
@@ -91,7 +92,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '900',
-    fontFamily: 'monospace',
+    fontFamily: MONO_FONT,
     textShadowColor: 'rgba(0,245,176,0.45)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 5,

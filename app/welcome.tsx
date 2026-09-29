@@ -37,6 +37,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore, type Persona } from '../store/settingsStore';
 import { signalGreetingComplete } from './greeting';
 import { useTranslation } from 'react-i18next';
+import { fitOneLine } from '../utils/phoneLayout';
 
 type CaddiePick = {
   id: Persona;
@@ -342,7 +343,7 @@ export default function WelcomeScreen() {
                 accessibilityLabel={t('welcome.accessibility_label.view_full_terms')}
               >
                 <Ionicons name="document-text-outline" size={13} color={colors.accent} />
-                <Text style={[styles.termsLinkText, { color: colors.accent }]}>{t('welcome.welcome_screen.view_full_terms')}</Text>
+                <Text {...fitOneLine()} style={[styles.termsLinkText, { color: colors.accent }]}>{t('welcome.welcome_screen.view_full_terms')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.termsLink, { borderColor: colors.border }]}
@@ -351,7 +352,7 @@ export default function WelcomeScreen() {
                 accessibilityLabel={t('welcome.accessibility_label.privacy_policy')}
               >
                 <Ionicons name="shield-checkmark-outline" size={13} color={colors.accent} />
-                <Text style={[styles.termsLinkText, { color: colors.accent }]}>{t('welcome.welcome_screen.privacy_policy')}</Text>
+                <Text {...fitOneLine()} style={[styles.termsLinkText, { color: colors.accent }]}>{t('welcome.welcome_screen.privacy_policy')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -515,7 +516,10 @@ function makeStyles(
       borderRadius: r.md,
       borderWidth: 1,
     },
+    // 2026-09-29 — one line, shrink-to-fit: at a phone width / large font the two pills wrapped
+    // unevenly (one line vs two). flexShrink lets the label be constrained beside its icon.
     termsLinkText: {
+      flexShrink: 1,
       fontSize: 11.5,
       fontWeight: '800',
       letterSpacing: 0.3,

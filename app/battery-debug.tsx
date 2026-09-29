@@ -25,6 +25,7 @@ import {
 } from '../services/batteryMonitor';
 import { safeBack } from '../services/safeBack';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
+import { MONO_FONT } from '../theme/fonts';
 
 export default function BatteryDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
@@ -128,8 +129,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5, marginBottom: 4,
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  k: { color: '#6b7280', fontSize: 12, fontFamily: 'monospace', flex: 1 },
-  v: { color: '#fff', fontSize: 12, fontFamily: 'monospace', flex: 2, textAlign: 'right' },
+  k: { color: '#6b7280', fontSize: 12, fontFamily: MONO_FONT, flex: 1 },
+  v: { color: '#fff', fontSize: 12, fontFamily: MONO_FONT, flex: 2, textAlign: 'right' },
   vAccent: { color: '#00C896', fontWeight: '700' },
   section: { color: '#6b7280', fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginBottom: 10 },
   btn: {

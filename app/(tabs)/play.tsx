@@ -26,6 +26,7 @@ import * as Location from 'expo-location';
 // Phase 407 — distance helper for course-locator GPS sort
 import { haversineYards } from '../../utils/geoDistance';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
+import { isBelow, fitOneLine, ACTION_ROW_GRID_BELOW, COURSE_ROW_STACK_BELOW, AT_COURSE_CHOICES_WRAP_BELOW } from '../../utils/phoneLayout';
 import { withAlpha, bestOn } from '../../theme/tokens';
 // 2026-05-26 — Fix CA: Play tab was hardcoded dark palette while the
 // rest of the app respected useTheme/light mode. Importing here so
@@ -660,7 +661,11 @@ export default function PlayTab() {
   // 2026-05-24 — beta-minimal responsive: constrain content to a
   // centered max-width on wide surfaces (fold-open, tablet, landscape).
   // Phone portrait + fold-closed render unchanged.
-  const { isWide } = useDeviceLayout();
+  const { isWide, width: winW } = useDeviceLayout();
+  // 2026-09-29 — narrow-phone shapes (see utils/phoneLayout). Wide/Fold-open renders unchanged.
+  const actionGrid = isBelow(winW, ACTION_ROW_GRID_BELOW);
+  const courseRowStack = isBelow(winW, COURSE_ROW_STACK_BELOW);
+  const atCourseChoicesWrap = isBelow(winW, AT_COURSE_CHOICES_WRAP_BELOW);
   const recentCourseIds = useRoundStore(s => s.recentCourseIds);
   const roundHistory = useRoundStore(s => s.roundHistory);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
@@ -2289,23 +2294,27 @@ export default function PlayTab() {
           // nine you're on, so ASK instead of one-tap-starting the wrong par/yardages.
           // 2026-07-30 (audit #1 — DATA LOSS) — hidden while a round is ACTIVE; startRound wipes the
           // in-progress round, so a one-tap "start a round" mid-round must not be offered.
-          <View style={styles.atCourseBanner}>
+          <View style={[styles.atCourseBanner, atCourseChoicesWrap && styles.atCourseBannerWrap]}>
             <AppIcon name="golf" size={14} color="#00C896" />
             <Text style={styles.atCourseBannerText} numberOfLines={2}>
               {t('play.play_tab.you_re_at')}{' '}
               <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name.split(/\s[—-]\s/)[0]}</Text> {t('play.play_tab.which_course')}
             </Text>
-            {[atCourse.course, atCourse.sibling].map((c) => (
-              <TouchableOpacity
-                key={c.id}
-                style={styles.atCourseChoiceBtn}
-                onPress={() => startRoundAtCourse(c)}
-                accessibilityRole="button"
-                accessibilityLabel={`Start a round at ${c.club_name}`}
-              >
-                <Text style={styles.atCourseChoiceText}>{c.club_name.split(/\s[—-]\s/).pop()}</Text>
-              </TouchableOpacity>
-            ))}
+            {/* 2026-09-29 — one wrapper so that below AT_COURSE_CHOICES_WRAP_BELOW the two choices take
+                their own line instead of crushing the question to a sliver; wide renders as before. */}
+            <View style={atCourseChoicesWrap ? styles.atCourseChoiceRowWrap : styles.atCourseChoiceRow}>
+              {[atCourse.course, atCourse.sibling].map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.atCourseChoiceBtn}
+                  onPress={() => startRoundAtCourse(c)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Start a round at ${c.club_name}`}
+                >
+                  <Text style={styles.atCourseChoiceText}>{c.club_name.split(/\s[—-]\s/).pop()}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
         {atCourse && !isRoundActive && !atCourse.sibling && selected?.id !== atCourse.course.id && (
@@ -2386,11 +2395,18 @@ export default function PlayTab() {
                     {c.rating != null && ` · Rating ${c.rating.toFixed(1)}`}
                     {c.slope != null && ` · Slope ${c.slope}`}
                   </Text>
+                  {/* 2026-09-29 — below COURSE_ROW_STACK_BELOW the pill beside the name squeezed the
+                      name to ~57dp at 320; it sits under the meta line instead. */}
+                  {courseRowStack && distanceLabelById[c.id] && (
+                    <View style={[styles.distancePill, styles.distancePillStacked]}>
+                      <Text style={styles.distancePillText}>{distanceLabelById[c.id]}</Text>
+                    </View>
+                  )}
                 </View>
                 {/* Phase 407 — distance-from-player chip. Only renders
                     when the GPS sort has computed a value for this
                     course. Courses missing coords show no chip. */}
-                {distanceLabelById[c.id] && (
+                {!courseRowStack && distanceLabelById[c.id] && (
                   <View style={styles.distancePill}>
                     <Text style={styles.distancePillText}>{distanceLabelById[c.id]}</Text>
                   </View>
@@ -2691,22 +2707,22 @@ export default function PlayTab() {
                 </View>
               </View>
 
-              <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleHoleMap}>
+              <View style={[styles.actionRow, actionGrid && styles.actionRowGrid]}>
+                <TouchableOpacity style={[styles.actionBtn, actionGrid && styles.actionBtnGrid]} onPress={handleHoleMap}>
                   <AppIcon name="map-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>{t('play.view')}</Text>
+                  <Text {...fitOneLine()} style={styles.actionBtnText}>{t('play.view')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleRangeBook}>
+                <TouchableOpacity style={[styles.actionBtn, actionGrid && styles.actionBtnGrid]} onPress={handleRangeBook}>
                   <AppIcon name="book-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>{t('play.log')}</Text>
+                  <Text {...fitOneLine()} style={styles.actionBtnText}>{t('play.log')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleCourseLayout} accessibilityRole="button" accessibilityLabel={t('play.accessibility_label.course_layout')}>
+                <TouchableOpacity style={[styles.actionBtn, actionGrid && styles.actionBtnGrid]} onPress={handleCourseLayout} accessibilityRole="button" accessibilityLabel={t('play.accessibility_label.course_layout')}>
                   <AppIcon name="list-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>{t('play.play_tab.layout')}</Text>
+                  <Text {...fitOneLine()} style={styles.actionBtnText}>{t('play.play_tab.layout')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleBookTeeTime} accessibilityRole="button" accessibilityLabel={`Find tee times at ${selected.club_name ?? selected.course_name ?? 'this course'}`}>
+                <TouchableOpacity style={[styles.actionBtn, actionGrid && styles.actionBtnGrid]} onPress={handleBookTeeTime} accessibilityRole="button" accessibilityLabel={`Find tee times at ${selected.club_name ?? selected.course_name ?? 'this course'}`}>
                   <AppIcon name="calendar-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>{t('play.play_tab.tee_times')}</Text>
+                  <Text {...fitOneLine()} style={styles.actionBtnText}>{t('play.play_tab.tee_times')}</Text>
                 </TouchableOpacity>
               </View>
               {/* 2026-09-29 — the pro shop's number beside Tee Times; nothing renders without one. */}
@@ -2993,7 +3009,7 @@ export default function PlayTab() {
               <View style={styles.pinDepthCol}>
                 {(['back', 'middle', 'front'] as const).map((depth) => (
                   <View key={depth} style={styles.pinDepthLabelWrap}>
-                    <Text style={styles.pinRowLabel}>
+                    <Text {...fitOneLine(0.7)} style={styles.pinRowLabel}>
                       {t(`play.pin_depth_${depth}`, { defaultValue: depth.toUpperCase() })}
                     </Text>
                   </View>
@@ -3412,7 +3428,9 @@ return StyleSheet.create({
    * tap target from it.
    */
   pinGreenRow: { flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 16, gap: 10 },
-  pinDepthCol: { width: 54, justifyContent: 'space-between', paddingVertical: 2 },
+  // 2026-09-29 — minWidth (not width) + a cap: at fontScale 1.3 "MIDDLE" no longer fit a fixed 54 and
+  // wrapped; the column may grow a few dp, and past the cap the label shrinks to fit on one line.
+  pinDepthCol: { minWidth: 54, maxWidth: 80, justifyContent: 'space-between', paddingVertical: 2 },
   pinDepthLabelWrap: { flex: 1, justifyContent: 'center' },
   pinRowLabel: { color: c.text_muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
 
@@ -3559,6 +3577,7 @@ return StyleSheet.create({
     backgroundColor: 'rgba(0,200,150,0.08)',
     marginRight: 4,
   },
+  distancePillStacked: { alignSelf: 'flex-start', marginTop: 4, marginRight: 0 },
   distancePillText: {
     color: c.accent,
     fontSize: 10,
@@ -3677,6 +3696,10 @@ return StyleSheet.create({
     color: c.accent,
     fontWeight: '800',
   },
+  // 2026-09-29 — narrow: choices wrap onto their own line, indented past the icon (14 + gap 8).
+  atCourseBannerWrap: { flexWrap: 'wrap' },
+  atCourseChoiceRow: { flexDirection: 'row', gap: 8 },
+  atCourseChoiceRowWrap: { flexBasis: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingLeft: 22 },
   // 2026-07-24 (final QA) — co-located course chooser buttons (Palms | Lakes).
   atCourseChoiceBtn: {
     paddingHorizontal: 12,
@@ -3750,9 +3773,12 @@ return StyleSheet.create({
   selectedSub: { color: c.text_muted, fontSize: 12, marginTop: 2 },
   selectedStats: { color: c.text_muted, fontSize: 12, marginTop: 4 },
 
-  // Single-line three-button row — short labels (Start / View / Log) keep
-  // the row tight even on Fold-closed (~344px) without wrapping.
+  // Four-button row (View / Log / Layout / Tee Times). One line at >= ACTION_ROW_GRID_BELOW (440dp,
+  // Fold-open and wider); below that "Tee Times" spilled out of its pill even at fontScale 1.0, so
+  // the row becomes a 2x2 grid (actionRowGrid + actionBtnGrid). Labels shrink-to-fit on one line.
   actionRow: { flexDirection: 'row', gap: 6, flexWrap: 'nowrap' },
+  actionRowGrid: { flexWrap: 'wrap', rowGap: 6 },
+  actionBtnGrid: { flexGrow: 1, flexBasis: '48%' },
   actionBtn: {
     flex: 1, flexDirection: 'row', gap: 4,
     backgroundColor: 'transparent', borderColor: c.accent, borderWidth: 1,
@@ -3761,7 +3787,7 @@ return StyleSheet.create({
     minWidth: 0,
   },
   actionBtnPrimary: { backgroundColor: c.accent, borderColor: c.accent },
-  actionBtnText: { color: c.accent, fontSize: 12, fontWeight: '800' },
+  actionBtnText: { color: c.accent, fontSize: 12, fontWeight: '800', flexShrink: 1 },
   actionBtnPrimaryText: { color: c.surface, fontSize: 12, fontWeight: '900' },
 });
 }

@@ -16,7 +16,7 @@
  */
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet, Keyboard, Platform, Image, useWindowDimensions } from 'react-native';
-import { askBarTextWidth, fitAskPlaceholder } from '../../services/caddieLayoutBudget';
+import { askBarTextWidth, fitAskPlaceholder, ASK_BAR_FONT_SIZE } from '../../services/caddieLayoutBudget';
 import { withAlpha } from '../../theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -64,7 +64,7 @@ export interface CaddieBottomBarProps {
 }
 
 export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: CaddieBottomBarProps) {
-  const { width: barWidth } = useWindowDimensions();
+  const { width: barWidth, fontScale } = useWindowDimensions();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const pathname = usePathname();
@@ -159,6 +159,9 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         placeholder={fitAskPlaceholder(
           placeholder,
           askBarTextWidth(barWidth, { micVisible: voiceCaddieOn }),
+          // 2026-09-29 — the input renders at 16 × the system font scale (no maxFontSizeMultiplier
+          // anywhere), so measuring at a bare 16 still clipped mid-word at a large system font.
+          ASK_BAR_FONT_SIZE * fontScale,
         )}
         placeholderTextColor={colors.text_muted}
         returnKeyType="send"

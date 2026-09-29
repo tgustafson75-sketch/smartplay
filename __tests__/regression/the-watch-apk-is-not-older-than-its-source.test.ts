@@ -70,8 +70,13 @@ describe('the wear APK is not older than the source it claims to carry', () => {
       .toEqual({ newestSource: path.relative(ROOT, src.file), staleArtifacts: [] });
   });
 
-  /** Play's Wear slot takes a bundle. An APK alone means nothing is uploadable. */
-  it('a Wear AAB exists — the APK alone cannot be uploaded to Play', () => {
+  /**
+   * Play's Wear slot takes a bundle. An APK alone means nothing is uploadable.
+   * 2026-09-29 — skipped, like the check above, when NOTHING has been built (a fresh clone or an
+   * agent worktree: build/ is gitignored, so this failed every commit made outside the main
+   * checkout). A built APK with no AAB beside it still fails, which is the case this exists for.
+   */
+  (present.length ? it : it.skip)('a Wear AAB exists — the APK alone cannot be uploaded to Play', () => {
     expect(fs.existsSync(ARTIFACTS[0])).toBe(true);
   });
 
