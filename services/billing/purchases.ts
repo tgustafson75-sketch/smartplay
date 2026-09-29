@@ -295,6 +295,8 @@ export function planEntitlementWrite(p: {
   mapped: SubscriptionStatus;
   /** The status right now, re-read AFTER the await. May differ from `before`. */
   now: SubscriptionStatus;
+  /** The store's own entitlement answer, when it gave one (storeEntitledFromCustomerInfo). */
+  storeEntitled?: boolean | null;
 }): SubscriptionStatus | null {
   const { before, mapped, now } = p;
   // An owner grant is ours, not the store's — unchanged behaviour, stated as a rule rather than an
@@ -309,6 +311,13 @@ export function planEntitlementWrite(p: {
    * the flight (`now === before`) the branch above has already returned, so this costs nothing in
    * the ordinary case.
    */
+  /**
+   * 2026-09-28 (1.0.2) — EXCEPT when the store positively says the player is paid. That is knowledge,
+   * not an echo. It matters because a lapsed promo can move a subscriber to 'expired' during this very
+   * await (the promo-lapse rung, for a subscriber whose store answer was never recorded before 1.0.2):
+   * `mapped === before === 'active'` then looked like an echo and the downgrade stood.
+   */
+  if (p.storeEntitled === true && (mapped === 'active' || mapped === 'trial')) return mapped;
   if (mapped === before) return null;
   return mapped;
 }
@@ -353,18 +362,33 @@ export type EntitlementSnapshot = {
   status: SubscriptionStatus;
   /** Non-null only while the store reports an active TRIAL — see trialStartFromCustomerInfo. */
   trialStartedAt: number | null;
+  /** The store's own answer — null when it could not be asked (no billing, offline, error). */
+  storeEntitled: boolean | null;
 };
+
+/**
+ * 2026-09-28 (1.0.2) — does the STORE say this player holds a live paid entitlement (trial or paid)?
+ * null when there is no answer to read. Kept apart from statusFromCustomerInfo on purpose: that one
+ * echoes the current status when the store has no opinion; this one must never guess.
+ */
+export function storeEntitledFromCustomerInfo(
+  info: { entitlements?: { active?: Record<string, unknown> } } | null | undefined,
+): boolean | null {
+  if (!info?.entitlements) return null;
+  const active = info.entitlements.active?.[ENTITLEMENT_ID] as { isActive?: boolean } | undefined;
+  return active?.isActive === true;
+}
 
 export async function refreshEntitlement(
   current: SubscriptionStatus,
 ): Promise<EntitlementSnapshot> {
-  const unchanged: EntitlementSnapshot = { status: current, trialStartedAt: null };
+  const unchanged: EntitlementSnapshot = { status: current, trialStartedAt: null, storeEntitled: null };
   if (!initBilling()) return unchanged;
   const Purchases = sdk();
   if (!Purchases) return unchanged;
   try {
     const info = await Purchases.getCustomerInfo();
-    return { status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info) };
+    return { status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info), storeEntitled: storeEntitledFromCustomerInfo(info) };
   } catch (e) {
     /**
      * 2026-08-30 — REPORTED, then swallowed. Returning `unchanged` is still the right behaviour:
@@ -477,7 +501,7 @@ export async function getTrialOffers(): Promise<Record<PurchasablePlan, FreeTria
 }
 
 export type PurchaseOutcome =
-  | { ok: true; status: SubscriptionStatus; trialStartedAt: number | null }
+  | { ok: true; status: SubscriptionStatus; trialStartedAt: number | null; storeEntitled: boolean | null }
   | { ok: false; reason: 'cancelled' | 'unavailable' | 'failed'; message?: string };
 
 /**
@@ -494,7 +518,7 @@ export async function purchasePackage(pkg: unknown, current: SubscriptionStatus)
   try {
     const result = await Purchases.purchasePackage(pkg);
     const info = result?.customerInfo;
-    return { ok: true, status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info) };
+    return { ok: true, status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info), storeEntitled: storeEntitledFromCustomerInfo(info) };
   } catch (e) {
     const err = e as { userCancelled?: boolean | null; message?: string };
     // Backing out of Apple's sheet is not an error and must never be reported as one.
@@ -517,7 +541,7 @@ export async function restorePurchases(current: SubscriptionStatus): Promise<Pur
   if (!Purchases) return { ok: false, reason: 'unavailable' };
   try {
     const info = await Purchases.restorePurchases();
-    return { ok: true, status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info) };
+    return { ok: true, status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info), storeEntitled: storeEntitledFromCustomerInfo(info) };
   } catch (e) {
     return { ok: false, reason: 'failed', message: (e as { message?: string })?.message };
   }

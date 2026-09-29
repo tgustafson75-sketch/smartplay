@@ -40,7 +40,7 @@ export default function PaywallScreen() {
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = getApiBaseUrl();
-  const { subscription_status, setSubscriptionStatus, setTrialStartedAt, email } = usePlayerProfileStore();
+  const { subscription_status, setSubscriptionStatus, setTrialStartedAt, setStoreEntitlementActive, email } = usePlayerProfileStore();
   const [busy, setBusy] = useState(false);
   /**
    * 2026-09-15 — APP REVIEW, GUIDELINE 2.1(b): "we cannot locate the In-App Purchases, such as
@@ -161,6 +161,7 @@ export default function PaywallScreen() {
       if (result.ok) {
         // The trial's clock starts NOW, at the purchase — not when the app was first opened.
         if (result.trialStartedAt != null) setTrialStartedAt(result.trialStartedAt);
+        if (result.storeEntitled != null) setStoreEntitlementActive(result.storeEntitled);
         setSubscriptionStatus(result.status);
         track('subscribe_succeeded', { status: result.status, plan });
         safeBack();
@@ -203,6 +204,7 @@ export default function PaywallScreen() {
       const result = await restorePurchases(subscription_status);
       if (result.ok && (result.status === 'active' || result.status === 'trial' || result.status === 'lifetime')) {
         if (result.trialStartedAt != null) setTrialStartedAt(result.trialStartedAt);
+        if (result.storeEntitled != null) setStoreEntitlementActive(result.storeEntitled);
         setSubscriptionStatus(result.status);
         track('restore_succeeded', { status: result.status });
         Alert.alert(t('paywall.alert.restored'), `You're all set — full ${caddieName} is back.`, [{ text: 'Great' }]);
@@ -210,6 +212,7 @@ export default function PaywallScreen() {
         return;
       }
       if (result.ok) {
+        if (result.storeEntitled != null) setStoreEntitlementActive(result.storeEntitled);
         setSubscriptionStatus(result.status);
         Alert.alert(t('paywall.alert.nothing_to_restore'), t('paywall.alert.no_active_subscription_on_this'), [{ text: 'OK' }]);
         return;

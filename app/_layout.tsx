@@ -695,6 +695,12 @@ function AppNavigator() {
         if (snapshot.trialStartedAt != null) {
           usePlayerProfileStore.getState().setTrialStartedAt(snapshot.trialStartedAt);
         }
+        // Remember what the store said, so a later promo expiry can tell its 'active' from theirs.
+        if (snapshot.storeEntitled != null) {
+          usePlayerProfileStore.getState().setStoreEntitlementActive(snapshot.storeEntitled);
+          // A store subscriber whose status a lapsed promo moved to 'expired' before this read landed
+          // gets it back through planEntitlementWrite's storeEntitled rule just below.
+        }
         /**
          * 2026-09-18 — THE DECISION MOVED INTO THE MODULE, because this is where it was wrong.
          *
@@ -705,7 +711,7 @@ function AppNavigator() {
          * 14-day trial on their first launch. Found on Tim's own App Store install, where the
          * caddie answered "That one got away from me" to everything. See planEntitlementWrite.
          */
-        const write = planEntitlementWrite({ before, mapped: next, now: nowStatus });
+        const write = planEntitlementWrite({ before, mapped: next, now: nowStatus, storeEntitled: snapshot.storeEntitled });
         if (write == null) return;
         usePlayerProfileStore.getState().setSubscriptionStatus(write);
       })();
@@ -798,6 +804,7 @@ function AppNavigator() {
         trialStartedAt: trial_started_at,
         trialDurationMs: TRIAL_DURATION_MS,
         now: Date.now(),
+        storeEntitled: usePlayerProfileStore.getState().store_entitlement_active,
       });
       if (plan.clearPromo) profile.clearPromo();
       if (plan.grantLifetime) grantLifetime();

@@ -193,6 +193,14 @@ interface PlayerProfileState {
    * a different length. Persisted automatically — partialize keeps everything it does not name.
    */
   promo_expires_at: number | null;
+  /**
+   * 2026-09-28 (1.0.2) — the STORE's last answer: does this player hold a live paid entitlement?
+   * Written on every successful store read (launch refresh, purchase, restore). It is what lets an
+   * expired promo tell a promo-granted 'active' (lapses) from a store subscriber's (never touched).
+   * null = the store has not answered yet on this install — treated as "might be a subscriber".
+   */
+  store_entitlement_active: boolean | null;
+  setStoreEntitlementActive: (on: boolean) => void;
   subscription_status: SubscriptionStatus;
   /** Optional player email. Used by isOwnerEmail() to grant lifetime
    *  access on first boot. Currently no auth surface populates this; set
@@ -437,6 +445,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       first_opened_at: null,
       trial_started_at: null,
       promo_expires_at: null,
+      store_entitlement_active: null,
       subscription_status: 'free',
       email: null,
       handicap_index: null,
@@ -526,6 +535,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
           subscription_status: 'active',
         }),
       clearPromo: () => set({ promo_expires_at: null }),
+      setStoreEntitlementActive: (on) => set({ store_entitlement_active: on }),
       extendPromo: (days) =>
         set((st) => {
           const now = Date.now();

@@ -37,6 +37,14 @@ export type LifecycleInput = {
   trialStartedAt: number | null;
   trialDurationMs: number;
   now: number;
+  /**
+   * 2026-09-28 (1.0.2) — the store's last answer on a live paid entitlement (profile
+   * store_entitlement_active). Only consulted when a promo ends. Only an explicit `false` lets a
+   * promo's 'active' lapse: null/absent means the store has not answered yet on this install, and a
+   * subscriber must never be downgraded on a guess. Every launch's store read records the answer, so
+   * a promo-only player lapses by the next launch at the latest.
+   */
+  storeEntitled?: boolean | null;
 };
 
 /**
@@ -63,6 +71,16 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
     // Expired: clear it and fall through to the normal ladder, so running out is visible in the
     // status without locking anyone out of anything.
     const rest = planTrialLifecycle({ ...input, promoExpiresAt: null });
+    /**
+     * 2026-09-28 (1.0.2) — AND THE ACCESS IT GRANTED ENDS WITH IT. grantPromo / extendPromo (referral
+     * rewards, owner comps, the old trial extension) all write 'active'; the fall-through above has no
+     * rung for 'active', so the comp cleared and the player stayed Pro for ever. An 'active' the store
+     * does not vouch for came from the promo and lapses to 'expired'. A store subscriber — a referral
+     * reward stacked on a paid plan is exactly this — is never touched here; the store owns their status.
+     */
+    if (status === 'active' && input.storeEntitled === false && !isOwner && subscriptionsEnabled && !rest.setStatus && !rest.grantLifetime) {
+      return { clearPromo: true, ...rest, setStatus: 'expired' };
+    }
     return { clearPromo: true, ...rest };
   }
 

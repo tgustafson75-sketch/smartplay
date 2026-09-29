@@ -145,7 +145,9 @@ describe('an active comp still outranks both blanket grants', () => {
       status: 'active', firstOpenedAt: NOW - 30 * DAY,
     });
     expect(plan.clearPromo).toBe(true);
-    // Falls through to the trial rung rather than leaving a lapsed comp reading as paid.
+    // 2026-09-28 (1.0.2) — the store has not answered on this install (storeEntitled absent), so this
+    // could be a subscriber: clear the comp, leave the status. The lapse itself is pinned in
+    // __tests__/regression/a-promo-lapses-a-subscription-does-not.test.ts.
     expect(plan).toEqual({ clearPromo: true });
   });
 });
