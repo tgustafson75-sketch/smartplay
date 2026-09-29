@@ -66,7 +66,12 @@ const easIgnored = (() => {
 })();
 const isExcludedFromBuild = (relPath) =>
   easIgnored.some((pat) => relPath === pat || relPath.startsWith(`${pat}/`));
-const NATIVE_FILES = ['app.json', 'app.config.js', 'app.config.ts'];
+/**
+ * 2026-09-29 — react-native.config.js decides which native modules AUTOLINK into the binary (it is
+ * how Health Connect's native half was taken out of the Android build). Editing it changes the
+ * shell exactly like editing a plugin, so it moves the fingerprint.
+ */
+const NATIVE_FILES = ['app.json', 'app.config.js', 'app.config.ts', 'react-native.config.js'];
 
 /**
  * 2026-09-13 — eas.json is hashed with its `EXPO_PUBLIC_*` env values REMOVED, for the same reason
