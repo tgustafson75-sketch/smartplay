@@ -204,7 +204,10 @@ const norm = (s: string | null | undefined) => String(s ?? '').toLowerCase().rep
  * Returns [] for a single-layout property — the common case costs one cached search, once per round.
  * Throws SiblingLookupFailed when the lookup could not be completed, so the caller can retry it.
  */
-export async function resolveSiblings(activeId: string, activeName: string): Promise<Sibling[]> {
+/** A resolved list that may carry `incomplete`: how many sibling cards did not come back. */
+type SiblingList = Sibling[] & { incomplete?: number };
+
+export async function resolveSiblings(activeId: string, activeName: string): Promise<SiblingList> {
   if (activeId.startsWith('custom:')) return [];
   if (activeId.startsWith('local:')) {
     const { resolveComplex } = require('../data/courseComplexes') as typeof import('../data/courseComplexes');
@@ -259,6 +262,9 @@ export async function resolveSiblings(activeId: string, activeName: string): Pro
     out.push({ courseId: id, courseName: courseDisplayLabel(c.club_name, c.course_name), holes, courseLocation: loc });
   }
   if (missing > 0 && out.length === 0) throw new SiblingLookupFailed(`no sibling card available (${missing} missing)`);
+  // Partial: use what resolved now, but say it is incomplete so the tick retries the rest (getCourse's
+  // null is a 404 OR a dead spot — the two cannot be told apart, so a missing card earns a retry).
+  if (missing > 0) (out as SiblingList).incomplete = missing;
   // Build their maps (deduped/cached by the geometry service) so their tees are known on the course.
   const geo = require('./courseGeometryService') as typeof import('./courseGeometryService');
   await Promise.all(out.map((s) => geo.fetchCourseGeometry(s.courseId, { courseLocation: s.courseLocation }).catch(() => null)));
@@ -288,7 +294,11 @@ function tick(): void {
         state = INITIAL_STATE;
         resolving = resolveSiblings(activeId, round.activeCourse ?? '')
           // An answer, empty or not, is settled for this course.
-          .then((s) => { if (siblingsFor === activeId) { siblings = s; failedAt = 0; failures = 0; } })
+          .then((s: SiblingList) => {
+            if (siblingsFor !== activeId) return;
+            siblings = s;
+            if (s.incomplete) { failedAt = Date.now(); failures += 1; } else { failedAt = 0; failures = 0; }
+          })
           // A failure waits RETRY_AFTER_FAILURE_MS. (It used to clear siblingsFor, which re-asked on the
           // very next 4s tick for as long as the course had no signal.)
           .catch(() => { if (siblingsFor === activeId) { siblings = []; failedAt = Date.now(); failures += 1; } })
@@ -296,10 +306,13 @@ function tick(): void {
       }
       return;
     }
-    if (!siblings.length) {
-      if (failedAt && failures < MAX_LOOKUP_FAILURES && Date.now() - failedAt > RETRY_AFTER_FAILURE_MS) { siblingsFor = null; failedAt = 0; }
+    // A failed OR incomplete lookup is asked again after the pause, within the per-course cap. An
+    // incomplete one keeps verifying against the siblings it has until then.
+    if (failedAt && failures < MAX_LOOKUP_FAILURES && Date.now() - failedAt > RETRY_AFTER_FAILURE_MS) {
+      siblingsFor = null; failedAt = 0;
       return;
     }
+    if (!siblings.length) return;
     const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
     const fix = getLastFix();
     if (!fix || (fix.source && fix.source !== 'live') || Date.now() - fix.timestamp > MAX_FIX_AGE_MS) return;

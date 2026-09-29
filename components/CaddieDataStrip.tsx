@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { registerPendingScoreFlush } from '../services/round/pendingScoreFlush';
 import {
   View,
   Text,
@@ -162,8 +163,11 @@ export default function CaddieDataStrip({
   useEffect(() => {
     if (pendingRef.current.hole != null && pendingRef.current.hole !== currentHoleNum) commitRef.current();
   }, [currentHoleNum]);
-  // Leaving the screen never drops a score just tapped in.
-  useEffect(() => () => commitRef.current(), []);
+  // Leaving the screen never drops a score just tapped in; ending the round flushes it first.
+  useEffect(() => {
+    const leave = registerPendingScoreFlush(() => commitRef.current());
+    return () => { leave(); commitRef.current(); };
+  }, []);
   const narrowStrip = screenW < 500;
   void _totalScore; void _scoreVsPar;
   const lastCellLabel = 'STROKE';

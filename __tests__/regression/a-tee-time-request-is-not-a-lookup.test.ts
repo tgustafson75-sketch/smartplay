@@ -20,8 +20,10 @@ describe('a tee-time request reaches the brain', () => {
     'pull up tee times at Menifee Lakes',
     "let's play Menifee Lakes, find me a tee-time",
     'any teetimes this weekend',
-  ])('"%s" is not claimed locally', (t) => {
-    expect(precheckLocalIntent(t)).toBeNull();
+  ])('"%s" is sent to the BRAIN, not a local handler and not the cloud classifier', (t) => {
+    // 2026-09-30 (triple-check) — null was not enough: a null precheck is handed to /api/voice-intent,
+    // whose enum can turn "tee time to play <course>" into open_course or quick_round.
+    expect(precheckLocalIntent(t)?.intent_type).toBe('conversational');
   });
 
   it('the data and course commands without a tee time keep their fast path', () => {
@@ -30,4 +32,13 @@ describe('a tee-time request reaches the brain', () => {
     expect(precheckLocalIntent("let's play Menifee Lakes Palms")?.intent_type).toBe('open_course');
   });
 
+});
+
+describe('and the router actually hands it to the brain', () => {
+  it('the precheck result dispatches as route_to_brain — no classifier call, no local handler', async () => {
+    const { VoiceCommandRouter } = require('../../services/voiceCommandRouter') as typeof import('../../services/voiceCommandRouter');
+    const intentOut = precheckLocalIntent('Get me a tee time to play Menifee Lakes Palms Saturday')!;
+    const res = await new VoiceCommandRouter().dispatch(intentOut, {} as never);
+    expect(res.side_effects).toContain('route_to_brain:conversational');
+  });
 });

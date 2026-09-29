@@ -617,9 +617,15 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
    * for a round at Menifee Lakes Saturday" matched the find_my_data block below (`find … round`), and
    * "Get me a tee time to play Menifee Lakes Palms Saturday" matched the course-open (`play <course>`),
    * both at confidence 'high' — so the booking hand-off was never reached. Any utterance naming a tee
-   * time defers, ahead of both.
+   * time goes to the brain, ahead of both.
+   *
+   * 2026-09-30 (triple-check) — and it goes to the BRAIN, not back to "no match". A null from here is
+   * handed to the cloud classifier (/api/voice-intent), whose enum has open_course / quick_round /
+   * find_my_data and no tee-time rule — so "get me a tee time to play Menifee Lakes" could come back
+   * as a course open or even a quick round. 'conversational' is the route both routers send straight
+   * to the brain, where find_tee_time lives.
    */
-  if (/\btee[\s-]?times?\b/i.test(t)) return null;
+  if (/\btee[\s-]?times?\b/i.test(t)) return intent(t, 'conversational', { raw_utterance: t });
 
   // 2026-07-25 (Tim — the app's whole point: "ask the caddie to find/pull up ANY of my data"). Checked
   // BEFORE the course-open below so "pull up my round at Mines" finds the ROUND record (not just opens

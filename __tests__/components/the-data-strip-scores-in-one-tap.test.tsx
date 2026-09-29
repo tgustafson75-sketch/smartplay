@@ -83,6 +83,21 @@ describe('THE ASK: score the hole from the bar', () => {
     expect(onScore.mock.calls).toEqual([[3, 7]]);
   });
 
+  it('THE BUG (triple-check 2026-09-30): End Round inside the settle window still records the last hole', () => {
+    const { useRoundStore } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+    const holes = Array.from({ length: 18 }, (_, i) => ({ hole: i + 1, par: 4, distance: 380 })) as never;
+    useRoundStore.getState().startRound('Test', holes, { nineHoleMode: false, isCompetition: false, notes: '', goal: null, courseId: 't', courseLocation: null } as never);
+    useRoundStore.getState().setCurrentHole(18);
+    const write = (score: number, h: number) => { if (useRoundStore.getState().isRoundActive) useRoundStore.getState().logScore(h, score); };
+    const r = render(<CaddieDataStrip {...base} hole={{ current: 18, total: 18, first: 1 }} par={4} holeScore={null} onScoreStep={write} onPuttsStep={jest.fn()} />);
+    fireEvent.press(r.getByTestId('strip-score-plus'));
+    const history = useRoundStore.getState().roundHistory.length;
+    useRoundStore.getState().endRound();
+    const saved = useRoundStore.getState().roundHistory;
+    expect(saved.length).toBe(history + 1);
+    expect((saved[saved.length - 1] as unknown as { scores: Record<number, number> }).scores[18]).toBe(4);
+  });
+
   it('an entered score steps from what is recorded', () => {
     const onScore = jest.fn();
     const r = render(<CaddieDataStrip {...base} par={4} holeScore={5} holePutts={2} onScoreStep={onScore} onPuttsStep={jest.fn()} />);

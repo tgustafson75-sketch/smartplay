@@ -105,6 +105,7 @@ import AppIcon from '../../components/AppIcon';
 // dedicated round-active camera button surfaces it elsewhere.
 import VocabBanner from '../../components/VocabBanner';
 import CaddieDataStrip, { STRIP_SCORING_ROW_HEIGHT } from '../../components/CaddieDataStrip';
+import { flushPendingScores } from '../../services/round/pendingScoreFlush';
 import HolePlanChip from '../../components/HolePlanChip';
 import { canAccess, trialDaysLeft, SUBSCRIPTIONS_ENABLED, gatedFeatureForPath } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
@@ -3400,6 +3401,7 @@ export default function CaddieTab() {
       // reading them after the reset always yields zero/null/[].
       // 2026-06-21 — also capture scores/courseHoles/activeCourse so
       // buildContextualSummary has the pre-reset data for best/worst hole.
+      flushPendingScores(); // a strip entry still settling is part of this summary
       const preRound = useRoundStore.getState();
       const snapshot = {
         total: getTotalScore(),
@@ -4729,6 +4731,7 @@ export default function CaddieTab() {
                   // Snapshot BEFORE endRound zeroes scores/course/id.
                   // 2026-06-21 — include scores/courseHoles/activeCourse so
                   // buildContextualSummary has pre-reset data.
+                  flushPendingScores(); // a strip entry still settling is part of this summary
                   const preRound = useRoundStore.getState();
                   const snapshot = {
                     total: getTotalScore(),

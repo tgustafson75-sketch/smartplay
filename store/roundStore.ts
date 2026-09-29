@@ -2055,6 +2055,11 @@ export const useRoundStore = create<RoundState>()(
       },
 
       endRound: () => {
+        // A score still settling on the caddie strip belongs to this round — write it before anything
+        // below reads scores. (See services/round/pendingScoreFlush.)
+        if (get().isRoundActive) {
+          (require('../services/round/pendingScoreFlush') as typeof import('../services/round/pendingScoreFlush')).flushPendingScores();
+        }
         const s = get();
         // Guard: no active round → no-op. Without this, a double-tap
         // (final-hole auto-end racing the End Round button) or a stray

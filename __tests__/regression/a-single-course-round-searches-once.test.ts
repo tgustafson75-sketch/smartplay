@@ -117,6 +117,22 @@ describe('a course in a dead zone is not searched all round', () => {
   });
 });
 
+describe('a partial sister-course answer is retried, within the cap (triple-check 2026-09-30)', () => {
+  it('one sister card missing in a dead spot → keep the good one, ask again after the pause, stop at the cap', async () => {
+    const row = (id: string) => ({ id, club_name: 'Hemet Golf Club', course_name: `Course ${id}`, location: '' });
+    const card = (id: string) => ({ ...hemetCard, id, course_name: `Course ${id}`,
+      tees: [{ tee_name: 'Blue', holes: Array.from({ length: 18 }, (_, i) => ({ hole_number: i + 1, par: 4, yardage: 380 })) }] });
+    mockSearch.mockResolvedValue([...ownRowOnly, row('good'), row('flaky')]);
+    mockGetCourse.mockImplementation(async (id: string) => (id === 'hemet' ? hemetCard : id === 'good' ? card('good') : null));
+    _tickForTests(); await flush();
+    expect(mockSearch).toHaveBeenCalledTimes(1);
+    now += RETRY_AFTER_FAILURE_MS + 1; _tickForTests(); await flush(); _tickForTests(); await flush();
+    expect(mockSearch).toHaveBeenCalledTimes(2);  // THE BUG: a partial answer was settled for the round
+    for (let i = 0; i < 20; i++) { now += RETRY_AFTER_FAILURE_MS + 1; _tickForTests(); await flush(); }
+    expect(mockSearch).toHaveBeenCalledTimes(MAX_LOOKUP_FAILURES);
+  });
+});
+
 describe('a background search that fails is a diagnostic, not a player-facing error', () => {
   it('logs diag for background, analysis_error for a search the player made', async () => {
     const actual = jest.requireActual('../../services/golfCourseApi') as typeof import('../../services/golfCourseApi');
