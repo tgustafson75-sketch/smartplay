@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../../theme/tokens';
 import { useTranslation } from 'react-i18next';
@@ -92,6 +92,10 @@ interface PillProps {
 }
 
 function Pill({ icon, label, color, bg, onPress }: PillProps) {
+  // 2026-09-29 (narrow-screen audit) — five pills in a row leave ~18–32dp for a label beside the icon
+  // on a phone (vs ~100 on the open Fold). Below 500dp the icon sits ABOVE the label.
+  const { width } = useWindowDimensions();
+  const stacked = width < 500;
   return (
     <Pressable
       onPress={onPress}
@@ -99,6 +103,7 @@ function Pill({ icon, label, color, bg, onPress }: PillProps) {
       accessibilityLabel={label}
       style={({ pressed }) => [
         styles.pill,
+        stacked && styles.pillStacked,
         { borderColor: color, backgroundColor: bg, opacity: pressed ? 0.7 : 1 },
       ]}
     >
@@ -133,9 +138,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
   },
+  pillStacked: { flexDirection: 'column', paddingHorizontal: 2, paddingVertical: 8, gap: 2 },
   pillText: {
     fontSize: 13,
     fontWeight: '700',
+    flexShrink: 1,
   },
 });
 

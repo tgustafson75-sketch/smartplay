@@ -22,7 +22,8 @@ import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 import { holeTile, getCenteredImageryUrl, centeredFrame, type HoleTile } from '../../services/mapboxImagery';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { useTranslation } from 'react-i18next';
-import { resolveYardageSource, yardageSourceLabel, isLiveYardage } from '../../services/yardageSource';
+import { yardageSourceLabel, isLiveYardage, type YardageSource } from '../../services/yardageSource';
+import ZoomableView from '../swinglab/ZoomableView';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -57,6 +58,25 @@ type Props = {
    * have no pill in the way, so they keep the default.
    */
   badgeTop?: number;
+  /**
+   * 2026-09-29 (Tim, Hemet 17: the round bar said STATIC while this map said LIVE 446y — at the same
+   * instant). THE NUMBER AND ITS LIVE/STATIC CALL, decided by the Caddie tab — the same readout the
+   * data strip shows. This preview used to run its own haversine from the raw fix to the green with no
+   * accuracy gate, no card+100 plausibility clamp and no yardage-mode check, so it could vouch for a
+   * number the resolver had rightly refused. Now it only ever repeats the one decision. Without a
+   * readout it shows no number and no pill: never a second opinion. Its own geometry is still used,
+   * but only to PLACE the player marker along the hole.
+   */
+  readout?: { yardage: number | null; source: YardageSource | null };
+  /** Full-size view: the yardage rides beside the moving marker instead of sitting in a corner. */
+  labelFollowsMarker?: boolean;
+  /**
+   * 2026-09-29 (Tim: "that image can be zoomed so user can zoom in on hole characteristics using
+   * fingers") — pinch to zoom 1–4×, drag when zoomed, double-tap to reset, single tap still opens
+   * SmartVision. The player marker and its yardage are INSIDE the zoomed layer, so they stay pinned to
+   * the same spot on the hole at any zoom; the LIVE/STATIC pill stays outside it, fixed and readable.
+   */
+  zoomable?: boolean;
 };
 
 /** Natural aspect (height / width) of a bundled require() image (a number id); null for a uri/unknown. */
@@ -96,6 +116,24 @@ type HoleFrameProps = {
   children: React.ReactNode;
 };
 
+/**
+ * Pinch-zoom wrapper for the full-size preview (see Props.zoomable). The outer box clips; the inner
+ * ZoomableView (the same component SmartMotion's zoom uses) scales the image AND everything drawn on
+ * it together. Disabled → children render exactly as before.
+ */
+function MaybeZoom({ enabled, box, onSingleTap, children }: {
+  enabled: boolean; box: { width: number; height: number }; onSingleTap?: () => void; children: React.ReactNode;
+}) {
+  if (!enabled) return <>{children}</>;
+  return (
+    <View style={[box, styles.zoomClip]}>
+      <ZoomableView style={box} maxScale={4} onSingleTap={onSingleTap}>
+        {children}
+      </ZoomableView>
+    </View>
+  );
+}
+
 function HoleFrame({ onPress, onLayout, children }: HoleFrameProps) {
   const { t } = useTranslation();
   return (
@@ -113,7 +151,7 @@ function HoleFrame({ onPress, onLayout, children }: HoleFrameProps) {
   );
 }
 
-export default function L1HolePreview({ onOpenSmartVision, width, height, badgeTop = 8 }: Props) {
+export default function L1HolePreview({ onOpenSmartVision, width, height, badgeTop = 8, readout, labelFollowsMarker = false, zoomable = false }: Props) {
   // The badge under the cart icon is the number the player glances at all round. It reads in their
   // unit now; the yards behind it (haversineYards, holeRecord.distance) are untouched.
   const { fmtCompact } = useDistanceFormat();
@@ -229,16 +267,8 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
 
   // 2026-08-13 — subscribe so a finished geometry build re-runs the effect below.
   const geometryCompletions = useGeometryStatusStore((st) => st.completions);
-  /**
-   * 2026-09-12 (Tim — "SmartVision should show ACTIVE with current cart position and yardages") —
-   * the SAME live/static judgement the in-round data strip makes, from the SAME function.
-   *
-   * The preview already computed a cart position and a yards-to-green and drew both. What it never
-   * did was say whether the map was ALIVE: on any hole where the overlay could not resolve, it was a
-   * hole photograph with no overlay and no explanation, which reads as a broken feature rather than
-   * as GPS that has not landed. Tim: "it all same catches, because the connectivity is the same."
-   */
-  const geometryBuilding = useGeometryStatusStore((st) => st.building);
+  // 2026-09-29 — the MAPPING…/LIVE/STATIC call is made by the Caddie tab and handed in as `readout`
+  // (see Props); this component no longer subscribes to the geometry-build status to make its own.
 
   useEffect(() => {
     let cancelled = false;
@@ -511,45 +541,46 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     const padBottom = 8;
     const trackHeight = box.height - padTop - padBottom;
     const cartY = pctAlong != null ? (padBottom + pctAlong * trackHeight) : null;
+    /**
+     * SAY WHETHER THIS MAP IS ALIVE — the Caddie tab's one readout (services/yardageSource), the same
+     * word the data strip shows. Three states, not two: a course mid-build says MAPPING… rather than a
+     * bare STATIC. No readout → no pill: this component never makes the call itself.
+     */
+    const sourcePill = (() => {
+      if (!isRoundActive) return null;
+      const src = readout?.source ?? null;
+      const label = yardageSourceLabel(src);
+      if (!label) return null;
+      return (
+        <View style={[styles.sourcePill, zoomable && styles.sourcePillFullSize, isLiveYardage(src) ? styles.sourcePillLive : styles.sourcePillStatic]}>
+          <Text style={[styles.sourcePillText, isLiveYardage(src) ? styles.sourcePillTextLive : styles.sourcePillTextStatic]}>{label}</Text>
+        </View>
+      );
+    })();
     return (
-      <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
+      <HoleFrame onPress={zoomable ? undefined : onOpenSmartVision} onLayout={setMeasuredDims}>
+        <MaybeZoom enabled={zoomable} box={box} onSingleTap={onOpenSmartVision}>
         <ImageBackground source={heroImageSource} onError={() => { if (!capturedUri) onTileError(aerialTileUrl); }} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
           {cartY != null && yardsToGreen != null ? (
             <>
               <View style={[styles.playerCartOnImage, { bottom: cartY, left: box.width / 2 - 12 }]}>
                 <Ionicons name="navigate" size={14} color="#0d1a0d" />
               </View>
-              <View style={styles.playerYardageBadge}>
-                <Text style={styles.playerYardageText}>{fmtCompact(yardsToGreen)}</Text>
-              </View>
+              {readout?.yardage != null ? (
+                <View style={labelFollowsMarker
+                  ? [styles.playerYardageBadge, styles.playerYardageBadgeFollow, { bottom: cartY + 2, left: box.width / 2 + 16 }]
+                  : styles.playerYardageBadge}>
+                  <Text style={[styles.playerYardageText, labelFollowsMarker && styles.playerYardageTextLarge]}>{fmtCompact(readout.yardage)}</Text>
+                </View>
+              ) : null}
             </>
           ) : null}
-          {/**
-            * SAY WHETHER THIS MAP IS ALIVE — from services/yardageSource, the same function the
-            * in-round data strip uses. Three states, not two: a course mid-build says MAPPING…
-            * rather than a bare STATIC that reads as "this is as good as it gets".
-            */}
-          {(() => {
-            if (!isRoundActive) return null;
-            /**
-             * In a round there is ALWAYS something to say — the only question is whether GPS is
-             * driving it. `displayYardage: 1` is the standing "a number is on screen" signal; the
-             * live/static call is made entirely by whether yardsToGreen resolved.
-             */
-            const src = resolveYardageSource({
-              displayYardage: 1,
-              liveYardage: yardsToGreen,
-              isBuilding: !!geometryBuilding[activeCourseId ?? ''],
-            });
-            const label = yardageSourceLabel(src);
-            if (!label) return null;
-            return (
-              <View style={[styles.sourcePill, isLiveYardage(src) ? styles.sourcePillLive : styles.sourcePillStatic]}>
-                <Text style={[styles.sourcePillText, isLiveYardage(src) ? styles.sourcePillTextLive : styles.sourcePillTextStatic]}>{label}</Text>
-              </View>
-            );
-          })()}
+          {zoomable ? null : sourcePill}
         </ImageBackground>
+        </MaybeZoom>
+        {/* Full-size: the pill sits OUTSIDE the zoomed layer (bottom-LEFT — the right-hand column is
+            the crosshair and data buttons), so zooming never moves or scales it. */}
+        {zoomable ? sourcePill : null}
         {/* Branded badge is a FRAME child (full width), not inside the centered/narrower image box —
             so it pins to the card's true top-right and clears the ••• tools pill (badgeTop). */}
         {compact ? null : <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop, right: 8 }} />}
@@ -701,6 +732,7 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: 8, right: 8,
     paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, borderWidth: 1,
   },
+  sourcePillFullSize: { right: undefined, left: 8 },
   sourcePillLive: { backgroundColor: 'rgba(0,200,150,0.18)', borderColor: '#00C896' },
   sourcePillStatic: { backgroundColor: 'rgba(0,0,0,0.55)', borderColor: 'rgba(255,255,255,0.35)' },
   sourcePillText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
@@ -716,6 +748,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   playerYardageText: { color: '#F5A623', fontSize: 11, fontWeight: '800', fontFamily: 'monospace' },
+  playerYardageBadgeFollow: { top: undefined },
+  zoomClip: { overflow: 'hidden', borderRadius: 10 },
+  playerYardageTextLarge: { fontSize: 15 },
   playerCartOnImage: {
     position: 'absolute',
     width: 24, height: 24,

@@ -100,7 +100,7 @@ function Pill({ label, color, onPress }: PillProps) {
         },
       ]}
     >
-      <Text style={[styles.pillText, { color }]} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.pillText, { color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </Pressable>
   );
 }
@@ -153,6 +153,7 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 13,
     fontWeight: '700',
+    flexShrink: 1,
   },
 });
 

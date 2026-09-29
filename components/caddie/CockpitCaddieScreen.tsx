@@ -100,6 +100,8 @@ export interface CockpitCaddieScreenProps {
   onOpenSmartVision?: () => void;
   /** Parent's gated SmartFinder opener (caddie.tsx, canAccess-checked). */
   onOpenSmartFinder?: () => void;
+  /** 2026-09-29 — when opened as a route (app/round/data.tsx): the header's close X. */
+  onClose?: () => void;
 }
 
 export default function CockpitCaddieScreen({
@@ -108,6 +110,7 @@ export default function CockpitCaddieScreen({
   onMicPress,
   onOpenSmartVision,
   onOpenSmartFinder,
+  onClose,
 }: CockpitCaddieScreenProps) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -448,6 +451,7 @@ export default function CockpitCaddieScreen({
         <BrandHeader
           voiceState={voiceState}
           onMicPress={onMicPress}
+          onClose={onClose}
         />
 
         {/* Minimal sub-row: hole / course. Mirrors v3's SubHeaderBar

@@ -1914,8 +1914,11 @@ check('Bottom-strip hole nav is finger-sized (Tim: arrows too small on course)',
   // and a larger hole value, so changing holes mid-round is an easy tap.
   (() => {
     const s = read('components/CaddieDataStrip.tsx');
-    return /size=\{24\}/.test(s) && /size=\{22\}/.test(s) &&
-      /hitSlop=\{14\}/.test(s) &&
+    // 2026-09-29 — on a phone-width strip (<500dp) the glyph drops to 18 and the padding to 1 so the
+    // hole NUMBER fits between them (it vanished on every iPhone — narrow-screen audit); the TOUCH
+    // target grows instead (hitSlop 18). The Fold/wide strip keeps exactly the June sizes below.
+    return /size=\{24\}/.test(s) && /size=\{narrowStrip \? 18 : 22\}/.test(s) &&
+      /hitSlop=\{narrowStrip \? 18 : 14\}/.test(s) &&
       /paddingHorizontal: 8,\s*\n\s*paddingVertical: 7/.test(s) && // holeNavBtn target
       !/size=\{16\}/.test(s) && !/size=\{14\}/.test(s);            // old tiny glyphs gone
   })(),
@@ -4369,7 +4372,7 @@ check('LOCK: a denied feature must OFFER the upgrade, never just refuse',
       for (const f of walkDir(path.resolve(root, d))) {
         const rel = f.slice(root.length + 1);
         if (rel === 'services/featureAccess.ts') continue;
-        if (rel === 'components/caddie/CockpitCaddieScreen.tsx') continue; // parked, imported by nothing
+        // 2026-09-29 — CockpitCaddieScreen is live again (app/round/data.tsx), so it is checked like the rest.
         const src = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
         let from = 0;
         for (;;) {

@@ -412,6 +412,27 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     transportMode: safe(() => r.transportMode ?? 'walking', 'walking'),
     /**
+     * 2026-09-29 (Tim: pace of play "could show how user plays in these conditions") — the live pace
+     * and his own slow-vs-normal scoring, from services/paceOfPlay: the same function the round bar's
+     * pace line reads, so the caddie and the screen cannot disagree. Null off-round.
+     */
+    pace: safe(() => {
+      const pace = require('./paceOfPlay') as typeof import('./paceOfPlay');
+      const rs = require('../store/roundStore') as typeof import('../store/roundStore');
+      return pace.paceContext({
+        isRoundActive: !!r.isRoundActive,
+        roundStartTime: r.roundStartTime ?? null,
+        holeStartedAt: r.holeStartedAt ?? {},
+        currentHole: r.currentHole ?? 1,
+        firstHole: rs.roundFirstHole(r),
+        lastHole: rs.roundLastHole(r),
+        history: ((r.roundHistory ?? []) as import('../store/roundStore').RoundRecord[]).map((h) => ({
+          startedAt: h.startedAt, endedAt: h.endedAt, holesPlayed: h.holesPlayed, scoreVsPar: h.scoreVsPar,
+        })),
+        now: Date.now(),
+      });
+    }, null),
+    /**
      * 2026-08-23 — His saved pre-round routine (the warm-up he told the caddie to remember). Stored
      * with a setter since June and read by exactly ONE place — localStatusResponder, the demoted
      * fallback — so it reached no brain at all. Round-independent: he saves and recalls it off the

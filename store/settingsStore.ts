@@ -299,6 +299,8 @@ interface SettingsState {
   // back to 'live' fires a fresh GPS read (synthetic Mark) so the
   // current position re-anchors the live yardages.
   yardageMode: 'live' | 'preround';
+  /** 2026-09-29 — show the pace-of-play line on the round bar (services/paceOfPlay). Off by default. */
+  showPaceOfPlay: boolean;
   // (Phase BL autoClubDetection / cageAutoClubDetection /
   // hasSeenAutoClubPrompt removed 2026-07-04 audit — zero consumers;
   // stale persisted values are ignored on hydrate.)
@@ -440,6 +442,7 @@ interface SettingsState {
    * a way to keep writing it. See services/intents/changeSettingHandler.ts.
    */
   setYardageMode: (v: 'live' | 'preround') => void;
+  setShowPaceOfPlay: (v: boolean) => void;
   setEnvironmentMode: (mode: 'course' | 'range' | 'sim') => void;
   setPracticeCanvasFeet: (feet: number) => void;
   setCameraBehindFeet: (feet: number) => void;
@@ -582,6 +585,7 @@ export const useSettingsStore = create<SettingsState>()(
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
+      showPaceOfPlay: false,
       environmentMode: 'range' as const,   // never a venue the player did not choose
       practiceCanvasFeet: 14,
       cameraBehindFeet: 7,
@@ -872,6 +876,7 @@ export const useSettingsStore = create<SettingsState>()(
       setGlassesMode: (v) => set({ glassesMode: v }),
       setFeelCaptureEnabled: (v) => set({ feelCaptureEnabled: v }),
       setKevinGreetingEnabled: (v) => set({ kevinGreetingEnabled: v }),
+      setShowPaceOfPlay: (v) => set({ showPaceOfPlay: v }),
       setYardageMode: (v) => {
         const prev = get().yardageMode;
         set({ yardageMode: v });
@@ -1245,6 +1250,7 @@ export const useSettingsStore = create<SettingsState>()(
         kevinGreetingEnabled: s.kevinGreetingEnabled,
         smartVisionImagery: s.smartVisionImagery,
         yardageMode: s.yardageMode,
+        showPaceOfPlay: s.showPaceOfPlay,
         environmentMode: s.environmentMode,
         practiceCanvasFeet: s.practiceCanvasFeet,
         cameraBehindFeet: s.cameraBehindFeet,

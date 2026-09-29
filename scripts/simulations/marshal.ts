@@ -254,7 +254,6 @@ export const ISLAND_BASELINE: Record<string, string> = {
    * I don't think so." Kept deliberately unrouted while that call is open, so it stays here as a
    * KNOWN island rather than being deleted or wired. Revisit post-launch.
    */
-  'components/caddie/CockpitCaddieScreen.tsx': 'PARKED (Tim 08-27) — cockpit mode, hidden, may return',
   /**
    * BUILT, GUARDED, NEVER WIRED — and the guard is the only consumer, which is what makes these the
    * exact failure this marshal exists to name.

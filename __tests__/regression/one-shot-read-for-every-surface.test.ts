@@ -109,7 +109,7 @@ describe('no surface decides for itself — it asks the brain', () => {
       for (const e of fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })) {
         const p = `${d}/${e.name}`;
         if (e.isDirectory()) {
-          if (['node_modules', '.git', 'dist', '.expo', 'ios', 'android', '__tests__', 'scripts'].includes(e.name)) continue;
+          if (['node_modules', '.git', '.claude', 'dist', '.expo', 'ios', 'android', '__tests__', 'scripts'].includes(e.name)) continue;
           walk(p);
         } else if (/\.tsx?$/.test(e.name)) {
           const rel = p.slice(2);

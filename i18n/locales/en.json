@@ -4068,5 +4068,15 @@
     "ready_other": "Ready · {{count}} greens mapped · in Your courses",
     "ready_no_greens": "Ready · no green map yet, yardages are estimates",
     "ready_unmeasured": "Ready · in Your courses"
+  },
+  "round_data_screen": {
+    "accessibility_label": {
+      "close": "Close the round data view"
+    }
+  },
+  "caddie_round_data": {
+    "accessibility_label": {
+      "open": "Open the round data view"
+    }
   }
 }

@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -108,21 +108,26 @@ interface CellProps {
 }
 
 function Cell({ label, value, sub, subColor, colors, onMinus, onPlus }: CellProps) {
+  // 2026-09-29 (narrow-screen audit) — the − value + row needs ~114dp; a phone cell gives 79–104, so the
+  // + button spilled into the next cell. Narrow screens get smaller buttons, a tighter gap and a value
+  // that shrinks; hitSlop keeps the touch target.
+  const { width } = useWindowDimensions();
+  const narrow = width < 500;
   return (
     <View style={[styles.cell, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
       <Text style={[styles.cellLabel, { color: colors.text_muted }]} numberOfLines={1}>{label}</Text>
-      <View style={styles.cellRow}>
+      <View style={[styles.cellRow, narrow && styles.cellRowNarrow]}>
         <Pressable
           onPress={onMinus}
-          hitSlop={10}
+          hitSlop={narrow ? 12 : 10}
           accessibilityRole="button"
           accessibilityLabel={`Decrease ${label.toLowerCase()}`}
-          style={[styles.btn, { backgroundColor: colors.accent_muted }]}
+          style={[styles.btn, narrow && styles.btnNarrow, { backgroundColor: colors.accent_muted }]}
         >
           <Ionicons name="remove" size={18} color={colors.accent} />
         </Pressable>
         <Text
-          style={[styles.cellValue, { color: colors.text_primary }]}
+          style={[styles.cellValue, narrow && styles.cellValueNarrow, { color: colors.text_primary }]}
           adjustsFontSizeToFit
           numberOfLines={1}
           minimumFontScale={0.7}
@@ -131,10 +136,10 @@ function Cell({ label, value, sub, subColor, colors, onMinus, onPlus }: CellProp
         </Text>
         <Pressable
           onPress={onPlus}
-          hitSlop={10}
+          hitSlop={narrow ? 12 : 10}
           accessibilityRole="button"
           accessibilityLabel={`Increase ${label.toLowerCase()}`}
-          style={[styles.btn, { backgroundColor: colors.accent_muted }]}
+          style={[styles.btn, narrow && styles.btnNarrow, { backgroundColor: colors.accent_muted }]}
         >
           <Ionicons name="add" size={18} color={colors.accent} />
         </Pressable>
@@ -178,6 +183,9 @@ const styles = StyleSheet.create({
     minWidth: 32,
     textAlign: 'center',
   },
+  cellRowNarrow: { gap: 4 },
+  btnNarrow: { width: 26, height: 26, borderRadius: 13 },
+  cellValueNarrow: { flexShrink: 1, minWidth: 24 },
   btn: {
     width: 30,
     height: 30,

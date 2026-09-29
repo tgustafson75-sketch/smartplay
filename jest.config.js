@@ -6,6 +6,10 @@ module.exports = {
     {
       displayName: 'logic',
       testEnvironment: 'node',
+      // 2026-09-29 — agent git worktrees live under .claude/worktrees/ INSIDE the repo; each holds a
+      // full copy of the app, so jest's haste map saw duplicate modules and tests could run twice.
+      modulePathIgnorePatterns: ['<rootDir>/.claude/'],
+      testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/'],
       // 2026-09-05 — the logic project had NO setup file, so Node's real fetch was live and
       // tests posted to production (thirteen fake ROUND TRACE emails + paid inference calls).
       // See __tests__/setupNoNetwork.ts.
@@ -54,6 +58,8 @@ module.exports = {
     {
       displayName: 'components',
       preset: 'jest-expo',
+      modulePathIgnorePatterns: ['<rootDir>/.claude/'],
+      testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/'],
       testMatch: ['<rootDir>/__tests__/components/**/*.test.tsx'],
       setupFilesAfterEnv: ['<rootDir>/__tests__/setupNoNetwork.ts', '<rootDir>/__tests__/setup.ts'],
       transformIgnorePatterns: [

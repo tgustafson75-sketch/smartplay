@@ -64,8 +64,23 @@ const CACHE_FRESH_MS    = 10_000;
 const POLL_CONFIG: Record<GpsMode, { intervalMs: number; accuracy: Location.Accuracy }> = {
   active:     { intervalMs: 1_000,  accuracy: Location.Accuracy.BestForNavigation },
   walking:    { intervalMs: 10_000, accuracy: Location.Accuracy.High },
-  stationary: { intervalMs: 20_000, accuracy: Location.Accuracy.Low },
+  /**
+   * 2026-09-29 (Tim, Hemet: "STATIC … when I should not have", and the rest screen's yardage not
+   * updating) — was Accuracy.Low. On Android that is a low-power NETWORK fix, 15–90m and sometimes
+   * hundreds of yards off, and stationary is exactly where a player stands for a minute and a half:
+   * on the tee, waiting on a group, sitting in the cart — which is also when the rest screen is up.
+   * Every such fix overwrote a good one, the accuracy fell into the weak band, the resolver dropped
+   * to the scorecard number and said STATIC, and the rest screen repeated a number that never moved.
+   * This mode only exists during a round (see the note above), so the fix stays GPS-grade; the saving
+   * comes from the 20s cadence, not from degrading the reading.
+   */
+  stationary: { intervalMs: 20_000, accuracy: Location.Accuracy.High },
 };
+
+/** Test seam: the poll settings a mode runs with. */
+export function pollConfigFor(m: GpsMode): { intervalMs: number; accuracy: Location.Accuracy } {
+  return POLL_CONFIG[m];
+}
 
 // Phase 107 / B2 — outlier rejection thresholds.
 // accuracy_m worse than this = reading discarded entirely.

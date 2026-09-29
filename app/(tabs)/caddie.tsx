@@ -22,6 +22,7 @@ import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
 import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
+import { computeLivePace, paceLine, formatClock } from '../../services/paceOfPlay';
 import type { ShotLocation, ShotResult } from '../../store/roundStore';
 import { useRestReadoutStore } from '../../store/restReadoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -157,6 +158,10 @@ const ONBOARDING_TOUR_STEPS: TourStep[] = [
 ];
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
+/** The SmartFinder crosshair's footprint on the plan card's band: right 14 + width 46 + 8 breathing. */
+const PLAN_CARD_RIGHT_INSET = 14 + 46 + 8;
+/** Where the brand row ends inside the hero zone (insets.top + 8 + 56 + 8, minus the zone's +12). */
+const L1_MAP_TOP_CLEAR = 64;
 
 // 2026-06-06 — Module-level once-per-process flag for the post-splash
 
@@ -725,6 +730,55 @@ export default function CaddieTab() {
   const displayYardage = resolvedYardage?.value ?? liveYardage ?? currentYardage;
 
   /**
+   * 2026-09-29 — ONE READOUT, decided here, repeated everywhere. The data strip, all four
+   * L1HolePreview renders and the rest screen now show this exact number with this exact LIVE / STATIC
+   * / MAPPING… call. The map preview used to decide its own (a raw haversine with none of the
+   * resolver's gates) and disagreed with the strip at Hemet 17 — STATIC on the bar, LIVE 446y on the
+   * map, same instant. [[two-owners-is-the-root-cause]]
+   */
+  const activeCourseIdForReadout = useRoundStore((s) => s.activeCourseId);
+  /**
+   * 2026-09-29 (Tim) — pace of play, optional (••• → Pace of play). services/paceOfPlay is the one
+   * owner; this line and the caddie's `pace` context read the same function. Re-derived on the 4s tick
+   * so the elapsed clock moves.
+   */
+  const showPaceOfPlay = useSettingsStore((s) => s.showPaceOfPlay);
+  const holeStartedAt = useRoundStore((s) => s.holeStartedAt);
+  const roundStartTime = useRoundStore((s) => s.roundStartTime);
+  // Its own 30s clock: pace moves in minutes, and it must not ride markTick (the yardage recompute tick).
+  const [paceTick, setPaceTick] = useState(0);
+  useEffect(() => {
+    if (!showPaceOfPlay || !isRoundActive) return;
+    const id = setInterval(() => setPaceTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, [showPaceOfPlay, isRoundActive]);
+  const paceLineText = useMemo(() => {
+    if (!showPaceOfPlay || !isRoundActive) return null;
+    const rs = useRoundStore.getState();
+    const pace = computeLivePace({
+      roundStartTime,
+      holeStartedAt: holeStartedAt ?? {},
+      currentHole,
+      firstHole: roundFirstHole(rs),
+      lastHole: roundLastHole(rs),
+      now: Date.now(),
+    });
+    return pace ? paceLine(pace, formatClock) : null;
+    // paceTick: the elapsed clock has to move even when nothing else does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPaceOfPlay, isRoundActive, roundStartTime, holeStartedAt, currentHole, paceTick]);
+  /** Measured height of the plan card, so the full-size SmartVision map keeps its live marker clear. */
+  const [planCardHeight, setPlanCardHeight] = useState(0);
+  const yardageReadout = useMemo(() => ({
+    yardage: isRoundActive ? (displayYardage ?? null) : null,
+    source: resolveYardageSource({
+      displayYardage,
+      liveYardage,
+      isBuilding: !!geometryBuilding[activeCourseIdForReadout ?? ''],
+    }),
+  }), [isRoundActive, displayYardage, liveYardage, geometryBuilding, activeCourseIdForReadout]);
+
+  /**
    * 2026-09-11 (Tim, approved against the layout freeze) — THE PLAN, ON SCREEN.
    *
    * Recomputed when the shot in front of the player changes: the hole, the number, and how many
@@ -846,9 +900,11 @@ export default function CaddieTab() {
    * displayYardage. It must not compute its own either — see store/restReadoutStore.ts. This screen
    * stays the single owner of "how far is it"; the overlay only ever repeats what was decided here.
    *
-   * Runs on every change of the resolved numbers, which during a live round is every GPS tick — that
-   * cadence is also what keeps the freshness stamp current, so the overlay can tell a live number
-   * from the ghost of one three holes ago.
+   * Runs on every change of the resolved numbers AND on every recompute tick (markTick: the 4s poll
+   * and each GPS fix). 2026-09-29 (Tim: the rest screen's yardage "was not updating") — it used to run
+   * only when a number CHANGED, so a player standing still on a tee published nothing, the 45s
+   * freshness window lapsed, and the overlay's number vanished as if GPS had died. The tick is what
+   * proves the number is still being computed; the value itself may legitimately not move.
    */
   useEffect(() => {
     if (!isRoundActive) { useRestReadoutStore.getState().clear(); return; }
@@ -857,7 +913,7 @@ export default function CaddieTab() {
       playsLike: playsLikeYardage ?? null,
       hole: currentHole ?? null,
     });
-  }, [isRoundActive, displayYardage, playsLikeYardage, currentHole]);
+  }, [isRoundActive, displayYardage, playsLikeYardage, currentHole, markTick, geometryCompletions]);
 
   // Audit 101 / W1 — useShallow subscriptions (see useRoundStore note above).
   const {
@@ -3462,11 +3518,10 @@ export default function CaddieTab() {
 
       {/* 2026-06-10 — Smart Finder floating shortcut. The rangefinder reticle
           used to live on every surface but only survived on the Play tab. This
-          main return is L2/L3 ONLY (L1 returns the cockpit screen above, which
-          has its own yardage-card → SmartFinder path), so the shortcut shows on
-          L2/L3 — and intentionally even with no active round, so it's testable
-          any time (e.g. putting distance). Right side, floating, above the
-          bottom controls. */}
+          main return renders for every presence level (the L1 cockpit early-return was removed on
+          2026-08-26; the cockpit now opens as its own route — see the data button below), and
+          intentionally even with no active round, so it's testable any time (e.g. putting distance).
+          Right side, floating, above the bottom controls. */}
       <TouchableOpacity
         style={{
           position: 'absolute', right: 14, bottom: budget.bubbleClearance, zIndex: 20,
@@ -3486,6 +3541,25 @@ export default function CaddieTab() {
       >
         <AppIcon name="locate-outline" size={22} color="#00C896" />
       </TouchableOpacity>
+      {/* 2026-09-29 (Tim) — the round DATA view (the v2 cockpit: steppers, live F/C/B, quick shot row),
+          one tap away instead of a layout to switch into. Stacked directly above the crosshair, in the
+          column the plan card leaves free (PLAN_CARD_RIGHT_INSET). Round only — its numbers are the
+          round's. */}
+      {isRoundActive ? (
+        <TouchableOpacity
+          style={{
+            position: 'absolute', right: 14, bottom: budget.bubbleClearance + 46 + 10, zIndex: 20,
+            width: 46, height: 46, borderRadius: 12, borderWidth: 1.5,
+            borderColor: '#00C896', backgroundColor: 'rgba(6,15,9,0.7)',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+          onPress={() => router.push('/round/data' as never)}
+          accessibilityRole="button"
+          accessibilityLabel={t('caddie_round_data.accessibility_label.open')}
+        >
+          <AppIcon name="grid-outline" size={22} color="#00C896" />
+        </TouchableOpacity>
+      ) : null}
 
       {/* KEVIN — Phase E Trust Spectrum gating.
            L2 path is byte-identical to the locked elite Kevin layout (the
@@ -3547,7 +3621,7 @@ export default function CaddieTab() {
                 style={{ position: 'absolute', top: cellTop, right: 12, zIndex: 6 }}
                 pointerEvents="box-none"
               >
-                <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} />
+                <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} readout={yardageReadout} />
               </View>
             </>
           );
@@ -3594,7 +3668,7 @@ export default function CaddieTab() {
               style={{ position: 'absolute', top: blockTop + cellH + gap, left: 12, zIndex: 6 }}
               pointerEvents="box-none"
             >
-              <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} />
+              <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} readout={yardageReadout} />
             </View>
           </>
         );
@@ -3647,9 +3721,30 @@ export default function CaddieTab() {
           <>
             {/* PRIMARY zone — fills between the top gap (below the status bar) and the controls row. */}
             <View style={{ position: 'absolute', left: 0, right: 0, top: zoneTop, bottom: zoneBottom }}>
-              {caddiePrimary ? kevinAvatar : (
-                <L1HolePreview onOpenSmartVision={openSmartVision} width={W} height={zoneHeight} badgeTop={62} />
-              )}
+              {caddiePrimary ? kevinAvatar : (() => {
+                /**
+                 * 2026-09-29 (Tim: "does SmartVision show live in L1?") — it did update every 4s, but
+                 * the yardage sat under the brand logo and the player marker and LIVE pill under the
+                 * data strip, so nothing visibly moved. The full-size map now fits the WHOLE hole into
+                 * the band nothing covers — below the brand row, above the plan card / corner box /
+                 * crosshair — so the marker's position stays truthful end to end and the yardage rides
+                 * beside it. The ONE readout (strip == map) is passed in.
+                 */
+                const bottomClear = budget.bubbleClearance + (isRoundActive ? planCardHeight : 0) + 6;
+                return (
+                  <View style={{ position: 'absolute', left: 0, right: 0, top: L1_MAP_TOP_CLEAR, bottom: bottomClear }}>
+                    <L1HolePreview
+                      onOpenSmartVision={openSmartVision}
+                      width={W}
+                      height={Math.max(120, zoneHeight - L1_MAP_TOP_CLEAR - bottomClear)}
+                      badgeTop={0}
+                      readout={yardageReadout}
+                      labelFollowsMarker
+                      zoomable
+                    />
+                  </View>
+                );
+              })()}
             </View>
             {/* CORNER box = the toggle. Shows the OTHER view; tap it to bring that view forward. */}
             <TouchableOpacity
@@ -3678,7 +3773,7 @@ export default function CaddieTab() {
             >
               <View style={StyleSheet.absoluteFill} pointerEvents="none">
                 {caddiePrimary
-                  ? <L1HolePreview width={120} height={86} />
+                  ? <L1HolePreview width={120} height={86} readout={yardageReadout} />
                   : kevinAvatar}
               </View>
               {/* swap affordance — tap-to-switch chip. 2026-07-25 (Tim — theme congruence) — was neon
@@ -3924,7 +4019,10 @@ export default function CaddieTab() {
       <View
         style={{
           position: 'absolute',
-          top: insets.top + (W >= 540 ? 160 : 240),
+          // 2026-09-29 (narrow-screen audit) — clamped so it always ends 8dp above the right-hand button
+          // column (crosshair + round data, whose top edge is boxHeight − bubbleClearance − 102). On a
+          // 667dp iPhone SE the fixed +240 put it 39dp into the data button.
+          top: Math.min(insets.top + (W >= 540 ? 160 : 240), budget.boxHeight - budget.bubbleClearance - 102 - 8 - 56),
           right: 12,
           zIndex: 16,
           width: 56,
@@ -4013,10 +4111,16 @@ export default function CaddieTab() {
       >
         {/* Sits ABOVE the strip, absolutely positioned — the strip keeps bottom: 0 and its own
              height, and nothing already on this screen moves by a pixel. */}
+        {/* 2026-09-29 (Tim, approved: "we do your recommendations") — lifted to the crosshair's line
+            (budget.bubbleClearance) and ended before it (rightInset), so neither the corner portrait
+            /map box nor the SmartFinder crosshair can sit on top of it. It grows upward into the hero;
+            Kevin's container is untouched — the OTHER element moved. */}
         <HolePlanChip
           plan={livePlan.plan}
           budgetLine={livePlan.budget}
-          bottomOffset={94}
+          bottomOffset={budget.bubbleClearance}
+          rightInset={PLAN_CARD_RIGHT_INSET}
+          onHeightChange={setPlanCardHeight}
           visible={isRoundActive}
         />
         <CaddieDataStrip
@@ -4047,11 +4151,8 @@ export default function CaddieTab() {
              copy of the identical judgement about the identical GPS. Tim: "all of that should be in
              the same general category — it all same catches, because the connectivity is the same."
              [[two-owners-is-the-root-cause]] */
-          yardageSource={resolveYardageSource({
-            displayYardage,
-            liveYardage,
-            isBuilding: !!geometryBuilding[useRoundStore.getState().activeCourseId ?? ''],
-          })}
+          yardageSource={yardageReadout.source}
+          paceLine={paceLineText}
           // 2026-05-19 — totalScore/scoreVsPar wiring temporarily removed.
           // Strip displays STROKE only (per Tim's "don't show score in
           // the data bar, scoring goes in the expandable tool arrow"

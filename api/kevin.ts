@@ -12,6 +12,7 @@ import { allowInference } from './_inferLimit';
 import { getCaddieName, getCharacterSpec, personaInputFrom } from '../lib/persona';
 import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
 import { BRAIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
+import { paceLineForBrain } from '../services/paceOfPlay';
 // 2026-06-24 — APP-FEATURE CATALOG. Makes the caddie aware of the app's real
 // tools/cards/drills (e.g. Smart Tempo) so they can name them and open them via
 // the open tools. Shared client+server module under services/.
@@ -332,6 +333,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       shotRead = null,
       roundConditions = null,
       transportMode = null,
+      pace = null,
       currentLocationType = null,
       riskMode = null,
       currentTeeBox = null,
@@ -1725,7 +1727,7 @@ ${(() => {
 })()}${currentLocationType && currentLocationType !== 'unknown'
   ? `WHERE THEY ARE STANDING: ${currentLocationType === 'green' ? 'ON THE GREEN — this is a PUTT. Read the putt; do not recommend a club or a full swing.' : currentLocationType === 'tee' ? 'on the tee' : 'in the fairway'}\n`
   : ''}Getting around: ${transportMode === 'cart' ? 'riding a cart' : 'walking'}${currentTeeBox ? ` | Tee: ${currentTeeBox}` : ''}${nineHoleMode ? ' | NINE-HOLE round — pace the round to 9, never 18' : ''}
-Risk posture: ${riskMode === 'safe' ? 'SAFE — take the conservative line, favour the fat side' : riskMode === 'aggressive' ? 'AGGRESSIVE — they want to take it on' : 'normal'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}
+${paceLineForBrain(pace)}Risk posture: ${riskMode === 'safe' ? 'SAFE — take the conservative line, favour the fat side' : riskMode === 'aggressive' ? 'AGGRESSIVE — they want to take it on' : 'normal'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}
 Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === null ? 'UNKNOWN — no hole pars loaded for this course. Do NOT state a score to par, do not call it even, and do not work one out from the total; say the strokes and holes only' : scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}
 Competition: ${isCompetition ? 'yes — be conservative' : 'no'}`
       : '';

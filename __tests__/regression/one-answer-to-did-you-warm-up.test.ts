@@ -69,7 +69,7 @@ describe('nobody keeps a second copy of it', () => {
       for (const e of fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })) {
         const p = `${d}/${e.name}`;
         if (e.isDirectory()) {
-          if (['node_modules', '.git', 'dist', '.expo', 'ios', 'android', '__tests__'].includes(e.name)) continue;
+          if (['node_modules', '.git', '.claude', 'dist', '.expo', 'ios', 'android', '__tests__'].includes(e.name)) continue;
           walk(p);
         } else if (/\.tsx?$/.test(e.name) && p !== './services/practice/warmupPerformance.ts') {
           if (/const WARMUP_WINDOW_MS\s*=/.test(code(p.slice(2)))) offenders.push(p);

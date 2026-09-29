@@ -310,11 +310,17 @@ describe('it is wired to the caddie AND to the screen, from ONE composer', () =>
     const stripHeight = Number(/^\s*height: (\d+),$/m.exec(strip.slice(strip.indexOf('wrapper: {')))?.[1]);
     expect(Number.isFinite(stripHeight)).toBe(true);
 
-    const offsets = [...caddieTab.matchAll(/bottomOffset=\{(\d+)\}/g)].map(m => Number(m[1]));
-    expect(offsets.length).toBe(2);
-    const [chipOffset, stripOffset] = [Math.max(...offsets), Math.min(...offsets)];
-
-    expect(chipOffset).toBeGreaterThanOrEqual(stripOffset + stripHeight);
+    // 2026-09-29 — the chip now sits on budget.bubbleClearance (the crosshair's line, above the corner
+    // box — Tim's Hemet screenshots showed it under both). Still DERIVED: compute the budget for real
+    // phone geometries and assert the chip clears the strip's top edge on each.
+    const stripOffset = Number(/<CaddieDataStrip[\s\S]{0,1500}?bottomOffset=\{(\d+)\}/.exec(caddieTab)?.[1]);
+    expect(Number.isFinite(stripOffset)).toBe(true);
+    expect(caddieTab).toMatch(/<HolePlanChip[\s\S]{0,200}?bottomOffset=\{budget\.bubbleClearance\}/);
+    const { caddieLayoutBudget } = require('../../services/caddieLayoutBudget') as typeof import('../../services/caddieLayoutBudget');
+    for (const H of [640, 740, 844, 900, 1000]) {
+      const b = caddieLayoutBudget({ W: 390, H, insetTop: 24, insetBottom: 16, barReserve: 90, tabBarHeight: 64 });
+      expect(b.bubbleClearance).toBeGreaterThanOrEqual(stripOffset + stripHeight);
+    }
   });
 
   it('the brain renders it and is told NOT to recompute the numbers', () => {

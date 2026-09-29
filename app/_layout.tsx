@@ -1888,6 +1888,10 @@ function AppNavigator() {
           options={{ animation: 'fade', headerShown: false }}
         />
         <Stack.Screen
+          name="round/data"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
           name="smartfinder"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />

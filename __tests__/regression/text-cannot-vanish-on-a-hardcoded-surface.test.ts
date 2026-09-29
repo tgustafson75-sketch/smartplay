@@ -43,7 +43,7 @@ function isDark(hex: string): boolean {
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     if (e.isDirectory()) {
-      if (['node_modules', '.git', 'dist', 'ios', 'android', '__tests__'].includes(e.name)) continue;
+      if (['node_modules', '.git', '.claude', 'dist', 'ios', 'android', '__tests__'].includes(e.name)) continue;
       walk(path.join(dir, e.name), out);
     } else if (e.name.endsWith('.tsx')) {
       out.push(path.join(dir, e.name));

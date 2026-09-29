@@ -65,6 +65,7 @@ export function GlobalToolsMenu() {
   const voiceEnabled = useSettingsStore((s) => s.voiceEnabled);
   const setVoiceEnabled = useSettingsStore((s) => s.setVoiceEnabled);
   const yardageMode = useSettingsStore((s) => s.yardageMode);
+  const showPaceOfPlay = useSettingsStore((s) => s.showPaceOfPlay);
   const setYardageMode = useSettingsStore((s) => s.setYardageMode);
   // 2026-05-16 — surface Active Listening one tap away from the Tools
   // menu (was previously buried in Settings, leading to Tim's "Kevin is
@@ -158,6 +159,13 @@ export function GlobalToolsMenu() {
     const next = !autoListenEnabled;
     applyListening(next);
     useToastStore.getState().show(next ? 'Hands-free listening on' : 'Hands-free listening off');
+    fire(() => undefined);
+  };
+
+  const togglePace = () => {
+    const next = !useSettingsStore.getState().showPaceOfPlay;
+    useSettingsStore.getState().setShowPaceOfPlay(next);
+    useToastStore.getState().show(next ? 'Pace of play: ON' : 'Pace of play: OFF');
     fire(() => undefined);
   };
 
@@ -285,6 +293,13 @@ export function GlobalToolsMenu() {
                   label={`Yardage: ${yardageMode === 'live' ? 'LIVE' : 'PRE-ROUND'}`}
                   sub={yardageMode === 'live' ? 'Tap for scorecard yardages' : 'Tap to go live on GPS'}
                   onPress={toggleYardageMode}
+                  colors={colors}
+                />
+                <Row
+                  icon={showPaceOfPlay ? 'timer' : 'timer-outline'}
+                  label={`Pace of play: ${showPaceOfPlay ? 'ON' : 'OFF'}`}
+                  sub={showPaceOfPlay ? 'Shown on the round bar' : 'Show time, minutes per hole and finish'}
+                  onPress={togglePace}
                   colors={colors}
                 />
                 <Row

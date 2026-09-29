@@ -322,6 +322,8 @@ export interface RoundRecord {
   courseId: string | null;
   startedAt: number;
   endedAt: number;
+  /** 2026-09-29 — when each hole was first reached (pace of play). Absent on older rounds. */
+  holeStartedAt?: Record<number, number>;
   holesPlayed: number;
   totalScore: number;
   scoreVsPar: number | null; // null = round had no hole with a known par (don't fabricate/trend a vs-par)
@@ -629,6 +631,12 @@ interface RoundState {
   pendingKevinRec: { club: string | null; shape: string | null; aimPoint: string | null; aimSide?: 'left' | 'center' | 'right' | null; at?: number; kind?: 'spoken' | 'engine' | 'inferred' } | null;
 
   roundStartTime: number | null;
+  /**
+   * 2026-09-29 — when the player first reached each hole of the round in progress (epoch ms), for
+   * pace of play (services/paceOfPlay). Stamped once per hole by startRound and setCurrentHole;
+   * revisiting a hole does not re-stamp it. Persisted with the round and snapshotted onto its record.
+   */
+  holeStartedAt: Record<number, number>;
   roundNumber: number;
   roundHistory: RoundRecord[];
   active_ghost: { source_round_id: string; label: string } | null;
@@ -1093,6 +1101,7 @@ export const useRoundStore = create<RoundState>()(
       lastMutation: null,
       currentRoundPhotos: [],
       roundStartTime: null,
+      holeStartedAt: {},
       roundEndTime: null,
       roundNumber: 0,
       roundHistory: [],
@@ -1447,6 +1456,7 @@ export const useRoundStore = create<RoundState>()(
           currentRoundPhotos: [],
           emotionalLog: [],
           roundStartTime: Date.now(),
+          holeStartedAt: { [startHoleResolved]: Date.now() },
           roundNumber: prev.roundNumber + 1,
           active_ghost: null,
           mentalState: 'neutral',
@@ -1921,6 +1931,7 @@ export const useRoundStore = create<RoundState>()(
           mode: 'free_play' as RoundMode,
           currentRoundId: null,
           roundStartTime: null,
+          holeStartedAt: {},
           preRoundYardageSnapshot: null,
           // 2026-06-07 (audit M2) — clear per-round caddie/location state so
           // the NEXT round doesn't inherit the prior round's tone/tags.
@@ -2099,6 +2110,7 @@ export const useRoundStore = create<RoundState>()(
           courseId: s.activeCourseId,
           startedAt: s.roundStartTime ?? Date.now(),
           endedAt: Date.now(),
+          holeStartedAt: { ...(s.holeStartedAt ?? {}) },
           holesPlayed: scoredEntries.length,
           totalScore: scoredEntries.reduce((a, [, score]) => a + score, 0),
           scoreVsPar,
@@ -2412,6 +2424,7 @@ export const useRoundStore = create<RoundState>()(
           mode: 'free_play' as RoundMode,
           currentRoundId: null,
           roundStartTime: null,
+          holeStartedAt: {},
           preRoundYardageSnapshot: null,
           // 2026-06-07 (audit M2) — clear per-round caddie/location state so
           // the next round starts neutral (matches discardRound).
@@ -2888,6 +2901,10 @@ export const useRoundStore = create<RoundState>()(
         if (prevHole !== clamped) {
           const green = greenForHole(prevHole);
           if (green) get().closeHoleEndLocation(prevHole, green);
+          // Pace of play: the first arrival on a hole is its start. A revisit keeps the first stamp.
+          if (state.isRoundActive && (state.holeStartedAt ?? {})[clamped] == null) {
+            set({ holeStartedAt: { ...(state.holeStartedAt ?? {}), [clamped]: Date.now() } });
+          }
         }
         const holeData = state.courseHoles.find(h => h.hole === clamped);
         // 2026-05-25 — Clear userStatedYardage when advancing holes;
@@ -3892,6 +3909,7 @@ export const useRoundStore = create<RoundState>()(
         riskMode: s.riskMode,
         currentRoundPhotos: s.currentRoundPhotos,
         roundStartTime: s.roundStartTime,
+        holeStartedAt: s.holeStartedAt ?? {},
         roundEndTime: s.roundEndTime,
         emotionalLog: s.emotionalLog,
         // 2026-05-24 — Persist Meta glasses + external context so a

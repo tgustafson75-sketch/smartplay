@@ -62,16 +62,22 @@ describe('the rule itself', () => {
 });
 
 describe('both surfaces use that one function', () => {
+  // 2026-09-29 — ONE READOUT (Tim, Hemet 17: bar STATIC, map LIVE 446y at the same instant). The rule
+  // was one function but its INPUT had two owners: the preview fed it its own raw haversine. Now the
+  // Caddie tab computes `yardageReadout` once with this function and hands it to the strip AND every
+  // preview; the preview decides nothing. Behaviour: __tests__/regression/a-still-player-keeps-a-live-number.
   it('the in-round data strip does', () => {
     const tab = code('app/(tabs)/caddie.tsx');
-    expect(tab).toMatch(/yardageSource=\{resolveYardageSource\(\{/);
+    expect(tab).toMatch(/const yardageReadout = useMemo\(\(\) => \(\{[\s\S]{0,160}?source: resolveYardageSource\(\{/);
+    expect(tab).toMatch(/yardageSource=\{yardageReadout\.source\}/);
     // and the inline ternary is GONE, not merely duplicated beside it
     expect(tab).not.toMatch(/liveYardage != null \? 'live'/);
   });
 
-  it('the L1 hole preview does too — the surface that was about to get a copy', () => {
+  it('the L1 hole preview shows THAT readout — it no longer runs the function on its own input', () => {
     const prev = code('components/caddie/L1HolePreview.tsx');
-    expect(prev).toMatch(/resolveYardageSource\(\{/);
+    expect(prev).not.toMatch(/resolveYardageSource\(/);
+    expect(prev).toMatch(/const src = readout\?\.source \?\? null;/);
     expect(prev).toMatch(/yardageSourceLabel\(src\)/);
     expect(prev).toMatch(/isLiveYardage\(src\)/);
   });
@@ -90,10 +96,14 @@ describe('both surfaces use that one function', () => {
 });
 
 describe('the preview says something during EVERY round, not only the happy path', () => {
-  it('labels the map even when no yardage resolved — silence reads as a broken feature', () => {
+  it('labels the map whenever the round bar has a number — the same label, never its own', () => {
+    // 2026-09-29 — was "displayYardage: 1" (always label) + its own yardsToGreen. The strip's
+    // displayYardage falls back to the card distance in a round, so the map is labelled whenever the
+    // bar is — and now always with the bar's word.
+    const tab = code('app/(tabs)/caddie.tsx');
+    expect(tab).toMatch(/yardage: isRoundActive \? \(displayYardage \?\? null\) : null,/);
     const prev = code('components/caddie/L1HolePreview.tsx');
-    expect(prev).toMatch(/displayYardage: 1,/);
-    expect(prev).toMatch(/liveYardage: yardsToGreen,/);
+    expect(prev).not.toMatch(/liveYardage: yardsToGreen,/);
   });
 
   it('and says nothing at all outside a round — it is a hole picture and does not pretend', () => {

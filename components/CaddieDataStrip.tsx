@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,6 +53,8 @@ export interface CaddieDataStripProps {
    * course we're still mapping is not a status, it's a shrug.
    */
   yardageSource?: 'live' | 'static' | 'building' | null;
+  /** 2026-09-29 — the optional pace-of-play line (services/paceOfPlay.paceLine), led in the stripe. */
+  paceLine?: string | null;
   // 2026-05-19 — Running round totals. When at least one hole has been
   // scored, the strip swaps the STROKE cell for SCORE (e.g. "12 +1")
   // so the user sees the round total without leaving the Caddie tab.
@@ -72,6 +75,7 @@ export default function CaddieDataStrip({
   bottomOffset = 0,
   stripLayout = 'horizontal',
   yardageSource = null,
+  paceLine = null,
   // 2026-05-19 — totalScore/scoreVsPar accepted as props for forward
   // compat but NOT rendered in the strip per Tim's "don't show the
   // score the whole time, mentals matter" call. Scoring lives in the
@@ -81,6 +85,14 @@ export default function CaddieDataStrip({
   onPress,
 }: CaddieDataStripProps) {
   const { t } = useTranslation();
+  /**
+   * 2026-09-29 (narrow-screen audit) — on a phone-width strip each cell is (W−56)/4: 80dp at 375,
+   * 84 at 393. The HOLE cell's two 22-glyph arrows with 8dp padding and 4dp gaps took 84 of it, so
+   * "7/18" shrank to nothing on every iPhone — invisible on the open Fold (~158dp cells). Narrow
+   * screens get slimmer arrows and a wider HOLE cell; the touch target stays ~50dp via hitSlop.
+   */
+  const { width: screenW } = useWindowDimensions();
+  const narrowStrip = screenW < 500;
   void _totalScore; void _scoreVsPar;
   const lastCellLabel = 'STROKE';
   const lastCellValue = String(stroke);
@@ -378,20 +390,20 @@ export default function CaddieDataStrip({
               the outer expand-to-cockpit handler in React Native).
               Tapping the value text between the arrows still expands
               the cockpit, so the affordance doesn't get hijacked. */}
-          <View style={styles.cell}>
+          <View style={[styles.cell, narrowStrip && styles.holeCellNarrow]}>
             <Text style={styles.cellLabel}>{t('caddie_data_strip.text.hole')}</Text>
-            <View style={styles.holeNavRow}>
+            <View style={[styles.holeNavRow, narrowStrip && styles.holeNavRowNarrow]}>
               <Pressable
                 onPress={handleHolePrev}
                 disabled={hole.current <= (hole.first ?? 1)}
-                hitSlop={14}
+                hitSlop={narrowStrip ? 18 : 14}
                 accessibilityRole="button"
                 accessibilityLabel={t('caddie_data_strip.accessibility_label.previous_hole')}
-                style={styles.holeNavBtn}
+                style={[styles.holeNavBtn, narrowStrip && styles.holeNavBtnNarrow]}
               >
                 <Ionicons
                   name="chevron-back"
-                  size={22}
+                  size={narrowStrip ? 18 : 22}
                   color={hole.current <= (hole.first ?? 1) ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                 />
               </Pressable>
@@ -399,14 +411,14 @@ export default function CaddieDataStrip({
               <Pressable
                 onPress={handleHoleNext}
                 disabled={hole.current >= hole.total}
-                hitSlop={14}
+                hitSlop={narrowStrip ? 18 : 14}
                 accessibilityRole="button"
                 accessibilityLabel={t('caddie_data_strip.accessibility_label.next_hole')}
-                style={styles.holeNavBtn}
+                style={[styles.holeNavBtn, narrowStrip && styles.holeNavBtnNarrow]}
               >
                 <Ionicons
                   name="chevron-forward"
-                  size={22}
+                  size={narrowStrip ? 18 : 22}
                   color={hole.current >= hole.total ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                 />
               </Pressable>
@@ -460,21 +472,28 @@ export default function CaddieDataStrip({
             </Text>
           </View>
         )}
-        {isOffCourse && (
-          <View style={styles.offCoursePill}>
-            <Ionicons name="warning-outline" size={9} color="#fbbf24" />
-            <Text style={styles.offCoursePillText}>
-              {yardsToNearestHole != null ? `OFF COURSE · ${fmtCompact(yardsToNearestHole)}` : 'OFF COURSE'}
-            </Text>
-          </View>
-        )}
-        {(movementMode === 'cart' || movementMode === 'walking') && (
-          <View style={styles.movementPill}>
-            <Ionicons
-              name={movementMode === 'cart' ? 'car-outline' : 'walk-outline'}
-              size={10}
-              color="#9ca3af"
-            />
+        {/* 2026-09-29 (narrow-screen audit) — the OFF COURSE pill (~124dp wide) and the cart/walk pill
+            were each absolutely positioned (right 8 / right 78) and overlapped whenever both showed.
+            One right-aligned row now lays them out side by side. */}
+        {(isOffCourse || movementMode === 'cart' || movementMode === 'walking') && (
+          <View style={styles.topRightRow} pointerEvents="none">
+            {(movementMode === 'cart' || movementMode === 'walking') && (
+              <View style={[styles.movementPill, styles.inRow]}>
+                <Ionicons
+                  name={movementMode === 'cart' ? 'car-outline' : 'walk-outline'}
+                  size={10}
+                  color="#9ca3af"
+                />
+              </View>
+            )}
+            {isOffCourse && (
+              <View style={[styles.offCoursePill, styles.inRow]}>
+                <Ionicons name="warning-outline" size={9} color="#fbbf24" />
+                <Text style={styles.offCoursePillText}>
+                  {yardsToNearestHole != null ? `OFF COURSE · ${fmtCompact(yardsToNearestHole)}` : 'OFF COURSE'}
+                </Text>
+              </View>
+            )}
           </View>
         )}
         {/* 2026-05-22 — Ghost Rounds. A thin top stripe that renders only
@@ -482,14 +501,21 @@ export default function CaddieDataStrip({
             (positioned absolute above the data row) so the strip's height
             stays at 84 in the layout sense. Tap routes the same as the
             rest of the strip (expand cockpit). */}
-        {ghostLine && (
+        {paceLine ? (
+          <View style={styles.ghostStripe}>
+            <Ionicons name="timer-outline" size={9} color="#a78bfa" />
+            <Text style={styles.ghostStripeText} numberOfLines={1} maxFontSizeMultiplier={1.1}>
+              {ghostLine ? `${paceLine} · ${ghostLine}` : paceLine}
+            </Text>
+          </View>
+        ) : ghostLine ? (
           <View style={styles.ghostStripe}>
             <Ionicons name="footsteps-outline" size={9} color="#a78bfa" />
-            <Text style={styles.ghostStripeText} numberOfLines={1}>
+            <Text style={styles.ghostStripeText} numberOfLines={1} maxFontSizeMultiplier={1.1}>
               {ghostLine}
             </Text>
           </View>
-        )}
+        ) : null}
       </Pressable>
     </Animated.View>
   );
@@ -613,6 +639,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  holeNavBtnNarrow: { paddingHorizontal: 1 },
+  holeNavRowNarrow: { gap: 0 },
+  // At 320dp: cell ≈ 1.4/4.4 of 264 = 84; arrows 2×(18+2) = 40 → ~44dp for "18/18" (fits ≥0.6 scale).
+  holeCellNarrow: { flex: 1.4 },
   dot: {
     width: 4,
     height: 4,
@@ -685,6 +715,11 @@ const styles = StyleSheet.create({
   // Phase 405 wave 3 — movement-mode pill (icon-only, beside the
   // off-course pill in the top-right). Subtle gray so it reads as a
   // status hint, not an alert.
+  topRightRow: {
+    position: 'absolute', top: 4, right: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+  },
+  inRow: { position: 'relative', top: undefined, right: undefined },
   movementPill: {
     position: 'absolute',
     top: 4,

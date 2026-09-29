@@ -32,6 +32,14 @@ export interface HolePlanChipProps {
   budgetLine?: string | null;
   /** Height of the data strip this sits above, so the two never overlap. */
   bottomOffset?: number;
+  /**
+   * 2026-09-29 (Tim's Hemet screenshots: the plan half-hidden). Room to leave on the right for the
+   * control that shares this band (the SmartFinder crosshair), so the card ends before it instead of
+   * under it.
+   */
+  rightInset?: number;
+  /** Reports the card's rendered height, so the screen can keep other content clear of it. */
+  onHeightChange?: (h: number) => void;
   visible?: boolean;
 }
 
@@ -46,7 +54,7 @@ export function planShorthand(plan: HolePlan): string {
 }
 
 export default function HolePlanChip({
-  plan, budgetLine = null, bottomOffset = 84, visible = true,
+  plan, budgetLine = null, bottomOffset = 84, rightInset = 0, onHeightChange, visible = true,
 }: HolePlanChipProps) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -59,7 +67,11 @@ export default function HolePlanChip({
   const target = plan.playingFor === 'par' ? t('holeplan.par') : `${plan.targetScore}`;
 
   return (
-    <View style={[styles.wrap, { bottom: bottomOffset }]} pointerEvents="box-none">
+    <View
+      style={[styles.wrap, { bottom: bottomOffset, right: rightInset }]}
+      pointerEvents="box-none"
+      onLayout={onHeightChange ? (e) => onHeightChange(Math.round(e.nativeEvent.layout.height)) : undefined}
+    >
       <Pressable
         onPress={() => setOpen((v) => !v)}
         style={[styles.chip, { backgroundColor: c.surface_elevated, borderColor: c.border }]}
@@ -70,13 +82,14 @@ export default function HolePlanChip({
           <Text style={[styles.label, { color: c.text_muted }]}>{t('holeplan.label')}</Text>
           <Text style={[styles.target, { color: c.accent }]}>{target}</Text>
           {budgetLine ? (
-            <Text style={[styles.budget, { color: c.text_secondary }]} numberOfLines={1}>
+            <Text style={[styles.budget, { color: c.text_secondary }]} numberOfLines={open ? 3 : 1}>
               {budgetLine}
             </Text>
           ) : null}
           <Text style={[styles.caret, { color: c.text_muted }]}>{open ? '▴' : '▾'}</Text>
         </View>
-        <Text style={[styles.shorthand, { color: c.text_primary }]} numberOfLines={1}>
+        {/* Expanded shows ALL of it — the goal line and the sequence wrap instead of being cut. */}
+        <Text style={[styles.shorthand, { color: c.text_primary }]} numberOfLines={open ? 3 : 1}>
           {planShorthand(plan)}
         </Text>
         {open ? (

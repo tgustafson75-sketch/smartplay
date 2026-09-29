@@ -197,6 +197,12 @@ export function findOrphanExports(): string[] {
  * you still remember what it was for — which is the entire point of this file.
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
+  // ── 2026-09-29: a still player keeps a GPS-grade fix ─────────────────────────
+  'services/gpsManager.ts :: pollConfigFor':
+    'TEST SEAM. POLL_CONFIG is module-private; the regression test for Tim\'s Hemet STATIC report ' +
+    '(__tests__/regression/a-still-player-keeps-a-live-number) asserts through this that stationary ' +
+    'mode polls at High accuracy, never the low-power network fix that turned a player standing on a ' +
+    'tee into STATIC. Deleting it makes that property unassertable.',
   // ── 2026-09-17: the silent round briefing ────────────────────────────────────
   'services/voiceService.ts :: getLastSpeakStartedAt':
     'TEST SEAM, deliberately kept after app/_layout.tsx moved to getLastSpeakActivityAt. It is the ' +

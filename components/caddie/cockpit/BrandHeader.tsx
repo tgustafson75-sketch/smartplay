@@ -32,9 +32,15 @@ export interface BrandHeaderProps {
   // 2026-05-14 — onModePress removed. Tim: "Tools menu cycler is the only
   // mode control. Remove the MODE pill from Cockpit too." The ••• Tools
   // pill in BrandHeaderRow (every tab) is now the single mode switcher.
+  /**
+   * 2026-09-29 — shown as a route (app/round/data.tsx) the screen needs a way out. An X in THIS row,
+   * after the ••• pill, rather than floating over it (the audit found the floating X covered ••• on
+   * every device, Fold included).
+   */
+  onClose?: () => void;
 }
 
-export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
+export function BrandHeader({ voiceState, onMicPress, onClose }: BrandHeaderProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const openTools = useToolsMenuStore((s) => s.open);
@@ -131,6 +137,17 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
       >
         <Ionicons name="ellipsis-horizontal" size={20} color={colors.text_muted} />
       </Pressable>
+      {onClose ? (
+        <Pressable
+          onPress={onClose}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={t('round_data_screen.accessibility_label.close')}
+          style={({ pressed }) => [styles.toolsPill, styles.closePill, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Ionicons name="close" size={20} color={colors.text_muted} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -225,6 +242,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     marginTop: 2,
   },
+  closePill: { marginLeft: 8 },
   toolsPill: {
     width: 36,
     height: 36,
