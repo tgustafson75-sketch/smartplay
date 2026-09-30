@@ -43,7 +43,7 @@ android {
         // "the watch APK that goes with phone build 28". Bump it with the phone build it ships
         // alongside.
         // 2026-09-30 — 1031: the round-aware layout for Play's "Watch shapes" rejection of 1030.
-        versionCode 1031
+        versionCode 1032
         versionName '1.0.1'
     }
 

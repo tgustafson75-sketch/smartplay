@@ -229,7 +229,9 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
             gravity = Gravity.CENTER_VERTICAL
         }
         feedbackScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
+            // 2026-09-30 — Play rejected 1031 for "Missing scrollbar" (Wear App Quality). Every
+            // scrollable view must show its bar while the user scrolls; this one had it switched off.
+            isHorizontalScrollBarEnabled = true
             visibility = View.GONE
             // Side padding so the first/last card can center on a round face.
             setPadding(dp(24), 0, dp(24), 0)
@@ -347,7 +349,14 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.BLACK)
             isFillViewport = true
-            isVerticalScrollBarEnabled = false
+            /**
+             * 2026-09-30 — Play rejected versionCode 1031: "Missing scrollbar" (Wear App Quality
+             * Guidelines). The bar was switched OFF here. It is on now, and inside the BoxInsetLayout
+             * box, so on a round face the bar sits on glass rather than at the square's cut-off edge.
+             * The platform fades it in on every scroll (drag or rotary) and out when idle.
+             */
+            isVerticalScrollBarEnabled = true
+            isScrollbarFadingEnabled = true
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             addView(
                 root,
