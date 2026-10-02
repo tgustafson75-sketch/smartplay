@@ -5255,3 +5255,8 @@ changing anything. Do NOT add a canned opener (killed 07-25). Sentry MCP is conf
 but the app reports to "smartplay-ai", so Claude can't read issues.
 
 **Notes:** new standing rule: updates go out only Sun→Mon 12:00 a.m. Central.
+- `e606f9e3` SmartPlan wiring. "Irons / shot shapes / swing speed this week" now updates the plan (new brain tool
+  `set_plan_focus` + the hands-free handler). The caddie sees the whole week. Focus sessions tick plan days
+  automatically. "What should I work on" goes to the brain. A once-a-day plan hint goes to the opener (no canned
+  line). Device check is on Tim's checklist (`smartplan-heard-and-updated`). **The server side (api/) has to be
+  deployed before Sunday's update, or the brain won't have the tool. The hands-free path works either way.**
