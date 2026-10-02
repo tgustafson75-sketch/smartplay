@@ -8,6 +8,11 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### 2026-10-01 — Wear 1031 REJECTED ("Missing scrollbar"). Fixed as **1032** (ae05fbe8): scrollbars on, checked
+> on the small-round emulator. Upload to `wear:production` is **Tim's / Cowork's** (instructions given; auto mode
+> blocks Claude from production uploads). **Updates now ship only Sun→Mon 12:00 a.m. Central.** Queued for
+> Mon 10-05: rules matcher fix (c6ba4dc4) + silent-turn report (e9454cef). Both on `release-1.0.2-polish`, JS-only.
+
 > ### 2026-09-30 — 1.0.2 STORE BUILDS DONE (commit 2e9627f3): iOS build 31 + Android versionCode 31, runtimeVersion
 > **"1.0.2"** (moved from "1.0.0" by Tim — OTAs now reach 1.0.2 binaries only). Includes the review sweep (9cee9f19)
 > and triple-check (d451fbfa). NOT submitted. Next: device check (round scoring via the 2-row bar, voice, SmartMotion

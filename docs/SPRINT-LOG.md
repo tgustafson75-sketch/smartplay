@@ -5232,3 +5232,26 @@ swing, sandbox purchase on a release build (R8).
 guard now skips when no wear build exists (fresh clone/worktree); an agent last night used --no-verify
 on a message-only amend of an unpushed commit.
 
+
+## Day 130 — 2026-10-01 — a watch scrollbar, a putter question, and a first answer that never came
+
+**Shipped (pushed to `release-1.0.2-polish`, not yet sent to phones):**
+- `ae05fbe8` Wear 1032: Play rejected 1031 for a missing scrollbar; both scroll views had it switched off. Bar
+  checked visible on the small-round emulator. AAB built; uploading it to Play is for Tim / Cowork.
+- `c6ba4dc4` Rules: "both hands on the putter?" got the flagstick ("putter" contains the keyword "putt"). The
+  matcher now needs whole words with stop words removed, plus one full keyword hit. Added Rule 10.1 (one hand
+  OK, anchoring banned). A question the reference doesn't cover goes to the brain (route_to_brain) instead of
+  "let me check". Gate: a-rules-answer-must-be-about-the-question.
+- `e9454cef` Voice: `services/voice/turnAnswerWatch` — any turn that goes thinking → idle with no line said or
+  shown now reports `turn_ended_silent`. Report only; no new speech.
+
+**Triage (no action):** Sentry pose_zero_frames/clubpath on 10-01 came from a Pixel 7 Pro in India on 1.0.2
+(probably a Play reviewer): a 60s clip that hit the recording cap with nobody in frame. `fileBytes: 0` is odd;
+note it for HANDOFF §3.2. EXC_BAD_ACCESS (AVPlayerItem seek) is 1.0.0 only, last seen 09-20; it is the expo-av
+unload-during-seek bug. If it recurs on 1.0.2, migrate to expo-audio/expo-video.
+
+**Open / carried:** Tim's first-ask silence and greeting delay were on **1.0.1**. Re-check on 1.0.2 before
+changing anything. Do NOT add a canned opener (killed 07-25). Sentry MCP is configured for org "smartplay",
+but the app reports to "smartplay-ai", so Claude can't read issues.
+
+**Notes:** new standing rule: updates go out only Sun→Mon 12:00 a.m. Central.
