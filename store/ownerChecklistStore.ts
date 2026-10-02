@@ -207,6 +207,17 @@ const SEED: Omit<ChecklistItem, 'done' | 'doneAt'>[] = [
     title: 'Use your own words for a bad patch',
     detail: 'Say "I choked", "I\u2019m tilted", "I lost my confidence", or "I have the yips". Before this update "choke" existed in the knowledge base only as "choke down" (a grip) and "yips" appeared nowhere, so these retrieved nothing or, worse, swing-mechanics noise — "I need to calm down" returned over-the-top and wedge bounce. A pass is a mental answer: routine, breathing, reset, expectations. A fail is a mechanics lecture.',
   },
+  {
+    /**
+     * 2026-10-01 — OpenAI notice: gpt-4o-mini-tts (plus tts-1 / tts-hd) shuts off 2027-01-06. Every live
+     * spoken line uses it, so on that date the caddie goes text-only. Tim: keep track of it, and keep
+     * looking at FREE models that could do the job.
+     */
+    id: 'tts-shutdown-2027-01-06',
+    group: 'ship',
+    title: 'Pick the new caddie voice before Jan 6 (OpenAI TTS shuts off)',
+    detail: 'OpenAI turns off gpt-4o-mini-tts on January 6, 2027 — every live line Kevin and Serena speak uses it. Target: switched by early December. Compare by ear, same lines: (1) OpenAI’s recommended replacement, (2) free or near-free options — Gemini TTS, the phone’s own on-device voice, open-source voices. A pass is a voice you’d keep for Kevin and one for Serena, with the cost per user written down. Then re-record the bundled greeting clips in the new voice so launch and live speech match.',
+  },
 ];
 
 interface ChecklistState {
