@@ -1621,7 +1621,9 @@
       "where": "WHERE",
       "goals_challenges_your_caddie_reads": "GOALS & CHALLENGES · your caddie reads this",
       "reminders_say_remind_me_to": "REMINDERS · say \"remind me to…\"",
-      "your_week": "Your week · {{goalLabel}}"
+      "your_week": "Your week · {{goalLabel}}",
+      "priority_you_asked_for": "PRIORITY YOU ASKED FOR",
+      "priority_until": "until {{date}}"
     },
     "placeholder": {
       "e_g_round_saturday_want": "e.g. Round Saturday — want to stop the double-cross off the tee and get my speed on lag putts. Only have ~3 hrs this week."

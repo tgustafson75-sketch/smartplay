@@ -89,6 +89,8 @@ export const UI_TOOLS = new Set([
    * caddie should move the aim rather than explain the golf swing on the seventh tee.
    */
   'set_session_focus',
+  // 2026-10-01 — "irons this week" reshapes the SmartPlan (see the tool above).
+  'set_plan_focus',
   'set_playing_condition',
   /**
    * 2026-08-21 — THE JUNE "NARRATIVE BRAIN", and the rest of the state the brain could not write.
@@ -209,13 +211,31 @@ export const BRAIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'set_session_focus',
-    description: 'The player declares what they want to WORK ON this session — a theme that should colour the rest of it ("let\'s work on tempo today", "I want to fix my slice at the range", "today is all about the short game"). Capture the goal in their own words. Use clear:true when they say to drop it. NOT for a one-off question ("how do I fix my slice?" is just conversation) and NOT for what the ball is doing today — that is set_playing_condition.',
+    description: 'The player declares what they want to WORK ON this session — a theme that should colour the rest of it ("let\'s work on tempo today", "I want to fix my slice at the range", "today is all about the short game"). Capture the goal in their own words. Use clear:true when they say to drop it. NOT for a one-off question ("how do I fix my slice?" is just conversation) and NOT for what the ball is doing today — that is set_playing_condition. If they name a LONGER stretch ("this week", "the next two weeks", "this month"), that is set_plan_focus, not this.',
     parameters: {
       type: 'object',
       properties: {
         goal: { type: 'string', description: "What they want to work on, in their own words." },
         note: { type: 'string', description: 'Any extra detail they gave. Omit if none.' },
         clear: { type: 'boolean', description: 'True when they are dropping the focus.' },
+      },
+      required: [],
+    },
+  },
+  {
+    /**
+     * 2026-10-01 (Tim — "if I say I want to work on my irons this week, that checks against the
+     * SmartPlan and updates"; "and shot shapes or swing speed"). Before this, "this week" landed in the
+     * 8-hour session focus or a free-text reminder, and the plan itself never moved.
+     */
+    name: 'set_plan_focus',
+    description: 'The player wants to work on something for a STRETCH of days — "I want to work on my irons this week", "shot shapes for the next two weeks", "let\'s focus on swing speed this month", "this week I need to sort out my putting". It updates their SmartPlan (the practice plan in SwingLab): that focus takes priority in the week\'s practice days until the period ends. Check it against THE PLAYER\'S SMARTPLAN in your context and tell them, in a sentence, what it changes (e.g. "two of your three days are irons now"). Pass focus in their own words; pass days for the period (this week = 7, two weeks = 14, this month = 30). clear:true when they drop it. Today-only goals are set_session_focus; "remind me to…" is set_reminder.',
+    parameters: {
+      type: 'object',
+      properties: {
+        focus: { type: 'string', description: 'What they want to work on, in their own words ("my irons", "shot shapes", "swing speed").' },
+        days: { type: 'integer', description: 'How many days the priority lasts. this week = 7, two weeks = 14, this month = 30. Default 7.' },
+        clear: { type: 'boolean', description: 'True when they are dropping a plan priority.' },
       },
       required: [],
     },
@@ -289,7 +309,7 @@ export const BRAIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'set_reminder',
-    description: 'Set a reminder the player asks for by voice — "remind me to work on my putting", "remind me to hit the range before Saturday", "remind me tomorrow to do the tempo drill", "note that I want to work on my speed this week". Capture WHAT to be reminded of, and if they said WHEN, the natural when-phrase. Saved to their SmartPlan reminders.',
+    description: 'Set a reminder the player asks for by voice — "remind me to work on my putting", "remind me to hit the range before Saturday", "remind me tomorrow to do the tempo drill". Capture WHAT to be reminded of, and if they said WHEN, the natural when-phrase. Saved to their SmartPlan reminders. "I want to work on X this week" is NOT a reminder — that is set_plan_focus, which changes the plan itself.',
     parameters: {
       type: 'object',
       properties: {

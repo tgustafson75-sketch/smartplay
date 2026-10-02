@@ -29,6 +29,8 @@ export type ToolAction =
   // which the caddie must aim around rather than diagnose. Typed here from the start — the only two
   // UI tools ever silently dropped were the two that lacked a ToolAction member.
   | { type: 'set_session_focus'; goal?: string; note?: string; clear?: boolean }
+  // 2026-10-01 — a SmartPlan priority for a stretch of days ("irons this week").
+  | { type: 'set_plan_focus'; focus?: string; days?: number; clear?: boolean }
   | { type: 'set_playing_condition'; stated: string; kind?: 'ball_flight' | 'physical' | 'feel'; compensate?: 'left' | 'right' | 'shorter' | 'longer'; clear?: boolean }
   // 2026-08-21 — the JUNE narrative brain (f4e0b31e) plus the rest of the state the brain could not
   // write. All four have worked on the CLASSIFIER path for months and were unreachable in

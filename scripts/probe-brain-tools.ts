@@ -159,6 +159,7 @@ const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, un
   { expect: 'log_score',           say: 'put me down for a 6 on this hole' },
   { expect: 'plan_shot',           say: "I'm going to lay up with my 7 iron to about 100" },
   { expect: 'set_reminder',        say: 'remind me to work on my putting Thursday' },
+  { expect: 'set_plan_focus',      say: 'I want to work on my irons this week' },
   { expect: 'log_issue',           say: 'log an issue, the yardage on hole 3 looked wrong' },
   { expect: 'mark_green',          say: 'mark the green here', ctx: ON_COURSE },
   // 2026-08-26 — was 'switch to Tank'. That persona is removed, and the caddie now correctly

@@ -26,6 +26,7 @@ import {
   PRACTICE_GOALS,
   type PracticeLocation,
 } from '../../services/practice/goalPlan';
+import { getFocus } from '../../services/practice/sessionPlan';
 import { useTranslation } from 'react-i18next';
 
 const DAYS = [2, 3, 4, 5];
@@ -45,10 +46,11 @@ export default function SmartPlanScreen() {
 
   // 2026-07-04 (Tim) — the plan is now PERSISTED (this week's plan), drives caddie
   // guidance, and carries a goals/challenges narrative + check-offs + reminders.
-  const { goal, days, minutes, location, narrative, completed: _rawCompleted, weekStartMs, reminders } = usePracticePlanStore(
+  const { goal, days, minutes, location, narrative, completed: _rawCompleted, weekStartMs, reminders, priorityFocuses } = usePracticePlanStore(
     useShallow((s) => ({
       goal: s.goal, days: s.daysPerWeek, minutes: s.minutesPerSession, location: s.location,
       narrative: s.narrative, completed: s.completed, weekStartMs: s.weekStartMs, reminders: s.reminders,
+      priorityFocuses: s.priorityFocuses,
     })),
   );
   /**
@@ -66,15 +68,20 @@ export default function SmartPlanScreen() {
   const toggleComplete = usePracticePlanStore((s) => s.toggleComplete);
   const toggleReminderDone = usePracticePlanStore((s) => s.toggleReminderDone);
   const removeReminder = usePracticePlanStore((s) => s.removeReminder);
+  const clearPriorityFocus = usePracticePlanStore((s) => s.clearPriorityFocus);
+  // 2026-10-01 — "irons this week" said to the caddie reshapes this week; it lapses on its own.
+  const activePriorities = priorityFocuses.filter((f) => f.untilMs > Date.now());
 
   const setGoal = (g: typeof goal) => setConfig({ goal: g });
   const setDays = (d: number) => setConfig({ daysPerWeek: d });
   const setMinutes = (m: number) => setConfig({ minutesPerSession: m });
   const setLocation = (l: typeof location) => setConfig({ location: l });
 
+  // Same inputs as store/practicePlanStore.currentWeekPlan — the caddie and the auto-tick read that one.
+  const priorityKeys = activePriorities.map((f) => f.key).join(',');
   const plan = useMemo(
-    () => buildGoalPlan({ goal, daysPerWeek: days, minutesPerSession: minutes, location }),
-    [goal, days, minutes, location],
+    () => buildGoalPlan({ goal, daysPerWeek: days, minutesPerSession: minutes, location, priorityFocuses: priorityKeys ? priorityKeys.split(',') : [] }),
+    [goal, days, minutes, location, priorityKeys],
   );
 
   const runDay = (focusKey: string, reps: number) => {
@@ -130,6 +137,24 @@ export default function SmartPlanScreen() {
             <Chip key={l.key} active={location === l.key} label={l.label} onPress={() => setLocation(l.key)} />
           ))}
         </View>
+
+        {activePriorities.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('practice_smartplan.smart_plan_screen.priority_you_asked_for')}</Text>
+            {activePriorities.map((f) => (
+              <View key={f.key} style={[styles.dayRow, { borderBottomColor: colors.border }]}>
+                <Ionicons name="flag" size={18} color={colors.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dayFocus, { color: colors.text_primary }]}>{getFocus(f.key)?.label ?? f.key}</Text>
+                  <Text style={[styles.dayReps, { color: colors.text_secondary }]}>{t('practice_smartplan.smart_plan_screen.priority_until', { date: new Date(f.untilMs).toDateString().slice(0, 10) })}</Text>
+                </View>
+                <TouchableOpacity onPress={() => clearPriorityFocus(f.key)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} accessibilityLabel={`Remove priority ${getFocus(f.key)?.label ?? f.key}`}>
+                  <Ionicons name="close" size={18} color={colors.text_muted} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* The plan */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>

@@ -1137,9 +1137,18 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'next_focus': {
-        // Phase J — "what should I work on". If a Phase K Primary Issue is
-        // populated on the most recent session, summarize it. Otherwise
-        // honest placeholder.
+        /**
+         * 2026-10-01 (Tim — "the caddie and app overall is not aware if I set up a SmartPlan"). "What
+         * should I work on" read only the last Cage session's primary issue and otherwise said
+         * "Analysis is coming soon" — a canned deflection, and blind to the plan the player set up.
+         * With a plan, or with no measured issue, the caddie answers: he sees the SmartPlan, the
+         * practice history and the swing reads together, which this handler cannot weigh.
+         */
+        const toBrain: IntentResult = { success: false, voice_response: null, side_effects: ['query:next_focus:route_to_brain'], follow_up_needed: false, route_to_brain: true };
+        try {
+          const planMod = await import('../../store/practicePlanStore');
+          if (planMod.planIsConfigured()) return toBrain;
+        } catch { /* fall through to the cage read */ }
         try {
           const { useSwingSessionStore } = await import('../../store/swingSessionStore');
           const cage = useSwingSessionStore.getState();
@@ -1153,19 +1162,9 @@ export const queryStatusHandler: IntentHandler = {
               follow_up_needed: false,
             };
           }
-          return {
-            success: true,
-            voice_response: "Analysis is coming soon — try the drills section in the meantime.",
-            side_effects: ['cage:next_focus:placeholder'],
-            follow_up_needed: false,
-          };
+          return toBrain;
         } catch {
-          return {
-            success: true,
-            voice_response: "Analysis is coming soon.",
-            side_effects: ['cage:next_focus:error'],
-            follow_up_needed: false,
-          };
+          return toBrain;
         }
       }
 

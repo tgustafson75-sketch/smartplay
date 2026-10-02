@@ -8,6 +8,8 @@
  */
 import type { IntentHandler, IntentResult, VoiceIntent } from '../../types/voiceIntent';
 import { useSessionFocusStore } from '../../store/sessionFocusStore';
+import { parsePlanPeriodDays } from '../practice/planFocus';
+import { applyPlanFocusWords } from '../../store/practicePlanStore';
 
 export const sessionFocusHandler: IntentHandler = {
   intent_type: 'set_session_focus',
@@ -51,6 +53,31 @@ export const sessionFocusHandler: IntentHandler = {
 
     const context = p.context === 'range' || p.context === 'course' || p.context === 'practice' ? p.context : null;
     const note = typeof p.note === 'string' && p.note.trim() ? p.note.trim() : null;
+
+    /**
+     * 2026-10-01 (Tim — "if I say I want to work on my irons this week, that checks against the
+     * SmartPlan, updates"). This handler said "Locked in — we're working on my irons THIS SESSION" to
+     * "this week", and the 8-hour session focus was gone by morning while the plan never moved.
+     *
+     * A stretch of days is a PLAN change: apply it to the SmartPlan, then let the caddie answer — he
+     * sees the updated plan and can say what it changed, which no fixed line here can. Words that
+     * name no plan focus ("my slice this week") go to him too; he keeps them as a reminder or asks.
+     */
+    const said = [intent.raw_text, goal, note].filter((x) => typeof x === 'string' && x.trim()).join(' ');
+    const periodDays = parsePlanPeriodDays(said);
+    if (periodDays != null) {
+      const keys = applyPlanFocusWords(goal, periodDays);
+      // success:false + route_to_brain is the "answer this conversationally" shape every path honours:
+      // listeningSession checks route_to_brain first; the on-screen mic falls through to the brain on
+      // a non-success with no follow-up (hooks/useVoiceCaddie isCommandHit).
+      return {
+        success: false,
+        voice_response: null,
+        side_effects: [keys.length > 0 ? `plan_focus:set:${keys.join('+')}` : 'plan_focus:unresolved'],
+        follow_up_needed: false,
+        route_to_brain: true,
+      };
+    }
     useSessionFocusStore.getState().setFocus(goal, { note, context });
 
     return {

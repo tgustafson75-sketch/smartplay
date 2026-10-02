@@ -6270,7 +6270,9 @@ check('SmartPlan UI — goal+constraints picker that runs a day through the Sess
     const layout = read('app/_layout.tsx');
     const caddie = read('app/(tabs)/caddie.tsx');
     return (
-      /buildGoalPlan\(\{ goal, daysPerWeek: days, minutesPerSession: minutes, location \}\)/.test(screen) &&
+      // 2026-10-01 — the screen also passes the player's spoken priority ("irons this week"), the same
+      // input store/practicePlanStore.currentWeekPlan gives the caddie and the auto-tick.
+      /buildGoalPlan\(\{ goal, daysPerWeek: days, minutesPerSession: minutes, location, priorityFocuses: /.test(screen) &&
       /startSession\('focus', \{ focus: focusKey, targetReps: reps/.test(screen) && // tap a day → run it
       /\/practice\/session/.test(screen) &&                        // launches the Session Runner
       /name="practice\/smartplan"/.test(layout) &&                 // route registered

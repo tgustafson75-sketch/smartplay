@@ -133,6 +133,9 @@ type AnyAction = {
   angle?: string;
   // zoom_target (2026-08-20 — voice magnification of the rangefinder scene)
   level?: 'in' | 'out' | 'reset';
+  // set_plan_focus (2026-10-01 — a SmartPlan priority for a stretch of days)
+  focus?: string;
+  days?: number;
   // set_session_focus / set_playing_condition (2026-08-21)
   goal?: string;
   stated?: string;
@@ -269,6 +272,32 @@ function dispatchOne(a: AnyAction): void {
       if (a.clear) sf.useSessionFocusStore.getState().clearFocus();
       else if (typeof a.goal === 'string' && a.goal.trim()) {
         sf.useSessionFocusStore.getState().setFocus(a.goal.trim(), { note: typeof a.note === 'string' ? a.note : null });
+      }
+      break;
+    }
+    case 'set_plan_focus': {
+      /**
+       * 2026-10-01 (Tim — "I want to work on my irons this week" should check against the SmartPlan
+       * and update it). Words that name a plan focus reshape the week; words that do not ("my slice
+       * this week") are kept as a SmartPlan reminder rather than dropped — the caddie already said
+       * he would remember it.
+       */
+      const plan = require('../../store/practicePlanStore') as typeof import('../../store/practicePlanStore');
+      if (a.clear) {
+        const keys = (require('../practice/planFocus') as typeof import('../practice/planFocus')).resolvePracticeFocusKeys(a.focus ?? '');
+        if (keys.length === 0) plan.usePracticePlanStore.getState().clearPriorityFocus();
+        else keys.forEach((k) => plan.usePracticePlanStore.getState().clearPriorityFocus(k));
+        toast('📋 SmartPlan priority cleared');
+        break;
+      }
+      const words = typeof a.focus === 'string' ? a.focus.trim() : '';
+      if (!words) break;
+      const days = typeof a.days === 'number' && Number.isFinite(a.days) && a.days > 0 ? a.days : 7;
+      const keys = plan.applyPlanFocusWords(words, days);
+      if (keys.length > 0) toast(`📋 SmartPlan: ${plan.planFocusLabels(keys)} for ${days === 7 ? 'this week' : `${days} days`}`);
+      else {
+        plan.usePracticePlanStore.getState().addReminder(`Work on ${words}`, days === 7 ? 'this week' : `next ${days} days`);
+        toast(`⏰ Added to your SmartPlan: ${words}`);
       }
       break;
     }

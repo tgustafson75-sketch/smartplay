@@ -89,6 +89,20 @@ interface PracticeSessionState {
 }
 
 /** "driver_speed" → "Driver Speed", "irons" → "Irons". For the points label. */
+/**
+ * 2026-10-01 (Tim — the app "is not aware if I set up a SmartPlan"). Finishing a focus session never
+ * ticked the plan: the only way a SmartPlan day got done was a tap on the SmartPlan screen, so a
+ * player who practised irons from anywhere else still had irons "left" all week and the caddie said
+ * so. Every completed session funnels through this store, so the tick lives here. A focus that is
+ * not a plan focus (a drill id, a club) simply matches no day. Best-effort, never blocks the save.
+ */
+function tickPlanDay(focus: string): void {
+  try {
+    const plan = require('./practicePlanStore') as typeof import('./practicePlanStore');
+    plan.usePracticePlanStore.getState().markFocusPracticed(focus);
+  } catch { /* the plan is a bonus here, never a dependency */ }
+}
+
 function prettyFocus(focus: string): string {
   return focus.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
@@ -149,6 +163,7 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
             const pp = require('./practicePointsStore') as typeof import('./practicePointsStore');
             pp.usePracticePointsStore.getState().awardPracticePoints({ key, label, swings, now: Date.now() });
           } catch { /* award best-effort, never blocks ending a session */ }
+          if (active.focus) tickPlanDay(active.focus);
         }
       },
       recordCompletedSession: ({ kind, focus, drillId, label, swingCount, environment, swingSamples }) => {
@@ -170,6 +185,7 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
           swingCount: swingCount ?? (swings.length || null),
         };
         set((s) => ({ history: [session, ...s.history].slice(0, 50) }));
+        if (focus && (session.swingCount ?? 0) > 0) tickPlanDay(focus);
       },
       activeSummary: () => {
         const active = get().active;

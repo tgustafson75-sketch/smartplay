@@ -94,6 +94,24 @@ export const PRACTICE_FOCUSES: PracticeFocus[] = [
     intent: 'Feel the transition — tempo over force. Alternate a control club and the driver.',
   },
   {
+    /**
+     * 2026-10-01 (Tim — "it ties to things like saying I want to work on shot shapes or swing speed").
+     * Swing speed already had a home (driver_speed); shot shapes did not, so "shot shapes this week"
+     * had nothing in the plan to land on. It is not in any goal's default weights — it enters a week
+     * only when the player asks for it (SmartPlan priority focus).
+     *
+     * Honest like services/practice/shotShapes: one departure point reads a START LINE, not a curve,
+     * so the read emphasizes start direction and the intent says the curve is felt, not measured.
+     */
+    key: 'shot_shape',
+    label: 'Shot shapes — draw & fade',
+    clubs: ['7I', '6I', 'Driver'],
+    blockSize: 2,
+    view: 'down_the_line',
+    emphasis: 'start_direction',
+    intent: 'Alternate draw and fade — start it right of target for a draw, left for a fade. We read the start line; the curve is yours to feel. New to shaping? The Shot Shapes lesson in SwingLab teaches it first.',
+  },
+  {
     key: 'putting',
     label: 'Putting',
     clubs: ['Putter'],

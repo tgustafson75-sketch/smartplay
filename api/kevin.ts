@@ -196,6 +196,7 @@ const TERSE_ACKS: Record<string, string> = {
   set_golfer:            'Switched over.',
   register_bag:          'Bag saved.',
   set_session_focus:     "That's the focus.",
+  set_plan_focus:        "It's in your plan.",
   set_playing_condition: "Noted — I'll aim around it.",
   club_change:           'Got it.',
   switch_caddie:         'Switching you over.',

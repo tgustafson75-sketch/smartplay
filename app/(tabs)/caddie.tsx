@@ -1936,10 +1936,21 @@ export default function CaddieTab() {
             return await sg.liveSetupGap();
           } catch { return null; }
         })();
+        /**
+         * 2026-10-01 (Tim — "when app opens give gentle reminder of the items on this week's plan").
+         * The SmartPlan outranks a setup gap: it is what the player chose to do this week, and the
+         * opener mentions ONE thing. The brain writes the words from the hint — nothing canned is
+         * spoken — and planNudgeHint is once a day and silent when the week's work is done.
+         */
+        const planHint = (() => {
+          try {
+            return (require('../../store/practicePlanStore') as typeof import('../../store/practicePlanStore')).planNudgeHint();
+          } catch { return null; }
+        })();
         console.log('[caddie] opener: generating from brain', {
-          persona: liveSettings.caddiePersonality, gap: gap?.key ?? null,
+          persona: liveSettings.caddiePersonality, gap: planHint ? null : gap?.key ?? null, plan: !!planHint,
         });
-        const r = await generateProactiveOpener({ gapHint: gap?.hint });
+        const r = await generateProactiveOpener({ gapHint: planHint ?? gap?.hint });
         /**
          * 2026-09-28 (Tim — "a first ask delay … racing or missing voice") — TWO first-tap defects
          * lived in these few lines.
@@ -1975,7 +1986,12 @@ export default function CaddieTab() {
           // Mark the gap raised: he brought it up, and bringing it up again next launch is the
           // nagging Tim asked to avoid. Raised as an OFFER now, so there is no answer to wait for —
           // a player who ignores it has declined it, which is the whole point of the cooldown.
-          if (gap) {
+          if (planHint) {
+            try {
+              (require('../../store/practicePlanStore') as typeof import('../../store/practicePlanStore'))
+                .usePracticePlanStore.getState().notePlanNudged();
+            } catch { /* a missed mark only means tomorrow's nudge comes a day early */ }
+          } else if (gap) {
             try {
               const sg = require('../../services/setupGaps') as typeof import('../../services/setupGaps');
               void sg.markGapAsked(gap.key);

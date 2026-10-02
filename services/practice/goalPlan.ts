@@ -41,6 +41,12 @@ export interface GoalPlanInput {
   location: PracticeLocation;
   /** Optional event deadline, in days — adds urgency framing. */
   deadlineDays?: number | null;
+  /**
+   * 2026-10-01 — focuses the player ASKED for ("irons this week", "shot shapes for two weeks"). They
+   * take every other day starting with day 1, so a 3-day week with an irons priority is irons, X,
+   * irons. A priority the location cannot support is left out and named in the notes.
+   */
+  priorityFocuses?: string[];
 }
 
 export interface PlannedSession {
@@ -95,6 +101,13 @@ const LOCATION_NOTE: Record<PracticeLocation, string | null> = {
   home: 'At home — carpet line for putting, a glass or towel target for chips. No full swings, but the scoring strokes are right here.',
 };
 
+const LOCATION_PHRASE: Record<PracticeLocation, string> = {
+  full: 'here',
+  range_only: 'on a range mat',
+  putting_green: 'on a putting green',
+  home: 'at home',
+};
+
 function repsForMinutes(minutes: number): number {
   // ~1 quality ball every 90s including reset/feedback; floor/ceiling kept sane.
   const r = Math.round((Math.max(5, minutes) / 1.5));
@@ -107,7 +120,7 @@ function repsForMinutes(minutes: number): number {
  * same-focus days back to back where avoidable), reps scaled to session length.
  */
 export function buildGoalPlan(input: GoalPlanInput): GoalPlan {
-  const { goal, daysPerWeek, minutesPerSession, location, deadlineDays } = input;
+  const { goal, daysPerWeek, minutesPerSession, location, deadlineDays, priorityFocuses } = input;
   const days = Math.max(1, Math.min(7, Math.floor(daysPerWeek)));
   const reps = repsForMinutes(minutesPerSession);
 
@@ -123,8 +136,17 @@ export function buildGoalPlan(input: GoalPlanInput): GoalPlan {
   const locNote = LOCATION_NOTE[location];
   if (locNote) notes.push(locNote);
 
+  const priorities: string[] = [];
+  for (const key of priorityFocuses ?? []) {
+    const focus = getFocus(key);
+    if (!focus || priorities.includes(key)) continue;
+    if (allowed(key)) priorities.push(key);
+    else notes.push(`${focus.label} can't be practised ${LOCATION_PHRASE[location]}, so it is not in this week's plan — change "Where" to add it.`);
+  }
+  const rest = ranked.filter((k) => !priorities.includes(k));
+
   // Nothing this location supports for this goal (e.g. "more distance" at home).
-  if (ranked.length === 0) {
+  if (ranked.length === 0 && priorities.length === 0) {
     notes.push(
       location === 'home'
         ? 'This goal needs full swings — at home, work putting and chipping instead, and save the range work for when you can get out.'
@@ -138,8 +160,17 @@ export function buildGoalPlan(input: GoalPlanInput): GoalPlan {
   const sessions: PlannedSession[] = [];
   let prev: string | null = null;
   for (let d = 0; d < days; d++) {
-    let key = ranked[d % ranked.length];
-    if (key === prev && ranked.length > 1) key = ranked[(d + 1) % ranked.length];
+    let key: string;
+    if (priorities.length > 0 && (d % 2 === 0 || rest.length === 0)) {
+      // Priority days: 1, 3, 5… cycling through what was asked for.
+      key = priorities[Math.floor(d / 2) % priorities.length];
+      if (rest.length === 0) key = priorities[d % priorities.length];
+    } else if (priorities.length > 0) {
+      key = rest[Math.floor(d / 2) % rest.length];
+    } else {
+      key = ranked[d % ranked.length];
+      if (key === prev && ranked.length > 1) key = ranked[(d + 1) % ranked.length];
+    }
     const focus = getFocus(key)!;
     sessions.push({ day: d + 1, focusKey: key, focusLabel: focus.label, reps });
     prev = key;
