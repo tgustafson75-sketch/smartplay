@@ -292,7 +292,25 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Leaving the flagstick in often helps with distance control on long putts — the stick can act as a backstop for slightly long approaches. Most pros leave it in for putts over 20 feet, take it out for putts inside 10.',
     official_reference: 'Rule 13.2',
     common_misconceptions: 'Pre-2019 hitting the flagstick from a putt on the green was a 2-stroke penalty. The change opens up the strategic choice.',
-    keywords: ['flagstick', 'flag', 'pin', 'putt', 'leave in', 'take out'],
+    // 2026-10-01 — 'putt' removed: it matched "putter" and "putt one-handed", so a question about the
+    // stroke was answered with the flagstick. Every putt is not a flagstick question.
+    keywords: ['flagstick', 'flag', 'pin', 'leave in', 'take out'],
+  },
+  {
+    /**
+     * 2026-10-01 — Tim: "do I have to have both hands on the putter?" No rule here covered the stroke
+     * itself, so the matcher reached for the nearest putting entry (the flagstick) and Serena answered
+     * that instead.
+     */
+    rule_id: 'making_a_stroke',
+    category: 'putting_green',
+    title: 'Making a stroke — one hand, anchoring',
+    rule_summary: 'No — one hand or two is your choice, on any stroke including putts. What is banned is anchoring the club against your body.',
+    detailed_explanation: 'The Rules do not say how many hands must be on the club. You may putt or swing one-handed. You must fairly strike the ball with the head of the club — no pushing, scraping or scooping. Anchoring is prohibited: you may not hold the club against your body (belly, chest, chin or forearm braced against the body), directly or with a forearm used as an anchor point. A long or belly putter is still legal as long as it is not anchored.',
+    tactical_advice: 'If one-handed feels better on short putts, use it. If you use a long putter, keep the grip hand and forearm off your body.',
+    official_reference: 'Rule 10.1',
+    common_misconceptions: 'Many players think both hands are required, or that long putters were banned. Neither is true — only anchoring was banned (2016).',
+    keywords: ['both hands', 'two hands', 'one hand', 'one handed', 'one-handed', 'anchor', 'anchoring', 'anchored', 'belly putter', 'broomstick', 'long putter'],
   },
   {
     rule_id: 'caddie_alignment',
@@ -392,20 +410,41 @@ export function searchRules(query: string): RuleEntry[] {
  * keyword overlap so Sonnet has the right rule + similar variants in
  * front of it.
  */
+/**
+ * 2026-10-01 — matches are WHOLE WORDS, filler words do not count, and a rule needs at least one
+ * full keyword hit to be returned. It used to be any substring of anything: "putter" matched the
+ * flagstick's "putt", and "the" matched "reading the green", so a question no rule covered was
+ * answered with whichever rule a stray syllable happened to touch. Returning nothing is correct
+ * there — the handler sends an uncovered question to the caddie brain.
+ */
+const STOP_WORDS = new Set([
+  'the', 'and', 'can', 'you', 'your', 'have', 'has', 'does', 'what', 'when', 'where', 'how', 'why',
+  'with', 'for', 'from', 'this', 'that', 'there', 'here', 'are', 'was', 'its', 'it\'s', 'get', 'got',
+  'should', 'would', 'could', 'about', 'rule', 'rules', 'allowed', 'legal', 'okay',
+]);
+const MIN_RULE_SCORE = 5;
+
+function containsPhrase(text: string, phrase: string): boolean {
+  const esc = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // optional plural so "spike marks" still hits a "spike mark" keyword
+  return new RegExp(`(^|[^a-z])${esc}(s|es)?([^a-z]|$)`).test(text);
+}
+
 export function findRelevantRules(query: string, limit = 3): RuleEntry[] {
   const q = query.toLowerCase();
-  const tokens = q.split(/\s+/).filter(t => t.length > 2);
+  const tokens = q.split(/[^a-z'-]+/).filter(t => t.length > 2 && !STOP_WORDS.has(t));
   const scored = RULES_REFERENCE.map(r => {
     let score = 0;
+    let fullHit = false;
     for (const k of r.keywords) {
-      if (q.includes(k)) score += 5;
-      else if (tokens.some(t => k.includes(t))) score += 2;
+      if (containsPhrase(q, k)) { score += 5; fullHit = true; }
+      else if (tokens.some(t => k.split(/\s+/).includes(t))) score += 2;
     }
-    if (r.title.toLowerCase().includes(q)) score += 8;
+    if (r.title.toLowerCase().includes(q)) { score += 8; fullHit = true; }
     if (r.rule_summary.toLowerCase().includes(q)) score += 3;
-    return { rule: r, score };
+    return { rule: r, score: fullHit ? score : 0 };
   })
-    .filter(x => x.score > 0)
+    .filter(x => x.score >= MIN_RULE_SCORE)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
   return scored.map(x => x.rule);

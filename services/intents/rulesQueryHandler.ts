@@ -9,8 +9,8 @@
  *   3. Returns Caddie-register response: brief, tactical, includes
  *      the answer + what to do next
  *
- * If no rule matches the query well, Kevin honestly says he wants to
- * verify before answering — better than confidently wrong.
+ * If no rule matches the query well, it goes to the caddie brain
+ * (route_to_brain) — better than confidently wrong.
  *
  * Authority: 2023 Rules of Golf via data/rulesReference.ts.
  */
@@ -37,12 +37,19 @@ export const rulesQueryHandler: IntentHandler = {
     const queryText = String(intent.parameters.query_text ?? intent.parameters.utterance ?? '').trim();
     const matches = findRelevantRules(queryText, 3);
 
+    /**
+     * 2026-10-01 — the bundled reference covers ~28 situations, not the Rules of Golf. A question
+     * outside it ("do I need both hands on the putter?") used to get either the nearest wrong rule or
+     * "let me check on that one", which never checked anything. It goes to the caddie brain now,
+     * which can answer it.
+     */
     if (matches.length === 0) {
       return {
-        success: true,
-        voice_response: "Let me check on that one — I want to make sure I get the rule right. Can you describe the situation more — is it relief, a penalty area, the green?",
-        side_effects: ['rules:no_match'],
-        follow_up_needed: true,
+        success: false,
+        voice_response: null,
+        side_effects: ['rules:no_match:route_to_brain'],
+        follow_up_needed: false,
+        route_to_brain: true,
       };
     }
 
