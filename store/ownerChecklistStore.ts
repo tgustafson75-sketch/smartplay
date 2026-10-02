@@ -208,6 +208,13 @@ const SEED: Omit<ChecklistItem, 'done' | 'doneAt'>[] = [
     detail: 'Say "I choked", "I\u2019m tilted", "I lost my confidence", or "I have the yips". Before this update "choke" existed in the knowledge base only as "choke down" (a grip) and "yips" appeared nowhere, so these retrieved nothing or, worse, swing-mechanics noise — "I need to calm down" returned over-the-top and wedge bounce. A pass is a mental answer: routine, breathing, reset, expectations. A fail is a mechanics lecture.',
   },
   {
+    // 2026-10-01 — Tim: the caddie wasn't aware of the SmartPlan; "irons this week" should update it.
+    id: 'smartplan-heard-and-updated',
+    group: 'field',
+    title: 'Tell the caddie "I want to work on my irons this week"',
+    detail: 'Set up SmartPlan in SwingLab first (any goal chip). Then say it to the caddie. A pass: he says what that changes in your plan (irons on two of three days), and SwingLab \u2192 SmartPlan shows "PRIORITY YOU ASKED FOR: Irons". Try "shot shapes for the next two weeks" and "swing speed this month" too. Ask "what should I work on?" \u2014 the answer should come from your plan. Run an irons focus session and the irons day ticks itself. Next launch (once a day), his opening line gently mentions what is left this week. A fail: "this session", "coming soon", or no mention of the plan at all.',
+  },
+  {
     /**
      * 2026-10-01 — OpenAI notice: gpt-4o-mini-tts (plus tts-1 / tts-hd) shuts off 2027-01-06. Every live
      * spoken line uses it, so on that date the caddie goes text-only. Tim: keep track of it, and keep
