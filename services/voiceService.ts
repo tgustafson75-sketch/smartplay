@@ -1207,11 +1207,15 @@ const captionSubscribers = new Set<(text: string | null) => void>();
 // playback cycles so a user can double-tap five seconds after a line
 // finishes to hear it again.
 let lastSpokenLine: string | null = null;
+// 2026-10-01 — counts every line the player was given, heard or read (speak, speakFromBase64 and
+// flashCaption all pass the words through here). listeningSession compares it across a turn to
+// catch a turn that ended with nothing at all.
+let captionSeq = 0;
 
 const notifyCaption = (text: string | null) => {
   currentCaption = text;
   // Cache non-null lines as the most-recent spoken text.
-  if (text && text.trim().length > 0) lastSpokenLine = text;
+  if (text && text.trim().length > 0) { lastSpokenLine = text; captionSeq += 1; }
   captionSubscribers.forEach(cb => cb(text));
 };
 
@@ -1236,6 +1240,7 @@ export const getCurrentCaption = (): string | null => currentCaption;
  *  recent text we tried to speak (whether it completed or was cut off).
  *  null when nothing has been spoken this session. */
 export const getLastSpokenLine = (): string | null => lastSpokenLine;
+export const getCaptionSeq = (): number => captionSeq;
 
 export const subscribeToCaption = (
   cb: (text: string | null) => void,

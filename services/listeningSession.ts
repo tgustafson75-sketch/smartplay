@@ -4,6 +4,7 @@ import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/v
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
+import { noteTurnState, noteTurnIntent, noteTurnClosing } from './voice/turnAnswerWatch';
 import { adviceIsStillWorthSaying, captureShotEpoch, currentTurnEpoch } from './adviceFreshness';
 import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
@@ -318,6 +319,8 @@ async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, f
 function setSessionStateMirror(next: SessionState): void {
   const prev = state;
   state = next;
+  // 2026-10-01 — a turn that ends with nothing heard or read is reported, whatever the exit.
+  noteTurnState(prev, next);
   // 2026-07-18 (Tim — "add a haptic when you tap the caddie/earbud/glasses so you FEEL it's on").
   // Every trigger source (earbud/glasses tap, global mic badge) flows through this chokepoint, so
   // one place covers them all. Best-effort + wrapped — a haptics failure can NEVER affect the
@@ -1352,6 +1355,7 @@ async function openSession() {
     }
     const t_intent = Date.now();
     console.log(`[path4:voice] intent=${intent.intent_type} topic=${(intent.parameters?.query_topic as string | undefined) ?? 'none'}`);
+    noteTurnIntent(intent.intent_type);
     if ((state as SessionState) !== 'thinking') return;
 
     setSessionStateMirror('responding');
@@ -1831,6 +1835,7 @@ export function forceCloseSession(): void {
 
 function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
   console.log(`[path4:voice] close (reason=${reason})`);
+  noteTurnClosing(reason);
   // Phase BM — always stopSpeaking (drops the isSpeaking() guard). The guard
   // missed the gap between speechId++ and Sound.createAsync returning where
   // currentSound is still null but a TTS fetch is in-flight; a session-close
@@ -1844,6 +1849,7 @@ function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
   // Belt + suspenders: ensure no orphan recording survives.
   void stopCapture().catch(() => {});
   setSessionStateMirror('idle');
+  noteTurnClosing(null);
 }
 
 /**
