@@ -215,8 +215,8 @@ const SEED: Omit<ChecklistItem, 'done' | 'doneAt'>[] = [
      */
     id: 'tts-shutdown-2027-01-06',
     group: 'ship',
-    title: 'Pick the new caddie voice before Jan 6 (OpenAI TTS shuts off)',
-    detail: 'OpenAI turns off gpt-4o-mini-tts on January 6, 2027 — every live line Kevin and Serena speak uses it. Target: switched by early December. Compare by ear, same lines: (1) OpenAI’s recommended replacement, (2) free or near-free options — Gemini TTS, the phone’s own on-device voice, open-source voices. A pass is a voice you’d keep for Kevin and one for Serena, with the cost per user written down. Then re-record the bundled greeting clips in the new voice so launch and live speech match.',
+    title: '2.0: pick the new caddie voice before Jan 6 (OpenAI TTS shuts off)',
+    detail: 'OpenAI turns off gpt-4o-mini-tts on January 6, 2027 — every live line Kevin and Serena speak uses it. Target: switched by early December. Compare by ear, same lines: (1) OpenAI’s recommended replacement, (2) free or near-free options — Gemini TTS, the phone’s own on-device voice, open-source voices. A pass is a voice you’d keep for Kevin and one for Serena, with the cost per user written down. Then re-record the bundled greeting clips in the new voice so launch and live speech match. Ships as part of 2.0 (with two new non-white avatars), so the new voice reads as a new version — submit by about Dec 1 so it is live before the shutdown.',
   },
 ];
 
