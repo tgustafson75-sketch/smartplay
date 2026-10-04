@@ -26,7 +26,14 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
   v.muted = true; v.playsInline = true; v.preload = 'auto';
   document.body.appendChild(v);
   var c = document.getElementById('c');
-  var cur = null, idle = null;
+  var cur = null, idle = null, queued = 0, cancelled = {};
+  // 2026-10-04 (sweep) — the app times a job from when it STARTS here, not from when it was queued: a grab
+  // waiting behind a motion pass used to time out and reset the whole page (killing the motion pass too).
+  function begin(id) { if (idle) { clearTimeout(idle); idle = null; } post({ type: 'start', id: id }); }
+  // Release the decoder only when nothing is queued — a release armed by the previous job used to fire
+  // in the middle of a motion pass and turn its remaining seeks into timeouts.
+  function settle() { queued--; if (idle) clearTimeout(idle); idle = queued > 0 ? null : setTimeout(release, 8000); }
+  window.__cancel = function (id) { cancelled[id] = true; };
   // Separate queues: a slow pose runtime load must never make frame grabs time out behind it.
   var frameQ = Promise.resolve(), poseQ = Promise.resolve();
   function release() { cur = null; v.removeAttribute('src'); try { v.load(); } catch (e) {} }
@@ -56,7 +63,9 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
   }
   window.__grab = function (id, src, tMs, maxDim) {
     if (idle) { clearTimeout(idle); idle = null; }
+    queued++;
     frameQ = frameQ.then(function () {
+      begin(id);
       return within(load(src), 5000, 'load').then(function () {
         var dur = v.duration;
         // Past the end is an ERROR, exactly like the native retriever: callers find a clip's length
@@ -74,11 +83,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
         post({ type: 'frame', id: id, ok: true, b64: url.slice(url.indexOf(',') + 1), w: c.width, h: c.height });
       }).catch(function (e) {
         post({ type: 'frame', id: id, ok: false, error: String(e && e.message || e) });
-      }).then(function () {
-        // Let go of the decoder and the file a few seconds after the last grab.
-        if (idle) clearTimeout(idle);
-        idle = setTimeout(release, 8000);
-      });
+      }).then(settle);
     });
   };
   // 2026-10-03 (Tim: "can the web be used instead?") — the web SmartMotion's motion window, ported
@@ -108,7 +113,9 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
   }
   window.__motion = function (id, src) {
     if (idle) { clearTimeout(idle); idle = null; }
+    queued++;
     frameQ = frameQ.then(function () {
+      begin(id);
       return within(load(src), 5000, 'load').then(function () {
         var dur = v.duration;
         if (!isFinite(dur) || dur <= 0) throw new Error('no duration');
@@ -118,6 +125,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
         var times = [], energy = [], prev = null, i = 0;
         function step() {
           if (i >= count) return Promise.resolve();
+          if (cancelled[id]) return Promise.reject(new Error('cancelled'));
           var t = Math.min((dur * i) / (count - 1), Math.max(0, dur - 0.05)); i++;
           return within(seek(t), 4000, 'seek').then(function () {
             cx.drawImage(v, 0, 0, PW, PH);
@@ -166,7 +174,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
         });
       }).catch(function (e) {
         post({ type: 'motion', id: id, ok: false, error: String(e && e.message || e) });
-      }).then(function () { if (idle) clearTimeout(idle); idle = setTimeout(release, 8000); });
+      }).then(function () { delete cancelled[id]; settle(); });
     });
   };
   // 2026-10-03 — pose, in the browser, for when the phone's native engine fails (a GPU delegate that
@@ -199,7 +207,9 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
   }
   window.__pose = function (id, b64) {
     poseQ = poseQ.then(function () {
-      return ensurePose().then(function (l) {
+      post({ type: 'start', id: id });
+      // A failed LOAD (runtime, wasm, model) is tagged so the app remembers it; a bad frame is not.
+      return ensurePose().catch(function (e) { throw new Error('pose load: ' + String(e && e.message || e)); }).then(function (l) {
         return within(new Promise(function (res, rej) {
           var img = new Image();
           img.onload = function () { res(img); };
@@ -226,6 +236,14 @@ export function FrameEngineHost(): React.ReactElement | null {
   const [{ wanted, generation }, setState] = useState(frameEngineState);
   useEffect(() => subscribeFrameEngine(() => setState(frameEngineState())), []);
   useEffect(() => () => detachFrameEngine(), []);
+  // 2026-10-04 (sweep) — clear exact frames / private clip copies a killed session left in the cache.
+  // Deferred so it never competes with launch; every platform (the clip copies exist on iOS too).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void (require('../utils/videoThumbnail') as typeof import('../utils/videoThumbnail')).sweepOrphanFrameFiles();
+    }, 10_000);
+    return () => clearTimeout(t);
+  }, []);
   const onLoadEnd = useCallback(() => {
     attachFrameEngine((js) => ref.current?.injectJavaScript(js));
   }, []);

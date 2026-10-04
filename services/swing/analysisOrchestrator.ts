@@ -98,7 +98,26 @@ export async function pickSwingBurst(
   return null;
 }
 
+/**
+ * 2026-10-04 (sweep) — every answer inside the clip and the right way round. A duration that
+ * under-reports (an upload's metadata) could put a motion window's start past its clamped end.
+ */
+function clampWindow(w: UploadSwingWindow, dur: number): UploadSwingWindow {
+  const startSec = Math.min(Math.max(0, w.startSec), dur);
+  const endSec = Math.min(Math.max(startSec, w.endSec), dur);
+  if (endSec - startSec < 0.2) return { startSec: 0, endSec: dur, impactSec: null, via: w.via === 'middle' ? 'middle' : 'whole_clip' };
+  return { ...w, startSec, endSec };
+}
+
 export async function findUploadSwingWindow(
+  clipUri: string,
+  durationSec: number,
+  opts: Parameters<typeof findUploadSwingWindowRaw>[2] = {},
+): Promise<UploadSwingWindow> {
+  return clampWindow(await findUploadSwingWindowRaw(clipUri, durationSec, opts), Math.max(0.5, durationSec));
+}
+
+async function findUploadSwingWindowRaw(
   clipUri: string,
   durationSec: number,
   /**
@@ -119,9 +138,14 @@ export async function findUploadSwingWindow(
     const { Platform } = require('react-native') as typeof import('react-native');
     if (Platform.OS === 'android') {
       const fe = require('../frameEngine') as typeof import('../frameEngine');
-      if (await fe.ensureFrameEngine(5_000)) {
+      // 2026-10-04 (sweep) — the motion pass reads the pooled PRIVATE COPY too, never the file the
+      // review player is looping (decoder contention; the never-read-what-the-player-holds rule). The
+      // copy is the one the burst pick and the read's frame readers use next, so it is not extra work.
+      const { acquireClipCopy } = require('./sharedClipCopy') as typeof import('./sharedClipCopy');
+      const shared = (await fe.ensureFrameEngine(5_000)) ? await acquireClipCopy(clipUri).catch(() => null) : null;
+      if (shared) try {
         motionRan = true;
-        const m = await fe.findMotionWindow(clipUri);
+        const m = await fe.findMotionWindow(shared.uri);
         const bursts = m.bursts ?? [];
         console.log('[window] motion pass', JSON.stringify({ window: m.window, bursts: bursts.length }));
         // Short clips: the motion window is enough — no pose on the critical path at all.
@@ -132,15 +156,7 @@ export async function findUploadSwingWindow(
           return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
         }
         let swing: { startMs: number; endMs: number; peakMs: number } | null = null;
-        if (bursts.length > 1) {
-          // Read the pooled PRIVATE COPY, never the file the player may be decoding (the native
-          // retriever vs ExoPlayer SIGSEGV class — see services/swing/sharedClipCopy).
-          const { acquireClipCopy } = require('./sharedClipCopy') as typeof import('./sharedClipCopy');
-          const shared = await acquireClipCopy(clipUri).catch(() => null);
-          if (shared) {
-            try { swing = await pickSwingBurst(shared.uri, bursts); } finally { shared.release(); }
-          }
-        }
+        if (bursts.length > 1) swing = await pickSwingBurst(shared.uri, bursts);
         if (swing) {
           // Address (~1.8s before the fastest moment) through the finish (~1.5s after).
           return {
@@ -153,7 +169,7 @@ export async function findUploadSwingWindow(
         if (m.window && m.window.endMs > m.window.startMs) {
           return { startSec: m.window.startMs / 1000, endSec: Math.min(dur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
         }
-      }
+      } finally { shared.release(); }
     }
   } catch (e) { console.log('[window] motion pass failed', e instanceof Error ? e.message : String(e)); }
 

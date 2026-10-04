@@ -11,6 +11,7 @@ const mockPlatform = { OS: 'android' };
 jest.mock('react-native', () => ({ Platform: mockPlatform }));
 const mockMotion = jest.fn();
 jest.mock('../../services/frameEngine', () => ({ ensureFrameEngine: async () => true, findMotionWindow: (...a: unknown[]) => mockMotion(...a) }));
+jest.mock('../../services/swing/sharedClipCopy', () => ({ acquireClipCopy: async (u: string) => ({ uri: u, release: () => undefined }) }));
 const mockOnDevice = jest.fn();
 jest.mock('../../services/swing/onDeviceLocate', () => ({ locateSwingWindowOnDevice: (...a: unknown[]) => mockOnDevice(...a) }));
 const mockNetwork = jest.fn();
@@ -75,6 +76,14 @@ describe('one owner decides where the swing is', () => {
     mockNetwork.mockImplementation(async (_u: string, _d: number, o: { onAbort?: (c: string) => void }) => { o.onAbort?.('dead_host'); return null; });
     await findUploadSwingWindow('file:///c.mp4', 30, { onNetworkAbort });
     expect(onNetworkAbort).toHaveBeenCalledWith('dead_host');
+  });
+
+  it('every answer is inside the clip and the right way round (an under-reported duration)', async () => {
+    mockMotion.mockResolvedValue({ durationMs: 6000, window: { startMs: 7000, endMs: 9000, peakMs: 8000 } });
+    const w = await findUploadSwingWindow('file:///c.mp4', 6);
+    expect(w.startSec).toBeGreaterThanOrEqual(0);
+    expect(w.endSec).toBeLessThanOrEqual(6);
+    expect(w.endSec).toBeGreaterThan(w.startSec);
   });
 
   it('iOS skips the browser pass (no engine there)', async () => {

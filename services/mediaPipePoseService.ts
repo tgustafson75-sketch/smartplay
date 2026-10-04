@@ -223,7 +223,9 @@ function browserFallbackPossible(): boolean {
 async function detectInBrowser(b64: string, timestampMs: number, opts?: DetectOptions): Promise<PoseFrame | null> {
   try {
     const fe = require('./frameEngine') as typeof import('./frameEngine');
-    await fe.ensureFrameEngine();
+    // 2026-10-04 (sweep) — the cold WebView takes 1-3s; wait for it properly, and if it is still not up
+    // skip THIS frame without giving up on the browser (it is warming, not failing).
+    if (!(await fe.ensureFrameEngine(6_000))) return null;
     const lm = await fe.detectPoseInBrowser(b64);
     if (!lm || lm.length === 0) return null;
     let frame: PoseFrame = { timestampMs, keypoints: projectBlazePoseToCoco17(lm as MediaPipeLandmark[]) };

@@ -167,10 +167,17 @@ async function copyOf(entry: CacheEntry): Promise<VideoThumbnails.VideoThumbnail
  * to the exact time instead — the reason the web SmartMotion reads the same clip cleanly. Native
  * stays the fallback: engine not mounted, a non-file source, or the engine failing.
  *
- * Three consecutive engine failures switch it off for the session, so a device where the WebView
+ * Three consecutive engine failures switch it off for five minutes (was: the session), so a device where the WebView
  * cannot decode a clip pays the timeout three times, not once per frame.
  */
 let engineFailures = 0;
+/** 2026-10-04 (sweep) — three failures switch exact frames off for a while, not for the whole session. */
+let engineOffUntil = 0;
+const ENGINE_OFF_MS = 5 * 60_000;
+function noteEngineFailure(): void {
+  engineFailures++;
+  if (engineFailures >= 3) { engineOffUntil = Date.now() + ENGINE_OFF_MS; engineFailures = 0; }
+}
 let exactSeq = 0;
 /**
  * 2026-10-03 (Tim: "this needs to happen in under 15 seconds") — the engine MEASURES ITSELF. Exact frames
@@ -210,7 +217,7 @@ async function exactOrNative(
      */
     const wantsExact = q >= 0.5 && q <= 0.8;
     if (
-      Platform.OS === 'android' && wantsExact && engineFailures < 3 && Date.now() >= engineSlowUntil
+      Platform.OS === 'android' && wantsExact && Date.now() >= engineOffUntil && Date.now() >= engineSlowUntil
       && sourceFilename.startsWith('file://') && typeof options?.time === 'number'
     ) {
       const fe = require('../services/frameEngine') as typeof import('../services/frameEngine');
@@ -226,9 +233,15 @@ async function exactOrNative(
         engineFailures = 0;
         return { uri, width: g.width, height: g.height };
       }
+      // Never came up in 6s: that IS an engine failure (a page whose script died never posts 'ready',
+      // and every frame would otherwise wait 6s inside the serialized media chain).
+      noteEngineFailure();
     }
-  } catch {
-    engineFailures++;
+  } catch (e) {
+    // "past end" is the CALLER's question (duration probing), and "queue timeout" is load, not a broken
+    // engine — neither counts.
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/past end|queue timeout/.test(msg)) noteEngineFailure();
   }
   return VideoThumbnails.getThumbnailAsync(sourceFilename, options);
 }
@@ -273,4 +286,26 @@ export function getThumbnailAsync(
   // Keep the chain alive whether this call resolves or rejects; never leak an unhandled rejection.
   chain = run.then(() => undefined, () => undefined);
   return run;
+}
+
+/**
+ * 2026-10-04 (sweep) — files a previous launch left behind in the cache directory: exact-frame JPEGs
+ * (exact_*, up to ~96 per session; the cache forgets them on restart but never deleted them) and
+ * private clip copies (shared-clip-*, tens of MB each) from a session killed before the pool reaped
+ * them. Both are only ever referenced in memory, so at launch nothing can still be using them.
+ * Persistent thumbnails are copied into documentDirectory and are not touched.
+ */
+export async function sweepOrphanFrameFiles(): Promise<number> {
+  const dir = FileSystem.cacheDirectory;
+  if (!dir) return 0;
+  let n = 0;
+  try {
+    const names = await FileSystem.readDirectoryAsync(dir);
+    for (const name of names) {
+      if (!/^(exact_|shared-clip-)/.test(name)) continue;
+      await FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(() => undefined);
+      n++;
+    }
+  } catch { /* housekeeping only */ }
+  return n;
 }

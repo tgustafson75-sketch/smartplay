@@ -29,12 +29,15 @@ export type MotionWindow = { startMs: number; endMs: number; peakMs: number };
 export type MotionBurst = { startMs: number; endMs: number; peakMs: number; peak: number };
 export type WebLandmark = { x: number; y: number; z: number; visibility: number; presence: number };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Pending = { resolve: (g: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
+type Pending = { resolve: (g: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout>; started?: () => void };
 
 let inject: ((js: string) => void) | null = null;
 let ready = false;
 let seq = 0;
 const pending = new Map<number, Pending>();
+/** Browser pose: loaded in the CURRENT page (a reset clears it), and a recent load failure to respect. */
+let poseWarm = false;
+let poseUnavailableUntil = 0;
 
 // ── on-demand mount + remount ───────────────────────────────────────────────────────────────────
 let wanted = false;
@@ -57,6 +60,9 @@ function want(): void {
 
 /** Throw the page away and start a fresh one; every pending request fails now, not at its timeout. */
 export function resetFrameEngine(reason: string): void {
+  // 2026-10-04 (sweep) — the new page has no pose runtime loaded: the next pose call is a COLD load
+  // again and gets the cold timeout. Left true, it got the warm 8s, timed out, reset again — a loop.
+  poseWarm = false;
   ready = false;
   inject = null;
   for (const [, p] of pending) { clearTimeout(p.timer); p.reject(new Error(`frame engine reset: ${reason}`)); }
@@ -109,6 +115,7 @@ export function onFrameEngineMessage(raw: string): void {
   let msg: { type?: string; id?: number; ok?: boolean; b64?: string; w?: number; h?: number; error?: string; landmarks?: WebLandmark[]; durationMs?: number; window?: MotionWindow | null; bursts?: MotionBurst[] };
   try { msg = JSON.parse(raw); } catch { return; }
   if (msg.type === 'ready') { ready = true; return; }
+  if (msg.type === 'start' && typeof msg.id === 'number') { pending.get(msg.id)?.started?.(); return; }
   if ((msg.type !== 'frame' && msg.type !== 'pose' && msg.type !== 'motion') || typeof msg.id !== 'number') return;
   const p = pending.get(msg.id);
   if (!p) return;
@@ -128,17 +135,43 @@ export function onFrameEngineMessage(raw: string): void {
   else p.reject(new Error(msg.error ?? 'frame engine: no frame'));
 }
 
-function request<T>(js: (id: number) => string, timeoutMs: number, label: string): Promise<T> {
+/**
+ * 2026-10-04 (sweep) — TWO clocks. The page acks a job when it STARTS it ('start'); until then the
+ * request is only queued behind other work and gets a generous queue limit that fails it WITHOUT a
+ * reset. From the ack, `timeoutMs` bounds the work itself. A grab queued behind a motion pass used to
+ * time out on the queue wait and reset the page, killing the motion pass with it.
+ *
+ * `onTimeout: 'cancel'` (the motion pass) tells the page to stop that job instead of resetting it: a
+ * long motion pass is slow, not wedged.
+ */
+function request<T>(
+  js: (id: number) => string, timeoutMs: number, label: string,
+  opts: { onTimeout?: 'reset' | 'cancel' } = {},
+): Promise<T> {
   if (!isFrameEngineReady()) return Promise.reject(new Error('frame engine not ready'));
   const id = ++seq;
+  const QUEUE_LIMIT_MS = Math.max(60_000, timeoutMs * 3);
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`${label} timeout`));
-      // The page bounds every step itself, so a request it never answered means it is wedged or dead.
-      resetFrameEngine(`${label} timeout`);
-    }, timeoutMs);
-    pending.set(id, { resolve, reject, timer });
+    const entry: Pending = {
+      resolve, reject,
+      timer: setTimeout(() => {
+        if (!pending.has(id)) return;
+        pending.delete(id);
+        reject(new Error(`${label} queue timeout`));
+      }, QUEUE_LIMIT_MS),
+    };
+    entry.started = () => {
+      clearTimeout(entry.timer);
+      entry.timer = setTimeout(() => {
+        if (!pending.has(id)) return;
+        pending.delete(id);
+        reject(new Error(`${label} timeout`));
+        if (opts.onTimeout === 'cancel') { try { inject?.(`window.__cancel && window.__cancel(${id}); true;`); } catch { /* best-effort */ } }
+        // The page bounds every step itself, so a started job it never answered means it is wedged or dead.
+        else resetFrameEngine(`${label} timeout`);
+      }, timeoutMs);
+    };
+    pending.set(id, entry);
     inject?.(js(id));
   });
 }
@@ -148,7 +181,8 @@ function request<T>(js: (id: number) => string, timeoutMs: number, label: string
  * Rejects past the end of the clip (callers probe duration that way) and on any page-side failure —
  * callers fall back to the native retriever.
  */
-export function grabExactFrame(videoUri: string, timeMs: number, maxDim = 1280, timeoutMs = 8_000): Promise<Grab> {
+// 10s: the page's own limits for one grab are load 5s + seek 4s; 8s reset a page that was still inside them.
+export function grabExactFrame(videoUri: string, timeMs: number, maxDim = 1280, timeoutMs = 10_000): Promise<Grab> {
   return request<Grab>(
     (id) => `window.__grab && window.__grab(${id}, ${JSON.stringify(videoUri)}, ${Math.max(0, Math.round(timeMs))}, ${Math.round(maxDim)}); true;`,
     timeoutMs, 'frame engine',
@@ -163,7 +197,7 @@ export function grabExactFrame(videoUri: string, timeMs: number, maxDim = 1280, 
 export function findMotionWindow(videoUri: string, timeoutMs = 20_000): Promise<{ durationMs: number; window: MotionWindow | null; bursts: MotionBurst[] }> {
   return request(
     (id) => `window.__motion && window.__motion(${id}, ${JSON.stringify(videoUri)}); true;`,
-    timeoutMs, 'motion window',
+    timeoutMs, 'motion window', { onTimeout: 'cancel' },
   );
 }
 
@@ -173,8 +207,6 @@ export function findMotionWindow(videoUri: string, timeoutMs = 20_000): Promise<
  * call loads the web runtime (from the CDN, then cached); a failed load is remembered for a few
  * minutes so a weak connection fails each frame instantly instead of after a long wait.
  */
-let poseWarm = false;
-let poseUnavailableUntil = 0;
 const POSE_RETRY_AFTER_MS = 5 * 60_000;
 
 export async function detectPoseInBrowser(b64: string): Promise<WebLandmark[]> {
@@ -187,7 +219,13 @@ export async function detectPoseInBrowser(b64: string): Promise<WebLandmark[]> {
     poseWarm = true;
     return lm;
   } catch (e) {
-    if (!poseWarm) poseUnavailableUntil = Date.now() + POSE_RETRY_AFTER_MS;
+    // 2026-10-04 (sweep) — remember only a real LOAD failure (the page tags those 'pose load:', or the
+    // cold load never answered). "Not ready" / "reset" / "detached" are the engine's state, not the CDN's;
+    // remembering them switched browser pose off for 5 minutes on a WebView that was merely warming up.
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!poseWarm && (/^pose load:/.test(msg) || /^browser pose timeout$/.test(msg))) {
+      poseUnavailableUntil = Date.now() + POSE_RETRY_AFTER_MS;
+    }
     throw e;
   }
 }
