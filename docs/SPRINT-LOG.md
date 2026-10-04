@@ -5276,3 +5276,22 @@ Reproduced on the emulator with Tim's clip (3870.mp4: 14.5s, 1920x1440, driver; 
   nativePose:true` report.
 - Gotcha: `expo start` without `--clear` served a STALE lazy chunk for onDeviceLocate for an hour.
 - Not done: Hemet hole-1 yardage (Tim gave up on the round).
+
+## Day 132 (cont.) — 2026-10-03/04 night — uploads rebuilt without a native build; orchestrator
+
+OTAs published tonight (runtime 1.0.2), in order: ff77d709 (browser frame engine + pose fallback) →
+speed + engine hardening → web-style motion window + pose as the second pass → review fixes (d7436cf3) →
+orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-polish, so the server now has
+`set_plan_focus`.
+- **Frames:** Android `expo-video-thumbnails` returns keyframes only (OPTION_CLOSEST_SYNC). The hidden-WebView
+  engine (services/frameEngine, components/FrameEngineHost) grabs exact frames for the quality 0.5–0.8 reads.
+  Native is used for everything else. Mounted on demand, self-healing, rejects past-end requests (duration
+  probes).
+- **Orchestrator** (services/swing/analysisOrchestrator): motion proposes candidate bursts and pose confirms
+  (hands above the shoulders). Short clips use the motion window or the whole clip. Then on-device locate →
+  network → middle. `analyzeOnce` gives one read per swing at a time.
+- **Measured (emulator, software decode):** 6s clip save→result 27s; the server read alone is about 10.5s.
+  **Real-phone time still unverified.** Tim tests on his phone 10-04.
+- **Native branch** `native/pose-exact-frames-cpu-fallback` is parked; Tim refused a store build.
+- **Open:** full SmartMotion orchestrator (live capture, club path, ball, tempo, as one plan). The
+  silent-turn watch doesn't cover the Caddie-tab mic. Locate on long, busy clips depends on pose speed.
