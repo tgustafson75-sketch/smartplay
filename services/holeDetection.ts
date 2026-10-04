@@ -472,6 +472,10 @@ async function ensureGreenForCurrentHole(
   if (greenDeriveAttempts.has(key)) return;
   if (greenForHole(courseId, hole)) return;   // something in the cascade already answers
   if (!isValidGolfCoord(at.lat, at.lng)) return;
+  const { seedIsFor, seedRejectedNearby } = await import('./holeGeometryDerivation');
+  // Refused from this very spot already (e.g. the practice green from the pro shop) — wait until the
+  // player has moved before spending another vision call.
+  if (seedRejectedNearby(courseId, hole, at)) return;
   greenDeriveAttempts.add(key);
   try {
     const { loadDerivedGeometry, getDerivedHoleGeometry } = await import('./courseGeometryService');
@@ -480,8 +484,8 @@ async function ensureGreenForCurrentHole(
     if (getDerivedHoleGeometry(courseId, hole)?.green) return;
     const { deriveHoleGeometry } = await import('./holeGeometryDerivation');
     const known = getHoleGeometry(courseId, hole);
-    const shotsHere = useRoundStore.getState().shots.filter((sh) => sh.hole === hole).length;
-    await deriveHoleGeometry({
+    const shotsHere = useRoundStore.getState().shots.filter((sh) => sh.hole === hole);
+    const found = await deriveHoleGeometry({
       seed: at,
       holeNumber: hole,
       par: known?.par ?? null,
@@ -489,8 +493,11 @@ async function ensureGreenForCurrentHole(
       courseId,
       knownTee: known?.tee ?? resolveTeeCoords(hole).tee ?? null,
       // The card check needs to know where the player is on the hole (see deriveHoleGeometry).
-      seedIs: shotsHere === 0 ? 'tee' : 'on_hole',
+      seedIs: seedIsFor(shotsHere, at),
     });
+    // Rejected because of where the player stood — not a failed hole. Free it to be tried again once
+    // they have moved (seedRejectedNearby gates that), instead of no green for the rest of the round.
+    if (!found && seedRejectedNearby(courseId, hole, at)) greenDeriveAttempts.delete(key);
   } catch (e) {
     // Never let a vision derive disturb hole detection — it is an enrichment, not a dependency.
     console.log('[holeDetection] green derive failed (non-fatal)', e);

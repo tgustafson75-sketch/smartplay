@@ -90,7 +90,7 @@ import { courseDisplayName } from '../services/courseDisplayName';
 // golf apps... Mapbox tiles are commodity; SmartPlay's strategic overlay is proprietary IP", and
 // drawn by nobody for three months. See the OWNER-ONLY block in the SVG below.
 import { computeYardageRings, computeLandingZone, computeLayupSuggestion, computeDangerCarries } from '../services/smartVisionOverlay';
-import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix, holeLengthYards, holePar } from '../services/smartFinderService';
+import { getLastFix, classifyAccuracy, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix, holeLengthYards, holePar } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
 import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
 import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
@@ -814,8 +814,13 @@ export default function SmartVisionScreen() {
           const okc2 = (c: { lat: number; lng: number } | null | undefined) =>
             !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng) && Math.abs(c.lat) <= 90 && Math.abs(c.lng) <= 180;
           const fix2 = getLastFix();
-          const playerPt2 = fix2 && okc2(fix2.location) ? { lat: fix2.location.lat, lng: fix2.location.lng } : null;
-          if (playerPt2) {
+          // 2026-10-04 (sweep) — a good, FRESH fix only: a cached parking-lot fix would search from the
+          // wrong place and the result is cached for good. Same quality gate hole detection uses.
+          const q2 = fix2 ? classifyAccuracy(fix2.accuracy_m, fix2.timestamp).level : 'none';
+          const playerPt2 = fix2 && okc2(fix2.location) && q2 !== 'weak' && q2 !== 'none' && q2 !== 'stale'
+            ? { lat: fix2.location.lat, lng: fix2.location.lng } : null;
+          const { seedIsFor, seedRejectedNearby } = await import('../services/holeGeometryDerivation');
+          if (playerPt2 && !seedRejectedNearby(courseId, holeIndex, playerPt2)) {
             svDeriveAttempts.add(attemptKey); // mark BEFORE await → suppresses the in-flight re-run race
             try {
               derivedGeo = await deriveHoleGeometry({
@@ -838,7 +843,11 @@ export default function SmartVisionScreen() {
                  * and a surveyed tee anchors orientation even while the green is being found.
                  */
                 knownTee: geo?.tee ?? null,
+                // 2026-10-04 (sweep) — the card check. This caller never passed it, so the map could
+                // still save the practice green as hole 1 — the Hemet bug the 10-03 fix claimed.
+                seedIs: seedIsFor(useRoundStore.getState().shots.filter((sh) => sh.hole === holeIndex), playerPt2),
               });
+              if (!derivedGeo && seedRejectedNearby(courseId, holeIndex, playerPt2)) svDeriveAttempts.delete(attemptKey);
             } catch (e) {
               console.log('[smartvision] hole-scan derive failed (non-fatal)', e);
               derivedGeo = null;

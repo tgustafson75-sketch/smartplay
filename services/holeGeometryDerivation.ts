@@ -153,6 +153,41 @@ function hashStr(s: string): number {
  * Derive a single hole's geometry from satellite imagery around `seed`.
  * Returns null on any failure or when the model can't honestly see a green.
  */
+/**
+ * 2026-10-04 (sweep) — WHERE IS THE PLAYER ON THIS HOLE, for the card check below. One rule, both
+ * callers (hole detection and the SmartVision map — the map used to skip the check entirely).
+ *
+ * 'on_hole' only when the player has WALKED AWAY from a shot they logged here (≥ 40y from its start):
+ * that is someone playing the hole. A shot merely existing was the old rule, and one logged by
+ * mistake on the range — or a tee shot logged while still standing on the tee — loosened the check
+ * to "any green within the card" while the player stood next to the practice green.
+ */
+export function seedIsFor(
+  shotsOnHole: readonly { start_location?: LatLng | null; gps_location?: LatLng | null }[],
+  at: LatLng,
+): 'tee' | 'on_hole' {
+  const walkedAway = shotsOnHole.some((sh) => {
+    const p = sh.start_location ?? sh.gps_location ?? null;
+    return !!p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && haversineMeters(p, at) * 1.09361 >= 40;
+  });
+  return walkedAway ? 'on_hole' : 'tee';
+}
+
+/**
+ * 2026-10-04 (sweep) — a green rejected BECAUSE OF WHERE THE PLAYER STOOD is not a failed hole. Both
+ * callers mark a hole "attempted" before the await, so that rejection used to end the search for the
+ * whole round: rightly refusing the practice green from the pro shop left hole 1 with no green at all.
+ * The spot is remembered instead, and the hole is tried again once the player has moved 40y from it.
+ */
+const seedRejections = new Map<string, LatLng>();
+const RETRY_AFTER_MOVING_YDS = 40;
+export function seedRejectedNearby(courseId: string | null | undefined, holeNumber: number, at: LatLng): boolean {
+  const p = seedRejections.get(`${courseId ?? ''}:${holeNumber}`);
+  return !!p && haversineMeters(p, at) * 1.09361 < RETRY_AFTER_MOVING_YDS;
+}
+/** Test seam. */
+export function _clearSeedRejectionsForTest(): void { seedRejections.clear(); }
+
 export async function deriveHoleGeometry(input: {
   seed: LatLng;              // player GPS or course centroid to center the satellite tile on
   holeNumber: number;
@@ -378,6 +413,7 @@ export async function deriveHoleGeometry(input: {
         : fromSeed > cardYards * 1.1;
       if (bad) {
         console.log(`[holeGeometry] hole ${holeNumber}: found green ${Math.round(fromSeed)}y from the player (${input.seedIs}) vs card ${cardYards}y — discarding, not caching`);
+        seedRejections.set(`${input.courseId ?? ''}:${holeNumber}`, seed);
         return null;
       }
     }

@@ -9,7 +9,9 @@ jest.mock('expo-file-system/legacy', () => ({
   downloadAsync: async () => ({ status: 200 }), readAsStringAsync: async () => 'AAAA', deleteAsync: async () => undefined,
 }));
 
-import { deriveHoleGeometry } from '../../services/holeGeometryDerivation';
+import fs from 'fs';
+import path from 'path';
+import { deriveHoleGeometry, seedIsFor, seedRejectedNearby, _clearSeedRejectionsForTest } from '../../services/holeGeometryDerivation';
 
 const GREEN = { lat: 33.6830, lng: -117.1790 };
 // A known tee ~400 yards due south of that green.
@@ -58,3 +60,58 @@ describe('a green vision found has to agree with the card', () => {
     expect(await deriveHoleGeometry({ seed: GREEN, holeNumber: 1, par: 4, yardage: 322, knownTee: null, seedIs: 'on_hole' })).toBeTruthy();
   });
 });
+
+/**
+ * 2026-10-04 (sweep) — three holes in the 10-03 fix:
+ *   1. the SmartVision map's own search never passed `seedIs`, so the check never ran there;
+ *   2. a rightly-rejected green burned the hole's only attempt — "wrong green" became "no green";
+ *   3. one logged shot (even a mistaken one, or a tee shot logged ON the tee) loosened the check.
+ */
+const yardsNorth = (p: { lat: number; lng: number }, y: number) => ({ lat: p.lat + y / 1.09361 / 110540, lng: p.lng });
+
+describe('where the player is on the hole', () => {
+  const at = { lat: 33.68, lng: -117.18 };
+  it('no shots, or a shot logged right where the player stands: still at the tee', () => {
+    expect(seedIsFor([], at)).toBe('tee');
+    expect(seedIsFor([{ start_location: yardsNorth(at, 5) }], at)).toBe('tee');
+    expect(seedIsFor([{ start_location: null, gps_location: null }], at)).toBe('tee');
+  });
+  it('walked away from a shot logged on this hole: on the hole', () => {
+    expect(seedIsFor([{ start_location: yardsNorth(at, -220) }], at)).toBe('on_hole');
+    expect(seedIsFor([{ gps_location: yardsNorth(at, -60) }], at)).toBe('on_hole');
+  });
+});
+
+describe('a green refused from where the player stood is tried again once they move', () => {
+  beforeEach(() => {
+    _clearSeedRejectionsForTest();
+    (global as unknown as { fetch: unknown }).fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ found_green: true, green_center: { x: 0.5, y: 0.5 }, green_front: null, green_back: null, tee: null, confidence: 'high', notes: '' }),
+    }));
+  });
+  it('the pro-shop refusal is remembered for that spot only', async () => {
+    const g = await deriveHoleGeometry({ seed: GREEN, holeNumber: 1, par: 4, yardage: 322, knownTee: null, seedIs: 'tee', courseId: 'hemet' });
+    expect(g).toBeNull();
+    expect(seedRejectedNearby('hemet', 1, yardsNorth(GREEN, 10))).toBe(true);    // still standing there
+    expect(seedRejectedNearby('hemet', 1, yardsNorth(GREEN, -120))).toBe(false); // walked to the tee
+    expect(seedRejectedNearby('hemet', 2, GREEN)).toBe(false);                    // another hole
+  });
+});
+
+describe('both callers that search for a green run the card check, and free the hole to retry', () => {
+  const read = (rel: string) => fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8');
+  it.each(['services/holeDetection.ts', 'app/smartvision.tsx'])('%s', (f) => {
+    const src = read(f);
+    expect(src).toMatch(/seedIs: seedIsFor\(/);
+    expect(src).toMatch(/seedRejectedNearby\(courseId, (hole|holeIndex), (at|playerPt2)\)\) (greenDeriveAttempts|svDeriveAttempts)\.delete/);
+  });
+  it('every deriveHoleGeometry call without a surveyed green passes seedIs', () => {
+    for (const f of ['services/holeDetection.ts', 'app/smartvision.tsx']) {
+      const calls = read(f).split('deriveHoleGeometry({').slice(1).map((t) => t.slice(0, 2500));
+      const searching = calls.filter((c) => !/knownGreen:\s*(?!null)/.test(c.split('});')[0]));
+      for (const c of searching) expect(c.split('});')[0]).toMatch(/seedIs:/);
+    }
+  });
+});
+
