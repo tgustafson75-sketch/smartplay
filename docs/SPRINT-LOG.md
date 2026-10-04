@@ -5295,3 +5295,18 @@ orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-po
 - **Native branch** `native/pose-exact-frames-cpu-fallback` is parked; Tim refused a store build.
 - **Open:** full SmartMotion orchestrator (live capture, club path, ball, tempo, as one plan). The
   silent-turn watch doesn't cover the Caddie-tab mic. Locate on long, busy clips depends on pose speed.
+
+## Day 133 — 2026-10-04 — orchestrator phase 2 (live SmartMotion)
+- **Shipped (a567d041, 9a194d64, 158b88cc, 08c5feb8):** live Stop + review use the one window finder (no
+  network after Stop); pose decodes once (warm joined); the pose pass no longer re-runs on its own angle;
+  one club-arc runner that saves swing 1; a named cloud fault always takes the headline, and a late duff is
+  locked; detail-screen club arc no longer restarted by play/pause and saved once found.
+- **OOM crash found + fixed:** heap dump showed 130.7MB of ExoPlayer buffer — `isLooping` (repeat mode)
+  buffers the next loops ahead to the 131MB cap. Review + recap players now loop by restarting at
+  didJustFinish. Emulator peak Java heap 213MB → 68MB, 0 OOM. Guard: no `isLooping` on any player.
+- Trial is **2 months** (Tim): tutorial copy + Cowork C2–C4 updated.
+- **Verified (emulator):** 1 read, 1 pose extraction (20 reads, was 97), 1 club path. Motion pass times out
+  only on the emulator's software decode; the network window (5.9–12.4s) then gives a read that swings
+  between early_extension and "couldn't see impact". **Real-phone motion window unverified.**
+- **Open:** OTA held for tonight's Sunday-midnight slot. Phase 3 (port the live screen's effects onto
+  engine stages + delete duplicate locate chains / anchors / dead watch-then-analyze).
