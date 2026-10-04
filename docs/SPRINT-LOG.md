@@ -5260,3 +5260,19 @@ but the app reports to "smartplay-ai", so Claude can't read issues.
   automatically. "What should I work on" goes to the brain. A once-a-day plan hint goes to the opener (no canned
   line). Device check is on Tim's checklist (`smartplan-heard-and-updated`). **The server side (api/) has to be
   deployed before Sunday's update, or the brain won't have the tool. The hands-free path works either way.**
+
+## Day 132 — 2026-10-03 — the upload that would not analyze
+
+Reproduced on the emulator with Tim's clip (3870.mp4: 14.5s, 1920x1440, driver; strike at 7.00s).
+- `fdf5e142` (JS, Sunday update): the on-device locator's 12 frames sit 1.2s apart, so the server guessed
+  impact at 8.94s. A dense refine pass now puts impact at 7.04s and top at 6.63s; it's pinned to his real
+  wrist track (`__tests__/fixtures/locate-3870-wrists.json`). Upload no longer autoplays during auto-analysis,
+  playback is held for the read, and the rest screen can't black out the wait. The file-settle check moved
+  to the legacy FS API (it was always 0 bytes and wasted 1.25s). Failed analyses now reach the issue log.
+- `ad444eee` on **`native/pose-exact-frames-cpu-fallback`** (needs a store build): Android thumbnails seeked
+  to the nearest keyframe (OPTION_CLOSEST_SYNC), so they're patched to exact frames and the module builds
+  from source. MediaPipe now falls back from GPU to CPU at run time, with detection serialized. Pose went from
+  0/16 to 16/16 frames on the emulator. That fallback is the likely cause of every `pose_zero_frames ·
+  nativePose:true` report.
+- Gotcha: `expo start` without `--clear` served a STALE lazy chunk for onDeviceLocate for an hour.
+- Not done: Hemet hole-1 yardage (Tim gave up on the round).
