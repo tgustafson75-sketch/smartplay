@@ -29,7 +29,10 @@ const SOURCE_RANK: Record<string, number> = { ai_vision: 1, user_walk: 2, osm: 3
  * is before this; a fixed client re-sharing refreshes its report's time and is trusted. The app's
  * cached maps use the same instant (courseGeometryService.SCALE_FIX_CLOUD_CLEAN_AT).
  */
-export const AI_SCALE_FIX_AT = '2026-09-24T03:30:00Z';
+// 2026-10-04 — moved to the card-check cutover (midnight Central 10-05, the release slot): AI greens
+// from before it were never checked against the card, and Hemet's hole 1 was one of them. Clients
+// from then on send scale_v 3 (api/course-geometry-share MIN_SCALE_V).
+export const AI_SCALE_FIX_AT = '2026-10-05T05:00:00Z';
 export function isPreScaleAiRow(r: { source?: unknown; created_at?: unknown; updated_at?: unknown }): boolean {
   if (String(r.source) !== 'ai_vision') return false;
   const at = String(r.created_at ?? r.updated_at ?? '');

@@ -8,6 +8,7 @@ import {
   Animated,
   Easing,
   useWindowDimensions,
+  AppState,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -166,7 +167,10 @@ export default function CaddieDataStrip({
   // Leaving the screen never drops a score just tapped in; ending the round flushes it first.
   useEffect(() => {
     const leave = registerPendingScoreFlush(() => commitRef.current());
-    return () => { leave(); commitRef.current(); };
+    // 2026-10-04 (sweep) — and when the app goes to the background: a score tapped and the phone
+    // pocketed could be killed by the OS inside the 2.5s settle and never written.
+    const sub = AppState.addEventListener('change', (st) => { if (st !== 'active') commitRef.current(); });
+    return () => { sub.remove(); leave(); commitRef.current(); };
   }, []);
   const narrowStrip = screenW < 500;
   void _totalScore; void _scoreVsPar;

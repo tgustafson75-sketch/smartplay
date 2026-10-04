@@ -26,12 +26,16 @@ describe('Course Cloud only stores AI geometry placed with the measured scale', 
     expect(r.status).toBe(200);
     expect(mockRecord).not.toHaveBeenCalled();
   });
-  it('a client on the fixed scale is stored', async () => {
-    await call({ course_id: 'x', contributor: 'c', holes, scale_v: 2 });
+  it('a client on the fixed scale AND the card check (v3) is stored', async () => {
+    await call({ course_id: 'x', contributor: 'c', holes, scale_v: 3 });
     expect(mockRecord).toHaveBeenCalledTimes(1);
+  });
+  it('a v2 client (right scale, no card check — the Hemet hole-1 green) is NOT stored', async () => {
+    await call({ course_id: 'x', contributor: 'c', holes, scale_v: 2 });
+    expect(mockRecord).not.toHaveBeenCalled();
   });
   it('the app sends the marker', () => {
     const src = jest.requireActual('fs').readFileSync(jest.requireActual('path').join(__dirname, '../../services/courseCloud.ts'), 'utf8');
-    expect(src).toMatch(/holes: fresh\.map\(toShareHole\), scale_v: 2 \}/);
+    expect(src).toMatch(/holes: fresh\.map\(toShareHole\), scale_v: 3 \}/);
   });
 });

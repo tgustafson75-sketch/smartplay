@@ -547,7 +547,9 @@ function cacheIsServable(geo: CourseGeometry | null): boolean {
  * "mapped" when deciding whether a fresh build is a downgrade — or the clean rebuild is refused in
  * favour of the misplaced copy.
  */
-export const SCALE_FIX_CLOUD_CLEAN_AT = Date.parse('2026-09-24T03:30:00Z'); // = api/_courseCloud AI_SCALE_FIX_AT
+// 2026-10-04 — moved with the server's to the card-check cutover: a cached map carrying AI greens from
+// before it is rebuilt online (those greens were never checked against the scorecard).
+export const SCALE_FIX_CLOUD_CLEAN_AT = Date.parse('2026-10-05T05:00:00Z'); // = api/_courseCloud AI_SCALE_FIX_AT
 export function preScaleEstimateCount(geo: CourseGeometry | null | undefined, cleanAt: number = SCALE_FIX_CLOUD_CLEAN_AT): number {
   if (!geo?.holes?.length || !(geo.fetched_at < cleanAt)) return 0;
   return geo.holes.filter(h => h.green != null && h.estimated === true).length;

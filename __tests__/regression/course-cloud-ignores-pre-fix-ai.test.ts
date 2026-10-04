@@ -6,7 +6,8 @@
 import { readSharedGeometry, recordContribution, isPreScaleAiRow, AI_SCALE_FIX_AT } from '../../api/_courseCloud';
 import { SCALE_FIX_CLOUD_CLEAN_AT } from '../../services/courseGeometryService';
 
-const BEFORE = '2026-09-20T00:00:00Z', AFTER = '2026-09-25T00:00:00Z';
+// 2026-10-04 — the cutover moved to the card check; BETWEEN is right-scale but never card-checked.
+const BEFORE = '2026-09-20T00:00:00Z', BETWEEN = '2026-09-30T00:00:00Z', AFTER = '2026-10-06T00:00:00Z';
 const row = (hole: number, source: string, at: string, extra: Record<string, unknown> = {}) => ({
   course_id: 'c', hole, source, confidence: 0.6, updated_at: at, created_at: at,
   tee_lat: 33.68, tee_lng: -117.18, green_lat: 33.683, green_lng: -117.179, ...extra,
@@ -37,6 +38,7 @@ describe('Course Cloud never uses AI geometry from before the scale fix', () => 
   it('classifies only AI rows from before the fix', () => {
     expect(isPreScaleAiRow(row(1, 'ai_vision', BEFORE))).toBe(true);
     expect(isPreScaleAiRow(row(1, 'ai_vision', AFTER))).toBe(false);
+    expect(isPreScaleAiRow(row(1, 'ai_vision', BETWEEN))).toBe(true);   // the Hemet hole-1 class
     expect(isPreScaleAiRow(row(1, 'osm', BEFORE))).toBe(false);
   });
 

@@ -28,8 +28,13 @@ import { recordContribution, type SharedHoleInput } from './_courseCloud';
 const APP_KEY = process.env.SPC_APP_KEY || 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29';
 const CONTRIB_SALT = process.env.SPC_CONTRIB_SALT || 'spc_course_cloud_salt_v1';
 const MAX_HOLES = 36;
-/** The client scale version whose AI geometry is placed correctly (2026-09-23 fix). */
-export const MIN_SCALE_V = 2;
+/**
+ * The client version whose AI geometry can be trusted. 2 = the measured Mapbox scale (2026-09-23).
+ * 3 = AI greens are also checked against the scorecard from where the player stood (2026-10-04 —
+ * Tim at Hemet: the practice green was found, saved and shared as hole 1). Older clients are thanked
+ * and not stored.
+ */
+export const MIN_SCALE_V = 3;
 
 function norm(v: unknown): string {
   return String(v ?? '').trim();

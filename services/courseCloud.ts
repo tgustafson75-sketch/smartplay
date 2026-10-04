@@ -103,8 +103,9 @@ export async function shareCourseGeometry(courseId: string, holes: HoleGeometry[
     const res = await fetch(`${base.replace(/\/+$/, '')}/api/course-geometry-share`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
-      // scale_v 2 = projected with Mapbox's measured scale; the server refuses AI geometry without it.
-      body: JSON.stringify({ course_id: courseId, contributor, holes: fresh.map(toShareHole), scale_v: 2 }),
+      // scale_v 3 = Mapbox's measured scale (2) AND AI greens checked against the card from where the
+      // player stood (3, 2026-10-04); the server refuses AI geometry from older clients.
+      body: JSON.stringify({ course_id: courseId, contributor, holes: fresh.map(toShareHole), scale_v: 3 }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);

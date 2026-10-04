@@ -115,3 +115,11 @@ describe('both callers that search for a green run the card check, and free the 
   });
 });
 
+
+describe('a score being tapped in survives the app going to the background (sweep 2026-10-04)', () => {
+  it('the strip flushes its pending entry on any AppState change away from active', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'components/CaddieDataStrip.tsx'), 'utf8');
+    expect(src).toMatch(/AppState\.addEventListener\('change', \(st\) => \{ if \(st !== 'active'\) commitRef\.current\(\); \}\)/);
+    expect(src).toMatch(/return \(\) => \{ sub\.remove\(\); leave\(\); commitRef\.current\(\); \};/);
+  });
+});
