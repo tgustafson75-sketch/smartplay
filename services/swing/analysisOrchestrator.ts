@@ -16,8 +16,8 @@
  *   3. THE SECOND PASS     — pose / body mechanics / trace, started by the read when it finishes
  *      (videoUpload's post-Phase-K pose pass). Never on the critical path.
  *
- * And ONE RUN PER SWING: analyzeOnce joins an in-flight run for the same session instead of starting a
- * second, so a re-tap, a remount or a second trigger cannot double the work.
+ * One run per swing — joining instead of starting a second — is the engine's job
+ * (services/swing/orchestrator/engine + uploadRun).
  *
  * services/swing/analysisPipeline still records what ran (observation); this decides what runs.
  */
@@ -155,18 +155,4 @@ export async function findUploadSwingWindow(clipUri: string, durationSec: number
   // 5. Nothing found anything: the middle of the clip.
   const c = dur / 2;
   return { startSec: Math.max(0, c - 2.5), endSec: Math.min(dur, c + 3), impactSec: null, via: 'middle' };
-}
-
-const inflight = new Map<string, Promise<unknown>>();
-
-/**
- * Run `work` for this session unless a run is already in flight — then join that one. The run is
- * forgotten when it settles, so the next explicit re-analyze starts fresh.
- */
-export function analyzeOnce<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
-  const running = inflight.get(sessionId) as Promise<T> | undefined;
-  if (running) return running;
-  const p = work().finally(() => { if (inflight.get(sessionId) === p) inflight.delete(sessionId); });
-  inflight.set(sessionId, p);
-  return p;
 }

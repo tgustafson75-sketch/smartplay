@@ -1279,6 +1279,8 @@ export default function SwingDetail() {
     // queue on the same frame reader, and the read is what the player is waiting for. The read's
     // own pose pass runs after it; this one picks up anything left once it is done.
     if (analysisRunning) return;
+    // Shot 0 of an upload is the orchestrator run's pose stage — doing it here too was a duplicate pass.
+    if (selectedShotIdx === 0 && session?.source === 'uploaded_video') return;
     const selShot = session?.shots[selectedShotIdx];
     if (!selShot?.clipUri || selShot.biomechanics !== undefined) return;             // already has / computing
     if (selectedShotIdx === 0 && session?.biomechanics !== undefined) return;        // shot 0 uses session-level
@@ -2224,23 +2226,9 @@ export default function SwingDetail() {
     if (!swing_id || !shot || !duration || duration <= 0) return;
     if (analyzeInFlightRef.current) return;
     autoAnalyzeFiredRef.current = true;
-    void (async () => {
-      /**
-       * 2026-10-03 (Tim: "Is all of this being managed by an orchestrator?") — WHERE THE SWING IS comes
-       * from one owner now (services/swing/analysisOrchestrator.findUploadSwingWindow): the web
-       * SmartMotion motion pass first, the whole clip when it is short, then the pose locates, then the
-       * middle. This effect only applies the answer and starts the read; the read's own second pass
-       * does pose / body mechanics afterwards.
-       */
-      const { findUploadSwingWindow } = await import('../../../services/swing/analysisOrchestrator');
-      const w = await findUploadSwingWindow(shot.clipUri!, duration);
-      uploadLog('swing-window', { via: w.via, startSec: Math.round(w.startSec * 10) / 10, endSec: Math.round(w.endSec * 10) / 10 }, swing_id);
-      useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, w.startSec, w.endSec, w.impactSec);
-      useToastStore.getState().show(
-        w.via === 'middle' ? 'Analyzing your swing… scrub + re-analyze to fine-tune.' : 'Found your swing — analyzing…',
-      );
-      onReanalyze();
-    })();
+    // 2026-10-04 — the orchestrator's upload run (services/swing/orchestrator/uploadRun) finds the swing,
+    // reads it, then runs pose — in that order, once. onReanalyze starts (or joins) that run.
+    onReanalyze();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisStatus, session?.source, duration, swing_id, shot]);
 

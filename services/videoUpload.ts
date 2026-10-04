@@ -281,10 +281,15 @@ export function runPhaseKOnSession(sessionId: string): Promise<{
   primary_issue: PrimaryIssue | null;
   drill_recommendation: DrillRecommendation | null;
 }> {
-  // 2026-10-03 — ONE read per swing at a time (services/swing/analysisOrchestrator): a second trigger
-  // while a read is running joins it instead of starting another read of the same clip.
-  const { analyzeOnce } = require('./swing/analysisOrchestrator') as typeof import('./swing/analysisOrchestrator');
-  return analyzeOnce(sessionId, () => runPhaseKOnSessionImpl(sessionId));
+  // 2026-10-04 — every caller goes through the orchestrator's upload run (window → read → pose), which
+  // also makes it one run per swing: a second trigger joins the run already going.
+  const { runUploadAnalysis } = require('./swing/orchestrator/uploadRun') as typeof import('./swing/orchestrator/uploadRun');
+  return runUploadAnalysis(sessionId);
+}
+
+/** The read stage itself — called only by the orchestrator (services/swing/orchestrator/uploadRun). */
+export function _runPhaseKRead(sessionId: string): ReturnType<typeof runPhaseKOnSessionImpl> {
+  return runPhaseKOnSessionImpl(sessionId);
 }
 
 async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
@@ -1218,191 +1223,9 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
     // Failures silent (pose API has known reliability variance, env-var
     // gated). Detail screen renders the Biomechanics card iff result is
     // present — zero UX regression when API isn't configured.
-    const firstClipSwing = swings.find(s => s.clipUri);
-    if (firstClipSwing?.clipUri) {
-      const durationSec = session.upload?.duration_sec ?? 3;
-      // 2026-06-15 (Tim — uploads never produced a usable skeleton) — if the user
-      // pointed at their swing ("Analyze this moment" sets clipStart/EndSeconds),
-      // window the on-device pose on THAT span so the skeleton lands on the swing
-      // instead of being smeared across a 30-60s clip. No boundaries → full-clip
-      // tiered sampling as before (short single-swing uploads still work).
-      const hasWindow =
-        typeof firstClipSwing.clipStartSeconds === 'number' &&
-        typeof firstClipSwing.clipEndSeconds === 'number' &&
-        firstClipSwing.clipEndSeconds > firstClipSwing.clipStartSeconds;
-      let poseWindow = hasWindow
-        ? { startMs: firstClipSwing.clipStartSeconds! * 1000, endMs: firstClipSwing.clipEndSeconds! * 1000 }
-        : null;
-      void (async () => {
-        try {
-          const poseMod = await import('./poseAnalysisApi');
-          const { resolveSwingerHandedness } = await import('./swingerHandedness');
-          // 2026-08-06 (Tim — "analysis does everything / takes too long"; the mp4 run showed a single-swing
-          // upload with no manual trim ran pose over the ENTIRE clip — windowed:false — so a 53s clip sampled
-          // ~53s of frames across the whole file). The vision stage already LOCATED the swing but the window
-          // was never handed here. When there's no window, locate the swing ONCE and crop the pose pass to it
-          // (~2s around the swing) instead of smearing across the clip. Best-effort: a locate miss falls back
-          // to the full-clip sampling (unchanged), so this only ever speeds things up, never breaks them.
-          // 2026-08-09 (verification wave C1) — the REAL impact anchor for the pose pass. Priority:
-          // (1) the shot's persisted vision-located impact (set at ingest by the single-swing locate),
-          // (2) the impact from the locate-once fallback below. With it, analyzeSwingFromVideo runs its
-          // strike-anchored branch — the fixed 65%-of-window "impact" fraction (which lands ~1.1s after
-          // the ball and mislabeled every stage) is no longer used for located uploads.
-          let poseImpactMs: number | null =
-            typeof firstClipSwing.locatedImpactSec === 'number' && firstClipSwing.locatedImpactSec > 0
-              ? firstClipSwing.locatedImpactSec * 1000
-              : null;
-          // 2026-08-09 (swing-analysis audit #1) — gate on a MISSING IMPACT, not a missing window. A
-          // manual trim ("point at your swing") sets a window but CLEARS locatedImpactSec (trim.tsx), so
-          // the old `if (!poseWindow)` skipped the locate and left poseImpactMs null → the fixed 65%
-          // fraction came back for trimmed uploads (the exact bug C1 claims to kill). Now: if we have no
-          // impact, locate it. When a window already exists (trim), keep that window and only ADOPT the
-          // located impact if it lands inside it (the dominant swing is why they trimmed there); an
-          // out-of-window locate falls back to the window CENTRE — both beat the downswing-fraction.
-          if (poseImpactMs == null) {
-            try {
-              const { locateSwingWindow, probeDurationMs } = await import('./poseDetection');
-              const durMs = await probeDurationMs(firstClipSwing.clipUri!).catch(() => durationSec * 1000);
-              /**
-               * 2026-09-01 — ON DEVICE FIRST, same as the review path. A swing is the fastest thing
-               * in the clip, so a dozen thumbnails through on-device pose answer "where is the swing"
-               * in seconds; locateSwingWindow is a cold-Lambda vision call with a 25s budget that
-               * aborted twice in Tim's 09-01 log. Fixing only the review path would have left the
-               * upload path paying the old cost for the same question.
-               * [[no-half-fixes-enforce-every-surface]] [[speed-is-the-wow]]
-               */
-              let loc: { startSec: number; endSec: number; swingTimeSec: number } | null = null;
-              if (durMs && durMs > 0) {
-                try {
-                  const { locateSwingWindowOnDevice } = await import('./swing/onDeviceLocate');
-                  loc = await locateSwingWindowOnDevice(firstClipSwing.clipUri!, durMs);
-                } catch { /* on-device is best-effort; the network locate below is the fallback */ }
-                if (!loc) loc = await locateSwingWindow(firstClipSwing.clipUri!, durMs);
-              }
-              if (loc && loc.endSec > loc.startSec) {
-                if (!poseWindow) {
-                  poseWindow = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };
-                  poseImpactMs = loc.swingTimeSec * 1000;
-                } else {
-                  const impMs = loc.swingTimeSec * 1000;
-                  poseImpactMs = (impMs >= poseWindow.startMs && impMs <= poseWindow.endMs)
-                    ? impMs
-                    : Math.round((poseWindow.startMs + poseWindow.endMs) / 2);
-                }
-                uploadLog('pose-window-located', { startSec: Math.round(loc.startSec), endSec: Math.round(loc.endSec), impact_ms: Math.round(poseImpactMs) }, sessionId);
-              } else if (poseWindow) {
-                // locate failed but the user trimmed → anchor impact to the trim centre, not the 65% fraction.
-                poseImpactMs = Math.round((poseWindow.startMs + poseWindow.endMs) / 2);
-              }
-            } catch { /* full-clip fallback — no regression */ }
-          }
-          // 2026-07-07 (biomech audit #9) — pass the KNOWN camera angle (was null,
-          // so a DTL-tagged upload got un-gated face-on turn/weight numbers the
-          // live SmartMotion path would have nulled).
-          // 2026-07-24 (full-app audit, root D) — also thread handedness so a lefty's
-          // weight-shift sign isn't inverted (default 'right' read it backwards).
-          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, poseImpactMs, resolveSwingerHandedness());
-          useSwingSessionStore.getState().setSessionBiomechanics(sessionId, biomech);
-          uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
-
-          // 2026-08-06 (Tim — "I can't get clean analysis the first time; it always takes going to the swing
-          // library and trying ~3 times") — on-device verdict fallback for UPLOADS, parity with live capture.
-          // If the cloud vision read didn't land a verdict (a cold Lambda fail = exactly the "re-analyze from
-          // the library" case), commit the MEASURED pose read so the upload shows a clean first-try result
-          // instead of an empty/failed one. UPGRADE-ONLY: never overwrites a cloud verdict that already
-          // resolved 'ok' (cloud enrichment still wins when it lands).
-          if (biomech) {
-            try {
-              const store = useSwingSessionStore.getState();
-              const sess = store.sessionHistory.find((s) => s.id === sessionId);
-              if (sess && sess.analysis_status !== 'ok') {
-                const { buildPoseSwingRead } = await import('./swing/poseSwingRead');
-                const { poseReadToPrimaryIssue } = await import('./swing/poseReadVerdict');
-                // 2026-08-09 (verification wave C3) — tempoFromBiomechanics computed the ratio from the
-                // SYNTHETIC anchor timestamps, which is a constant of the offset table: every windowed
-                // upload returned exactly the same "tempo" regardless of the swing — a fabricated metric.
-                // tempoFromPoseFrames reads the REAL wrist-Y series from the dense frames, anchored on the
-                // vision-located impact, and returns NO_TEMPO (no fault, no number) when it can't read one.
-                const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, poseMod.tempoFromPoseFrames(biomech.frames, poseImpactMs, 'video')));
-                if (pi) {
-                  store.setSessionAnalysis(sessionId, pi, null);
-                  store.setSessionAnalysisStatus(sessionId, 'ok');
-                  uploadLog('pose-verdict-committed', { issue: pi.issue_id }, sessionId);
-                }
-              }
-            } catch { /* non-fatal — cloud path still owns the verdict */ }
-          }
-
-          // 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open"): detect
-          // the clubhead arc HERE, in the analysis pass, and PERSIST it. Old design re-extracted
-          // frames at VIEW time, which raced the autoplaying ExoPlayer → guarded with abort-while-
-          // playing → so on an autoplaying clip the arc never computed. During analysis nothing is
-          // playing, so it's safe (shouldAbort:false) AND the stored points draw immediately on open
-          // (even while the clip plays — no view-time retriever). Only when there's a real swing
-          // window. Empty [] = analyzed, clubhead not trackable (honest — the view draws nothing).
-          if (poseWindow && (biomech?.frames?.length ?? 0) >= 2) {
-            const pw = poseWindow; // capture: poseWindow is `let` (may be located above), so pin it for the nested map()
-            try {
-              const { detectClubPath } = await import('./swing/clubPath');
-              /**
-               * 2026-09-20 — THE UPLOAD PATH CROPS TOO, and this is the one a shared video takes.
-               *
-               * Tim's Sentry read `detected: 2` of fourteen sampled frames. The 2026-08-10 ROI crop
-               * exists to stop exactly that (~6px clubhead → ~40px) and was wired at ONE of five
-               * detectClubPath call sites. `biomech.frames` is already required two lines above for
-               * this block to run at all, so the bounds were sitting right here the whole time.
-               * [[sweep-the-missing-half-not-the-unused-export]]
-               */
-              const { bodyBoundsFromPose } = await import('./swing/bodyBounds');
-              const arc = await detectClubPath({
-                videoUri: firstClipSwing.clipUri!,
-                startMs: pw.startMs,
-                endMs: pw.endMs,
-                shouldAbort: () => false,
-                bodyBounds: bodyBoundsFromPose(biomech?.frames ?? null),
-                // 2026-09-29 — the clip's own capture rate (null for an upload = unknown, the 30fps floor).
-                sourceFps: (await import('./capture/clipFps')).sessionCapturedFps(
-                  useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId) ?? null,
-                ),
-              });
-              if (arc && arc.points.length >= 3) {
-                // rebase window-relative tMs → absolute clip ms (parity with the view overlay)
-                useSwingSessionStore.getState().setSessionClubArc(
-                  sessionId,
-                  arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + pw.startMs })),
-                  { w: arc.frameW ?? null, h: arc.frameH ?? null },
-                );
-              } else {
-                useSwingSessionStore.getState().setSessionClubArc(sessionId, [], null);
-              }
-              /**
-               * 2026-09-09 — this line was the exact ambiguity `f44f06d` set out to kill, still
-               * standing in the analysis pass: `points: 0` for all four reasons (nothing came back /
-               * the model saw 1-2 / the points clustered / they zig-zagged), which send you to
-               * opposite fixes — the camera, or the prompt.
-               *
-               * It matters MOST here. This pass runs with nothing playing (`shouldAbort: false`, see
-               * the 07-30 note above), so it is the one arc read that cannot be blamed on ExoPlayer
-               * holding the file. A sparse arc HERE is the model or the gates, and that is precisely
-               * the question the close-out left open.
-               */
-              uploadLog('club-arc', {
-                points: arc?.points.length ?? 0,
-                rejected: arc?.rejected?.reason ?? null,
-                detected: arc?.rejected?.detected ?? null,
-                gate: arc?.rejected?.gate ?? null,
-                framesSampled: arc?.framesSampled ?? null,
-              }, sessionId);
-            } catch (arcErr) {
-              console.log('[club-arc] analysis-pass detection failed', arcErr);
-            }
-          }
-        } catch (poseErr) {
-          // Non-fatal — Phase K result already shown. Pose API is opt-in.
-          console.log('[pose] background analysis failed', poseErr);
-        }
-      })();
-    }
+    // 2026-10-04 — the post-read pose / body-mechanics / club-arc pass is the orchestrator's SECOND
+    // stage now (services/swing/orchestrator/uploadRun → runUploadPosePass), not a fire-and-forget tail.
+    // It runs after this read, once, under its own budget, and the screen shows it when it lands.
 
     // 2026-07-09 — recompute this club's confidence (clean-strike rate) from the now-updated
     // cage history, so the cage setup "X% confidence" badge has a real value.
@@ -1600,4 +1423,201 @@ export async function ingestVideoFromPick(args: {
     });
   }
   return sessionId;
+}
+
+/**
+ * 2026-10-04 — the post-read pose pass (was a void tail inside runPhaseKOnSession): pose frames on the
+ * shot's window, biomechanics, the on-device verdict when the cloud read did not commit, and the
+ * persisted club arc. Called by the orchestrator's 'pose' stage, after the read, once per run.
+ */
+export async function runUploadPosePass(sessionId: string): Promise<true | null> {
+  const session = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sessionId);
+  if (!session) return null;
+  const swings = session.shots;
+  const firstClipSwing = swings.find(s => s.clipUri);
+    if (firstClipSwing?.clipUri) {
+      const durationSec = session.upload?.duration_sec ?? 3;
+      // 2026-06-15 (Tim — uploads never produced a usable skeleton) — if the user
+      // pointed at their swing ("Analyze this moment" sets clipStart/EndSeconds),
+      // window the on-device pose on THAT span so the skeleton lands on the swing
+      // instead of being smeared across a 30-60s clip. No boundaries → full-clip
+      // tiered sampling as before (short single-swing uploads still work).
+      const hasWindow =
+        typeof firstClipSwing.clipStartSeconds === 'number' &&
+        typeof firstClipSwing.clipEndSeconds === 'number' &&
+        firstClipSwing.clipEndSeconds > firstClipSwing.clipStartSeconds;
+      let poseWindow = hasWindow
+        ? { startMs: firstClipSwing.clipStartSeconds! * 1000, endMs: firstClipSwing.clipEndSeconds! * 1000 }
+        : null;
+      await (async () => {
+        try {
+          const poseMod = await import('./poseAnalysisApi');
+          const { resolveSwingerHandedness } = await import('./swingerHandedness');
+          // 2026-08-06 (Tim — "analysis does everything / takes too long"; the mp4 run showed a single-swing
+          // upload with no manual trim ran pose over the ENTIRE clip — windowed:false — so a 53s clip sampled
+          // ~53s of frames across the whole file). The vision stage already LOCATED the swing but the window
+          // was never handed here. When there's no window, locate the swing ONCE and crop the pose pass to it
+          // (~2s around the swing) instead of smearing across the clip. Best-effort: a locate miss falls back
+          // to the full-clip sampling (unchanged), so this only ever speeds things up, never breaks them.
+          // 2026-08-09 (verification wave C1) — the REAL impact anchor for the pose pass. Priority:
+          // (1) the shot's persisted vision-located impact (set at ingest by the single-swing locate),
+          // (2) the impact from the locate-once fallback below. With it, analyzeSwingFromVideo runs its
+          // strike-anchored branch — the fixed 65%-of-window "impact" fraction (which lands ~1.1s after
+          // the ball and mislabeled every stage) is no longer used for located uploads.
+          let poseImpactMs: number | null =
+            typeof firstClipSwing.locatedImpactSec === 'number' && firstClipSwing.locatedImpactSec > 0
+              ? firstClipSwing.locatedImpactSec * 1000
+              : null;
+          // 2026-08-09 (swing-analysis audit #1) — gate on a MISSING IMPACT, not a missing window. A
+          // manual trim ("point at your swing") sets a window but CLEARS locatedImpactSec (trim.tsx), so
+          // the old `if (!poseWindow)` skipped the locate and left poseImpactMs null → the fixed 65%
+          // fraction came back for trimmed uploads (the exact bug C1 claims to kill). Now: if we have no
+          // impact, locate it. When a window already exists (trim), keep that window and only ADOPT the
+          // located impact if it lands inside it (the dominant swing is why they trimmed there); an
+          // out-of-window locate falls back to the window CENTRE — both beat the downswing-fraction.
+          if (poseImpactMs == null) {
+            try {
+              const { locateSwingWindow, probeDurationMs } = await import('./poseDetection');
+              const durMs = await probeDurationMs(firstClipSwing.clipUri!).catch(() => durationSec * 1000);
+              /**
+               * 2026-09-01 — ON DEVICE FIRST, same as the review path. A swing is the fastest thing
+               * in the clip, so a dozen thumbnails through on-device pose answer "where is the swing"
+               * in seconds; locateSwingWindow is a cold-Lambda vision call with a 25s budget that
+               * aborted twice in Tim's 09-01 log. Fixing only the review path would have left the
+               * upload path paying the old cost for the same question.
+               * [[no-half-fixes-enforce-every-surface]] [[speed-is-the-wow]]
+               */
+              let loc: { startSec: number; endSec: number; swingTimeSec: number } | null = null;
+              if (durMs && durMs > 0) {
+                try {
+                  const { locateSwingWindowOnDevice } = await import('./swing/onDeviceLocate');
+                  loc = await locateSwingWindowOnDevice(firstClipSwing.clipUri!, durMs);
+                } catch { /* on-device is best-effort; the network locate below is the fallback */ }
+                if (!loc) loc = await locateSwingWindow(firstClipSwing.clipUri!, durMs);
+              }
+              if (loc && loc.endSec > loc.startSec) {
+                if (!poseWindow) {
+                  poseWindow = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };
+                  poseImpactMs = loc.swingTimeSec * 1000;
+                } else {
+                  const impMs = loc.swingTimeSec * 1000;
+                  poseImpactMs = (impMs >= poseWindow.startMs && impMs <= poseWindow.endMs)
+                    ? impMs
+                    : Math.round((poseWindow.startMs + poseWindow.endMs) / 2);
+                }
+                uploadLog('pose-window-located', { startSec: Math.round(loc.startSec), endSec: Math.round(loc.endSec), impact_ms: Math.round(poseImpactMs) }, sessionId);
+              } else if (poseWindow) {
+                // locate failed but the user trimmed → anchor impact to the trim centre, not the 65% fraction.
+                poseImpactMs = Math.round((poseWindow.startMs + poseWindow.endMs) / 2);
+              }
+            } catch { /* full-clip fallback — no regression */ }
+          }
+          // 2026-07-07 (biomech audit #9) — pass the KNOWN camera angle (was null,
+          // so a DTL-tagged upload got un-gated face-on turn/weight numbers the
+          // live SmartMotion path would have nulled).
+          // 2026-07-24 (full-app audit, root D) — also thread handedness so a lefty's
+          // weight-shift sign isn't inverted (default 'right' read it backwards).
+          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, poseImpactMs, resolveSwingerHandedness());
+          useSwingSessionStore.getState().setSessionBiomechanics(sessionId, biomech);
+          uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
+
+          // 2026-08-06 (Tim — "I can't get clean analysis the first time; it always takes going to the swing
+          // library and trying ~3 times") — on-device verdict fallback for UPLOADS, parity with live capture.
+          // If the cloud vision read didn't land a verdict (a cold Lambda fail = exactly the "re-analyze from
+          // the library" case), commit the MEASURED pose read so the upload shows a clean first-try result
+          // instead of an empty/failed one. UPGRADE-ONLY: never overwrites a cloud verdict that already
+          // resolved 'ok' (cloud enrichment still wins when it lands).
+          if (biomech) {
+            try {
+              const store = useSwingSessionStore.getState();
+              const sess = store.sessionHistory.find((s) => s.id === sessionId);
+              if (sess && sess.analysis_status !== 'ok') {
+                const { buildPoseSwingRead } = await import('./swing/poseSwingRead');
+                const { poseReadToPrimaryIssue } = await import('./swing/poseReadVerdict');
+                // 2026-08-09 (verification wave C3) — tempoFromBiomechanics computed the ratio from the
+                // SYNTHETIC anchor timestamps, which is a constant of the offset table: every windowed
+                // upload returned exactly the same "tempo" regardless of the swing — a fabricated metric.
+                // tempoFromPoseFrames reads the REAL wrist-Y series from the dense frames, anchored on the
+                // vision-located impact, and returns NO_TEMPO (no fault, no number) when it can't read one.
+                const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, poseMod.tempoFromPoseFrames(biomech.frames, poseImpactMs, 'video')));
+                if (pi) {
+                  store.setSessionAnalysis(sessionId, pi, null);
+                  store.setSessionAnalysisStatus(sessionId, 'ok');
+                  uploadLog('pose-verdict-committed', { issue: pi.issue_id }, sessionId);
+                }
+              }
+            } catch { /* non-fatal — cloud path still owns the verdict */ }
+          }
+
+          // 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open"): detect
+          // the clubhead arc HERE, in the analysis pass, and PERSIST it. Old design re-extracted
+          // frames at VIEW time, which raced the autoplaying ExoPlayer → guarded with abort-while-
+          // playing → so on an autoplaying clip the arc never computed. During analysis nothing is
+          // playing, so it's safe (shouldAbort:false) AND the stored points draw immediately on open
+          // (even while the clip plays — no view-time retriever). Only when there's a real swing
+          // window. Empty [] = analyzed, clubhead not trackable (honest — the view draws nothing).
+          if (poseWindow && (biomech?.frames?.length ?? 0) >= 2) {
+            const pw = poseWindow; // capture: poseWindow is `let` (may be located above), so pin it for the nested map()
+            try {
+              const { detectClubPath } = await import('./swing/clubPath');
+              /**
+               * 2026-09-20 — THE UPLOAD PATH CROPS TOO, and this is the one a shared video takes.
+               *
+               * Tim's Sentry read `detected: 2` of fourteen sampled frames. The 2026-08-10 ROI crop
+               * exists to stop exactly that (~6px clubhead → ~40px) and was wired at ONE of five
+               * detectClubPath call sites. `biomech.frames` is already required two lines above for
+               * this block to run at all, so the bounds were sitting right here the whole time.
+               * [[sweep-the-missing-half-not-the-unused-export]]
+               */
+              const { bodyBoundsFromPose } = await import('./swing/bodyBounds');
+              const arc = await detectClubPath({
+                videoUri: firstClipSwing.clipUri!,
+                startMs: pw.startMs,
+                endMs: pw.endMs,
+                shouldAbort: () => false,
+                bodyBounds: bodyBoundsFromPose(biomech?.frames ?? null),
+                // 2026-09-29 — the clip's own capture rate (null for an upload = unknown, the 30fps floor).
+                sourceFps: (await import('./capture/clipFps')).sessionCapturedFps(
+                  useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId) ?? null,
+                ),
+              });
+              if (arc && arc.points.length >= 3) {
+                // rebase window-relative tMs → absolute clip ms (parity with the view overlay)
+                useSwingSessionStore.getState().setSessionClubArc(
+                  sessionId,
+                  arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + pw.startMs })),
+                  { w: arc.frameW ?? null, h: arc.frameH ?? null },
+                );
+              } else {
+                useSwingSessionStore.getState().setSessionClubArc(sessionId, [], null);
+              }
+              /**
+               * 2026-09-09 — this line was the exact ambiguity `f44f06d` set out to kill, still
+               * standing in the analysis pass: `points: 0` for all four reasons (nothing came back /
+               * the model saw 1-2 / the points clustered / they zig-zagged), which send you to
+               * opposite fixes — the camera, or the prompt.
+               *
+               * It matters MOST here. This pass runs with nothing playing (`shouldAbort: false`, see
+               * the 07-30 note above), so it is the one arc read that cannot be blamed on ExoPlayer
+               * holding the file. A sparse arc HERE is the model or the gates, and that is precisely
+               * the question the close-out left open.
+               */
+              uploadLog('club-arc', {
+                points: arc?.points.length ?? 0,
+                rejected: arc?.rejected?.reason ?? null,
+                detected: arc?.rejected?.detected ?? null,
+                gate: arc?.rejected?.gate ?? null,
+                framesSampled: arc?.framesSampled ?? null,
+              }, sessionId);
+            } catch (arcErr) {
+              console.log('[club-arc] analysis-pass detection failed', arcErr);
+            }
+          }
+        } catch (poseErr) {
+          // Non-fatal — Phase K result already shown. Pose API is opt-in.
+          console.log('[pose] background analysis failed', poseErr);
+        }
+      })();
+    }
+  return true;
 }

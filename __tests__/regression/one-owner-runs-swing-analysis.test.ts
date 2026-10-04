@@ -4,7 +4,7 @@
  * pass fighting the read's frames). services/swing/analysisOrchestrator now owns where the swing is and
  * one read per swing at a time.
  */
-import { analyzeOnce, findUploadSwingWindow, pickSwingBurst } from '../../services/swing/analysisOrchestrator';
+import { findUploadSwingWindow, pickSwingBurst } from '../../services/swing/analysisOrchestrator';
 
 // jest.mock calls below are hoisted above this import.
 const mockPlatform = { OS: 'android' };
@@ -67,19 +67,4 @@ describe('motion proposes, pose confirms', () => {
   });
 });
 
-describe('one read per swing at a time', () => {
-  it('a second trigger joins the running read instead of starting another', async () => {
-    let runs = 0;
-    let release!: () => void;
-    const work = () => { runs++; return new Promise<string>((r) => { release = () => r('done'); }); };
-    const a = analyzeOnce('s1', work);
-    const b = analyzeOnce('s1', work);
-    expect(runs).toBe(1);
-    release();
-    await expect(Promise.all([a, b])).resolves.toEqual(['done', 'done']);
-    // settled → the next explicit re-analyze starts fresh
-    const c = analyzeOnce('s1', async () => { runs++; return 'again'; });
-    await expect(c).resolves.toBe('again');
-    expect(runs).toBe(2);
-  });
-});
+// One run per swing (joining) is the engine's job now — see the-orchestrator-runs-each-stage-once-in-order.

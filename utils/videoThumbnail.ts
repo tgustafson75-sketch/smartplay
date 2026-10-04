@@ -214,7 +214,7 @@ async function exactOrNative(
       && sourceFilename.startsWith('file://') && typeof options?.time === 'number'
     ) {
       const fe = require('../services/frameEngine') as typeof import('../services/frameEngine');
-      if (await fe.ensureFrameEngine()) {
+      if (await fe.ensureFrameEngine(6_000)) {
         // Pose and the locator need the body, not detail: 640px for the locator's quick looks
         // (quality 0.6), 960px for pose frames.
         const maxDim = q <= 0.6 ? 640 : 960;
