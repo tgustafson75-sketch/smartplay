@@ -5314,3 +5314,12 @@ orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-po
   had none); deleted the swing screen's unreachable on-open backfill + `?watch=1` path + watchdog; durable
   clip shares the raw clip's private copy. Emulator: 1 read / 1 pose / 1 club path, heap steady ~104MB, 0 OOM.
   Still effects (not engine stages) on the live screen — by choice; the races they caused are fixed in-screen.
+- **Adversarial sweep (branch `sweep-2026-10-04`, NOT pushed — held for Tim's go):** 4 reviewers +
+  a re-review of the fixes. Course: the map now runs the hole-1 card check, refusals retry (≤3/hole),
+  Course Cloud stops serving never-checked AI greens (cutover 2026-10-05T05:00Z, scale_v 3), a tapped
+  score survives backgrounding. Orchestrator: re-analyze after the read gets a new read, abandoned
+  stages stop writing (guarded store), putts skip swing stages. SmartMotion: play-at-end, finish
+  handling, one saved headline, swing-1 arc always saved, pose-anchor slack. Frame engine: start-acked
+  timing, motion cancel, no reset loops, cool-offs, orphan sweep. Emulator after: 1 read / 1 pose /
+  1 club path, 0 OOM. Open (plausible, not fixed): shotgun start on another tee; par-5 green beyond
+  the imagery from the tee; the 15s live ceiling does not stop the abandoned finder's work.
