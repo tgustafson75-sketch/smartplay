@@ -16359,7 +16359,7 @@ check(
   );
   check(
     'CLIPS: one player for the screen, not one per shot',
-    (readCode('app/recap/[round_id].tsx').match(/<Video/g) ?? []).length === 1,
+    (readCode('app/recap/[round_id].tsx').match(/<Video\s/g) ?? []).length === 1,
     'a Video mounted per chip would hold a decoder open for every clip in the round',
   );
   check(
