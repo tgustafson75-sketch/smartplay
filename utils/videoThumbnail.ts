@@ -178,19 +178,30 @@ async function exactOrNative(
 ): Promise<VideoThumbnails.VideoThumbnailsResult> {
   try {
     const { Platform } = require('react-native') as typeof import('react-native');
-    const fe = require('../services/frameEngine') as typeof import('../services/frameEngine');
+    const q = typeof options?.quality === 'number' ? options.quality : 1;
+    /**
+     * 2026-10-03 (Tim, same night: "it's taking FOREVER") — the engine is slower per frame than the
+     * native retriever, so only the reads where EXACT timing changes the answer go through it: the
+     * swing locator and pose sampling (quality 0.5-0.8). Duration probes (0.3 — they rely on a
+     * past-the-end failure), club/ball path bursts (0.9 — many frames, ROI crops), and full-size
+     * stills (1.0) stay on the fast native call.
+     */
+    const wantsExact = q >= 0.5 && q <= 0.8;
     if (
-      Platform.OS === 'android' && engineFailures < 3 && fe.isFrameEngineReady()
+      Platform.OS === 'android' && wantsExact && engineFailures < 3
       && sourceFilename.startsWith('file://') && typeof options?.time === 'number'
     ) {
-      // Lower-quality requests are the locators' quick looks (quality 0.6): a 640px frame is plenty to
-      // find the wrists and decodes/encodes several times faster than full size.
-      const maxDim = typeof options.quality === 'number' && options.quality <= 0.6 ? 640 : 1280;
-      const g = await fe.grabExactFrame(sourceFilename, options.time, maxDim);
-      const uri = `${FileSystem.cacheDirectory}exact_${Date.now()}_${++exactSeq}.jpg`;
-      await FileSystem.writeAsStringAsync(uri, g.b64, { encoding: FileSystem.EncodingType.Base64 });
-      engineFailures = 0;
-      return { uri, width: g.width, height: g.height };
+      const fe = require('../services/frameEngine') as typeof import('../services/frameEngine');
+      if (await fe.ensureFrameEngine()) {
+        // Pose and the locator need the body, not detail: 640px for the locator's quick looks
+        // (quality 0.6), 960px for pose frames.
+        const maxDim = q <= 0.6 ? 640 : 960;
+        const g = await fe.grabExactFrame(sourceFilename, options.time, maxDim);
+        const uri = `${FileSystem.cacheDirectory}exact_${Date.now()}_${++exactSeq}.jpg`;
+        await FileSystem.writeAsStringAsync(uri, g.b64, { encoding: FileSystem.EncodingType.Base64 });
+        engineFailures = 0;
+        return { uri, width: g.width, height: g.height };
+      }
     }
   } catch {
     engineFailures++;
@@ -224,7 +235,10 @@ export function getThumbnailAsync(
       while (frameCache.size > CACHE_MAX) {
         const oldest = frameCache.keys().next().value;
         if (oldest == null) break;
+        const gone = frameCache.get(oldest);
         frameCache.delete(oldest);
+        // Delete the evicted original too — the map entry was the only thing that knew it existed.
+        if (gone) void FileSystem.deleteAsync(gone.uri, { idempotent: true }).catch(() => undefined);
       }
       // Hand the CALLER a copy and keep the original, so their delete cannot empty the cache.
       const copy = await copyOf({ uri: out.uri, width: out.width, height: out.height });

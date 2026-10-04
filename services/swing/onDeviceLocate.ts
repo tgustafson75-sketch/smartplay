@@ -68,6 +68,7 @@ const BUDGET_MS = 6_000;
 /** The dense second look (see the refine pass): ~100ms steps inside the two fastest coarse gaps. */
 const REFINE_STEP_MS = 100;
 const REFINE_BUDGET_MS = 6_000;
+const HARD_CAP_MS = 20_000;
 
 /** Evenly spaced sample times across the usable body of the clip. Exported for the test. */
 export function sampleTimesMs(durationMs: number, count: number = LOCATE_FRAME_COUNT): number[] {
@@ -206,7 +207,12 @@ export async function searchSwingWindow(
    * single sample came back, so the sweep stopped at six frames, none of them on the swing.
    */
   let deadline = Number.POSITIVE_INFINITY;
+  // A hard cap from the CALL as well, so a pose engine that never warms up cannot stretch three misses
+  // into minutes.
+  const coarseStartedAt = clock();
+  const hardStop = coarseStartedAt + HARD_CAP_MS;
   for (const tMs of times) {
+    if (clock() > hardStop) break;
     if (clock() > deadline) break;   // spend what is left on the answer, not on more frames
     const sample = await readAt(tMs);
     if (sample && samples.length === 0) deadline = clock() + BUDGET_MS;
@@ -240,8 +246,16 @@ export async function searchSwingWindow(
   // Coarse-to-fine across BOTH gaps (400ms, then 200, then 100), alternating between them, so a budget
   // that runs out mid-refine still leaves both covered evenly. Filling one gap at 100ms first spent the
   // whole budget on the backswing and never looked at the downswing (measured on the emulator).
-  const refineDeadline = clock() + REFINE_BUDGET_MS;
-  const top2 = spans.sort((a, b) => b.v - a.v).slice(0, 2);
+  /**
+   * 2026-10-03 (review + Tim: "taking FOREVER") — the refine must not double the wait on clips the
+   * coarse pass already sees well. Coarse spacing at or under ~450ms (short live captures) already
+   * resolves a swing: skip it. Otherwise it gets at most half of what the coarse pass took.
+   */
+  const coarseSpacing = coarse.length > 1 ? (coarse[coarse.length - 1].tMs - coarse[0].tMs) / (coarse.length - 1) : 0;
+  const coarseSpent = Math.max(0, clock() - coarseStartedAt);
+  const refineBudget = coarseSpacing <= 450 ? 0 : Math.min(REFINE_BUDGET_MS, Math.max(2_000, coarseSpent * 0.5));
+  const refineDeadline = clock() + refineBudget;
+  const top2 = refineBudget > 0 ? spans.sort((a, b) => b.v - a.v).slice(0, 2) : [];
   const seen = new Set(samples.map((p) => p.tMs));
   const order: number[] = [];
   for (const step of [400, 200, REFINE_STEP_MS]) {

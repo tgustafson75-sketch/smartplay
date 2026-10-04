@@ -200,7 +200,9 @@ export async function detectPoseFromBase64(
     // GPU landmarker builds and then rejects every detect(), and the old path turned each rejection
     // into "no pose in frame" — a golfer standing right there reported absent. Switch this session to
     // the same model running in the browser (services/frameEngine) instead of failing the whole read.
-    if (++nativeFailStreak >= 2) {
+    // Only where the browser engine exists (Android) — on iOS, or with no engine, switching would turn
+    // a transient failure into no pose for the rest of the session.
+    if (++nativeFailStreak >= 2 && browserFallbackPossible()) {
       nativeInferenceBroken = true;
       devLog('[mediaPipe] native inference failing — using the browser engine for this session');
     }
@@ -211,9 +213,17 @@ export async function detectPoseFromBase64(
 let nativeFailStreak = 0;
 let nativeInferenceBroken = false;
 
+function browserFallbackPossible(): boolean {
+  try {
+    const { Platform } = require('react-native') as typeof import('react-native');
+    return Platform.OS === 'android';
+  } catch { return false; }
+}
+
 async function detectInBrowser(b64: string, timestampMs: number, opts?: DetectOptions): Promise<PoseFrame | null> {
   try {
     const fe = require('./frameEngine') as typeof import('./frameEngine');
+    await fe.ensureFrameEngine();
     const lm = await fe.detectPoseInBrowser(b64);
     if (!lm || lm.length === 0) return null;
     let frame: PoseFrame = { timestampMs, keypoints: projectBlazePoseToCoco17(lm as MediaPipeLandmark[]) };
@@ -222,6 +232,10 @@ async function detectInBrowser(b64: string, timestampMs: number, opts?: DetectOp
     return frame;
   } catch (e) {
     devLog('[mediaPipe] browser detect failed: ' + String(e));
+    // The browser could not stand in either — go back to trying native rather than sticking with a
+    // fallback that is not working.
+    nativeInferenceBroken = false;
+    nativeFailStreak = 0;
     return null;
   }
 }

@@ -9,8 +9,17 @@
  *
  * So the browser does it here too: a hidden WebView (components/FrameEngineHost) seeks a <video> to
  * the exact time and hands back the drawn frame. No native change — react-native-webview ships in
- * the binary. utils/videoThumbnail routes every frame grab through this on Android and falls back to
- * the native retriever if the engine is not mounted or does not answer.
+ * the binary. utils/videoThumbnail routes frame grabs through this on Android and falls back to the
+ * native retriever whenever the engine is not there or does not answer.
+ *
+ * 2026-10-03 (adversarial review, same night) — hardened:
+ *   - MOUNTED ON DEMAND. The host renders nothing until the first request, so Android users who never
+ *     analyze a clip never start a WebView renderer.
+ *   - SELF-HEALING. A request the page never answers, or a dead renderer, bumps `generation`: the host
+ *     remounts the WebView and every pending request is rejected at once instead of each waiting out
+ *     its timeout.
+ *   - The browser pose fallback remembers a failed runtime load for a few minutes rather than trying
+ *     the CDN again on every frame (a weak course connection cost 45s per frame).
  */
 
 type Grab = { b64: string; width: number; height: number };
@@ -22,6 +31,35 @@ let inject: ((js: string) => void) | null = null;
 let ready = false;
 let seq = 0;
 const pending = new Map<number, Pending>();
+
+// ── on-demand mount + remount ───────────────────────────────────────────────────────────────────
+let wanted = false;
+let generation = 0;
+const listeners = new Set<() => void>();
+const notify = () => listeners.forEach((l) => l());
+
+/** The host subscribes; it renders the WebView only once something has asked for a frame. */
+export function subscribeFrameEngine(l: () => void): () => void {
+  listeners.add(l);
+  return () => { listeners.delete(l); };
+}
+export function frameEngineState(): { wanted: boolean; generation: number } {
+  return { wanted, generation };
+}
+
+function want(): void {
+  if (!wanted) { wanted = true; notify(); }
+}
+
+/** Throw the page away and start a fresh one; every pending request fails now, not at its timeout. */
+export function resetFrameEngine(reason: string): void {
+  ready = false;
+  inject = null;
+  for (const [, p] of pending) { clearTimeout(p.timer); p.reject(new Error(`frame engine reset: ${reason}`)); }
+  pending.clear();
+  generation++;
+  notify();
+}
 
 /** Called by the host when its page has loaded and can take requests. */
 export function attachFrameEngine(injectJs: (js: string) => void): void {
@@ -37,6 +75,21 @@ export function detachFrameEngine(): void {
 
 export function isFrameEngineReady(): boolean {
   return ready && inject != null;
+}
+
+/**
+ * Ask for the engine and wait briefly for it to come up. False means "use native this time" — the
+ * first frames of the very first analysis may come from the native retriever while the page loads.
+ */
+export async function ensureFrameEngine(waitMs = 2_500): Promise<boolean> {
+  want();
+  if (isFrameEngineReady()) return true;
+  const until = Date.now() + waitMs;
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 100));
+    if (isFrameEngineReady()) return true;
+  }
+  return false;
 }
 
 /** Messages posted by the page (window.ReactNativeWebView.postMessage). */
@@ -58,36 +111,64 @@ export function onFrameEngineMessage(raw: string): void {
   else p.reject(new Error(msg.error ?? 'frame engine: no frame'));
 }
 
-/**
- * The frame at exactly `timeMs`, as a JPEG (base64, no data: prefix), longest side at most `maxDim`.
- * Rejects on timeout or any page-side failure — callers fall back to the native retriever.
- */
-export function grabExactFrame(videoUri: string, timeMs: number, maxDim = 1280, timeoutMs = 6_000): Promise<Grab> {
+function request<T>(js: (id: number) => string, timeoutMs: number, label: string): Promise<T> {
   if (!isFrameEngineReady()) return Promise.reject(new Error('frame engine not ready'));
   const id = ++seq;
-  return new Promise<Grab>((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(new Error('frame engine timeout'));
+      reject(new Error(`${label} timeout`));
+      // The page bounds every step itself, so a request it never answered means it is wedged or dead.
+      resetFrameEngine(`${label} timeout`);
     }, timeoutMs);
     pending.set(id, { resolve, reject, timer });
-    inject?.(`window.__grab && window.__grab(${id}, ${JSON.stringify(videoUri)}, ${Math.max(0, Math.round(timeMs))}, ${Math.round(maxDim)}); true;`);
+    inject?.(js(id));
   });
 }
 
 /**
+ * The frame at exactly `timeMs`, as a JPEG (base64, no data: prefix), longest side at most `maxDim`.
+ * Rejects past the end of the clip (callers probe duration that way) and on any page-side failure —
+ * callers fall back to the native retriever.
+ */
+export function grabExactFrame(videoUri: string, timeMs: number, maxDim = 1280, timeoutMs = 8_000): Promise<Grab> {
+  return request<Grab>(
+    (id) => `window.__grab && window.__grab(${id}, ${JSON.stringify(videoUri)}, ${Math.max(0, Math.round(timeMs))}, ${Math.round(maxDim)}); true;`,
+    timeoutMs, 'frame engine',
+  );
+}
+
+/**
  * 2026-10-03 — BlazePose landmarks (33, normalized) for a JPEG, computed in the browser with the same
- * model the native module loads. The fallback for a native engine that fails at inference; the first
- * call loads the web runtime (from the CDN, then cached), so it gets a long timeout.
+ * model the native module loads. The fallback for a native engine that fails at inference. The first
+ * call loads the web runtime (from the CDN, then cached); a failed load is remembered for a few
+ * minutes so a weak connection fails each frame instantly instead of after a long wait.
  */
 let poseWarm = false;
-export function detectPoseInBrowser(b64: string): Promise<WebLandmark[]> {
-  if (!isFrameEngineReady()) return Promise.reject(new Error('frame engine not ready'));
-  const id = ++seq;
-  const timeoutMs = poseWarm ? 8_000 : 45_000;
-  return new Promise<WebLandmark[]>((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error('browser pose timeout')); }, timeoutMs);
-    pending.set(id, { resolve: (l: WebLandmark[]) => { poseWarm = true; resolve(l); }, reject, timer });
-    inject?.(`window.__pose && window.__pose(${id}, ${JSON.stringify(b64)}); true;`);
-  });
+let poseUnavailableUntil = 0;
+const POSE_RETRY_AFTER_MS = 5 * 60_000;
+
+export function browserPoseAvailable(): boolean {
+  return isFrameEngineReady() && Date.now() >= poseUnavailableUntil;
+}
+
+export async function detectPoseInBrowser(b64: string): Promise<WebLandmark[]> {
+  if (Date.now() < poseUnavailableUntil) throw new Error('browser pose unavailable (recent load failure)');
+  try {
+    const lm = await request<WebLandmark[]>(
+      (id) => `window.__pose && window.__pose(${id}, ${JSON.stringify(b64)}); true;`,
+      poseWarm ? 8_000 : 35_000, 'browser pose',
+    );
+    poseWarm = true;
+    return lm;
+  } catch (e) {
+    if (!poseWarm) poseUnavailableUntil = Date.now() + POSE_RETRY_AFTER_MS;
+    throw e;
+  }
+}
+
+/** Test seam. */
+export function _resetFrameEngineForTest(): void {
+  detachFrameEngine();
+  wanted = false; generation = 0; poseWarm = false; poseUnavailableUntil = 0;
 }
