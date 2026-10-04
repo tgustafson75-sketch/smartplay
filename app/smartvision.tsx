@@ -819,9 +819,10 @@ export default function SmartVisionScreen() {
           const q2 = fix2 ? classifyAccuracy(fix2.accuracy_m, fix2.timestamp).level : 'none';
           const playerPt2 = fix2 && okc2(fix2.location) && q2 !== 'weak' && q2 !== 'none' && q2 !== 'stale'
             ? { lat: fix2.location.lat, lng: fix2.location.lng } : null;
+          if (playerPt2) svDeriveAttempts.add(attemptKey); // mark BEFORE any await → suppresses the in-flight re-run race
           const { seedIsFor, seedRejectedNearby } = await import('../services/holeGeometryDerivation');
-          if (playerPt2 && !seedRejectedNearby(courseId, holeIndex, playerPt2)) {
-            svDeriveAttempts.add(attemptKey); // mark BEFORE await → suppresses the in-flight re-run race
+          if (playerPt2 && seedRejectedNearby(courseId, holeIndex, playerPt2)) svDeriveAttempts.delete(attemptKey);
+          else if (playerPt2) {
             try {
               derivedGeo = await deriveHoleGeometry({
                 seed: playerPt2,

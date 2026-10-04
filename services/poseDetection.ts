@@ -1428,9 +1428,10 @@ export async function analyzeSwing(
           allowNetwork: locatePlan === 'full',
           onNetworkAbort: (cause) => { locateDegraded = cause; },
         });
-        // 'whole_clip' is "nothing narrower was found" just like 'middle' — null keeps this function's own
-        // fallbacks (the last-5s sampling, the locate_degraded flag) exactly as they were (sweep 10-04).
-        if (w.via !== 'middle' && w.via !== 'whole_clip' && w.endSec > w.startSec) located = w.core ?? { startSec: w.startSec, endSec: w.endSec };
+        // 'middle' is a guess → null (the degraded / fallback handling below). 'whole_clip' is a DECISION
+        // for a clip of 8s or less (the clip is the swing) and is sampled as such, unflagged — treating it
+        // as a miss marked good short clips "rough" (re-review 10-04).
+        if (w.via !== 'middle' && w.endSec > w.startSec) located = w.core ?? { startSec: w.startSec, endSec: w.endSec };
       } catch { /* best-effort — the whole clip below */ }
       locateMs = Date.now() - tLocate;
       if (located) {

@@ -4,7 +4,7 @@
  * re-share refreshes its report time and is trusted. The app's cached maps use the same instant.
  */
 import { readSharedGeometry, recordContribution, isPreScaleAiRow, AI_SCALE_FIX_AT } from '../../api/_courseCloud';
-import { SCALE_FIX_CLOUD_CLEAN_AT } from '../../services/courseGeometryService';
+import { SCALE_FIX_CLOUD_CLEAN_AT, preScaleEstimateCount } from '../../services/courseGeometryService';
 
 // 2026-10-04 — the cutover moved to the card check; BETWEEN is right-scale but never card-checked.
 const BEFORE = '2026-09-20T00:00:00Z', BETWEEN = '2026-09-30T00:00:00Z', AFTER = '2026-10-06T00:00:00Z';
@@ -59,3 +59,14 @@ describe('Course Cloud never uses AI geometry from before the scale fix', () => 
     expect(writes.find((w) => w.table === 'course_geometry')).toBeUndefined();
   });
 });
+
+describe('the app side of the cutover only applies once it has passed (re-review 10-04)', () => {
+  const geo = { fetched_at: Date.parse('2026-10-04T20:00:00Z'), holes: [{ green: { lat: 1, lng: 1 }, estimated: true }] } as never;
+  it('before the cutover, a fresh map is not treated as stale (no refetch on every open)', () => {
+    expect(preScaleEstimateCount(geo, SCALE_FIX_CLOUD_CLEAN_AT, SCALE_FIX_CLOUD_CLEAN_AT - 60_000)).toBe(0);
+  });
+  it('after it, a map fetched before it with AI greens is rebuilt', () => {
+    expect(preScaleEstimateCount(geo, SCALE_FIX_CLOUD_CLEAN_AT, SCALE_FIX_CLOUD_CLEAN_AT + 60_000)).toBe(1);
+  });
+});
+

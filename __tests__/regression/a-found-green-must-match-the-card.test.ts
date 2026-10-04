@@ -74,7 +74,9 @@ describe('where the player is on the hole', () => {
   it('no shots, or a shot logged right where the player stands: still at the tee', () => {
     expect(seedIsFor([], at)).toBe('tee');
     expect(seedIsFor([{ start_location: yardsNorth(at, 5) }], at)).toBe('tee');
-    expect(seedIsFor([{ start_location: null, gps_location: null }], at)).toBe('tee');
+  });
+  it('a shot with no location cannot say where it was hit — a logged shot means on the hole, as before', () => {
+    expect(seedIsFor([{ start_location: null, gps_location: null }], at)).toBe('on_hole');
   });
   it('walked away from a shot logged on this hole: on the hole', () => {
     expect(seedIsFor([{ start_location: yardsNorth(at, -220) }], at)).toBe('on_hole');
@@ -96,6 +98,14 @@ describe('a green refused from where the player stood is tried again once they m
     expect(seedRejectedNearby('hemet', 1, yardsNorth(GREEN, 10))).toBe(true);    // still standing there
     expect(seedRejectedNearby('hemet', 1, yardsNorth(GREEN, -120))).toBe(false); // walked to the tee
     expect(seedRejectedNearby('hemet', 2, GREEN)).toBe(false);                    // another hole
+  });
+  it('a hole is searched at most three times from different spots — never a vision call every 40y', async () => {
+    for (let i = 0; i < 3; i++) {
+      const spot = yardsNorth(GREEN, -60 * i);
+      expect(seedRejectedNearby('hemet', 3, spot)).toBe(false);
+      expect(await deriveHoleGeometry({ seed: spot, holeNumber: 3, par: 4, yardage: 400, knownTee: null, seedIs: 'tee', courseId: 'hemet' })).toBeNull();
+    }
+    expect(seedRejectedNearby('hemet', 3, yardsNorth(GREEN, -400))).toBe(true);   // spent, wherever they are
   });
 });
 

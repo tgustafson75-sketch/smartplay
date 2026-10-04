@@ -168,7 +168,9 @@ export function seedIsFor(
 ): 'tee' | 'on_hole' {
   const walkedAway = shotsOnHole.some((sh) => {
     const p = sh.start_location ?? sh.gps_location ?? null;
-    return !!p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && haversineMeters(p, at) * 1.09361 >= 40;
+    // A shot with no location cannot say where it was hit: as before, a logged shot means on the hole.
+    if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return true;
+    return haversineMeters(p, at) * 1.09361 >= 40;
   });
   return walkedAway ? 'on_hole' : 'tee';
 }
@@ -179,11 +181,19 @@ export function seedIsFor(
  * whole round: rightly refusing the practice green from the pro shop left hole 1 with no green at all.
  * The spot is remembered instead, and the hole is tried again once the player has moved 40y from it.
  */
-const seedRejections = new Map<string, LatLng>();
+const seedRejections = new Map<string, { at: LatLng; count: number }>();
 const RETRY_AFTER_MOVING_YDS = 40;
+/**
+ * At most this many position refusals per hole per session (re-review 10-04): a player who logs no
+ * shots stays in 'tee' mode, so once past ~40% of the hole even the RIGHT green reads "too close" —
+ * without a cap that was a paid vision call every 40y, on every hole.
+ */
+const MAX_SEED_RETRIES = 2;
 export function seedRejectedNearby(courseId: string | null | undefined, holeNumber: number, at: LatLng): boolean {
-  const p = seedRejections.get(`${courseId ?? ''}:${holeNumber}`);
-  return !!p && haversineMeters(p, at) * 1.09361 < RETRY_AFTER_MOVING_YDS;
+  const r = seedRejections.get(`${courseId ?? ''}:${holeNumber}`);
+  if (!r) return false;
+  if (r.count > MAX_SEED_RETRIES) return true;            // spent: no more searches for this hole
+  return haversineMeters(r.at, at) * 1.09361 < RETRY_AFTER_MOVING_YDS;
 }
 /** Test seam. */
 export function _clearSeedRejectionsForTest(): void { seedRejections.clear(); }
@@ -413,7 +423,8 @@ export async function deriveHoleGeometry(input: {
         : fromSeed > cardYards * 1.1;
       if (bad) {
         console.log(`[holeGeometry] hole ${holeNumber}: found green ${Math.round(fromSeed)}y from the player (${input.seedIs}) vs card ${cardYards}y — discarding, not caching`);
-        seedRejections.set(`${input.courseId ?? ''}:${holeNumber}`, seed);
+        const rk = `${input.courseId ?? ''}:${holeNumber}`;
+        seedRejections.set(rk, { at: seed, count: (seedRejections.get(rk)?.count ?? 0) + 1 });
         return null;
       }
     }

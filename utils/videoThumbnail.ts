@@ -295,7 +295,10 @@ export function getThumbnailAsync(
  * them. Both are only ever referenced in memory, so at launch nothing can still be using them.
  * Persistent thumbnails are copied into documentDirectory and are not touched.
  */
-export async function sweepOrphanFrameFiles(): Promise<number> {
+/** When this JS bundle started — files modified before it belong to an earlier launch. */
+const MODULE_LOADED_AT = Date.now();
+
+export async function sweepOrphanFrameFiles(bootAt: number = MODULE_LOADED_AT): Promise<number> {
   const dir = FileSystem.cacheDirectory;
   if (!dir) return 0;
   let n = 0;
@@ -303,6 +306,11 @@ export async function sweepOrphanFrameFiles(): Promise<number> {
     const names = await FileSystem.readDirectoryAsync(dir);
     for (const name of names) {
       if (!/^(exact_|shared-clip-)/.test(name)) continue;
+      // Only what a PREVIOUS launch left (re-review 10-04): an analysis started in this launch's
+      // first seconds may already be using a fresh copy or frame.
+      const info = await FileSystem.getInfoAsync(`${dir}${name}`).catch(() => null);
+      const mtimeMs = info && info.exists && typeof info.modificationTime === 'number' ? info.modificationTime * 1000 : null;
+      if (mtimeMs == null || mtimeMs >= bootAt) continue;
       await FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(() => undefined);
       n++;
     }

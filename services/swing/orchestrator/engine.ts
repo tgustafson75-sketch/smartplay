@@ -62,7 +62,6 @@ export class AnalysisRun<Input> {
   private readonly outputs: Record<string, unknown> = {};
   private readonly listeners = new Set<Listener>();
   private readonly stageCtrls: Record<string, AbortController> = {};
-  private readonly stageCleanup: Record<string, () => void> = {};
   private finished = false;
   readonly done: Promise<RunSnapshot>;
   private resolveDone!: (s: RunSnapshot) => void;
@@ -98,6 +97,12 @@ export class AnalysisRun<Input> {
   }
 
   start(): void { void this.pump(); }
+
+  /** A newer run for the same key has started: stop everything this one set going, finished or not. */
+  supersede(): void {
+    if (!this.finished) { this.cancel(); return; }
+    this.ctrl.abort();
+  }
 
   private emit(): void {
     const snap = this.snapshot();
@@ -146,7 +151,6 @@ export class AnalysisRun<Input> {
         if (this.ctrl.signal.aborted) stageCtrl.abort();
         else this.ctrl.signal.addEventListener('abort', onRunAbort, { once: true });
         const ctx: StageContext<Input> = { input: this.input, outputs: { ...this.outputs }, signal: stageCtrl.signal };
-        this.stageCleanup[s.id] = () => this.ctrl.signal.removeEventListener('abort', onRunAbort);
         this.stageCtrls[s.id] = stageCtrl;
         if (s.when && !s.when(ctx)) { this.settle(s.id, { status: 'skipped' }); changed = true; started = true; continue; }
         started = true;
@@ -192,7 +196,9 @@ export class AnalysisRun<Input> {
       }
     } finally {
       if (timer) clearTimeout(timer);
-      this.stageCleanup[s.id]?.();
+      // The run-abort link is never unhooked: work a stage started and did not await (the read's putting
+      // analysis) must still go quiet when a NEWER run for the same swing supersedes this one — even after
+      // this run has finished (see supersede()). The run is dropped with its listeners once replaced.
     }
     this.emit();
     void this.pump();
@@ -205,6 +211,8 @@ export class AnalysisRun<Input> {
  * settled), in which case it is cancelled and a fresh run starts.
  */
 const runs = new Map<string, AnalysisRun<unknown>>();
+/** The most recent run per key, kept after it finishes so the next one can silence its leftover work. */
+const lastRun = new Map<string, AnalysisRun<unknown>>();
 
 export function getOrStartRun<Input>(
   key: string,
@@ -214,15 +222,16 @@ export function getOrStartRun<Input>(
   const existing = runs.get(key) as AnalysisRun<Input> | undefined;
   if (existing && !existing.snapshot().done) {
     if (!restart || !restart(existing.snapshot())) return existing;
-    existing.cancel();
   }
+  lastRun.get(key)?.supersede();
   const { stages, input, hooks } = build();
   const run = new AnalysisRun<Input>(key, stages, input, hooks);
   runs.set(key, run as AnalysisRun<unknown>);
+  lastRun.set(key, run as AnalysisRun<unknown>);
   void run.done.then(() => { if (runs.get(key) === (run as AnalysisRun<unknown>)) runs.delete(key); });
   run.start();
   return run;
 }
 
 /** Test seam. */
-export function _clearRunsForTest(): void { runs.clear(); }
+export function _clearRunsForTest(): void { runs.clear(); lastRun.clear(); }

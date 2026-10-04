@@ -12,7 +12,12 @@ import { useSwingSessionStore } from '../../../store/swingSessionStore';
 
 type SwingStore = ReturnType<typeof useSwingSessionStore.getState>;
 
-const MUTATOR = /^(set|ingest|add|update|remove|append|mark|record|clear|delete|patch)/;
+/**
+ * The store's READ functions — every other function on it changes state and goes quiet on abort. An
+ * allow-list of readers, not a pattern of writers: the pattern missed `expandUploadIntoSwings`, so an
+ * over-budget read could still split a session into shots after its run had failed (re-review 10-04).
+ */
+const READERS = new Set(['getClubProfile']);
 
 export function liveSessionStore(signal?: AbortSignal | null): SwingStore {
   if (!signal) return useSwingSessionStore.getState();
@@ -20,7 +25,7 @@ export function liveSessionStore(signal?: AbortSignal | null): SwingStore {
     get(_t, key) {
       const st = useSwingSessionStore.getState() as unknown as Record<string | symbol, unknown>;
       const v = st[key];
-      if (typeof v === 'function' && typeof key === 'string' && MUTATOR.test(key)) {
+      if (typeof v === 'function' && typeof key === 'string' && !READERS.has(key)) {
         return (...args: unknown[]) => {
           if (signal.aborted) return undefined;
           return (v as (...a: unknown[]) => unknown).apply(useSwingSessionStore.getState(), args);

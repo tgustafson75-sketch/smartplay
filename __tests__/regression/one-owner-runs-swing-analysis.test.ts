@@ -111,3 +111,11 @@ describe('motion proposes, pose confirms', () => {
 });
 
 // One run per swing (joining) is the engine's job now — see the-orchestrator-runs-each-stage-once-in-order.
+
+describe('the window is clamped to the clip the motion pass MEASURED (re-review 10-04)', () => {
+  it('stated 5s, measured 10s: the swing at 6-9s is kept, not thrown away', async () => {
+    mockMotion.mockResolvedValue({ durationMs: 10_000, window: { startMs: 6000, endMs: 9000, peakMs: 7600 } });
+    const w = await findUploadSwingWindow('file:///c.mp4', 5);
+    expect(w).toEqual(expect.objectContaining({ via: 'motion', startSec: 6, endSec: 9 }));
+  });
+});

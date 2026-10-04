@@ -63,6 +63,23 @@ describe('the browser frame engine bridge', () => {
     jest.useRealTimers();
   });
 
+  it('two queue limits in a row with nothing starting: the page is gone, start a fresh one', async () => {
+    const sent: string[] = [];
+    attachFrameEngine((js) => sent.push(js));
+    onFrameEngineMessage(JSON.stringify({ type: 'ready' }));
+    jest.useFakeTimers();
+    const gen0 = frameEngineState().generation;
+    const a = grabExactFrame('file:///c.mp4', 100, 640, 1000);
+    const b = grabExactFrame('file:///c.mp4', 200, 640, 1000);
+    a.catch(() => undefined); b.catch(() => undefined);
+    jest.advanceTimersByTime(61_000);
+    await expect(a).rejects.toThrow(/queue timeout/);
+    await expect(b).rejects.toThrow(/queue timeout/);
+    expect(frameEngineState().generation).toBe(gen0 + 1);
+    expect(sent.some((j) => /__cancel\(/.test(j))).toBe(true);
+    jest.useRealTimers();
+  });
+
   it('a slow motion pass is CANCELLED in the page, not answered with a page reset', async () => {
     const sent: string[] = [];
     attachFrameEngine((js) => sent.push(js));

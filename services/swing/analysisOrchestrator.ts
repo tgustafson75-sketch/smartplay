@@ -103,10 +103,15 @@ export async function pickSwingBurst(
  * under-reports (an upload's metadata) could put a motion window's start past its clamped end.
  */
 function clampWindow(w: UploadSwingWindow, dur: number): UploadSwingWindow {
-  const startSec = Math.min(Math.max(0, w.startSec), dur);
-  const endSec = Math.min(Math.max(startSec, w.endSec), dur);
+  const clamp = (x: number, lo: number, hi: number) => Math.min(Math.max(x, lo), hi);
+  const startSec = clamp(w.startSec, 0, dur);
+  const endSec = clamp(w.endSec, startSec, dur);
   if (endSec - startSec < 0.2) return { startSec: 0, endSec: dur, impactSec: null, via: w.via === 'middle' ? 'middle' : 'whole_clip' };
-  return { ...w, startSec, endSec };
+  const impactSec = w.impactSec != null && w.impactSec >= startSec && w.impactSec <= endSec ? w.impactSec : null;
+  const core = w.core
+    ? { startSec: clamp(w.core.startSec, startSec, endSec), endSec: clamp(w.core.endSec, startSec, endSec) }
+    : undefined;
+  return { ...w, startSec, endSec, impactSec, ...(core && core.endSec > core.startSec ? { core } : { core: undefined }) };
 }
 
 export async function findUploadSwingWindow(
@@ -114,7 +119,11 @@ export async function findUploadSwingWindow(
   durationSec: number,
   opts: Parameters<typeof findUploadSwingWindowRaw>[2] = {},
 ): Promise<UploadSwingWindow> {
-  return clampWindow(await findUploadSwingWindowRaw(clipUri, durationSec, opts), Math.max(0.5, durationSec));
+  // Clamp to the LONGER of the stated duration and the one the motion pass measured: an upload's
+  // metadata can under-report, and clamping to it threw away a correct window past the stated end.
+  const measured = { durSec: 0 };
+  const w = await findUploadSwingWindowRaw(clipUri, durationSec, opts, measured);
+  return clampWindow(w, Math.max(0.5, durationSec, measured.durSec));
 }
 
 async function findUploadSwingWindowRaw(
@@ -129,6 +138,7 @@ async function findUploadSwingWindowRaw(
     /** Why the network locate gave up — analyzeSwing reports it as `locate_degraded`. */
     onNetworkAbort?: (cause: 'dead_host' | 'ceiling' | 'unknown') => void;
   } = {},
+  measured: { durSec: number } = { durSec: 0 },
 ): Promise<UploadSwingWindow> {
   const dur = Math.max(0.5, durationSec);
   let motionRan = false;
@@ -146,14 +156,16 @@ async function findUploadSwingWindowRaw(
       if (shared) try {
         motionRan = true;
         const m = await fe.findMotionWindow(shared.uri);
+        measured.durSec = (m.durationMs ?? 0) / 1000;
+        const mdur = Math.max(dur, measured.durSec);
         const bursts = m.bursts ?? [];
         console.log('[window] motion pass', JSON.stringify({ window: m.window, bursts: bursts.length }));
         // Short clips: the motion window is enough — no pose on the critical path at all.
         if (dur <= SHORT_CLIP_NO_LOCATE_SEC) {
           if (m.window && m.window.endMs > m.window.startMs) {
-            return { startSec: m.window.startMs / 1000, endSec: Math.min(dur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
+            return { startSec: m.window.startMs / 1000, endSec: Math.min(mdur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
           }
-          return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
+          return { startSec: 0, endSec: mdur, impactSec: null, via: 'whole_clip' };
         }
         let swing: { startMs: number; endMs: number; peakMs: number } | null = null;
         if (bursts.length > 1) swing = await pickSwingBurst(shared.uri, bursts);
@@ -161,13 +173,13 @@ async function findUploadSwingWindowRaw(
           // Address (~1.8s before the fastest moment) through the finish (~1.5s after).
           return {
             startSec: Math.max(0, (swing.peakMs - 1800) / 1000),
-            endSec: Math.min(dur, (swing.peakMs + 1500) / 1000),
+            endSec: Math.min(mdur, (swing.peakMs + 1500) / 1000),
             impactSec: null,
             via: 'motion',
           };
         }
         if (m.window && m.window.endMs > m.window.startMs) {
-          return { startSec: m.window.startMs / 1000, endSec: Math.min(dur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
+          return { startSec: m.window.startMs / 1000, endSec: Math.min(mdur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
         }
       } finally { shared.release(); }
     }

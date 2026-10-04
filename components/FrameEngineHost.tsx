@@ -65,6 +65,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
     if (idle) { clearTimeout(idle); idle = null; }
     queued++;
     frameQ = frameQ.then(function () {
+      if (cancelled[id]) { delete cancelled[id]; settle(); return; }   // the app gave up on it while queued
       begin(id);
       return within(load(src), 5000, 'load').then(function () {
         var dur = v.duration;
@@ -115,6 +116,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
     if (idle) { clearTimeout(idle); idle = null; }
     queued++;
     frameQ = frameQ.then(function () {
+      if (cancelled[id]) { delete cancelled[id]; settle(); return; }   // the app gave up on it while queued
       begin(id);
       return within(load(src), 5000, 'load').then(function () {
         var dur = v.duration;

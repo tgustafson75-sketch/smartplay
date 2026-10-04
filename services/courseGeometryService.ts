@@ -462,7 +462,9 @@ export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeome
 // mapboxImagery.MAPBOX_Z0_METERS_PER_PX. They are not read again; the hole is derived afresh.
 // 2026-10-03 — v2 -> v3: greens derived before the card check above (e.g. a hole-1 green read from the
 // pro shop at Hemet) were cached and reused every round. Re-derive them under the check.
-const DERIVED_KEY_PREFIX = 'course-geometry-derived-v3::';
+// 2026-10-04 — v3 -> v4: the SmartVision map's own search skipped that check until today, so a v3
+// cache can still hold a map-found green that was never card-checked.
+const DERIVED_KEY_PREFIX = 'course-geometry-derived-v4::';
 const derivedMemCache: Map<string, Record<number, HoleGeometry>> = new Map();
 
 function derivedKey(courseId: string): string {
@@ -550,7 +552,10 @@ function cacheIsServable(geo: CourseGeometry | null): boolean {
 // 2026-10-04 — moved with the server's to the card-check cutover: a cached map carrying AI greens from
 // before it is rebuilt online (those greens were never checked against the scorecard).
 export const SCALE_FIX_CLOUD_CLEAN_AT = Date.parse('2026-10-05T05:00:00Z'); // = api/_courseCloud AI_SCALE_FIX_AT
-export function preScaleEstimateCount(geo: CourseGeometry | null | undefined, cleanAt: number = SCALE_FIX_CLOUD_CLEAN_AT): number {
+export function preScaleEstimateCount(geo: CourseGeometry | null | undefined, cleanAt: number = SCALE_FIX_CLOUD_CLEAN_AT, now: number = Date.now()): number {
+  // Only once the cutover has PASSED (re-review 10-04): a build running before it would otherwise
+  // treat every freshly fetched map as pre-cutover and refetch it on every open.
+  if (now < cleanAt) return 0;
   if (!geo?.holes?.length || !(geo.fetched_at < cleanAt)) return 0;
   return geo.holes.filter(h => h.green != null && h.estimated === true).length;
 }

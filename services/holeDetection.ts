@@ -472,11 +472,11 @@ async function ensureGreenForCurrentHole(
   if (greenDeriveAttempts.has(key)) return;
   if (greenForHole(courseId, hole)) return;   // something in the cascade already answers
   if (!isValidGolfCoord(at.lat, at.lng)) return;
+  greenDeriveAttempts.add(key);   // BEFORE any await — a second tick must not start a second search
   const { seedIsFor, seedRejectedNearby } = await import('./holeGeometryDerivation');
   // Refused from this very spot already (e.g. the practice green from the pro shop) — wait until the
   // player has moved before spending another vision call.
-  if (seedRejectedNearby(courseId, hole, at)) return;
-  greenDeriveAttempts.add(key);
+  if (seedRejectedNearby(courseId, hole, at)) { greenDeriveAttempts.delete(key); return; }
   try {
     const { loadDerivedGeometry, getDerivedHoleGeometry } = await import('./courseGeometryService');
     // A previous session may already have solved this hole — hydrate before spending a vision call.

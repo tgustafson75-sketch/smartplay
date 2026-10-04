@@ -35,6 +35,8 @@ let inject: ((js: string) => void) | null = null;
 let ready = false;
 let seq = 0;
 const pending = new Map<number, Pending>();
+/** Consecutive queue limits reached with no job starting in between (see request()). */
+let queueStalls = 0;
 /** Browser pose: loaded in the CURRENT page (a reset clears it), and a recent load failure to respect. */
 let poseWarm = false;
 let poseUnavailableUntil = 0;
@@ -63,6 +65,7 @@ export function resetFrameEngine(reason: string): void {
   // 2026-10-04 (sweep) — the new page has no pose runtime loaded: the next pose call is a COLD load
   // again and gets the cold timeout. Left true, it got the warm 8s, timed out, reset again — a loop.
   poseWarm = false;
+  queueStalls = 0;
   ready = false;
   inject = null;
   for (const [, p] of pending) { clearTimeout(p.timer); p.reject(new Error(`frame engine reset: ${reason}`)); }
@@ -158,9 +161,15 @@ function request<T>(
         if (!pending.has(id)) return;
         pending.delete(id);
         reject(new Error(`${label} queue timeout`));
+        // Drop it from the page's queue too, so a stale motion pass cannot run later and hold the decoder.
+        try { inject?.(`window.__cancel && window.__cancel(${id}); true;`); } catch { /* best-effort */ }
+        // Two queue limits in a row with NOTHING started in between: the page is not busy, it is gone
+        // (reloaded without a renderer event, or its queue is poisoned). Start a fresh one.
+        if (++queueStalls >= 2) { queueStalls = 0; resetFrameEngine(`${label} queue stalled`); }
       }, QUEUE_LIMIT_MS),
     };
     entry.started = () => {
+      queueStalls = 0;
       clearTimeout(entry.timer);
       entry.timer = setTimeout(() => {
         if (!pending.has(id)) return;
@@ -233,5 +242,5 @@ export async function detectPoseInBrowser(b64: string): Promise<WebLandmark[]> {
 /** Test seam. */
 export function _resetFrameEngineForTest(): void {
   detachFrameEngine();
-  wanted = false; generation = 0; poseWarm = false; poseUnavailableUntil = 0;
+  wanted = false; generation = 0; poseWarm = false; poseUnavailableUntil = 0; queueStalls = 0;
 }

@@ -143,3 +143,29 @@ describe('an abandoned stage stops writing', () => {
     }
   });
 });
+
+describe('re-review 10-04', () => {
+  it('EVERY store function but the readers goes quiet on abort — expandUploadIntoSwings included', async () => {
+    const { liveSessionStore } = await import('../../services/swing/orchestrator/liveSessionStore');
+    const { useSwingSessionStore } = await import('../../store/swingSessionStore');
+    const real = useSwingSessionStore.getState().expandUploadIntoSwings;
+    const spy = jest.fn();
+    useSwingSessionStore.setState({ expandUploadIntoSwings: spy } as never);
+    const ctrl = new AbortController();
+    ctrl.abort();
+    liveSessionStore(ctrl.signal).expandUploadIntoSwings('s' as never, [] as never);
+    expect(spy).not.toHaveBeenCalled();
+    useSwingSessionStore.setState({ expandUploadIntoSwings: real } as never);
+  });
+
+  it('a newer run for the same swing silences work the previous run left going — even after it finished', async () => {
+    const { getOrStartRun, _clearRunsForTest } = await import('../../services/swing/orchestrator/engine');
+    _clearRunsForTest();
+    let leftover: AbortSignal | null = null;
+    const first = getOrStartRun('k2', () => ({ input: {}, stages: [{ id: 'read', budgetMs: 1000, run: async ({ signal }) => { leftover = signal; return 'ok'; } }] }));
+    await first.done;                                      // finished; its "putting analysis" would still be running
+    expect((leftover as AbortSignal | null)?.aborted).toBe(false);
+    getOrStartRun('k2', () => ({ input: {}, stages: [{ id: 'read', budgetMs: 1000, run: async () => 'ok' }] }));
+    expect((leftover as AbortSignal | null)?.aborted).toBe(true);
+  });
+});
