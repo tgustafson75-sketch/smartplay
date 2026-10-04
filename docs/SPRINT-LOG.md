@@ -5310,3 +5310,7 @@ orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-po
   between early_extension and "couldn't see impact". **Real-phone motion window unverified.**
 - **Open:** OTA held for tonight's Sunday-midnight slot. Phase 3 (port the live screen's effects onto
   engine stages + delete duplicate locate chains / anchors / dead watch-then-analyze).
+- **Phase 3 (d9c69a7c):** analyzeSwing's locate → the one finder; one club-arc anchor rule (upload pass
+  had none); deleted the swing screen's unreachable on-open backfill + `?watch=1` path + watchdog; durable
+  clip shares the raw clip's private copy. Emulator: 1 read / 1 pose / 1 club path, heap steady ~104MB, 0 OOM.
+  Still effects (not engine stages) on the live screen — by choice; the races they caused are fixed in-screen.
