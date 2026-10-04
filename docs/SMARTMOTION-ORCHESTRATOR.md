@@ -40,7 +40,7 @@ feel: on demand, after read
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Engine (services/swing/orchestrator) + the upload/library path: window → read → pose/biomech → club arc. All `runPhaseKOnSession` callers go through it. The swing screen's auto-analyze and per-shot backfill become engine requests. | **done 2026-10-04** — services/swing/orchestrator/{engine,uploadRun}.ts; emulator: both of Tim's clips, one read each, correct verdict |
-| 2 | Live SmartMotion screen (app/swinglab/smartmotion.tsx) moved onto the engine stage by stage: segments/locate, verdict + per-swing reads, pose/biomech/pose-verdict, tempo, club arc, ball departure/path, feel. | planned |
+| 2 | Live SmartMotion screen (app/swinglab/smartmotion.tsx) moved onto the engine stage by stage: segments/locate, verdict + per-swing reads, pose/biomech/pose-verdict, tempo, club arc, ball departure/path, feel. | **in progress** — 2026-10-04: live Stop and review (<15s) find the window through findUploadSwingWindow (no network after Stop); the pose warm and the review pass share one in-flight decode (emulator: 2 extractions → 1). Open: hazards 3–9 (setAngle re-run, club-arc ×2, verdict race, contact_read after save, remount re-entry, detail club arc on play/pause, motion window outside the frame queue). |
 | 3 | Delete what the engine replaced: five extra locate chains, the duplicate club-arc anchors, the dead `LIBRARY_AUTO_PROCESS` / watch-then-analyze code, the second clip copy. | planned |
 
 Each phase ships only after `tsc`, jest, the sim and an emulator run on Tim's 6s and 14.5s clips pass.

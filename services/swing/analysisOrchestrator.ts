@@ -91,7 +91,15 @@ export async function pickSwingBurst(
   return null;
 }
 
-export async function findUploadSwingWindow(clipUri: string, durationSec: number): Promise<UploadSwingWindow> {
+export async function findUploadSwingWindow(
+  clipUri: string,
+  durationSec: number,
+  /**
+   * allowNetwork:false — the live capture path right after Stop: a fast on-device answer (or the whole
+   * clip) beats a 35s network locate while the player stands there waiting for the read.
+   */
+  opts: { allowNetwork?: boolean } = {},
+): Promise<UploadSwingWindow> {
   const dur = Math.max(0.5, durationSec);
   // 1. The web SmartMotion way: localised motion between tiny frames (seconds, no pose), then a few
   //    pose reads to tell the swing burst from the other motion in the clip.
@@ -102,6 +110,7 @@ export async function findUploadSwingWindow(clipUri: string, durationSec: number
       if (await fe.ensureFrameEngine(5_000)) {
         const m = await fe.findMotionWindow(clipUri);
         const bursts = m.bursts ?? [];
+        console.log('[window] motion pass', JSON.stringify({ window: m.window, bursts: bursts.length }));
         // Short clips: the motion window is enough — no pose on the critical path at all.
         if (dur <= SHORT_CLIP_NO_LOCATE_SEC) {
           if (m.window && m.window.endMs > m.window.startMs) {
@@ -133,7 +142,7 @@ export async function findUploadSwingWindow(clipUri: string, durationSec: number
         }
       }
     }
-  } catch { /* a fast path only — the rest still answers */ }
+  } catch (e) { console.log('[window] motion pass failed', e instanceof Error ? e.message : String(e)); }
 
   // 2. Short clip: the clip is the swing.
   if (dur <= SHORT_CLIP_NO_LOCATE_SEC) return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
@@ -145,6 +154,7 @@ export async function findUploadSwingWindow(clipUri: string, durationSec: number
     if (onDev && onDev.endSec > onDev.startSec) {
       return { startSec: Math.max(0, onDev.startSec - 0.5), endSec: Math.min(dur, onDev.endSec + 0.5), impactSec: onDev.swingTimeSec, via: 'on_device' };
     }
+    if (opts.allowNetwork === false) throw new Error('network locate not allowed here');
     const { locateSwingWindow } = require('../poseDetection') as typeof import('../poseDetection');
     const net = await locateSwingWindow(clipUri, dur * 1000);
     if (net && net.endSec > net.startSec) {

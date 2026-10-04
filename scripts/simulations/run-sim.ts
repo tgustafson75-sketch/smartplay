@@ -4139,7 +4139,11 @@ check('LOCK: the pose warm starts INSIDE the network wait, and both paths key it
       !/durationMs.*\|\$\{/.test(helper) &&
       !/videoDurationMs/.test(helper) &&
       // non-blocking: fired with void, and its failures swallowed
-      /void \(async \(\) => \{[\s\S]{0,1200}?poseExtractCacheRef\.current = \{ key: warmKey, frames \};[\s\S]{0,200}?\} catch \{/.test(sm) &&
+      /void \(async \(\) => \{[\s\S]{0,1600}?poseExtractCacheRef\.current = \{ key: warmKey, frames \};[\s\S]{0,200}?\} catch \{/.test(sm) &&
+      // 2026-10-04 — a warm still DECODING is joined, not repeated: on the emulator the review pass
+      // missed the cache mid-warm and decoded the same 20 frames twice.
+      /poseExtractInflightRef\.current = \{ key: warmKey, p \};/.test(sm) &&
+      /const inflight = poseExtractInflightRef\.current\?\.key === extractKey \? poseExtractInflightRef\.current\.p : null;/.test(sm) &&
       /**
        * warmed on the DURABLE uri — keying on rawUri would be a guaranteed miss.
        *
@@ -9254,7 +9258,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       // 2026-09-01 — the window is now MEASURED on-device first and only synthesized when that
       // returns nothing. The invariant this clause protects is that a bounded window always exists
       // (never the unbounded path), so it asserts BOTH branches: the measured one and the fallback.
-      /locateSwingWindowOnDevice\(recorded\.uri, durMs\)/.test(smA) &&
+      // 2026-10-04 (orchestrator phase 2) — measured by the ONE window finder the upload path uses,
+      // with no network locate after Stop.
+      /findUploadSwingWindow\(recorded\.uri, durMs \/ 1000, \{ allowNetwork: false \}\)/.test(smA) &&
       /strikeMs: Math\.round\(located\.swingTimeSec \* 1000\)/.test(smA) &&
       /: \{ index: 1, strikeMs: Math\.round\(durMs \* 0\.6\), startMs: 0, endMs: durMs/.test(smA) &&
       /void runAnalysis\(recorded\.uri, firstSeg\)/.test(smA) &&

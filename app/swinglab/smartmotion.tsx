@@ -1580,6 +1580,9 @@ export default function SmartMotion() {
   // Caches the last pose extraction so an angle-only effect re-run reuses frames instead of re-decoding
   // the clip (see the pose/biomech effect — kills the double pose:extract:start per open).
   const poseExtractCacheRef = useRef<{ key: string; frames: Awaited<ReturnType<typeof extractPoseFramesFromVideo>> } | null>(null);
+  // 2026-10-04 (orchestrator phase 2) — the warm's extraction while it is still DECODING. The review pass
+  // used to miss the cache because the warm had not finished, and decoded the same 20 frames a second time.
+  const poseExtractInflightRef = useRef<{ key: string; p: Promise<Awaited<ReturnType<typeof extractPoseFramesFromVideo>>> } | null>(null);
   // Tracks the session whose verdict was already committed from the on-device pose read, so the fast
   // offline verdict is written exactly once per session (see the pose-verdict effect below).
   const poseVerdictSessionRef = useRef<string | null>(null);
@@ -2855,7 +2858,10 @@ export default function SmartMotion() {
           const warmUri = await durableUriP;
           const durMs = await probeDurationMs(warmUri).catch(() => 0);
           if (!durMs || durMs <= 0) return;
-          const frames = await extractPoseFramesFromVideo(warmUri, durMs, true, poseWindow, acousticImpactMs);
+          if (poseExtractInflightRef.current?.key === warmKey) return;
+          const p = extractPoseFramesFromVideo(warmUri, durMs, true, poseWindow, acousticImpactMs);
+          poseExtractInflightRef.current = { key: warmKey, p };
+          const frames = await p.finally(() => { if (poseExtractInflightRef.current?.p === p) poseExtractInflightRef.current = null; });
           // Only publish if nothing better landed while we decoded, and only for THIS session.
           if (myRun !== sessionRunRef.current) return;
           if (poseExtractCacheRef.current?.key === warmKey) return;
@@ -3345,8 +3351,16 @@ export default function SmartMotion() {
         // 2026-08-05 — reuse cached frames when only `angle` changed (kills the double extraction).
         const extractKey = poseExtractKeyFor({ clipUri, poseWindow, selectedSwing, handedness: swingerHandedness, acousticImpactMs });
         let frames: Awaited<ReturnType<typeof extractPoseFramesFromVideo>>;
+        const inflight = poseExtractInflightRef.current?.key === extractKey ? poseExtractInflightRef.current.p : null;
         if (poseExtractCacheRef.current?.key === extractKey) {
           frames = poseExtractCacheRef.current.frames;
+        } else if (inflight) {
+          // The warm is decoding these exact frames right now — join it, never decode twice.
+          frames = await inflight.catch(() => null);
+          if (cancelled) return;
+          if (frames) poseExtractCacheRef.current = { key: extractKey, frames };
+          else frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs);
+          if (cancelled) return;
         } else {
           frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs);
           if (cancelled) return;
@@ -3676,6 +3690,36 @@ export default function SmartMotion() {
       try {
         const pose = await import('../../services/poseDetection');
         const durMs = await pose.probeDurationMs(clipUriParam).catch(() => 0);
+        /**
+         * 2026-10-04 — a single-swing clip (<15s) gets its window from the ORCHESTRATOR (motion → burst
+         * check → on-device → network) and a BOUNDED read. Before, it paid the multi-swing locate (up to
+         * 30s), found nothing, and read the clip unbounded — the network then guessed impact 2s after the
+         * strike on Tim's clip and the read was made from frames of him walking away ("early extension").
+         * Clips of 15s or more are range sessions: the multi-swing locate below splits them, as before.
+         */
+        if (!cancelled && durMs > 0 && durMs < 15_000) {
+          const { findUploadSwingWindow } = await import('../../services/swing/analysisOrchestrator');
+          const w = await findUploadSwingWindow(clipUriParam, durMs / 1000);
+          if (!cancelled) {
+            const seg: SwingSegment = {
+              index: 1,
+              strikeMs: Math.round((w.impactSec ?? (w.startSec + w.endSec) / 2) * 1000),
+              startMs: Math.round(w.startSec * 1000),
+              endMs: Math.round(w.endSec * 1000),
+              confidence: 'low',
+              peakDb: 0,
+              confirmed: false,
+              // The window is measured; the impact is not (see the live path's note on `synthesized`).
+              synthesized: true,
+            };
+            console.log('[smartmotion] review window', JSON.stringify({ via: w.via, startMs: seg.startMs, endMs: seg.endMs }));
+            setSegments([seg]);
+            setSelectedSwing(0);
+            segmentsRef.current = [seg];
+            void runAnalysis(clipUriParam, seg);
+            return;
+          }
+        }
         const swings = durMs > 0 ? await pose.locateSwings(clipUriParam, durMs) : [];
         // 2026-06-13 (SPEED) — >= 1, not > 1. When the upload locate already
         // found the swing(s), pass the located window as boundaries so
@@ -4873,8 +4917,17 @@ export default function SmartMotion() {
            */
           let located: { startSec: number; endSec: number; swingTimeSec: number } | null = null;
           try {
-            const { locateSwingWindowOnDevice } = await import('../../services/swing/onDeviceLocate');
-            located = await locateSwingWindowOnDevice(recorded.uri, durMs);
+            /**
+             * 2026-10-04 — the ORCHESTRATOR answers where the swing is (services/swing/analysisOrchestrator):
+             * the motion pass, motion bursts confirmed by pose, the on-device locate — the same finder the
+             * upload path uses, so live and upload can no longer disagree about a clip. No network locate
+             * here: right after Stop the player is waiting, and the whole clip is the honest fallback.
+             */
+            const { findUploadSwingWindow } = await import('../../services/swing/analysisOrchestrator');
+            const w = await findUploadSwingWindow(recorded.uri, durMs / 1000, { allowNetwork: false });
+            if (w.via !== 'middle' && w.endSec > w.startSec) {
+              located = { startSec: w.startSec, endSec: w.endSec, swingTimeSec: w.impactSec ?? (w.startSec + w.endSec) / 2 };
+            }
           } catch { /* best-effort — the synthesized window below is the fallback */ }
           firstSeg = located
             ? {

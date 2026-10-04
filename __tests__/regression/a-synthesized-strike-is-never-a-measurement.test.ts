@@ -89,7 +89,7 @@ describe('the capture path measures the window before it guesses one (2026-09-01
   const sm = read('app/swinglab/smartmotion.tsx');
 
   it('on-device locate runs BEFORE the 0.6*duration placeholder', () => {
-    const onDev = sm.indexOf('locateSwingWindowOnDevice(recorded.uri, durMs)');
+    const onDev = sm.indexOf('findUploadSwingWindow(recorded.uri, durMs / 1000, { allowNetwork: false })');
     const guess = sm.indexOf('strikeMs: Math.round(durMs * 0.6)');
     expect(onDev).toBeGreaterThan(-1);
     expect(guess).toBeGreaterThan(-1);
