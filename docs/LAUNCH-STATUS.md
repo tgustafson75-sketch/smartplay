@@ -13,13 +13,32 @@ the other's side, so this file is where they meet.
 (`docs/LAUNCH-STATUS.md` → pencil icon → commit to `main`). Put your name and the date in the row
 you touch.
 
-**Last updated:** 2026-09-05 · Claude Code (session `smartplaycaddie-fd`) — **BOTH STORES ARE IN REVIEW.** Play versionCode **26** and App Store build **26**, both in review. Billing is ON; Health Connect is
+**Last updated:** 2026-10-04 · Claude Code — new **Cowork** section at the top (C1–C7). Previous: 2026-09-05 · Claude Code (session `smartplaycaddie-fd`) — **BOTH STORES ARE IN REVIEW.** Play versionCode **26** and App Store build **26**, both in review. Billing is ON; Health Connect is
 OUT of 1.0. Rows below were rewritten across 09-03/09-05 and the **Health rows reversed direction** —
 re-read them before filling any form. The console side is complete. **Nothing on the Blocking list is open** — the last row
 (`REFERRAL_SALT`) was verified live on 09-05 by deriving a code and comparing it against what an
 empty salt would produce.
 
 ---
+
+## 🟠 Cowork — open as of 2026-10-04 (Claude Code)
+
+1.0.2 is **published** (Tim, 10-04). Tonight's code fixes went out as over-the-air updates on runtime 1.0.2, and
+the server deployed from `main` at 00:45 PDT. Nothing below needs a code change. Each row is console work only.
+
+| # | Item | Where | What "done" means |
+|---|---|---|---|
+| C1 | **Wear OS 1032** (scrollbar fix) replaces the rejected 1031 | Play Console → Production → **Wear OS** form factor (not phone). AAB at `wear-os-app/app/build/outputs/bundle/release/app-release.aab`, versionCode **1032** | 1032 is in the Wear OS release and sent for review; 1031 is under "Not included"; no 1031 in any Wear testing track. Note the review state here. |
+| C2 | Play listing trial wording | Play Console → Main store listing (full description) | The trial sentence reads **"1-month free trial"** (it went out as "14-day free trial"). |
+| C3 | Play subscription offers → 1 month | Play Console → Monetize → Subscriptions → each base plan's free-trial offer | Free-trial length is **1 month** on every offer. Same moment as C2, so the listing matches what people get. |
+| C4 | App Store: same trial length | App Store Connect → subscriptions → introductory offers, plus the description text | 1-month free trial; the description doesn't say 14 days. If iOS was meant to stay different, write that here instead. |
+| C5 | Social posts | Tim's social accounts | Updated to advertise the free options: round recap and history import are free; satellite hole views are paid. |
+| C6 | Sentry: clear old "Ongoing" issues | sentry.io → org **smartplay-ai** → project smartplay-caddie-mobile | Old 1.0.0-only issues (e.g. EXC_BAD_ACCESS / AVPlayerItem seek) set to **Resolve → In the next release**, so they reopen only if they come back on 1.0.2. |
+| C7 | Re-verify the stale rows below | This file | Rows 43, 44, 46, 50 and 51 (Play/App Store products, tax, sign-in details, RevenueCat entitlement `smartplay_caddie_pro`) still say OPEN from 09-05, but 1.0.2 is live with billing. Check each console and mark it DONE or say what is still missing. |
+
+**For Tim, not Cowork** (Claude Code connector settings — `/mcp` in a terminal session):
+- The Sentry connector points at org `smartplay`, but the app reports to **`smartplay-ai`**, so Claude can't read crash reports.
+- The GitHub connector token has expired.
 
 ## 🔴 Blocking — nothing ships until these clear
 
