@@ -1,0 +1,16 @@
+diff --git a/node_modules/expo-video-thumbnails/android/src/main/java/expo/modules/videothumbnails/VideoThumbnailsModule.kt b/node_modules/expo-video-thumbnails/android/src/main/java/expo/modules/videothumbnails/VideoThumbnailsModule.kt
+index b5e6e5e..46ca123 100644
+--- a/node_modules/expo-video-thumbnails/android/src/main/java/expo/modules/videothumbnails/VideoThumbnailsModule.kt
++++ b/node_modules/expo-video-thumbnails/android/src/main/java/expo/modules/videothumbnails/VideoThumbnailsModule.kt
+@@ -94,7 +94,10 @@ class VideoThumbnailsModule : Module() {
+ 
+           return retriever.getFrameAtTime(
+             videoOptions.time.toLong() * 1000,
+-            MediaMetadataRetriever.OPTION_CLOSEST_SYNC
++            // SmartPlay patch (2026-10-03): OPTION_CLOSEST decodes the exact frame at `time`.
++            // OPTION_CLOSEST_SYNC snapped every request to the nearest keyframe (~1s apart in phone
++            // video), so a swing's top and impact came back as the same few frames.
++            MediaMetadataRetriever.OPTION_CLOSEST
+           )
+         } catch (e: Exception) {
+           Log.e(ERROR_TAG, "Unable to retrieve source file")

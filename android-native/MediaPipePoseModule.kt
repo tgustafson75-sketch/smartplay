@@ -75,12 +75,23 @@ class MediaPipePoseModule(reactContext: ReactApplicationContext) :
     /** Lazy init the landmarker. Synchronized so two concurrent
      *  detectPose calls from JS don't double-build. Throws on init
      *  failure — callers wrap in try/promise.reject. */
+    /**
+     * 2026-10-03 — sticky once the GPU delegate has failed AT INFERENCE. Creating a GPU landmarker
+     * can succeed on a device whose GL path then fails every detect() (seen on the emulator:
+     * inference_calculator_gl_advanced.cc, every frame). The create-time CPU fallback below never
+     * saw that, so every frame rejected, JS mapped each rejection to "no pose in frame", and the
+     * swing read reported a golfer who was standing right there as absent (pose_zero_frames,
+     * nativePose: true — Tim's 50s clip, the Pixel 7 Pro on 10-01).
+     */
+    @Volatile private var forceCpu = false
+
     @Synchronized
     private fun ensureLandmarker(quality: String) {
         if (landmarker != null && loadedQuality == quality) return
         // Reload only if quality changed.
-        landmarker?.close()
+        val previous = landmarker
         landmarker = null
+        try { previous?.close() } catch (_: Throwable) { /* a failed graph may refuse to close */ }
         // 2026-05-25 — PoseLandmarkerOptions has no .toBuilder() in
         // current tasks-vision; build GPU and CPU option trees separately
         // and try GPU first, fall back to CPU on failure.
@@ -101,7 +112,10 @@ class MediaPipePoseModule(reactContext: ReactApplicationContext) :
                 .setMinTrackingConfidence(0.4f)
                 .setOutputSegmentationMasks(false)
                 .build()
-        landmarker = try {
+        landmarker = if (forceCpu) {
+            android.util.Log.w("MediaPipePose", "building CPU landmarker")
+            PoseLandmarker.createFromOptions(reactApplicationContext, buildOptions(Delegate.CPU))
+        } else try {
             PoseLandmarker.createFromOptions(reactApplicationContext, buildOptions(Delegate.GPU))
         } catch (e: Throwable) {
             // GPU path failed — retry with CPU. Some emulators + older
@@ -126,7 +140,30 @@ class MediaPipePoseModule(reactContext: ReactApplicationContext) :
                 }
             val mpImage: MPImage = BitmapImageBuilder(bitmap).build()
             val t0 = System.currentTimeMillis()
-            val result: PoseLandmarkerResult = landmarker!!.detect(mpImage)
+            // One frame at a time on one landmarker. JS fires frames concurrently; a GPU→CPU rebuild
+            // racing an in-flight detect() closed the engine under it ("task graph hasn't been
+            // successfully started") and failed every frame after. The lock makes the switch happen
+            // once, cleanly, and is free in practice: a landmarker runs one image at a time anyway.
+            val result: PoseLandmarkerResult = synchronized(this) {
+                ensureLandmarker(quality)
+                try {
+                    landmarker!!.detect(mpImage)
+                } catch (gpuFail: Throwable) {
+                    android.util.Log.w("MediaPipePose", "detect failed (forceCpu=$forceCpu): ${gpuFail.message?.take(120)}")
+                    if (forceCpu) throw gpuFail
+                    // The GPU path built but cannot run here. Rebuild on the CPU — for this frame and
+                    // for every frame after it — rather than fail the whole read one frame at a time.
+                    forceCpu = true
+                    // Drop the reference FIRST: closing a graph that has already failed can itself
+                    // throw, and that throw used to skip the rebuild and leave the broken GPU engine
+                    // in place for every frame after ("task graph hasn't been successfully started").
+                    val broken = landmarker
+                    landmarker = null
+                    try { broken?.close() } catch (_: Throwable) { /* it is already dead */ }
+                    ensureLandmarker(quality)
+                    landmarker!!.detect(mpImage)
+                }
+            }
             lastInferenceMs = System.currentTimeMillis() - t0
             promise.resolve(serializeResult(result, lastInferenceMs))
         } catch (e: Throwable) {
