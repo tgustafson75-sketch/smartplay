@@ -17,33 +17,46 @@ import { logVoiceDiag, logVoiceSilentFail } from '../voiceErrorLog';
 
 type CloseReason = 'user_close' | 'dormancy_timeout';
 
-let owed: { seq: number; at: number } | null = null;
-let intent: string | null = null;
-let closing: CloseReason | null = null;
-
-export function noteTurnState(prev: string, next: string): void {
-  if (next === 'thinking' && prev !== 'thinking') {
-    owed = { seq: getCaptionSeq(), at: Date.now() };
-    intent = null;
-    return;
-  }
-  if (next !== 'idle' || prev === 'idle') return;
-  const turn = owed;
-  owed = null;
-  if (!turn || getCaptionSeq() !== turn.seq) return;
-  const extra = { from: prev, ms: Date.now() - turn.at, intent, close: closing };
-  if (closing === 'user_close' || intent === 'acknowledge') logVoiceDiag('turn_ended_silent', extra);
-  else logVoiceSilentFail('turn_ended_silent', extra);
-}
-
-export function noteTurnIntent(intentType: string): void { intent = intentType; }
+/** Observation must never break a mic: a missing or throwing counter reads as 0. */
+const seqNow = (): number => { try { return typeof getCaptionSeq === 'function' ? getCaptionSeq() : 0; } catch { return 0; } };
 
 /**
- * 2026-10-03 (review) — the turn ACTED instead of speaking: a silent tool-open (the screen change is
- * the answer, 08-06), a navigation, a successful command with no line, brain tool actions. Those are
- * answers. Without this every "open SmartVision" filed a voice_silent_fail to the owner inbox.
+ * 2026-10-03 — one watcher per MIC. The earbud/hands-free session (listeningSession) and the Caddie-tab
+ * mic (hooks/useCaddieTabMic) run their own turns; sharing one "owed" slot would let one mic's answer
+ * clear the other's silent turn. The report carries which mic it was.
  */
-export function noteTurnActed(): void { owed = null; }
+export function createTurnWatch(mic: string) {
+  let owed: { seq: number; at: number } | null = null;
+  let intent: string | null = null;
+  let closing: CloseReason | null = null;
+  return {
+    state(prev: string, next: string): void {
+      if (next === 'thinking' && prev !== 'thinking') {
+        owed = { seq: seqNow(), at: Date.now() };
+        intent = null;
+        return;
+      }
+      if (next !== 'idle' || prev === 'idle') return;
+      const turn = owed;
+      owed = null;
+      if (!turn || seqNow() !== turn.seq) return;
+      const extra = { mic, from: prev, ms: Date.now() - turn.at, intent, close: closing };
+      if (closing === 'user_close' || intent === 'acknowledge') logVoiceDiag('turn_ended_silent', extra);
+      else logVoiceSilentFail('turn_ended_silent', extra);
+    },
+    intent(intentType: string): void { intent = intentType; },
+    /**
+     * 2026-10-03 (review) — the turn ACTED instead of speaking: a silent tool-open (the screen change
+     * is the answer, 08-06), a navigation, a successful command with no line, brain tool actions.
+     */
+    acted(): void { owed = null; },
+    /** Bracket a close so the idle it causes is attributed to it. */
+    closing(reason: CloseReason | null): void { closing = reason; },
+  };
+}
 
-/** Bracket a close so the idle it causes is attributed to it. */
-export function noteTurnClosing(reason: CloseReason | null): void { closing = reason; }
+const session = createTurnWatch('session');
+export const noteTurnState = (prev: string, next: string): void => session.state(prev, next);
+export const noteTurnIntent = (intentType: string): void => session.intent(intentType);
+export const noteTurnActed = (): void => session.acted();
+export const noteTurnClosing = (reason: CloseReason | null): void => session.closing(reason);

@@ -3,7 +3,7 @@
  * session had several exits that ended a turn with nothing heard or read and filed no report, so
  * the case left no evidence. Every state change now goes through services/voice/turnAnswerWatch.
  */
-import { noteTurnState, noteTurnIntent, noteTurnClosing } from '../../services/voice/turnAnswerWatch';
+import { noteTurnState, noteTurnIntent, noteTurnClosing, createTurnWatch } from '../../services/voice/turnAnswerWatch';
 
 // jest.mock is hoisted above the import, so these factories still apply.
 const mockSeq = { n: 0 };
@@ -59,6 +59,24 @@ describe('a turn that ends with nothing said reports itself', () => {
   it('an idle that was never a turn (opener, listening cancelled) is not a turn', () => {
     noteTurnState('opening', 'listening');
     noteTurnState('listening', 'idle');
+    expect(mockSilentFail).not.toHaveBeenCalled();
+  });
+});
+
+describe('each mic has its own watch (2026-10-03: the Caddie-tab mic was not covered)', () => {
+  it("one mic's silent turn is reported even while the other mic's turn is open", () => {
+    const tab = createTurnWatch('caddie_tab');
+    noteTurnState('listening', 'thinking');      // earbud turn open
+    tab.state('listening', 'thinking');            // tab turn open
+    tab.state('thinking', 'idle');                 // tab turn ends with nothing
+    expect(mockSilentFail).toHaveBeenCalledWith('turn_ended_silent', expect.objectContaining({ mic: 'caddie_tab' }));
+  });
+
+  it('a tab turn that ran a tool action is answered', () => {
+    const tab = createTurnWatch('caddie_tab');
+    tab.state('listening', 'thinking');
+    tab.acted();
+    tab.state('thinking', 'idle');
     expect(mockSilentFail).not.toHaveBeenCalled();
   });
 });

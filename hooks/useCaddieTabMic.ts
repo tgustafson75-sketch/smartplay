@@ -13,6 +13,7 @@
  *   openSession() / connect() / pushGpsUpdate() / closeSession() are scaffold for Phase 3.
  */
 
+import { createTurnWatch } from '../services/voice/turnAnswerWatch';
 import { useRef, useCallback } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
 import { askCaddie } from '../services/caddieBrain';
@@ -69,11 +70,27 @@ interface UsePipecatVoiceOpts {
 
 export function useCaddieTabMic({
   onKevinSpoke,
-  onToolAction,
-  onVoiceStateChange,
+  onToolAction: onToolActionRaw,
+  onVoiceStateChange: onVoiceStateChangeRaw,
   onReadyToListen,
   onSuperseded,
 }: UsePipecatVoiceOpts = {}) {
+  /**
+   * 2026-10-03 — the silent-turn watch (services/voice/turnAnswerWatch) for THIS mic. Tim's "she thought,
+   * then didn't answer at all" could happen here too and filed nothing: the watch only covered the
+   * earbud/hands-free session. A turn that goes thinking → idle with no line said or shown is reported;
+   * a turn that ran a tool action counts as answered.
+   */
+  const turnWatchRef = useRef(createTurnWatch('caddie_tab'));
+  const lastVoiceStateRef = useRef<string>('idle');
+  const onVoiceStateChange = (state: 'idle' | 'listening' | 'thinking' | 'speaking') => {
+    turnWatchRef.current.state(lastVoiceStateRef.current, state);
+    lastVoiceStateRef.current = state;
+    onVoiceStateChangeRaw?.(state);
+  };
+  const onToolAction: typeof onToolActionRaw = onToolActionRaw
+    ? ((action) => { turnWatchRef.current.acted(); return onToolActionRaw(action); }) as typeof onToolActionRaw
+    : undefined;
   // 2026-07-06 (voice-parity F2) — one brain turn at a time. A mic tap while the
   // caddie is still 'thinking' releases isProcessingRef in the consumer BEFORE
   // this await resolves, so a second processTurn could start and race the ONE
