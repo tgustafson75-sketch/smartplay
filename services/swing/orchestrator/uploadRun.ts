@@ -22,7 +22,22 @@ const MULTI_SWING_UPLOAD_SEC = 15;
 
 const session = (id: string) => useSwingSessionStore.getState().sessionHistory.find((s) => s.id === id) ?? null;
 
+/**
+ * 2026-10-04 (sweep) — a putt is read by puttingAnalysisService, not by the swing stages. The old pose
+ * tail sat AFTER the read's putting return and never ran for putts; as an engine stage it did, and a
+ * full-swing fault could land as a putt's headline before the putting synthesis replaced it.
+ */
+function isPutt(id: string): boolean {
+  const s = session(id);
+  if (!s) return false;
+  try {
+    const { getAnalyzerKind } = require('../../swingLibrary') as typeof import('../../swingLibrary');
+    return getAnalyzerKind(s) === 'putting';
+  } catch { return false; }
+}
+
 function needsWindow(id: string): boolean {
+  if (isPutt(id)) return false;
   const s = session(id);
   const shot = s?.shots?.[0];
   if (!s || !shot?.clipUri || s.source !== 'uploaded_video') return false;
@@ -38,14 +53,18 @@ function stages(): StageDef<In>[] {
       critical: true,
       // Motion (≤20s) → burst check (4s) → on-device locate (≤20s cap) → network locate (35s): enough
       // for the chain to ANSWER, so the read never has to locate a second time.
-      budgetMs: 60_000,
+      // 2026-10-04 (sweep) — above the chain's real Android worst case (engine 5 + motion 20 + copy +
+      // pick 4 + on-device 20 + network ≈ 79s+); an overrun abandons the window, never half-writes it.
+      budgetMs: 90_000,
       when: ({ input }) => needsWindow(input.sessionId),
-      run: async ({ input }) => {
+      run: async ({ input, signal }) => {
         const s = session(input.sessionId);
         const shot = s?.shots?.[0];
         if (!s || !shot?.clipUri) return null;
         const { findUploadSwingWindow } = require('../analysisOrchestrator') as typeof import('../analysisOrchestrator');
         const w = await findUploadSwingWindow(shot.clipUri, s.upload?.duration_sec ?? 0);
+        // Overran its budget or the run was replaced: the read has moved on without this window.
+        if (signal.aborted) return null;
         useSwingSessionStore.getState().setShotClipBoundaries(input.sessionId, shot.id, w.startSec, w.endSec, w.impactSec);
         try {
           (require('../../../store/toastStore') as typeof import('../../../store/toastStore')).useToastStore.getState()
@@ -60,18 +79,19 @@ function stages(): StageDef<In>[] {
       after: ['window'],
       // The read's own worst case (probe + locate + frames + POST with retry) is ~150s.
       budgetMs: 160_000,
-      run: async ({ input }) => {
+      run: async ({ input, signal }) => {
         const vu = require('../../videoUpload') as typeof import('../../videoUpload');
-        return vu._runPhaseKRead(input.sessionId);
+        return vu._runPhaseKRead(input.sessionId, signal);
       },
     },
     {
       id: 'pose',
       deps: ['read'],
       budgetMs: 90_000,
-      run: async ({ input }) => {
+      when: ({ input }) => !isPutt(input.sessionId),
+      run: async ({ input, signal }) => {
         const vu = require('../../videoUpload') as typeof import('../../videoUpload');
-        return vu.runUploadPosePass(input.sessionId);
+        return vu.runUploadPosePass(input.sessionId, signal);
       },
     },
   ];
@@ -88,7 +108,8 @@ function report(key: string, stage: string, error: string): void {
       }
     }
     (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore')).useIssueLogStore.getState()
-      .addAppEvent('orchestrator_stage_failed', { run: key, stage, error: error.slice(0, 120) }, stage === 'read' ? 'analysis_error' : 'diag');
+      // diag: a failed READ is already reported once, as swing_analysis_failed, by the status write above.
+      .addAppEvent('orchestrator_stage_failed', { run: key, stage, error: error.slice(0, 120) }, 'diag');
   } catch { /* reporting never breaks a run */ }
 }
 
@@ -98,7 +119,16 @@ function report(key: string, stage: string, error: string): void {
  * owned, ordered and budgeted.
  */
 export function runUploadAnalysis(sessionId: string): Promise<ReadResult> {
-  const run = getOrStartRun<In>(`upload:${sessionId}`, () => ({ stages: stages(), input: { sessionId }, hooks: { onStageFailed: report } }));
+  /**
+   * 2026-10-04 (sweep) — JOIN only while the read is still coming. Once it has settled the live run is
+   * just its pose tail, and a new request (Analyze this moment after a scrub, the angle chip, a trim)
+   * wants a NEW read; joining handed back the old result and the new window was never analysed.
+   */
+  const readSettled = (snap: { stages: Record<string, { status: string }> }) => {
+    const st = snap.stages.read?.status;
+    return st != null && st !== 'pending' && st !== 'running';
+  };
+  const run = getOrStartRun<In>(`upload:${sessionId}`, () => ({ stages: stages(), input: { sessionId }, hooks: { onStageFailed: report } }), readSettled);
   return new Promise<ReadResult>((resolve) => {
     const unsub = run.subscribe((snap) => {
       const st = snap.stages.read?.status;

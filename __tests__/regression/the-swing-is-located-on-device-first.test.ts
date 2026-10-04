@@ -163,7 +163,7 @@ describe('EVERY surface that asks where the swing is asks the device first', () 
       expect(src.indexOf('locateSwingWindowOnDevice(')).toBeGreaterThan(-1);
       expect(src.indexOf('locateSwingWindowOnDevice(')).toBeLessThan(src.indexOf('await locateSwingWindow('));
     }
-    expect(strip(read('services/videoUpload.ts'))).toMatch(/if \(!loc\) loc = await locateSwingWindow\(/);
+    expect(strip(read("services/videoUpload.ts"))).toMatch(/if \(!loc && !poseWindow\) loc = await locateSwingWindow\(/);
   });
 });
 

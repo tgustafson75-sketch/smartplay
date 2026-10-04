@@ -95,3 +95,51 @@ describe('the orchestrator engine', () => {
     expect(seen).toEqual(['read', 'pose']);
   });
 });
+
+/**
+ * 2026-10-04 (sweep) — a stage that overran its budget used to lose the race and keep WORKING: the
+ * real stages ignored the run's signal and wrote stale windows/verdicts over the next run. The engine
+ * now aborts the stage's own signal, and the store handle the read and pose pass write through goes
+ * quiet once it is aborted.
+ */
+describe('an abandoned stage stops writing', () => {
+  it('budget overrun aborts that stage\'s signal', async () => {
+    jest.useRealTimers();
+    const { AnalysisRun } = await import('../../services/swing/orchestrator/engine');
+    let seen: AbortSignal | null = null;
+    const run = new AnalysisRun('k', [{ id: 'slow', budgetMs: 20, run: ({ signal }) => { seen = signal; return new Promise(() => undefined); } }], {});
+    run.start();
+    const snap = await run.done;
+    expect(snap.stages.slow.status).toBe('failed');
+    expect((seen as AbortSignal | null)?.aborted).toBe(true);
+  });
+
+  it('the guarded store passes writes through until the signal aborts, then drops them', async () => {
+    const { liveSessionStore } = await import('../../services/swing/orchestrator/liveSessionStore');
+    const { useSwingSessionStore } = await import('../../store/swingSessionStore');
+    useSwingSessionStore.setState({ sessionHistory: [{ id: 'g1', analysis_status: 'pending', shots: [] }] as never });
+    const ctrl = new AbortController();
+    const store = liveSessionStore(ctrl.signal);            // captured BEFORE the abort, like the real code
+    store.setSessionAnalysisStatus('g1', 'analyzing_pose' as never);
+    expect(useSwingSessionStore.getState().sessionHistory[0].analysis_status).toBe('analyzing_pose');
+    ctrl.abort();
+    store.setSessionAnalysisStatus('g1', 'ok');
+    expect(useSwingSessionStore.getState().sessionHistory[0].analysis_status).toBe('analyzing_pose');
+    expect(store.sessionHistory[0].id).toBe('g1');         // reads still work
+  });
+
+  it('the read and the pose pass take the store only through that handle', () => {
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'services/videoUpload.ts'), 'utf8');
+    for (const head of ['async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal)', 'export async function runUploadPosePass(sessionId: string, signal?: AbortSignal)']) {
+      const i = src.indexOf(head);
+      expect(i).toBeGreaterThan(-1);
+      const rest = src.slice(i + head.length);
+      const end = rest.search(/\n(export |async function |function )/);
+      const body = rest.slice(0, end);
+      expect(body).not.toMatch(/useSwingSessionStore\.getState\(\)/);
+      expect(body).toMatch(/liveSessionStore\(signal\)/);
+    }
+  });
+});

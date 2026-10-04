@@ -19,6 +19,7 @@ import { Audio } from 'expo-av';
 import { probeSoundOptions } from './audioPlaybackOptions';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSwingSessionStore, resolveSwingerToPlayerId, type UploadMetadata, type SwingTag, type PrimaryIssue, type DrillRecommendation } from '../store/swingSessionStore';
+import { liveSessionStore } from './swing/orchestrator/liveSessionStore';
 import { analyzeSwing, analyzeSwingTentative } from './poseDetection';
 import { classifySession } from './swingIssueClassifier';
 import { recommendDrill } from './drillRecommendation';
@@ -288,18 +289,18 @@ export function runPhaseKOnSession(sessionId: string): Promise<{
 }
 
 /** The read stage itself — called only by the orchestrator (services/swing/orchestrator/uploadRun). */
-export function _runPhaseKRead(sessionId: string): ReturnType<typeof runPhaseKOnSessionImpl> {
-  return runPhaseKOnSessionImpl(sessionId);
+export function _runPhaseKRead(sessionId: string, signal?: AbortSignal): ReturnType<typeof runPhaseKOnSessionImpl> {
+  return runPhaseKOnSessionImpl(sessionId, signal);
 }
 
-async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
+async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): Promise<{
   primary_issue: PrimaryIssue | null;
   drill_recommendation: DrillRecommendation | null;
 }> {
   uploadLog('phase-k-enter', { session_id: sessionId }, sessionId);
   V6('STAGE 0 — runPhaseKOnSession enter', { sessionId });
   practiceLog('phase-k-enter', 'ok', { session_id: sessionId });
-  const store = useSwingSessionStore.getState();
+  const store = liveSessionStore(signal);
   let session = store.sessionHistory.find(s => s.id === sessionId);
   if (!session) {
     uploadLog('phase-k-abort', { status: 'failed', reason: 'session_not_in_store' }, sessionId);
@@ -334,7 +335,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
       // 2026-06-10 — move OFF 'pending' so re-analyze shows real progress (and
       // can't strand on the spinner with the retry button disabled). The IIFE
       // below writes the terminal 'ok' (addPuttingAnalysis) or 'failed'.
-      useSwingSessionStore.getState().setSessionAnalysisStatus(sessionId, 'analyzing_pose');
+      liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'analyzing_pose');
       void (async () => {
         try {
           // 2026-05-22 — Extract putt-phase key frames locally before
@@ -371,7 +372,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
           // 2026-05-22 — Persist the PuttingAnalysis on the session so
           // the cage-review Putting tab can render it without re-running
           // analysis. addPuttingAnalysis also flips analysis_status='ok'.
-          useSwingSessionStore.getState().addPuttingAnalysis(sessionId, result);
+          liveSessionStore(signal).addPuttingAnalysis(sessionId, result);
           uploadLog('putting-analysis-attached', { session_id: sessionId, score: result.overallScore }, sessionId);
           // 2026-05-23 (Fix #5) — Synthesize an overall-fault PrimaryIssue
           // from the putting result and persist it alongside the granular
@@ -383,11 +384,11 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
           // drill_recommendation being non-null at the render site so
           // no empty drill card appears for putts.
           try {
-            const liveSession = useSwingSessionStore.getState().sessionHistory.find(s => s.id === sessionId);
+            const liveSession = liveSessionStore(signal).sessionHistory.find(s => s.id === sessionId);
             const firstShotId = liveSession?.shots[0]?.id ?? null;
             const thumb = liveSession?.shots[0]?.perShotAnalysis?.visual_reference_path ?? null;
             const synthesized = putting.synthesizePrimaryIssueFromPutting(result, firstShotId, thumb);
-            useSwingSessionStore.getState().setSessionAnalysis(sessionId, synthesized, null);
+            liveSessionStore(signal).setSessionAnalysis(sessionId, synthesized, null);
             uploadLog('putting-primary-issue-synthesized', {
               session_id: sessionId,
               name: synthesized.name,
@@ -405,7 +406,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
           // (e.g. a dynamic-import failure) left the session stuck on the
           // pending spinner with no way out. Mirrors the swing path (line ~670).
           try {
-            useSwingSessionStore.getState().setSessionAnalysisStatus(
+            liveSessionStore(signal).setSessionAnalysisStatus(
               sessionId,
               'failed',
               "Couldn't read this putt — try Re-analyze, or re-record from a cleaner angle.",
@@ -443,7 +444,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
       }
     }
     if (repointed) {
-      const fresh = useSwingSessionStore.getState().sessionHistory.find(s => s.id === sessionId);
+      const fresh = liveSessionStore(signal).sessionHistory.find(s => s.id === sessionId);
       if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
     }
   } catch (e) {
@@ -510,7 +511,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
             endSec: seg.endMs / 1000,
             impactSec: seg.strikeMs / 1000,
           })));
-          const fresh = useSwingSessionStore.getState().sessionHistory.find(x => x.id === sessionId);
+          const fresh = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
           uploadLog('upload-multi-swing-expand', { swings_found: found.length, shots: swings.length }, sessionId);
           V6('STAGE 0 — upload expanded into multi-swing', { found: found.length, shots: swings.length });
@@ -520,7 +521,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
           // + re-probe: ~15-40s wasted on the most common upload). Persist the located window + impact on
           // the existing shot so the analyze + pose passes run bounded and strike-anchored immediately.
           store.setShotClipBoundaries(sessionId, swings[0].id, segs[0].startMs / 1000, segs[0].endMs / 1000, segs[0].strikeMs / 1000);
-          const fresh = useSwingSessionStore.getState().sessionHistory.find(x => x.id === sessionId);
+          const fresh = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
           uploadLog('upload-single-swing-located', { impact_sec: Math.round((segs[0].strikeMs / 1000) * 10) / 10 }, sessionId);
         }
@@ -675,7 +676,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
         const deadline = Date.now() + TRANSCRIPT_BUDGET_MS;
         while (Date.now() < deadline) {
           await new Promise(r => setTimeout(r, POLL_MS));
-          const liveSession = useSwingSessionStore.getState().sessionHistory.find(s => s.id === sessionId);
+          const liveSession = liveSessionStore(signal).sessionHistory.find(s => s.id === sessionId);
           if (liveSession?.shots.some(s => (s.commentary_transcript ?? '').trim().length > 0)) {
             uploadLog('coach-audio-wait-resolved', { ms: Date.now() - (deadline - TRANSCRIPT_BUDGET_MS) }, sessionId);
             break;
@@ -752,7 +753,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
       // is absent." Reduces false-positive impact reads + tightens
       // the fault-frame selection. No-op when the user hasn't set
       // them up (which is the common case during early beta).
-      const liveSession = useSwingSessionStore.getState().sessionHistory.find(s => s.id === sessionId);
+      const liveSession = liveSessionStore(signal).sessionHistory.find(s => s.id === sessionId);
       const ballAreaCtx = liveSession?.ball_area_norm ?? null;
       const targetCtx = liveSession?.target_norm ?? null;
       // 2026-05-27 — Fix EU: thread the user's chosen cage camera angle
@@ -765,7 +766,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
       // landed AFTER `swings` was snapshotted (line 221) is still seen
       // by the analyzer. The closure variable `swing` was frozen at
       // snapshot time.
-      const liveShot = useSwingSessionStore.getState().sessionHistory
+      const liveShot = liveSessionStore(signal).sessionHistory
         .find(s => s.id === sessionId)?.shots.find(x => x.id === swing.id);
       const coachAudio = (liveShot?.commentary_transcript ?? swing.commentary_transcript ?? '').trim();
       // 2026-06-01 — Fix GE: library uploads use tier='quick' (Haiku
@@ -841,8 +842,8 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
         // diagnostic frame time (fault_frame_index) — one real moment, or nothing. Never sample times.
         const faultIdx = r.analysis.fault_frame_index;
         const faultTs = faultIdx != null && faultIdx >= 0 ? r.frame_timestamps_sec[faultIdx] : undefined;
-        useSwingSessionStore.getState().setShotIssueTimestamps(sessionId, swing.id, typeof faultTs === 'number' ? [faultTs] : []);
-        useSwingSessionStore.getState().setShotAnalysis(sessionId, swing.id, {
+        liveSessionStore(signal).setShotIssueTimestamps(sessionId, swing.id, typeof faultTs === 'number' ? [faultTs] : []);
+        liveSessionStore(signal).setShotAnalysis(sessionId, swing.id, {
           detected_issue: r.analysis.detected_issue,
           // 2026-07-06 — carry the evidence-gated headline; the per-swing row
           // titles off this first (detected_issue is prompt-steered to 'none').
@@ -899,7 +900,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
     if (faultCandidates.length > 0) {
       const byIndex = [...faultCandidates].sort((a, b) => a.index - b.index);
       const chosen = byIndex.find(c => c.uri) ?? byIndex[0];
-      useSwingSessionStore.getState().setSessionFaultFrame(sessionId, {
+      liveSessionStore(signal).setSessionFaultFrame(sessionId, {
         uri: chosen.uri,
         index: chosen.frameIndex,
         fraction: chosen.fraction,
@@ -976,7 +977,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
             detected_in_shots: [firstSwingWithClip.id],
             confidence: 'low',
           };
-          useSwingSessionStore.getState().setSessionAnalysis(sessionId, tentativeIssue, null);
+          liveSessionStore(signal).setSessionAnalysis(sessionId, tentativeIssue, null);
           uploadLog('result-store', {
             status: 'ok',
             primary_issue_id: tentativeIssue.issue_id,
@@ -1018,11 +1019,11 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
           swings: swings.length,
         });
       } catch { /* best-effort */ }
-      useSwingSessionStore.getState().setSessionAnalysisStatus(sessionId, 'failed', message);
+      liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'failed', message);
       return { primary_issue: null, drill_recommendation: null };
     }
 
-    useSwingSessionStore.getState().setSessionAnalysisStatus(sessionId, 'analyzing_pattern');
+    liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'analyzing_pattern');
     uploadLog('classifier-start', { results_count: results.length }, sessionId);
     V6('STAGE 5 — classifySession call', { resultsCount: results.length });
     let primary_issue = classifySession(results);
@@ -1184,7 +1185,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
       ui_status: 'ok',
     });
 
-    useSwingSessionStore.getState().setSessionAnalysis(sessionId, primary_issue, drill_recommendation);
+    liveSessionStore(signal).setSessionAnalysis(sessionId, primary_issue, drill_recommendation);
     uploadLog('result-store', {
       status: 'ok',
       primary_issue_id: primary_issue?.issue_id ?? null,
@@ -1238,7 +1239,7 @@ async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
     const msg = e instanceof Error ? e.message : String(e);
     uploadLog('phase-k-throw', { status: 'failed', message: msg }, sessionId);
     V6('STAGE 6 FINAL — failed: pipeline threw', { error: msg, stack: e instanceof Error ? (e.stack ?? '').split('\n').slice(0, 5).join(' | ') : null });
-    useSwingSessionStore.getState().setSessionAnalysisStatus(
+    liveSessionStore(signal).setSessionAnalysisStatus(
       sessionId, 'failed',
       "I had trouble watching this one — could be lighting, angle, or video quality.",
     );
@@ -1430,8 +1431,8 @@ export async function ingestVideoFromPick(args: {
  * shot's window, biomechanics, the on-device verdict when the cloud read did not commit, and the
  * persisted club arc. Called by the orchestrator's 'pose' stage, after the read, once per run.
  */
-export async function runUploadPosePass(sessionId: string): Promise<true | null> {
-  const session = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sessionId);
+export async function runUploadPosePass(sessionId: string, signal?: AbortSignal): Promise<true | null> {
+  const session = liveSessionStore(signal).sessionHistory.find((x) => x.id === sessionId);
   if (!session) return null;
   const swings = session.shots;
   const firstClipSwing = swings.find(s => s.clipUri);
@@ -1493,7 +1494,10 @@ export async function runUploadPosePass(sessionId: string): Promise<true | null>
                   const { locateSwingWindowOnDevice } = await import('./swing/onDeviceLocate');
                   loc = await locateSwingWindowOnDevice(firstClipSwing.clipUri!, durMs);
                 } catch { /* on-device is best-effort; the network locate below is the fallback */ }
-                if (!loc) loc = await locateSwingWindow(firstClipSwing.clipUri!, durMs);
+                // 2026-10-04 (sweep) — with a window already in hand (a trim, or the orchestrator's window
+                // stage) the network locate only refines an IMPACT, and it costs up to 35s of this stage's
+                // 90s budget; a miss falls back to the window centre below. Without a window it still runs.
+                if (!loc && !poseWindow) loc = await locateSwingWindow(firstClipSwing.clipUri!, durMs);
               }
               if (loc && loc.endSec > loc.startSec) {
                 if (!poseWindow) {
@@ -1518,7 +1522,7 @@ export async function runUploadPosePass(sessionId: string): Promise<true | null>
           // 2026-07-24 (full-app audit, root D) — also thread handedness so a lefty's
           // weight-shift sign isn't inverted (default 'right' read it backwards).
           const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, poseImpactMs, resolveSwingerHandedness());
-          useSwingSessionStore.getState().setSessionBiomechanics(sessionId, biomech);
+          liveSessionStore(signal).setSessionBiomechanics(sessionId, biomech);
           uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
 
           // 2026-08-06 (Tim — "I can't get clean analysis the first time; it always takes going to the swing
@@ -1529,7 +1533,7 @@ export async function runUploadPosePass(sessionId: string): Promise<true | null>
           // resolved 'ok' (cloud enrichment still wins when it lands).
           if (biomech) {
             try {
-              const store = useSwingSessionStore.getState();
+              const store = liveSessionStore(signal);
               const sess = store.sessionHistory.find((s) => s.id === sessionId);
               if (sess && sess.analysis_status !== 'ok') {
                 const { buildPoseSwingRead } = await import('./swing/poseSwingRead');
@@ -1589,18 +1593,18 @@ export async function runUploadPosePass(sessionId: string): Promise<true | null>
                 bodyBounds: bodyBoundsFromPose(biomech?.frames ?? null),
                 // 2026-09-29 — the clip's own capture rate (null for an upload = unknown, the 30fps floor).
                 sourceFps: (await import('./capture/clipFps')).sessionCapturedFps(
-                  useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId) ?? null,
+                  liveSessionStore(signal).sessionHistory.find((s) => s.id === sessionId) ?? null,
                 ),
               });
               if (arc && arc.points.length >= 3) {
                 // rebase window-relative tMs → absolute clip ms (parity with the view overlay)
-                useSwingSessionStore.getState().setSessionClubArc(
+                liveSessionStore(signal).setSessionClubArc(
                   sessionId,
                   arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + pw.startMs })),
                   { w: arc.frameW ?? null, h: arc.frameH ?? null },
                 );
               } else {
-                useSwingSessionStore.getState().setSessionClubArc(sessionId, [], null);
+                liveSessionStore(signal).setSessionClubArc(sessionId, [], null);
               }
               /**
                * 2026-09-09 — this line was the exact ambiguity `f44f06d` set out to kill, still

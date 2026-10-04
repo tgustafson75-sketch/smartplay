@@ -10,12 +10,17 @@ import { _clearRunsForTest } from '../../services/swing/orchestrator/engine';
 
 const mockOrder: string[] = [];
 let mockPoseRelease: (() => void) | null = null;
+const mockPoseSignals: (AbortSignal | undefined)[] = [];
+let mockKind = 'full_swing';
+jest.mock('../../services/swingLibrary', () => ({ getAnalyzerKind: () => mockKind }));
 jest.mock('../../services/swing/analysisOrchestrator', () => ({
   findUploadSwingWindow: async () => { mockOrder.push('window'); return { startSec: 5.3, endSec: 7.9, impactSec: null, via: 'motion' }; },
 }));
 jest.mock('../../services/videoUpload', () => ({
   _runPhaseKRead: async () => { mockOrder.push('read'); return { primary_issue: { issue_id: 'over_the_top' }, drill_recommendation: null }; },
-  runUploadPosePass: () => new Promise((r) => { mockOrder.push('pose'); mockPoseRelease = () => r(true); }),
+  runUploadPosePass: (_id: string, signal?: AbortSignal) => new Promise((r) => {
+    mockOrder.push('pose'); mockPoseSignals.push(signal); mockPoseRelease = () => r(true);
+  }),
 }));
 jest.mock('../../store/toastStore', () => ({ useToastStore: { getState: () => ({ show: () => undefined }) } }));
 
@@ -25,7 +30,7 @@ const seed = (dur: number) => useSwingSessionStore.setState({
     shots: [{ id: 'sh1', clipUri: 'file:///c.mp4' }] }] as never,
 });
 
-beforeEach(() => { mockOrder.length = 0; mockPoseRelease = null; _clearRunsForTest(); });
+beforeEach(() => { mockOrder.length = 0; mockPoseRelease = null; mockPoseSignals.length = 0; mockKind = 'full_swing'; _clearRunsForTest(); });
 
 describe('an upload runs window → read → pose, once', () => {
   it('a single-swing upload finds its window first, then reads; the caller gets the read before pose ends', async () => {
@@ -53,5 +58,29 @@ describe('an upload runs window → read → pose, once', () => {
     await Promise.all([runUploadAnalysis('s1'), runUploadAnalysis('s1')]);
     expect(mockOrder.filter((x) => x === 'read')).toHaveLength(1);
     mockPoseRelease?.();
+  });
+
+  /**
+   * 2026-10-04 (sweep) — once the read has settled the live run is only its pose tail. A new request
+   * (Analyze this moment after a scrub, the angle chip, a trim) must get a NEW read, and the old pose
+   * tail must be told to stop — it used to join and hand back the old result.
+   */
+  it('a trigger AFTER the read settled starts a fresh read and aborts the old pose tail', async () => {
+    seed(42);
+    await runUploadAnalysis('s1');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockPoseSignals).toHaveLength(1);
+    await runUploadAnalysis('s1');
+    expect(mockOrder.filter((x) => x === 'read')).toHaveLength(2);
+    expect(mockPoseSignals[0]?.aborted).toBe(true);
+    mockPoseRelease?.();
+  });
+
+  it('a putt runs the read only — no swing window, no swing pose pass', async () => {
+    mockKind = 'putting';
+    seed(6);
+    await runUploadAnalysis('s1');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockOrder).toEqual(['read']);
   });
 });

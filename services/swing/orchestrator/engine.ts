@@ -61,6 +61,8 @@ export class AnalysisRun<Input> {
   private readonly state: Record<string, StageState> = {};
   private readonly outputs: Record<string, unknown> = {};
   private readonly listeners = new Set<Listener>();
+  private readonly stageCtrls: Record<string, AbortController> = {};
+  private readonly stageCleanup: Record<string, () => void> = {};
   private finished = false;
   readonly done: Promise<RunSnapshot>;
   private resolveDone!: (s: RunSnapshot) => void;
@@ -136,7 +138,16 @@ export class AnalysisRun<Input> {
         if (r === 'blocked') { this.settle(s.id, { status: 'skipped' }); changed = true; started = true; continue; }
         if (r === 'wait') continue;
         if (!s.critical && criticalOutstanding) continue;   // critical first — secondary waits its turn
-        const ctx: StageContext<Input> = { input: this.input, outputs: { ...this.outputs }, signal: this.ctrl.signal };
+        // 2026-10-04 (sweep) — each stage gets ITS OWN signal, aborted when the run is cancelled OR when
+        // this stage overruns its budget. Before, an overrun only lost the race: the stage's work went on
+        // and kept writing to the store after the run had moved past it.
+        const stageCtrl = new AbortController();
+        const onRunAbort = () => stageCtrl.abort();
+        if (this.ctrl.signal.aborted) stageCtrl.abort();
+        else this.ctrl.signal.addEventListener('abort', onRunAbort, { once: true });
+        const ctx: StageContext<Input> = { input: this.input, outputs: { ...this.outputs }, signal: stageCtrl.signal };
+        this.stageCleanup[s.id] = () => this.ctrl.signal.removeEventListener('abort', onRunAbort);
+        this.stageCtrls[s.id] = stageCtrl;
         if (s.when && !s.when(ctx)) { this.settle(s.id, { status: 'skipped' }); changed = true; started = true; continue; }
         started = true;
         void this.runStage(s, ctx);
@@ -160,7 +171,9 @@ export class AnalysisRun<Input> {
     try {
       const out = await Promise.race([
         s.run(ctx),
-        new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error('budget')), s.budgetMs); }),
+        new Promise<never>((_, rej) => {
+          timer = setTimeout(() => { rej(new Error('budget')); this.stageCtrls[s.id]?.abort(); }, s.budgetMs);   // budget wins the race, THEN the work is told to stop
+        }),
         new Promise<never>((_, rej) => {
           if (ctx.signal.aborted) rej(new Error('cancelled'));
           ctx.signal.addEventListener('abort', () => rej(new Error('cancelled')), { once: true });
@@ -179,21 +192,30 @@ export class AnalysisRun<Input> {
       }
     } finally {
       if (timer) clearTimeout(timer);
+      this.stageCleanup[s.id]?.();
     }
     this.emit();
     void this.pump();
   }
 }
 
-/** The registry: one run per key, joined if it exists and is still going. */
+/**
+ * The registry: one run per key, joined if it exists and is still going — unless `restart` says the
+ * live run no longer answers this request (the caller decides; uploadRun restarts once the read has
+ * settled), in which case it is cancelled and a fresh run starts.
+ */
 const runs = new Map<string, AnalysisRun<unknown>>();
 
 export function getOrStartRun<Input>(
   key: string,
   build: () => { stages: StageDef<Input>[]; input: Input; hooks?: RunHooks },
+  restart?: (live: RunSnapshot) => boolean,
 ): AnalysisRun<Input> {
   const existing = runs.get(key) as AnalysisRun<Input> | undefined;
-  if (existing && !existing.snapshot().done) return existing;
+  if (existing && !existing.snapshot().done) {
+    if (!restart || !restart(existing.snapshot())) return existing;
+    existing.cancel();
+  }
   const { stages, input, hooks } = build();
   const run = new AnalysisRun<Input>(key, stages, input, hooks);
   runs.set(key, run as AnalysisRun<unknown>);
