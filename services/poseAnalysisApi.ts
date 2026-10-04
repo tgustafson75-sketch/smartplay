@@ -1121,7 +1121,10 @@ export async function extractPoseFramesFromVideo(
   let fileWaitMs = 0;
   let fileBytes: number | null = null;
   try {
-    const FS = require('expo-file-system') as typeof import('expo-file-system');
+    // 2026-10-03 — the LEGACY API. In SDK 54 the root 'expo-file-system' getInfoAsync is deprecated and
+    // never reported a size here, so every read paid the full 1.25s "wait for the clip to settle" and
+    // the zero-frames report said fileBytes: 0 for a 37MB file (the 10-01 Pixel report, Tim's 10-03 log).
+    const FS = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
     let lastSize = -1;
     for (let attempt = 0; attempt < 6; attempt++) {
       const info = await FS.getInfoAsync(videoUri).catch(() => null);

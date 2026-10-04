@@ -85,8 +85,16 @@ describe('it produces timing, never evidence', () => {
     expect(src).toMatch(/if \(!anchors\) return null/);
   });
 
-  it('never throws — one unreadable frame is a shorter signal, not a failure', () => {
-    expect(src).toMatch(/catch \{\s*\n?\s*frame = null;/);
+  it('never throws — one unreadable frame is a shorter signal, not a failure', async () => {
+    // 2026-10-03 — was a source-text match on the old inline loop; the search moved into
+    // searchSwingWindow (testable with a reader), so check the BEHAVIOUR: unreadable frames are skipped.
+    const { searchSwingWindow } = await import('../../services/swing/onDeviceLocate');
+    let n = 0;
+    const swing = (t: number) => ({ tMs: t, x: 0.5 + (t > 6000 && t < 7000 ? (t - 6000) / 2000 : 0), y: t > 5500 && t < 6600 ? 0.4 : 0.6 });
+    const flaky = async (t: number) => (++n % 4 === 0 ? null : swing(t));
+    const w = await searchSwingWindow(14000, flaky);
+    expect(n).toBeGreaterThan(12); // it kept reading past the misses (coarse + refine)
+    expect(w === null || typeof w.swingTimeSec === 'number').toBe(true);
   });
 
   it('THE TRAP: it never touches the helper that falls through to a cloud proxy', () => {
@@ -103,9 +111,19 @@ describe('it produces timing, never evidence', () => {
     expect(src).toMatch(/if \(!status\?\.available\) return null/);
   });
 
+  it('the budget stops the sweep — a slow device answers from what it has', async () => {
+    const { searchSwingWindow } = await import('../../services/swing/onDeviceLocate');
+    let now = 0; let reads = 0;
+    const slowRead = async (t: number) => { reads++; now += 2_000; return { tMs: t, x: 0.5, y: 0.6 }; };
+    await searchSwingWindow(14000, slowRead, () => now);
+    // 6s coarse budget at 2s a frame → ~4 coarse reads, not 12; then too few samples to answer.
+    expect(reads).toBeLessThan(8);
+  });
+
   it('has a BUDGET — it replaced a slow thing and must not become one', () => {
     expect(src).toMatch(/const BUDGET_MS = 6_000/);
-    expect(src).toMatch(/if \(Date\.now\(\) > deadline\) break/);
+    // 2026-10-03 — the clock is injectable now; prove the budget actually stops the sweep.
+    expect(src).toMatch(/if \(clock\(\) > deadline\) break/);
     // and it answers from what it collected rather than discarding the work
     expect(src).toMatch(/samples\.length < MIN_USABLE_SAMPLES\) return null/);
   });

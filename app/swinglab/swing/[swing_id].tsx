@@ -464,6 +464,13 @@ export default function SwingDetail() {
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
   /**
+   * 2026-10-03 (Tim — "every time you open it it tries to play and analyze at the same time … this
+   * has to be fixed deeply"). True while THIS swing's analysis is running. Playback is held for the
+   * whole run: one owner of the clip at a time. Set by the effect next to `analysisStatus` below,
+   * read here because togglePlayPause is declared first.
+   */
+  const analysisRunningRef = useRef(false);
+  /**
    * 2026-08-19 (Tim, reviewing his round: "play button does not fade out").
    *
    * It never did. The control was `opacity: isPlaying ? 0.55 : 1` — it DIMMED while playing and then
@@ -516,6 +523,10 @@ export default function SwingDetail() {
     if (!v) return;
     try {
       const st = await v.getStatusAsync();
+      if (analysisRunningRef.current && !(st.isLoaded && st.isPlaying)) {
+        useToastStore.getState().show('Reading your swing — it plays the moment the read is done.');
+        return;
+      }
       if (st.isLoaded && st.isPlaying) {
         isPlayingRef.current = false;
         await v.pauseAsync();
@@ -1024,6 +1035,20 @@ export default function SwingDetail() {
   const cardsFade = useRef(new Animated.Value(0)).current;
   const spokenForRef = useRef<string | null>(null);
   const analysisStatus: AnalysisStatus = session?.analysis_status ?? 'pending';
+  // An uploaded clip at 'pending' IS running (the auto-analyze effect below fires on open); a live
+  // capture at 'pending' is idle ("Ready to analyze"), so it is not.
+  const analysisRunning = analysisStatus === 'analyzing_frames' || analysisStatus === 'analyzing_pose'
+    || analysisStatus === 'analyzing_pattern' || (analysisStatus === 'pending' && session?.source === 'uploaded_video');
+  // The rest screen (1 min without a touch) must not black the screen out while the player waits for
+  // the read — it looked exactly like "it stopped analyzing". Counted with the playback suppression.
+  useRestSuppress(analysisRunning);
+  useEffect(() => {
+    analysisRunningRef.current = analysisRunning;
+    if (!analysisRunning) return;
+    // Started while the clip was playing (a tap that landed first, a re-analyze mid-play): stop it.
+    isPlayingRef.current = false;
+    void videoRef.current?.pauseAsync().catch(() => undefined);
+  }, [analysisRunning]);
 
   // Phase BQ — emit [upload:ui-render] on every analysis_status transition
   // so the empirical trace shows whether the UI ever sees the result the

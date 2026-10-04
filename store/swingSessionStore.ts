@@ -1746,7 +1746,31 @@ export const useSwingSessionStore = create<SwingSessionState>()(
       // 2026-06-16 — dual-update like setSessionAnalysis: status (analyzing /
       // error / pending) is set while the session is still IN-FLIGHT, so the
       // live GolfFix card must see it too — not just the saved history entry.
-      setSessionAnalysisStatus: (sessionId, status, error) =>
+      setSessionAnalysisStatus: (sessionId, status, error) => {
+        /**
+         * 2026-10-03 (Tim: an imported mp4 "WILL NOT ANALYZE", and his issue log held NOTHING about it —
+         * boot/diag/transcribe/user only). Every path that ends a swing analysis in failure (a dozen
+         * sites across videoUpload and the detail screen, plus the watchdogs) lands here, and none of
+         * them reported beyond console/analytics. Report once per transition into 'failed', with what
+         * the clip was, so the next "won't analyze" arrives with its reason.
+         */
+        const before = get().sessionHistory.find((x) => x.id === sessionId) ?? (get().activeSession?.id === sessionId ? get().activeSession : null);
+        if (status === 'failed' && before && before.analysis_status !== 'failed') {
+          try {
+            const shot0 = before.shots?.[0];
+            require('./issueLogStore').useIssueLogStore.getState().addAppEvent('swing_analysis_failed', {
+              reason: (error ?? before.analysis_error ?? 'unknown').slice(0, 160),
+              from: before.analysis_status ?? null,
+              source: before.source ?? null,
+              durationSec: before.upload?.duration_sec ?? null,
+              device: before.upload?.source_device ?? null,
+              clipExt: shot0?.clipUri ? (shot0.clipUri.split('?')[0].split('.').pop() ?? '').slice(0, 5) : null,
+              windowSec: shot0?.clipStartSeconds != null && shot0?.clipEndSeconds != null
+                ? Math.round((shot0.clipEndSeconds - shot0.clipStartSeconds) * 10) / 10 : null,
+              shots: before.shots?.length ?? 0,
+            }, 'analysis_error');
+          } catch { /* the report must never block the status write */ }
+        }
         set(s => {
           const apply = (session: SwingSession): SwingSession =>
             session.id !== sessionId ? session : {
@@ -1761,7 +1785,8 @@ export const useSwingSessionStore = create<SwingSessionState>()(
                 : s.activeSession,
             sessionHistory: s.sessionHistory.map(apply),
           };
-        }),
+        });
+      },
 
       // 2026-06-02 — Fix GN: orphan-cleanup pass. Audit found that
       // sessions where analysis was in-flight at force-close stayed

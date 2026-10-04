@@ -195,7 +195,6 @@ export default function UploadSwing() {
     // minute ones"). Trim screen is for genuinely long content.
     const SHORT_CLIP_SEC = 60;
     const hasKnownDuration = typeof durationSec === 'number' && durationSec > 0;
-    const isShortClip = hasKnownDuration && durationSec <= SHORT_CLIP_SEC;
     const isLongClip = hasKnownDuration && durationSec > SHORT_CLIP_SEC;
     // 2026-06-14 (audit fix) — ingest can reject (e.g. a persist/AsyncStorage
     // write throw). Without a catch the screen sat on "Saving…" forever with no
@@ -242,11 +241,17 @@ export default function UploadSwing() {
     }
     // Routing: long → trim screen; short → detail with watch param;
     // unknown duration → detail (legacy auto-fire path runs).
+    /**
+     * 2026-10-03 (Tim — "every time you open it it tries to play and analyze at the same time").
+     * ?watch=1 auto-PLAYED the clip while the detail screen's auto-analyze ALSO started on open — two
+     * owners of one file at once (its own analyze-on-playthrough trigger has been off since 06-15, so
+     * the param bought nothing but the collision). One owner now: the detail screen analyzes, the
+     * player is held until the read is done, then you tap to watch.
+     */
     if (isLongClip) {
       router.replace(`/swinglab/trim?session_id=${sessionId}` as never);
     } else {
-      const watchParam = isShortClip ? '?watch=1' : '';
-      router.replace(`/swinglab/swing/${sessionId}${watchParam}` as never);
+      router.replace(`/swinglab/swing/${sessionId}` as never);
     }
   };
 

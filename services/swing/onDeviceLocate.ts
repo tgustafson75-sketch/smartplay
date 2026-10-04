@@ -65,6 +65,9 @@ const MIN_USABLE_SAMPLES = 5;
  * been collected, which is why MIN_USABLE_SAMPLES is a floor rather than a requirement to finish.
  */
 const BUDGET_MS = 6_000;
+/** The dense second look (see the refine pass): ~100ms steps inside the two fastest coarse gaps. */
+const REFINE_STEP_MS = 100;
+const REFINE_BUDGET_MS = 6_000;
 
 /** Evenly spaced sample times across the usable body of the clip. Exported for the test. */
 export function sampleTimesMs(durationMs: number, count: number = LOCATE_FRAME_COUNT): number[] {
@@ -117,8 +120,7 @@ async function locateSwingWindowOnDeviceImpl(
   clipUri: string,
   durationMs: number,
 ): Promise<LocatedWindow | null> {
-  const times = sampleTimesMs(durationMs);
-  if (times.length === 0) return null;
+  if (sampleTimesMs(durationMs).length === 0) return null;
 
   /**
    * ON-DEVICE ONLY, DELIBERATELY. The obvious helper here is poseAnalysisApi.poseAtTime, and using it
@@ -162,48 +164,90 @@ async function locateSwingWindowOnDeviceImpl(
   const workUri = shared.uri;
 
   try {
-    const samples: MotionSample[] = [];
-    let consecutiveMisses = 0;
-    const deadline = Date.now() + BUDGET_MS;
-    for (const tMs of times) {
-      if (Date.now() > deadline) break;   // spend what is left on the answer, not on more frames
+    const readAt = async (tMs: number): Promise<MotionSample | null> => {
       // Serial on purpose, AND on the global media chain (see the import note) — the second half is
       // what actually holds off the other retrievers. The private copy handles the player.
-      let frame = null;
       try {
         const thumb = await VideoThumbnails.getThumbnailAsync(workUri, { time: tMs, quality: 0.6 });
-        frame = await mp.detectPoseFromUri(thumb.uri, undefined, tMs);
-        // 2026-09-17 — delete the temp, like every other extractor in services/swing. This samples
-        // a dozen times per locate and ran on every swing.
+        const f = await mp.detectPoseFromUri(thumb.uri, undefined, tMs);
+        // 2026-09-17 — delete the temp, like every other extractor in services/swing.
         void FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(() => undefined);
+        const c = f ? wristCentroid(f) : null;
+        return c ? { tMs, x: c.x, y: c.y } : null;
       } catch {
-        frame = null; // one unreadable frame is a shorter signal, not a failed locate
+        return null; // one unreadable frame is a shorter signal, not a failed locate
       }
-      if (!frame) {
-        // Bail early rather than paying for a dozen decodes that are clearly going nowhere — the
-        // caller's network locate is a better use of the time than finishing a hopeless sweep.
-        if (++consecutiveMisses >= 3 && samples.length === 0) return null;
-        continue;
-      }
-      consecutiveMisses = 0;
-      const c = wristCentroid(frame);
-      if (c) samples.push({ tMs, x: c.x, y: c.y });
-    }
-    if (samples.length < MIN_USABLE_SAMPLES) return null;
-
-    const anchors = deriveSwingAnchors(samples);
-    if (!anchors) return null;
-    const { startMs, endMs, impactMs } = anchors;
-    if (!(Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs)) return null;
-
-    return {
-      startSec: Math.max(0, startMs / 1000),
-      endSec: Math.min(durationMs / 1000, endMs / 1000),
-      swingTimeSec: Math.min(Math.max(impactMs / 1000, startMs / 1000), endMs / 1000),
     };
+    return await searchSwingWindow(durationMs, readAt);
   } finally {
     // Every early return above lands here. Releasing decrements the refcount; the pool keeps the file
     // for another 8s so the consumers right behind this one reuse it rather than re-copying.
     shared.release();
   }
+}
+
+/**
+ * The search itself, with the frame reader passed in — the device reads thumbnails through MediaPipe,
+ * the test harness reads the same clip through ffmpeg + MediaPipe on a desktop. Same code either way,
+ * so what the harness measures is what the phone does.
+ */
+export async function searchSwingWindow(
+  durationMs: number,
+  readAt: (tMs: number) => Promise<MotionSample | null>,
+  clock: () => number = Date.now,
+): Promise<LocatedWindow | null> {
+  const times = sampleTimesMs(durationMs);
+  if (times.length === 0) return null;
+  const samples: MotionSample[] = [];
+  let consecutiveMisses = 0;
+  const deadline = clock() + BUDGET_MS;
+  for (const tMs of times) {
+    if (clock() > deadline) break;   // spend what is left on the answer, not on more frames
+    const sample = await readAt(tMs);
+    if (!sample) {
+      // Bail early rather than paying for a dozen decodes that are clearly going nowhere — the
+      // caller's network locate is a better use of the time than finishing a hopeless sweep.
+      if (++consecutiveMisses >= 3 && samples.length === 0) return null;
+      continue;
+    }
+    consecutiveMisses = 0;
+    samples.push(sample);
+  }
+  if (samples.length < MIN_USABLE_SAMPLES) return null;
+
+  /**
+   * 2026-10-03 (Tim's 14.5s upload: impact placed at 8.94s, the real strike is at 7.0s — he had
+   * already turned to watch the ball). Twelve samples across a 14s clip are 1.2s apart and a
+   * downswing is ~0.3s, so "the fastest wrist move between two samples" was as likely to be the
+   * walk-off as the swing — and every pose frame downstream is then centred on that moment.
+   *
+   * REFINE: look again, densely, inside the two fastest coarse intervals. Two, not one, because the
+   * coarse winner is exactly the thing in doubt (the turn-around can out-move a swing seen through a
+   * 1.2s gap); at 100ms the real downswing is unmistakably the fastest motion in the clip.
+   */
+  const coarse = [...samples].sort((a, b) => a.tMs - b.tMs);
+  const spans: { from: number; to: number; v: number }[] = [];
+  for (let i = 1; i < coarse.length; i++) {
+    const dt = Math.max(1, coarse[i].tMs - coarse[i - 1].tMs);
+    spans.push({ from: coarse[i - 1].tMs, to: coarse[i].tMs, v: Math.hypot(coarse[i].x - coarse[i - 1].x, coarse[i].y - coarse[i - 1].y) / dt });
+  }
+  const refineDeadline = clock() + REFINE_BUDGET_MS;
+  for (const span of spans.sort((a, b) => b.v - a.v).slice(0, 2)) {
+    for (let t = span.from + REFINE_STEP_MS; t < span.to; t += REFINE_STEP_MS) {
+      if (clock() > refineDeadline) break;
+      const sample = await readAt(Math.round(t));
+      if (sample) samples.push(sample);
+    }
+  }
+
+  const anchors = deriveSwingAnchors(samples);
+  if (!anchors) return null;
+  const { startMs, endMs, impactMs } = anchors;
+  if (!(Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs)) return null;
+
+  return {
+    startSec: Math.max(0, startMs / 1000),
+    endSec: Math.min(durationMs / 1000, endMs / 1000),
+    swingTimeSec: Math.min(Math.max(impactMs / 1000, startMs / 1000), endMs / 1000),
+  };
 }
