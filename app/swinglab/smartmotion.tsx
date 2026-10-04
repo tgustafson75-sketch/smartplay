@@ -118,7 +118,7 @@ import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { anchorToleranceMs, clubArcAnchorMs } from '../../services/swing/clubPathWindow';
+import { anchorToleranceMs, clubArcAnchorMs, POSE_ANCHOR_TOLERANCE_MS } from '../../services/swing/clubPathWindow';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useRoundStore } from '../../store/roundStore';
 import { SmartMotionHeader, CaptureGuides, SpeedStat, TempoBar, BodyAnalysisRow, AcousticPickupCard, VerdictBadge, FooterChips, type Angle, type MetricSpec, ICON_BIOMECH, deriveBodyItems, type SmTone, SwingBreakdownCard } from '../../components/smartmotion/SmartMotionHud';
@@ -831,6 +831,8 @@ export default function SmartMotion() {
    * confidently as a right one. [[a-cache-key-must-name-every-input]]
    */
   const clubPathCacheRef = useRef<Record<string, { x: number; y: number; tMs: number }[] | null>>({});
+  // The frame size each READ arc was measured in (absent = the run never answered), for the saved arc.
+  const clubArcFrameRef = useRef<Record<string, { w: number | null; h: number | null } | null>>({});
   /**
    * 2026-09-09 — HAS THE POSE STAGE FINISHED FOR THIS CLIP + SWING? (success OR failure).
    *
@@ -1612,6 +1614,20 @@ export default function SmartMotion() {
   const ingestedSessionIdRef = useRef<string | null>(null);
   // 2026-07-30 — one-shot guard so the analysis-time clubhead-arc persist runs once per session.
   const clubArcSessionRef = useRef<string | null>(null);
+  /**
+   * 2026-10-04 (sweep) — SAVE swing 1's arc once, from wherever it lands: a fresh read, the cache (a
+   * revisit), or the session appearing after the read finished. It used to save only from a fresh read
+   * that landed while swing 1 was selected AND the session existed — otherwise never.
+   */
+  const persistSwing0Arc = useCallback((key: string) => {
+    const sid = ingestedSessionIdRef.current;
+    if (!sid || clubArcSessionRef.current === sid || !(key in clubArcFrameRef.current)) return;
+    clubArcSessionRef.current = sid;
+    const pts = clubPathCacheRef.current[key] ?? null;
+    try {
+      useSwingSessionStore.getState().setSessionClubArc(sid, pts ?? [], pts ? clubArcFrameRef.current[key] ?? null : null);
+    } catch { /* the detail screen still live-extracts as a fallback */ }
+  }, []);
   const stoppingRef = useRef(false);
   const meteringRef = useRef<MeteringHandle | null>(null);
   const audioUriRef = useRef<string | null>(null);
@@ -2204,6 +2220,7 @@ export default function SmartMotion() {
     const clubCacheKey = `${clipUri}|${selectedSwing}|${Math.round(seg.startMs)}|${Math.round(seg.endMs)}`;
     if (clubCacheKey in clubPathCacheRef.current) {
       setClubArcPoints(clubPathCacheRef.current[clubCacheKey]);
+      if (selectedSwing === 0) persistSwing0Arc(clubCacheKey);
       return;
     }
     /**
@@ -2316,7 +2333,10 @@ export default function SmartMotion() {
      */
     // effectiveMode, not environmentMode: it is forced to 'course' during a round, which is
     // exactly the case Tim is describing — alone in a fairway, nobody else's ball near the mic.
-    const segToleranceMs = anchorToleranceMs(seg.confidence, effectiveMode);
+    // 2026-10-04 (sweep) — the graded strike tolerance only for a HEARD strike; a pose anchor gets the
+    // pose's own slack (POSE_ANCHOR_TOLERANCE_MS) instead of a video segment's 'high' = 0ms.
+    const segToleranceMs = segStrikeMs == null ? 0
+      : heardStrikeMs != null ? anchorToleranceMs(seg.confidence, effectiveMode) : POSE_ANCHOR_TOLERANCE_MS;
     /**
      * 2026-09-09 (Tim: "locate and anchor are fundamental though") — REPORT THE ANCHOR.
      *
@@ -2350,13 +2370,8 @@ export default function SmartMotion() {
         clubPathCacheRef.current[clubCacheKey] = pts;
         setClubArcPoints(pts);
         // The saved swing keeps THIS arc (swing 1 is the session's) — the swing-detail screen draws it.
-        const sid = ingestedSessionIdRef.current;
-        if (selectedSwing === 0 && sid && r && clubArcSessionRef.current !== sid) {
-          clubArcSessionRef.current = sid;
-          try {
-            useSwingSessionStore.getState().setSessionClubArc(sid, pts ?? [], pts ? { w: r.frameW ?? null, h: r.frameH ?? null } : null);
-          } catch { /* the detail screen still live-extracts as a fallback */ }
-        }
+        if (r) clubArcFrameRef.current[clubCacheKey] = pts ? { w: r.frameW ?? null, h: r.frameH ?? null } : null;
+        if (selectedSwing === 0) persistSwing0Arc(clubCacheKey);
         try {
           noteStage(stageKey, 'club', !r ? 'skipped' : (r.points.length >= 3 ? 'ok' : 'empty'),
             { points: r?.points.length ?? 0, zoomed: bodyBoundsFromPose(poseFrames) != null });
@@ -2446,7 +2461,13 @@ export default function SmartMotion() {
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [clipUri, segments, selectedSwing, poseFrames, poseAttemptKey, effectiveMode]);
+  }, [clipUri, segments, selectedSwing, poseFrames, poseAttemptKey, effectiveMode, persistSwing0Arc]);
+  // The session can appear AFTER swing 1's arc was read (or while another swing is on screen): save it then.
+  useEffect(() => {
+    const seg0 = segments[0];
+    if (!sessionId || !clipUri || !seg0) return;
+    persistSwing0Arc(`${clipUri}|0|${Math.round(seg0.startMs)}|${Math.round(seg0.endMs)}`);
+  }, [sessionId, clipUri, segments, persistSwing0Arc]);
 
   // Compose the tiered multi-point shot trace from the measured positions +
   // the aim reference. 'full' = solid in-frame path; 'launch' = solid measured
@@ -3402,7 +3423,11 @@ export default function SmartMotion() {
           frames = poseExtractCacheRef.current.frames;
         } else if (inflight) {
           // The warm is decoding these exact frames right now — join it, never decode twice.
-          frames = await inflight.catch(() => null);
+          // Bounded (sweep 10-04): a stalled warm must not hold the review's own pass forever.
+          frames = await Promise.race([
+            inflight.catch(() => null),
+            new Promise<null>((res) => setTimeout(() => res(null), 20_000)),
+          ]);
           if (cancelled) return;
           if (frames) poseExtractCacheRef.current = { key: extractKey, frames };
           else frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs);
@@ -3696,7 +3721,8 @@ export default function SmartMotion() {
         if (!cancelled && durMs > 0 && durMs < 15_000) {
           const { findUploadSwingWindow } = await import('../../services/swing/analysisOrchestrator');
           const w = await findUploadSwingWindow(clipUriParam, durMs / 1000);
-          if (!cancelled) {
+          // 'middle' is a guess, not a swing (sweep 10-04) — let the locator below look instead.
+          if (!cancelled && w.via !== 'middle') {
             const seg: SwingSegment = {
               index: 1,
               strikeMs: Math.round((w.impactSec ?? (w.startSec + w.endSec) / 2) * 1000),
@@ -3823,6 +3849,7 @@ export default function SmartMotion() {
     ballDepartureCacheRef.current = {}; // 2026-06-14 — drop per-swing trace cache on reset
     ballPathCacheRef.current = {};
     clubPathCacheRef.current = {};
+    clubArcFrameRef.current = {};
     setBallPathPoints(null);
     setLiveDb(null);
     setMeteringActive(false);
@@ -4122,7 +4149,11 @@ export default function SmartMotion() {
               if (m) { sessionMishit = m; break; }
             }
             const primaryIssue = contactIssue({ ballLaunched: null, reportedMishit: sessionMishit }) ?? rolled;
-            if (primaryIssue) {
+            // 2026-10-04 (sweep) — the THIRD headline writer: a strike the camera already saved (a duff
+            // on any swing) is never replaced by a swing fault here either — only by another contact read.
+            const savedIssue = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sessionId)?.primary_issue?.issue_id;
+            const strikeSaved = savedIssue != null && CONTACT_ISSUE_IDS.includes(savedIssue);
+            if (primaryIssue && (!strikeSaved || CONTACT_ISSUE_IDS.includes(primaryIssue.issue_id))) {
               useSwingSessionStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
               useSwingSessionStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
             }
@@ -4247,6 +4278,7 @@ export default function SmartMotion() {
     ballDepartureCacheRef.current = {}; // 2026-06-14 — new recording → drop per-swing trace cache
     ballPathCacheRef.current = {};
     clubPathCacheRef.current = {};
+    clubArcFrameRef.current = {};
     /**
      * 2026-09-01 (adversarial audit) — AND THE ANALYSIS CACHE, which was the one omission here.
      *
@@ -4920,7 +4952,15 @@ export default function SmartMotion() {
              * here: right after Stop the player is waiting, and the whole clip is the honest fallback.
              */
             const { findUploadSwingWindow } = await import('../../services/swing/analysisOrchestrator');
-            const w = await findUploadSwingWindow(recorded.uri, durMs / 1000, { allowNetwork: false });
+            // 2026-10-04 (sweep) — one ceiling for the whole finder right after Stop (engine warm-up, motion,
+            // the clip copy, the burst pick, the on-device locate). The player is waiting; past it the
+            // synthesized window below answers.
+            const LIVE_FIND_CEILING_MS = 15_000;
+            const w = await Promise.race([
+              findUploadSwingWindow(recorded.uri, durMs / 1000, { allowNetwork: false }),
+              new Promise<{ via: 'middle'; startSec: number; endSec: number; impactSec: null }>((res) =>
+                setTimeout(() => res({ via: 'middle', startSec: 0, endSec: 0, impactSec: null }), LIVE_FIND_CEILING_MS)),
+            ]);
             if (w.via !== 'middle' && w.endSec > w.startSec) {
               located = { startSec: w.startSec, endSec: w.endSec, swingTimeSec: w.impactSec ?? (w.startSec + w.endSec) / 2 };
             }
@@ -5299,9 +5339,21 @@ export default function SmartMotion() {
     setVideoPaused(next);
     try {
       if (next) await videoRef.current?.pauseAsync();
-      else await videoRef.current?.playAsync();
+      else {
+        /**
+         * 2026-10-04 (sweep) — playAsync on a clip parked AT ITS END does nothing on Android: ExoPlayer
+         * is already ENDED and only reports didJustFinish on a change INTO that state, so the manual
+         * loop never fired and Play showed "playing" on a frozen last frame. Start from the swing.
+         */
+        const v = videoRef.current;
+        const st = v ? await v.getStatusAsync().catch(() => null) : null;
+        const atEnd = !!st && st.isLoaded && typeof st.durationMillis === 'number' && st.positionMillis >= st.durationMillis - 250;
+        const seg = segments[selectedSwingRef.current];
+        if (atEnd) await v?.playFromPositionAsync(seg && seg.endMs > seg.startMs ? seg.startMs : 0);
+        else await v?.playAsync();
+      }
     } catch { /* ignore */ }
-  }, [videoPaused]);
+  }, [videoPaused, segments]);
   // 2026-06-11 — was a dead-end toast (deferred-wiring placeholder). The session
   // already auto-ingests at record time and the analysis/biomech attach to it, so
   // the data IS persisted — but the user's explicit "Save" tap did nothing visible
@@ -5563,6 +5615,18 @@ export default function SmartMotion() {
     if (ns && ns.width > 0 && ns.height > 0) setReviewVideoNatural({ w: ns.width, h: ns.height });
   }, []);
   const onReviewPlaybackStatus = useCallback((s: AVPlaybackStatus) => {
+    // 2026-10-04 (sweep) — the END first, ahead of the window loop and regardless of its seek guard:
+    // a finish that arrived while a window seek held the guard was dropped, and iOS has already stopped
+    // the player on finish, so the clip sat frozen with videoPaused false.
+    if ('didJustFinish' in s && s.didJustFinish && !videoPaused) {
+      const seg0 = segments[selectedSwingRef.current];
+      const start = seg0 && seg0.endMs > seg0.startMs ? seg0.startMs : 0;
+      loopSeekGuardRef.current = true;
+      void videoRef.current?.playFromPositionAsync(start)
+        .catch(() => undefined)
+        .finally(() => { loopSeekGuardRef.current = false; });
+      return;
+    }
     if ('positionMillis' in s && typeof s.positionMillis === 'number'
         && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
       playbackMsEmitRef.current = s.positionMillis;
@@ -5578,15 +5642,6 @@ export default function SmartMotion() {
           .catch(() => undefined)
           .finally(() => { loopSeekGuardRef.current = false; });
       }
-    }
-    // The loop, done here instead of with `isLooping` — see the <Video> below.
-    if ('didJustFinish' in s && s.didJustFinish && !videoPaused && !loopSeekGuardRef.current) {
-      const seg = segments[selectedSwingRef.current];
-      const start = seg && seg.endMs > seg.startMs ? seg.startMs : 0;
-      loopSeekGuardRef.current = true;
-      void videoRef.current?.playFromPositionAsync(start)
-        .catch(() => undefined)
-        .finally(() => { loopSeekGuardRef.current = false; });
     }
   }, [segments, videoPaused]);
   const onReviewVideoError = useCallback((e: unknown) => {

@@ -9,7 +9,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { liveDistanceUnit, toDisplayDistance, unitLabel } from '../../../services/distanceUnits';
-import { impactAnchorMs, narrowClubPathWindow, poseImpactFromFrames, clubArcAnchorMs } from '../../../services/swing/clubPathWindow';
+import { impactAnchorMs, narrowClubPathWindow, poseImpactFromFrames, clubArcAnchor, anchorIsHeard, POSE_ANCHOR_TOLERANCE_MS } from '../../../services/swing/clubPathWindow';
 import { wristCentroid, deriveSwingAnchors } from '../../../services/swing/poseMotion';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
@@ -834,7 +834,9 @@ export default function SwingDetail() {
         } catch { /* observation only */ }
         // 2026-09-20 — crop to the player. Tim's Sentry from this very screen read `detected: 2`
         // of fourteen sampled frames, which is what a ~6px clubhead looks like.
-        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: swingCapturedFps });
+        // 2026-10-04 (sweep) — a pose-derived anchor carries the pose's slack; a heard strike is exact.
+        const anchorTolMs = anchorMs == null || anchorIsHeard({ detectionMethod: shot.detectionMethod, detectionOffsetSeconds: shot.detectionOffsetSeconds }) ? 0 : POSE_ANCHOR_TOLERANCE_MS;
+        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, toleranceMs: anchorTolMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: swingCapturedFps });
         try {
           const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
           pipe.noteStage(pipe.runKeyFor(uri, startMs, endMs), 'club',
@@ -1168,7 +1170,7 @@ export default function SwingDetail() {
           // 2026-09-01 — same honest anchor rule as the sibling call site above; without it the
           // sampler spreads its dense band across the whole back half of the window.
           // 2026-10-04 — the ONE anchor rule (it had no pose impact here; the sibling above did).
-          const arcAnchorMs = clubArcAnchorMs({
+          const { anchorMs: arcAnchorMs, toleranceMs: arcToleranceMs } = clubArcAnchor({
             detectionMethod: selShot.detectionMethod,
             detectionOffsetSeconds: selShot.detectionOffsetSeconds,
             frames: biomech?.frames ?? null,
@@ -1182,7 +1184,7 @@ export default function SwingDetail() {
           } catch { /* observation only */ }
           // 2026-09-20 — the re-analyse path gets the crop too. `biomech` was just computed above,
           // so its frames are the freshest bounds available for this clip.
-          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames), sourceFps: swingCapturedFps });
+          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, toleranceMs: arcToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames), sourceFps: swingCapturedFps });
           // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
           // would drop a valid 3-point arc and persist [].
           if (arc && arc.points.length >= 3) {

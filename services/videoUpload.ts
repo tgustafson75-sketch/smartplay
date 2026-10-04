@@ -1574,10 +1574,10 @@ export async function runUploadPosePass(sessionId: string, signal?: AbortSignal)
                * [[sweep-the-missing-half-not-the-unused-export]]
                */
               const { bodyBoundsFromPose } = await import('./swing/bodyBounds');
-              const { clubArcAnchorMs } = await import('./swing/clubPathWindow');
+              const { clubArcAnchor } = await import('./swing/clubPathWindow');
               // 2026-10-04 (orchestrator phase 3) — this runner passed NO anchor, so the dense samples
               // spread over the whole window; the swing screen's runner anchored on the impact. One rule.
-              const arcAnchorMs = clubArcAnchorMs({
+              const { anchorMs: arcAnchorMs, toleranceMs: arcToleranceMs } = clubArcAnchor({
                 detectionMethod: firstClipSwing.detectionMethod,
                 detectionOffsetSeconds: firstClipSwing.detectionOffsetSeconds,
                 frames: biomech?.frames ?? null,
@@ -1589,6 +1589,7 @@ export async function runUploadPosePass(sessionId: string, signal?: AbortSignal)
                 startMs: pw.startMs,
                 endMs: pw.endMs,
                 impactMs: arcAnchorMs,
+                toleranceMs: arcToleranceMs,
                 shouldAbort: () => false,
                 bodyBounds: bodyBoundsFromPose(biomech?.frames ?? null),
                 // 2026-09-29 — the clip's own capture rate (null for an upload = unknown, the 30fps floor).

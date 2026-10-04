@@ -16,7 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import fixture from '../fixtures/locate-3870-wrists.json';
-import { poseImpactFromFrames } from '../../services/swing/clubPathWindow';
+import { poseImpactFromFrames, clubArcAnchor, POSE_ANCHOR_TOLERANCE_MS } from '../../services/swing/clubPathWindow';
 import { deriveSwingAnchors } from '../../services/swing/poseMotion';
 import type { PoseFrame } from '../../services/poseAnalysisApi';
 
@@ -127,3 +127,15 @@ describe('the wrist may NEVER become geometry', () => {
     expect(pm).not.toMatch(/export function .*(Path|Arc|Trace|Points)\s*\(/);
   });
 });
+
+describe('an anchor carries its own slack (sweep 2026-10-04)', () => {
+  it('a heard strike keeps the graded tolerance; a pose impact gets the pose\'s', () => {
+    const heard = clubArcAnchor({ detectionMethod: 'audio_transient', detectionOffsetSeconds: 7, frames: tim, rawStartMs: 0, rawEndMs: 14_496, heardToleranceMs: 0 });
+    expect(heard).toEqual({ anchorMs: 7000, toleranceMs: 0 });
+    const pose = clubArcAnchor({ detectionMethod: 'manual', detectionOffsetSeconds: 7, frames: tim, rawStartMs: 0, rawEndMs: 14_496, heardToleranceMs: 0 });
+    expect(pose.anchorMs).toBe(poseImpactFromFrames(tim));
+    expect(pose.toleranceMs).toBe(POSE_ANCHOR_TOLERANCE_MS);
+    expect(clubArcAnchor({ frames: [], rawStartMs: 0, rawEndMs: 1000 })).toEqual({ anchorMs: null, toleranceMs: 0 });
+  });
+});
+

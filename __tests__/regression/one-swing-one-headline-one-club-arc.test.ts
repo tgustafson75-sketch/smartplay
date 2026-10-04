@@ -32,7 +32,11 @@ describe('one swing, one headline, one club arc', () => {
 
   it('the screen has exactly one club-arc runner, and it saves swing 1', () => {
     expect((sm.match(/detectClubPath\(/g) ?? []).length).toBe(1);
-    expect(sm).toMatch(/selectedSwing === 0 && sid && r && clubArcSessionRef\.current !== sid/);
+    // 2026-10-04 (sweep) — saved once from wherever swing 1's arc lands: a fresh read, the cache, or the
+    // session appearing after the read.
+    expect(sm).toMatch(/if \(selectedSwing === 0\) persistSwing0Arc\(clubCacheKey\);\s*return;/);           // cache hit
+    expect(sm).toMatch(/if \(r\) clubArcFrameRef\.current\[clubCacheKey\][\s\S]{0,200}?if \(selectedSwing === 0\) persistSwing0Arc\(clubCacheKey\);/); // fresh read
+    expect(sm).toMatch(/persistSwing0Arc\(`\$\{clipUri\}\|0\|/);                                              // session appears later
     expect(sm).toMatch(/setSessionClubArc\(sid, pts \?\? \[\]/);
   });
 
@@ -105,9 +109,28 @@ describe('every club-arc runner anchors on impact by the one rule', () => {
   });
 
   it('pose-built anchors go through clubArcAnchorMs / poseImpactFromFrames', () => {
-    expect(code('services/videoUpload.ts')).toMatch(/const arcAnchorMs = clubArcAnchorMs\(\{[\s\S]{0,900}?impactMs: arcAnchorMs,/);
+    expect(code('services/videoUpload.ts')).toMatch(/const \{ anchorMs: arcAnchorMs, toleranceMs: arcToleranceMs \} = clubArcAnchor\(\{[\s\S]{0,900}?impactMs: arcAnchorMs,\s*toleranceMs: arcToleranceMs,/);
     expect(sm).toMatch(/const segStrikeMs = clubArcAnchorMs\(\{/);
-    expect(detail).toMatch(/const arcAnchorMs = clubArcAnchorMs\(\{/);
+    expect(detail).toMatch(/const \{ anchorMs: arcAnchorMs, toleranceMs: arcToleranceMs \} = clubArcAnchor\(\{/);
+    // 2026-10-04 (sweep) — a pose anchor never runs with a heard strike's 0ms slack.
+    expect(sm).toMatch(/heardStrikeMs != null \? anchorToleranceMs\(seg\.confidence, effectiveMode\) : POSE_ANCHOR_TOLERANCE_MS/);
+    expect(detail).toMatch(/toleranceMs: anchorTolMs,/);
     expect(detail).toMatch(/useMemo\(\(\) => poseImpactFromFrames\(poseFrames\)/);
+  });
+});
+
+/** 2026-10-04 (sweep) — what the adversarial pass found on the live screen. */
+describe('the review loop and the third headline writer', () => {
+  it('the reel re-persist never replaces a saved strike headline with a swing fault', () => {
+    expect(sm).toMatch(/const strikeSaved = savedIssue != null && CONTACT_ISSUE_IDS\.includes\(savedIssue\);\s*if \(primaryIssue && \(!strikeSaved \|\| CONTACT_ISSUE_IDS\.includes\(primaryIssue\.issue_id\)\)\)/);
+  });
+  it('Play on a clip parked at its end restarts from the swing (Android ENDED never re-fires didJustFinish)', () => {
+    expect(sm).toMatch(/if \(atEnd\) await v\?\.playFromPositionAsync\(/);
+  });
+  it('the finish is handled FIRST, ahead of the window loop and its seek guard', () => {
+    const h = sm.slice(sm.indexOf('const onReviewPlaybackStatus = useCallback('));
+    expect(h.indexOf("'didJustFinish' in s")).toBeGreaterThan(-1);
+    expect(h.indexOf("'didJustFinish' in s")).toBeLessThan(h.indexOf('loopSeekGuardRef.current = true'));
+    expect(h.slice(0, h.indexOf("'positionMillis' in s"))).not.toMatch(/!loopSeekGuardRef\.current/);
   });
 });

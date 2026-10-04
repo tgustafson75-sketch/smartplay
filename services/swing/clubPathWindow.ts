@@ -176,14 +176,16 @@ export function poseImpactFromFrames(frames: readonly PoseFrame[] | null | undef
   return a && Number.isFinite(a.impactMs) ? a.impactMs : null;
 }
 
-/** The ONE anchor every club-arc runner passes to detectClubPath: heard strike → pose impact → none. */
-export function clubArcAnchorMs(input: {
+type ClubArcAnchorInput = {
   detectionMethod?: string | null;
   detectionOffsetSeconds?: number | null;
   frames: readonly PoseFrame[] | null | undefined;
   rawStartMs: number;
   rawEndMs: number;
-}): number | null {
+};
+
+/** The ONE anchor every club-arc runner passes to detectClubPath: heard strike → pose impact → none. */
+export function clubArcAnchorMs(input: ClubArcAnchorInput): number | null {
   return impactAnchorMs({
     detectionMethod: input.detectionMethod,
     detectionOffsetSeconds: input.detectionOffsetSeconds,
@@ -191,4 +193,25 @@ export function clubArcAnchorMs(input: {
     rawStartMs: input.rawStartMs,
     rawEndMs: input.rawEndMs,
   });
+}
+
+/**
+ * 2026-10-04 (sweep) — how wrong a POSE-derived impact can be: it comes from ~20 frames ~150ms apart,
+ * so about two frame gaps. anchorToleranceMs grades a HEARD strike; applied to a pose anchor it gave a
+ * 'high'-confidence video segment 0ms of slack, and the dense band could miss the downswing.
+ */
+export const POSE_ANCHOR_TOLERANCE_MS = 240;
+
+/** True when the anchor is a heard strike (the only kind anchorToleranceMs grades). */
+export function anchorIsHeard(input: Pick<ClubArcAnchorInput, 'detectionMethod' | 'detectionOffsetSeconds'>): boolean {
+  return input.detectionMethod === 'audio_transient'
+    && typeof input.detectionOffsetSeconds === 'number' && Number.isFinite(input.detectionOffsetSeconds)
+    && input.detectionOffsetSeconds > 0;
+}
+
+/** The anchor with its slack: a heard strike keeps the caller's graded tolerance; a pose one gets the pose's. */
+export function clubArcAnchor(input: ClubArcAnchorInput & { heardToleranceMs?: number }): { anchorMs: number | null; toleranceMs: number } {
+  const anchorMs = clubArcAnchorMs(input);
+  if (anchorMs == null) return { anchorMs: null, toleranceMs: 0 };
+  return { anchorMs, toleranceMs: anchorIsHeard(input) ? (input.heardToleranceMs ?? 0) : POSE_ANCHOR_TOLERANCE_MS };
 }

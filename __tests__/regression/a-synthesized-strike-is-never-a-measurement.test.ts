@@ -133,7 +133,11 @@ describe('the capture path measures the window before it guesses one (2026-09-01
   });
 
   it('but it still claims NO acoustic strike — peakDb stays 0 on both branches', () => {
-    const block = sm.slice(sm.indexOf('let located:'), sm.indexOf('let located:') + 3200);
+    // From the measured branch to the end of the synthesized fallback — anchored on code, not a byte count.
+    const from = sm.indexOf('let located:');
+    const to = sm.indexOf('strikeMs: Math.round(durMs * 0.6)', from) + 200;
+    expect(to).toBeGreaterThan(from + 200);
+    const block = sm.slice(from, to);
     expect((block.match(/peakDb: 0/g) ?? []).length).toBe(2);
     expect(block).not.toMatch(/audio_transient/);
   });
