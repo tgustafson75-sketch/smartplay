@@ -174,8 +174,10 @@ export async function detectPoseFromBase64(
   if (!NativeMod) return null;
   ensureAppStateListener();
   const quality = effectiveQuality(opts?.quality);
+  if (nativeInferenceBroken) return detectInBrowser(b64, timestampMs, opts);
   try {
     const result = await NativeMod.detectPoseFromFrame(b64, { quality });
+    nativeFailStreak = 0;
     if (!result.poseFound || result.landmarks.length === 0) {
       devLog(`[mediaPipe] no pose detected (inferenceMs=${result.inferenceMs})`);
       return null;
@@ -194,6 +196,32 @@ export async function detectPoseFromBase64(
     return frame;
   } catch (e) {
     devLog('[mediaPipe] detectPoseFromBase64 failed: ' + String(e));
+    // 2026-10-03 — two native failures in a row means the engine, not the frame: on the emulator a
+    // GPU landmarker builds and then rejects every detect(), and the old path turned each rejection
+    // into "no pose in frame" — a golfer standing right there reported absent. Switch this session to
+    // the same model running in the browser (services/frameEngine) instead of failing the whole read.
+    if (++nativeFailStreak >= 2) {
+      nativeInferenceBroken = true;
+      devLog('[mediaPipe] native inference failing — using the browser engine for this session');
+    }
+    return nativeInferenceBroken ? detectInBrowser(b64, timestampMs, opts) : null;
+  }
+}
+
+let nativeFailStreak = 0;
+let nativeInferenceBroken = false;
+
+async function detectInBrowser(b64: string, timestampMs: number, opts?: DetectOptions): Promise<PoseFrame | null> {
+  try {
+    const fe = require('./frameEngine') as typeof import('./frameEngine');
+    const lm = await fe.detectPoseInBrowser(b64);
+    if (!lm || lm.length === 0) return null;
+    let frame: PoseFrame = { timestampMs, keypoints: projectBlazePoseToCoco17(lm as MediaPipeLandmark[]) };
+    if (opts?.povHint || true) frame = postProcessForGlassesPOV(frame);
+    devLog(`[mediaPipe] browser detect ok usable=${countUsable(frame.keypoints)}/17`);
+    return frame;
+  } catch (e) {
+    devLog('[mediaPipe] browser detect failed: ' + String(e));
     return null;
   }
 }

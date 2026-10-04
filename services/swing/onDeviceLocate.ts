@@ -131,7 +131,7 @@ async function locateSwingWindowOnDeviceImpl(
    */
   const mp = await import('../mediaPipePoseService');
   const status = await mp.getMediaPipeStatus().catch(() => null);
-  if (!status?.available) return null;   // pre-build / unlinked: fall back to the network locate
+  if (!status?.available) { console.log('[locate] on-device skipped: pose engine unavailable'); return null; }   // pre-build / unlinked: fall back to the network locate
 
   /**
    * 2026-09-09 — READ A PRIVATE COPY, NEVER THE FILE THE PLAYER HOLDS.
@@ -160,7 +160,7 @@ async function locateSwingWindowOnDeviceImpl(
     const { acquireClipCopy } = await import('./sharedClipCopy');
     shared = await acquireClipCopy(clipUri);
   } catch { /* acquire failed — refused below, same as clubPath */ }
-  if (!shared) return null;
+  if (!shared) { console.log('[locate] on-device skipped: no private copy of the clip'); return null; }
   const workUri = shared.uri;
 
   try {
@@ -200,20 +200,26 @@ export async function searchSwingWindow(
   if (times.length === 0) return null;
   const samples: MotionSample[] = [];
   let consecutiveMisses = 0;
-  const deadline = clock() + BUDGET_MS;
+  /**
+   * 2026-10-03 — the budget starts at the FIRST frame that read, not at the call. A pose engine that is
+   * warming up (the browser fallback loads its runtime on first use) spent the whole budget before a
+   * single sample came back, so the sweep stopped at six frames, none of them on the swing.
+   */
+  let deadline = Number.POSITIVE_INFINITY;
   for (const tMs of times) {
     if (clock() > deadline) break;   // spend what is left on the answer, not on more frames
     const sample = await readAt(tMs);
+    if (sample && samples.length === 0) deadline = clock() + BUDGET_MS;
     if (!sample) {
       // Bail early rather than paying for a dozen decodes that are clearly going nowhere — the
       // caller's network locate is a better use of the time than finishing a hopeless sweep.
-      if (++consecutiveMisses >= 3 && samples.length === 0) return null;
+      if (++consecutiveMisses >= 3 && samples.length === 0) { console.log('[locate] on-device gave up: first frames unreadable'); return null; }
       continue;
     }
     consecutiveMisses = 0;
     samples.push(sample);
   }
-  if (samples.length < MIN_USABLE_SAMPLES) return null;
+  if (samples.length < MIN_USABLE_SAMPLES) { console.log('[locate] on-device gave up: only', samples.length, 'frames read'); return null; }
 
   /**
    * 2026-10-03 (Tim's 14.5s upload: impact placed at 8.94s, the real strike is at 7.0s — he had
@@ -231,17 +237,30 @@ export async function searchSwingWindow(
     const dt = Math.max(1, coarse[i].tMs - coarse[i - 1].tMs);
     spans.push({ from: coarse[i - 1].tMs, to: coarse[i].tMs, v: Math.hypot(coarse[i].x - coarse[i - 1].x, coarse[i].y - coarse[i - 1].y) / dt });
   }
+  // Coarse-to-fine across BOTH gaps (400ms, then 200, then 100), alternating between them, so a budget
+  // that runs out mid-refine still leaves both covered evenly. Filling one gap at 100ms first spent the
+  // whole budget on the backswing and never looked at the downswing (measured on the emulator).
   const refineDeadline = clock() + REFINE_BUDGET_MS;
-  for (const span of spans.sort((a, b) => b.v - a.v).slice(0, 2)) {
-    for (let t = span.from + REFINE_STEP_MS; t < span.to; t += REFINE_STEP_MS) {
-      if (clock() > refineDeadline) break;
-      const sample = await readAt(Math.round(t));
-      if (sample) samples.push(sample);
+  const top2 = spans.sort((a, b) => b.v - a.v).slice(0, 2);
+  const seen = new Set(samples.map((p) => p.tMs));
+  const order: number[] = [];
+  for (const step of [400, 200, REFINE_STEP_MS]) {
+    for (const span of top2) {
+      for (let t = span.from + step; t < span.to - 20; t += step) {
+        const r = Math.round(t);
+        if (!seen.has(r)) { seen.add(r); order.push(r); }
+      }
     }
+  }
+  for (const t of order) {
+    if (clock() > refineDeadline) break;
+    const sample = await readAt(t);
+    if (sample) samples.push(sample);
   }
 
   const anchors = deriveSwingAnchors(samples);
-  if (!anchors) return null;
+  if (!anchors) { console.log('[locate] on-device gave up: no clear swing in', samples.length, 'frames'); return null; }
+  console.log('[locate] on-device', { frames: samples.length, topMs: anchors.topMs, impactMs: anchors.impactMs });
   const { startMs, endMs, impactMs } = anchors;
   if (!(Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs)) return null;
 

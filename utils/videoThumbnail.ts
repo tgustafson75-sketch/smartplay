@@ -160,6 +160,44 @@ async function copyOf(entry: CacheEntry): Promise<VideoThumbnails.VideoThumbnail
   }
 }
 
+/**
+ * 2026-10-03 — EXACT FRAMES ON ANDROID. The native retriever behind expo-video-thumbnails asks for
+ * OPTION_CLOSEST_SYNC, i.e. the nearest keyframe (~1s apart in phone video), so every analysis that
+ * sampled a swing got two or three distinct pictures. services/frameEngine seeks a browser <video>
+ * to the exact time instead — the reason the web SmartMotion reads the same clip cleanly. Native
+ * stays the fallback: engine not mounted, a non-file source, or the engine failing.
+ *
+ * Three consecutive engine failures switch it off for the session, so a device where the WebView
+ * cannot decode a clip pays the timeout three times, not once per frame.
+ */
+let engineFailures = 0;
+let exactSeq = 0;
+async function exactOrNative(
+  sourceFilename: string,
+  options?: VideoThumbnails.VideoThumbnailsOptions,
+): Promise<VideoThumbnails.VideoThumbnailsResult> {
+  try {
+    const { Platform } = require('react-native') as typeof import('react-native');
+    const fe = require('../services/frameEngine') as typeof import('../services/frameEngine');
+    if (
+      Platform.OS === 'android' && engineFailures < 3 && fe.isFrameEngineReady()
+      && sourceFilename.startsWith('file://') && typeof options?.time === 'number'
+    ) {
+      // Lower-quality requests are the locators' quick looks (quality 0.6): a 640px frame is plenty to
+      // find the wrists and decodes/encodes several times faster than full size.
+      const maxDim = typeof options.quality === 'number' && options.quality <= 0.6 ? 640 : 1280;
+      const g = await fe.grabExactFrame(sourceFilename, options.time, maxDim);
+      const uri = `${FileSystem.cacheDirectory}exact_${Date.now()}_${++exactSeq}.jpg`;
+      await FileSystem.writeAsStringAsync(uri, g.b64, { encoding: FileSystem.EncodingType.Base64 });
+      engineFailures = 0;
+      return { uri, width: g.width, height: g.height };
+    }
+  } catch {
+    engineFailures++;
+  }
+  return VideoThumbnails.getThumbnailAsync(sourceFilename, options);
+}
+
 // eslint-disable-next-line import/export
 export function getThumbnailAsync(
   sourceFilename: string,
@@ -180,7 +218,7 @@ export function getThumbnailAsync(
       frameCache.delete(key);                            // stale entry, fall through to a real decode
     }
     misses++;
-    const out = await VideoThumbnails.getThumbnailAsync(sourceFilename, options);
+    const out = await exactOrNative(sourceFilename, options);
     try {
       frameCache.set(key, { uri: out.uri, width: out.width, height: out.height });
       while (frameCache.size > CACHE_MAX) {

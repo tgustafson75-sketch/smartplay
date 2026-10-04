@@ -81,8 +81,8 @@ describe('it produces timing, never evidence', () => {
   });
 
   it('gives up rather than guessing when the body cannot be seen', () => {
-    expect(src).toMatch(/samples\.length < MIN_USABLE_SAMPLES\) return null/);
-    expect(src).toMatch(/if \(!anchors\) return null/);
+    expect(src).toMatch(/samples\.length < MIN_USABLE_SAMPLES\)\s*(\{[^}]*)?return null/);
+    expect(src).toMatch(/if \(!anchors\)\s*(\{[^}]*)?return null/);
   });
 
   it('never throws — one unreadable frame is a shorter signal, not a failure', async () => {
@@ -108,7 +108,7 @@ describe('it produces timing, never evidence', () => {
 
   it('checks the native module is actually there before decoding anything', () => {
     expect(src).toMatch(/getMediaPipeStatus\(\)/);
-    expect(src).toMatch(/if \(!status\?\.available\) return null/);
+    expect(src).toMatch(/if \(!status\?\.available\)\s*(\{[^}]*)?return null/);
   });
 
   it('the budget stops the sweep — a slow device answers from what it has', async () => {
@@ -116,8 +116,9 @@ describe('it produces timing, never evidence', () => {
     let now = 0; let reads = 0;
     const slowRead = async (t: number) => { reads++; now += 2_000; return { tMs: t, x: 0.5, y: 0.6 }; };
     await searchSwingWindow(14000, slowRead, () => now);
-    // 6s coarse budget at 2s a frame → ~4 coarse reads, not 12; then too few samples to answer.
-    expect(reads).toBeLessThan(8);
+    // 2s a frame: the 6s coarse budget (from the first good frame) stops the sweep at ~5 of 12, and the
+    // 6s refine budget at ~3 more — bounded, instead of 12 coarse + up to 24 refine reads.
+    expect(reads).toBeLessThanOrEqual(10);
   });
 
   it('has a BUDGET — it replaced a slow thing and must not become one', () => {
@@ -125,11 +126,11 @@ describe('it produces timing, never evidence', () => {
     // 2026-10-03 — the clock is injectable now; prove the budget actually stops the sweep.
     expect(src).toMatch(/if \(clock\(\) > deadline\) break/);
     // and it answers from what it collected rather than discarding the work
-    expect(src).toMatch(/samples\.length < MIN_USABLE_SAMPLES\) return null/);
+    expect(src).toMatch(/samples\.length < MIN_USABLE_SAMPLES\)\s*(\{[^}]*)?return null/);
   });
 
   it('bails early instead of paying for a dozen hopeless decodes', () => {
-    expect(src).toMatch(/consecutiveMisses >= 3 && samples\.length === 0\) return null/);
+    expect(src).toMatch(/consecutiveMisses >= 3 && samples\.length === 0\)\s*(\{[^}]*)?return null/);
   });
 
   it('reads frames serially — concurrent reads on one file are the SIGSEGV class', () => {

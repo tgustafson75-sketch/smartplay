@@ -97,6 +97,7 @@ import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
 import { BatterySaverPrompt } from '../components/battery/BatterySaverPrompt';
 import { RestModeOverlay } from '../components/round/RestModeOverlay';
+import { FrameEngineHost } from '../components/FrameEngineHost';
 import { OwnerIssueLogPrompt } from '../components/OwnerIssueLogPrompt';
 import { useRestModeStore } from '../store/restModeStore';
 // 2026-05-24 (Flow C) — Tap-to-undo banner for silent tee Marks
@@ -1973,6 +1974,9 @@ function AppNavigator() {
       {/* 2026-06-28 (Tim) — owner-only "N issues logged → Send now" nudge so Tank
           can one-tap email the log without digging through Owner Tools. */}
       <OwnerIssueLogPrompt />
+      {/* 2026-10-03 — hidden browser that grabs EXACT video frames on Android (services/frameEngine);
+          the native retriever only returns the nearest keyframe. Invisible, Android-only. */}
+      <FrameEngineHost />
       {/* 2026-07-01 (Tim) — the UNIVERSAL caddie mic: a tap-to-talk badge always in the upper
           left of every screen (the one way to talk to the unified caddie anywhere), that also
           keeps the brain's "where am I" context in sync with the route. Mounted last so it rides
