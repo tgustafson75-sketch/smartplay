@@ -20,7 +20,7 @@
  *   4. A lifetime on a non-owner is a kill-switch leftover and is cleared to 'free'.
  *   5. A LEGACY app trial already running heals and expires on its own dates.
  *
- * 2026-09-28 (1.0.2) — THE APP NO LONGER GRANTS A TRIAL. The store's introductory offer (one month,
+ * 2026-09-28 (1.0.2) — THE APP NO LONGER GRANTS A TRIAL. The store's introductory offer (two months,
  * started from the plans screen) is the only trial. A fresh install, the launch cohort and a cleared
  * lifetime all land on 'free'. Rung 5 is kept so the 14-day app trials already running when 1.0.2
  * installs finish on the dates their players were promised.

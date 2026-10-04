@@ -185,7 +185,7 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => {
     title: 'Your free trial',
     blurb: 'Start it from the plans screen.',
     steps: [
-      'SmartPlay Full includes a 1-month free trial for new subscribers, started from the plans screen.',
+      'SmartPlay Full includes a 2-month free trial for new subscribers, started from the plans screen.',
     ],
   },
   {
