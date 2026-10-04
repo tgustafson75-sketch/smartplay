@@ -6350,7 +6350,9 @@ check('Chunk honesty propagates to every swing-judge (not just the live badge)',
       // force the overwrite even when the pose verdict already landed (chunk honesty wins over pose).
       /const contactPi = contactIssue\(contact\);/.test(smSrc) &&
       /const primaryIssue: PrimaryIssue = contactPi/.test(smSrc) &&
-      /if \(contactPi \|\| poseVerdictSessionRef\.current !== sessionId\)/.test(smSrc) &&
+      // 2026-10-04 — contactPi still forces the overwrite first, unconditionally (the rest of the
+      // condition now also lets a named cloud fault win; see one-swing-one-headline-one-club-arc).
+      /if \(contactPi \|\| \(!contactAlreadySaved && \(cloudNamed \|\| poseVerdictSessionRef\.current !== sessionId\)\)\)/.test(smSrc) &&
       // CNS learns the evidence-gated / contact fault, NOT the 'none'-biased detected_issue.
       /recordSwingFault\(\{ fault: learnedFault/.test(smSrc) &&
       /contactMishitFaultId\(contact\.reportedMishit\)/.test(smSrc) &&
@@ -6386,7 +6388,7 @@ check('Chunk honesty PERSISTS: a live-detected duff is written back so it never 
     // Per-shot row gets the duff strike so club-confidence + the library row honor it.
     /contact_read: 'fat'/.test(smSrc) &&
     // Session headline only UPGRADES a non-contact issue to the duff verdict.
-    /!\(curIssueId && contactIssueIds\.includes\(curIssueId\)\)/.test(smSrc) &&
+    /!\(curIssueId && CONTACT_ISSUE_IDS\.includes\(curIssueId\)\)/.test(smSrc) &&
     /const duff = contactIssue\(\{ ballLaunched: false, reportedMishit: null \}\)/.test(smSrc)
   ),
   'the lazily-computed ball-departure duff is persisted onto the per-shot row + session report when it resolves, so reopening the swing shows the chunk instead of a clean read — and the write is upgrade-only so it never overwrites a named mishit or downgrades a real launch');
@@ -9082,7 +9084,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       const liveInfer = /inferCameraAngle\(liveAngleFramesRef\.current as never\)/.test(smSrc2)
         && /liveAngleFramesRef\.current = \[\.\.\.liveAngleFramesRef\.current, frame\]\.slice\(-4\)/.test(smSrc2);
       // ...and the recorded swing's own frames get the final word, ungated.
-      const swingWins = /if \(\(bio\.angle === 'face_on' \|\| bio\.angle === 'down_the_line'\) && bio\.angle !== angle\) \{/.test(smSrc2);
+      const swingWins = /if \(\(bio\.angle === 'face_on' \|\| bio\.angle === 'down_the_line'\) && bio\.angle !== angleRef\.current\) \{/.test(smSrc2);
       return twoWay && noExplicitFlag && liveInfer && swingWins;
     })(),
     'the mode control is Full swing / Putting only; the angle is inferred live from the framing pose and finally from the swing frames, with no user flag able to suppress the correction');
@@ -16899,8 +16901,11 @@ check(
   );
   check(
     'CLUB ARC: a video-located swing is refused as an anchor on the live screen',
-    /const segStrikeMs = \(seg\.peakDb \?\? 0\) !== 0 && typeof seg\.strikeMs === 'number' && !seg\.synthesized/
-      .test(readCode('app/swinglab/smartmotion.tsx')),
+    // 2026-10-04 — the heard strike first, else a pose impact that impactAnchorMs accepts (it refuses
+    // an 'estimated' fraction-of-window label). Never the video-located / synthesized strikeMs.
+    /const heardStrikeMs = \(seg\.peakDb \?\? 0\) !== 0 && typeof seg\.strikeMs === 'number' && !seg\.synthesized/
+      .test(readCode('app/swinglab/smartmotion.tsx')) &&
+      /const segStrikeMs = heardStrikeMs \?\? impactAnchorMs\(\{/.test(readCode('app/swinglab/smartmotion.tsx')),
     'peakDb === 0 marks a video-located swing and synthesized marks the whole-clip 0.6*duration guess — neither is a strike to cluster on',
   );
 }

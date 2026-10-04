@@ -792,8 +792,11 @@ export default function SwingDetail() {
     // can never collide with ExoPlayer on the same handle — the SIGSEGV condition is structurally gone.
     // But this leftover guard still blocked STARTING extraction whenever the clip was playing, so any
     // swing without a stored arc showed NO trace while playing (the "trace never works" case). Extraction
-    // now starts regardless of playback; isPlaying stays in the deps so an aborted run retries on a
-    // play/pause flip, and the runKey below dedupes after the first real success.
+    // now starts regardless of playback, and the runKey below dedupes after the first real success.
+    // 2026-10-04 (orchestrator phase 2) — `isPlaying` LEFT the deps. Each play/pause tap cancelled the
+    // run in flight and started it again from the top (a clip copy, ~14 decodes, a server pass); with
+    // the private copy nothing about playback needs the run to stop. A found arc is now SAVED on the
+    // shot, so the next open draws it at once instead of reading the clip again.
     const rawStartMs = (shot.clipStartSeconds ?? 0) * 1000;
     const rawEndMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
     /**
@@ -889,7 +892,11 @@ export default function SwingDetail() {
           // absolute (+ startMs) so the blue club tracks correctly on uploads-with-waggle and split swings
           // (was pinning to the finish point → a wrong static shaft). Adding a constant doesn't affect the
           // static trace's speed coloring (it uses deltas).
-          setClubArcPoints(r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + startMs })));
+          const pts = r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + startMs }));
+          setClubArcPoints(pts);
+          if (session?.id && shot.id) {
+            try { useSwingSessionStore.getState().setShotClubArc(session.id, shot.id, pts, { w: r.frameW ?? null, h: r.frameH ?? null }); } catch { /* drawing it is what matters */ }
+          }
         } else {
           /**
            * 2026-08-22 (Tim — "you'll see in the downloads an example of how I wanted the swing arc
@@ -907,8 +914,8 @@ export default function SwingDetail() {
            *
            * Both, and this is why. `clubArcRunKeyRef` was marked ONLY on a successful arc, so a
            * swing whose club path genuinely cannot be traced never recorded that it had been tried.
-           * `isPlaying` is in this effect's deps on purpose (native frame extraction cannot run
-           * while ExoPlayer holds the file, so a play/pause flip must retry) — but combined with
+           * (2026-10-04: `isPlaying` has since left the deps — see the effect's head.) It was in
+           * them then (a play/pause flip retried the extraction) — and combined with
            * "mark only on success" that turns every open, every play and every pause into a fresh
            * native extraction plus a PAID vision call, for a result that already came back empty.
            *
@@ -956,10 +963,9 @@ export default function SwingDetail() {
                  * 2026-08-31 — AN ABORTED RUN IS NOT A FAILURE, and calling it one cost Tim a
                  * false alarm from the field.
                  *
-                 * `shouldAbort` is the effect's own cancellation flag, and `isPlaying` is in its
-                 * deps precisely so a play/pause flip RETRIES the extraction. The video autoplays
-                 * on arrival, so the first run is routinely superseded a moment after it starts —
-                 * which is the system working. It was logged as `analysis_error` with
+                 * `shouldAbort` is the effect's own cancellation flag: a run is superseded when its
+                 * inputs change (another swing selected, the window trimmed) — which is the system
+                 * working. (Until 2026-10-04 a play/pause flip superseded it too.) It was logged as `analysis_error` with
                  * `points: 0`, indistinguishable from a genuine mis-detection, and read exactly
                  * like the club trace had broken.
                  *
@@ -980,7 +986,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
    
-  }, [hasPose, poseFrames, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx, swingCapturedFps]);
+  }, [hasPose, poseFrames, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, session?.id, session?.club_arc, shot?.club_arc, shot?.id, selectedShotIdx, swingCapturedFps]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay

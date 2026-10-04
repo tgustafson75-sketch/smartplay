@@ -337,6 +337,7 @@ export default function RecapScreen() {
     [roundRecord],
   );
   const [openClip, setOpenClip] = useState<{ uri: string; label: string } | null>(null);
+  const clipVideoRef = useRef<Video>(null);
   const [clipLoading, setClipLoading] = useState(false);
 
   /**
@@ -1077,10 +1078,17 @@ export default function RecapScreen() {
           </View>
           {openClip && (
             <Video
+              ref={clipVideoRef}
               source={{ uri: openClip.uri }}
               style={styles.clipVideo}
               useNativeControls
-              isLooping
+              // 2026-10-04 — not `isLooping`: on Android ExoPlayer's repeat mode buffers the next loops
+              // ahead (up to 131MB on the Java heap) — the SmartMotion review died of exactly that.
+              // Restart at the end instead.
+              isLooping={false}
+              onPlaybackStatusUpdate={(st) => {
+                if ('didJustFinish' in st && st.didJustFinish) void clipVideoRef.current?.replayAsync().catch(() => undefined);
+              }}
               shouldPlay
               resizeMode={ResizeMode.CONTAIN}
               onError={() => {

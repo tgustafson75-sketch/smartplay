@@ -118,7 +118,7 @@ import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { anchorToleranceMs } from '../../services/swing/clubPathWindow';
+import { anchorToleranceMs, impactAnchorMs } from '../../services/swing/clubPathWindow';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useRoundStore } from '../../store/roundStore';
 import { SmartMotionHeader, CaptureGuides, SpeedStat, TempoBar, BodyAnalysisRow, AcousticPickupCard, VerdictBadge, FooterChips, type Angle, type MetricSpec, ICON_BIOMECH, deriveBodyItems, type SmTone, SwingBreakdownCard } from '../../components/smartmotion/SmartMotionHud';
@@ -433,6 +433,9 @@ function contactMishitName(m: NonNullable<SmContact['reportedMishit']>): string 
 }
 
 /** CNS tendency id for a contact mishit (so the brain learns "tends to chunk"). */
+/** The headlines that name the STRIKE, not the swing — a later swing-fault read never replaces one. */
+const CONTACT_ISSUE_IDS = ['no_launch', 'heavy_contact', 'thin_contact', 'topped_contact'];
+
 function contactMishitFaultId(m: NonNullable<SmContact['reportedMishit']>): string {
   return m === 'thin' ? 'thin_contact' : m === 'topped' ? 'topped_contact' : 'heavy_contact';
 }
@@ -1590,10 +1593,10 @@ export default function SmartMotion() {
   // by a slower, separate effect. If biomech won the race the saved verdict was built with tempo=null and
   // then locked, silently dropping a "rushed transition" fault from the SAVED/library read. These refs let
   // the verdict RE-COMMIT once tempo arrives (poseVerdictTempoRef = committed WITH tempo → final), while
-  // never clobbering a cloud CONTACT-MISHIT override (cloudMishitRef) which is the one thing the on-device
-  // read can't see.
+  // never clobbering a cloud verdict (cloudVerdictLockRef): a contact mishit, or since 2026-10-04 any NAMED
+  // cloud fault — one deterministic headline instead of whichever read finished first.
   const poseVerdictTempoRef = useRef<string | null>(null);
-  const cloudMishitRef = useRef<string | null>(null);
+  const cloudVerdictLockRef = useRef<string | null>(null);
   const pagerRef = useRef<ScrollView>(null);
   // 2026-08-01 (tester — "moving the ball box scrolls to another card") — true while a ball/target
   // drag is in flight, so the horizontal card pager freezes and can't steal the drag gesture.
@@ -2119,10 +2122,13 @@ export default function SmartMotion() {
               // Session headline: only UPGRADE a non-contact issue to the duff verdict
               // (don't clobber an already-named contact miss). Mirrors the save path's dual write.
               const curIssueId = sess?.primary_issue?.issue_id;
-              const contactIssueIds = ['no_launch', 'heavy_contact', 'thin_contact', 'topped_contact'];
-              if (sess && !(curIssueId && contactIssueIds.includes(curIssueId))) {
+              if (sess && !(curIssueId && CONTACT_ISSUE_IDS.includes(curIssueId))) {
                 const duff = contactIssue({ ballLaunched: false, reportedMishit: null });
-                if (duff) store.setSessionAnalysis(sessionId, duff, null);
+                if (duff) {
+                  store.setSessionAnalysis(sessionId, duff, null);
+                  // 2026-10-04 — lock it: the tempo re-commit used to overwrite the duff a moment later.
+                  cloudVerdictLockRef.current = sessionId;
+                }
               }
             }
           } catch { /* best-effort — the live badge is already honest */ }
@@ -2277,9 +2283,23 @@ export default function SmartMotion() {
      * refused here exactly as the placeholder offset is refused in clubPathWindow.
      * [[a-field-that-is-sometimes-a-placeholder]] [[no-half-fixes-enforce-every-surface]]
      */
-    const segStrikeMs = (seg.peakDb ?? 0) !== 0 && typeof seg.strikeMs === 'number' && !seg.synthesized
+    const heardStrikeMs = (seg.peakDb ?? 0) !== 0 && typeof seg.strikeMs === 'number' && !seg.synthesized
       ? seg.strikeMs
       : null;
+    /**
+     * 2026-10-04 (orchestrator phase 2) — ONE club-arc runner per swing. The persist path used to run
+     * its own detectClubPath for swing 1 with its own anchor (the pose-labelled impact) while this one
+     * ran with the heard strike only — two server passes, two arcs, and the saved one could differ from
+     * the one on screen. Now: the heard strike, else the pose impact (refused when it is only a
+     * fraction of the window), and this result is what gets saved.
+     */
+    const poseImpact = poseFrames?.find((f) => f.position === 'P6_impact') ?? null;
+    const segStrikeMs = heardStrikeMs ?? impactAnchorMs({
+      poseImpactMs: poseImpact?.timestampMs ?? null,
+      poseImpactSource: poseImpact?.positionSource ?? null,
+      rawStartMs: seg.startMs,
+      rawEndMs: seg.endMs,
+    });
     /**
      * 2026-09-01 (Tim — "a strike confirmation or acoustic pickup can help confirm… it's just a
      * silent, thin confirmation level of that strike point, and you can work around that", then
@@ -2327,6 +2347,14 @@ export default function SmartMotion() {
         const pts = r && r.points.length >= 3 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + segStart })) : null;
         clubPathCacheRef.current[clubCacheKey] = pts;
         setClubArcPoints(pts);
+        // The saved swing keeps THIS arc (swing 1 is the session's) — the swing-detail screen draws it.
+        const sid = ingestedSessionIdRef.current;
+        if (selectedSwing === 0 && sid && r && clubArcSessionRef.current !== sid) {
+          clubArcSessionRef.current = sid;
+          try {
+            useSwingSessionStore.getState().setSessionClubArc(sid, pts ?? [], pts ? { w: r.frameW ?? null, h: r.frameH ?? null } : null);
+          } catch { /* the detail screen still live-extracts as a fallback */ }
+        }
         try {
           noteStage(stageKey, 'club', !r ? 'skipped' : (r.points.length >= 3 ? 'ok' : 'empty'),
             { points: r?.points.length ?? 0, zoomed: bodyBoundsFromPose(poseFrames) != null });
@@ -3218,11 +3246,22 @@ export default function SmartMotion() {
               // path). Only OVERWRITE it for a real contact mishit (chunk honesty — a fat/thin the pose
               // read can't see); otherwise keep the measured read as the headline and let the cloud enrich
               // per-shot below. When pose hasn't committed, the cloud verdict lands as before.
-              if (contactPi || poseVerdictSessionRef.current !== sessionId) {
+              /**
+               * 2026-10-04 (orchestrator phase 2) — THE HEADLINE NO LONGER DEPENDS ON WHO FINISHED FIRST.
+               * The pose verdict won when it landed first, the cloud won when it did, so the same swing
+               * could save two different headlines run to run. Now a NAMED cloud fault (or a contact
+               * mishit) always wins and is locked; the on-device read is the answer only when the cloud
+               * has no named fault or never answered.
+               */
+              const cloudNamed = rolled != null && rolled.issue_id !== 'smartmotion_observation';
+              // A duff the camera already saw (ball never left) is never replaced by a swing fault.
+              const savedIssue = useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId)?.primary_issue?.issue_id;
+              const contactAlreadySaved = savedIssue != null && CONTACT_ISSUE_IDS.includes(savedIssue);
+              if (contactPi || (!contactAlreadySaved && (cloudNamed || poseVerdictSessionRef.current !== sessionId))) {
                 useSwingSessionStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
-                // 2026-08-06 (analysis audit) — a real contact mishit is the ONE cloud read the on-device
-                // pose can't see; lock it so the tempo re-commit (pose-verdict effect) never overwrites it.
-                if (contactPi) cloudMishitRef.current = sessionId;
+                // 2026-08-06 (analysis audit) — lock it so the tempo re-commit (pose-verdict effect)
+                // never overwrites a cloud verdict.
+                if (contactPi || cloudNamed) cloudVerdictLockRef.current = sessionId;
               }
               useSwingSessionStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
               // 2026-07-09 (audit BACKLOG #1) — LIVE capture previously wrote only the
@@ -3396,7 +3435,7 @@ export default function SmartMotion() {
            * and showShotMap — gated on the header's version — hid the shot map. Same half-fix shape as
            * the swing gate: engine corrected, surface didn't. [[no-half-fixes-enforce-every-surface]]
            */
-          if ((bio.angle === 'face_on' || bio.angle === 'down_the_line') && bio.angle !== angle) {
+          if ((bio.angle === 'face_on' || bio.angle === 'down_the_line') && bio.angle !== angleRef.current) {
             setAngle(bio.angle); lastChosenAngleRef.current = bio.angle;
           }
           setBiomech(bio);
@@ -3413,60 +3452,7 @@ export default function SmartMotion() {
             // instead of re-extracting frames against an autoplaying clip (that race is why the arc
             // never showed). detectClubPath extracts from a PRIVATE COPY, so it's safe even while the
             // review loops. One-shot per session; fire-and-forget so it never blocks the review.
-            if (poseWindow && (frames?.length ?? 0) >= 2 && clubArcSessionRef.current !== sessionId) {
-              clubArcSessionRef.current = sessionId;
-              void (async () => {
-                try {
-                  const { detectClubPath } = await import('../../services/swing/clubPath');
-                  // 2026-09-01 — same anchor rule as the review path: the pose-labelled impact
-                  // frame is the honest centre for a persisted swing, and is what stops the dense
-                  // samples running into the follow-through. Absent → the sampler spreads as before.
-                  const { impactAnchorMs } = await import('../../services/swing/clubPathWindow');
-                  const impactFrame = frames?.find((f) => f.position === 'P6_impact') ?? null;
-                  const anchorMs = impactAnchorMs({
-                    poseImpactMs: impactFrame?.timestampMs ?? null,
-                    // 2026-09-01 — a P6_impact placed at 0.65 of the window is a FRACTION, not an
-                    // impact. Passing its provenance lets impactAnchorMs refuse it, the same way it
-                    // refuses the synthesized 0.6*duration strike offset.
-                    poseImpactSource: impactFrame?.positionSource ?? null,
-                    rawStartMs: poseWindow.startMs,
-                    rawEndMs: poseWindow.endMs,
-                  });
-                  // 2026-09-09 — the persist path decides its own anchor, so it reports its own.
-                  try {
-                    noteStage(runKeyFor(clipUri, poseWindow.startMs, poseWindow.endMs), 'anchor',
-                      anchorMs != null ? 'ok' : 'empty',
-                      { anchorMs, source: impactFrame?.positionSource ?? null, via: 'pose_impact' });
-                  } catch { /* observation only */ }
-                  /**
-                   * 2026-09-20 (Tim's Sentry, SM-F926U) — THE ZOOM WAS ON THE OTHER PATH.
-                   *
-                   *   clubpath_arc_too_sparse { screen: "swing-detail", detected: 2,
-                   *     framesSampled: 14, framesPlanned: 14, rejected: "too_few", points: 0 }
-                   *
-                   * The sampler did its whole job — fourteen of fourteen planned frames. The model
-                   * found a clubhead in TWO of them. That is what a ~6px clubhead looks like.
-                   *
-                   * The 2026-08-10 ROI crop exists precisely to stop that: crop to the player's
-                   * pose bounds and spend the 640px budget there, taking the head from ~6px to
-                   * ~40px. It was passed on the REVIEW path above (`bodyBounds:
-                   * bodyBoundsFromPose(poseFrames)`) and NOT here — and HERE is the persist path,
-                   * the one whose own comment says it exists "so the swing-detail screen draws the
-                   * stored points". So the arc the player actually keeps was computed without the
-                   * fix, while the one that flashes past during review had it. The saved swing is
-                   * the one he looks at. [[no-half-fixes-enforce-every-surface]]
-                   * [[sweep-the-missing-half-not-the-unused-export]]
-                   */
-                  const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, impactMs: anchorMs, shouldAbort: () => false, bodyBounds: bodyBoundsFromPose(frames ?? null), sourceFps: clipFpsRef.current });
-                  const store = useSwingSessionStore.getState();
-                  if (arc && arc.points.length >= 3) {
-                    store.setSessionClubArc(sessionId, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
-                  } else {
-                    store.setSessionClubArc(sessionId, [], null);
-                  }
-                } catch { /* non-fatal — the view screen still live-extracts as a fallback */ }
-              })();
-            }
+            // The clubhead arc is saved by the ONE club-arc runner (the review effect) — see there.
           }
           // 2026-08-01 (Tim — per-swing breakdown) — ALSO store THIS swing's biomech on ITS OWN shot
           // (not only the session/primary), so a multi-swing library reel can show each swing's own
@@ -3496,7 +3482,10 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, videoDurationMs, phase, angle, segments, selectedSwing, swingerHandedness]);
+    // 2026-10-04 (orchestrator phase 2) — `angle` is NOT a dependency. This effect SETS it from the
+    // frames, and computeBiomechanicsFromFrames takes null (the frames decide), so an angle change
+    // re-ran the whole stage to produce the same numbers and re-write them to the session.
+  }, [clipUri, videoDurationMs, phase, segments, selectedSwing, swingerHandedness]);
 
   // 2026-08-05 (Tim — "analysis takes 3 tries; the first cloud read fails cold, then works after re-analyze
   // from the library"). ROOT CAUSE: the SAVED verdict landed ONLY when the cloud vision read
@@ -3512,7 +3501,7 @@ export default function SmartMotion() {
     if (!sessionId) return;
     // Final states: already committed WITH tempo (nothing better coming from on-device), or a cloud
     // contact-mishit read has taken over (chunk honesty — never overwrite it with a tempo re-commit).
-    if (poseVerdictTempoRef.current === sessionId || cloudMishitRef.current === sessionId) return;
+    if (poseVerdictTempoRef.current === sessionId || cloudVerdictLockRef.current === sessionId) return;
     // Committed once already but tempo STILL isn't here → wait for it (or the cloud); don't re-run pointlessly.
     if (poseVerdictSessionRef.current === sessionId && !tempo) return;
     try {
@@ -5583,6 +5572,15 @@ export default function SmartMotion() {
           .finally(() => { loopSeekGuardRef.current = false; });
       }
     }
+    // The loop, done here instead of with `isLooping` — see the <Video> below.
+    if ('didJustFinish' in s && s.didJustFinish && !videoPaused && !loopSeekGuardRef.current) {
+      const seg = segments[selectedSwingRef.current];
+      const start = seg && seg.endMs > seg.startMs ? seg.startMs : 0;
+      loopSeekGuardRef.current = true;
+      void videoRef.current?.playFromPositionAsync(start)
+        .catch(() => undefined)
+        .finally(() => { loopSeekGuardRef.current = false; });
+    }
   }, [segments, videoPaused]);
   const onReviewVideoError = useCallback((e: unknown) => {
     console.log('[smartmotion] video load error:', JSON.stringify(e));
@@ -5813,7 +5811,14 @@ export default function SmartMotion() {
             // CV trace mapping are switched to 'contain' in lockstep so the skeleton, club, and ball trace
             // scale identically and stay aligned on the golfer.
             resizeMode={ResizeMode.CONTAIN}
-            isLooping
+            /**
+             * 2026-10-04 — NOT `isLooping`. On Android expo-av loops with ExoPlayer's repeat mode, and
+             * ExoPlayer then buffers the NEXT loops ahead too, up to its 131MB video cap, on the Java
+             * heap. A heap dump of the 14.5s / 37MB clip in review held 130.7MB in 1,994 ExoPlayer
+             * buffer segments, and the app died of OutOfMemoryError. One pass buffers one clip; the
+             * status handler restarts it at the end.
+             */
+            isLooping={false}
             shouldPlay={!videoPaused}
             rate={playbackRate}
             shouldCorrectPitch={false}
