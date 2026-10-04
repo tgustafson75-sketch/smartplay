@@ -90,7 +90,7 @@ import { courseDisplayName } from '../services/courseDisplayName';
 // golf apps... Mapbox tiles are commodity; SmartPlay's strategic overlay is proprietary IP", and
 // drawn by nobody for three months. See the OWNER-ONLY block in the SVG below.
 import { computeYardageRings, computeLandingZone, computeLayupSuggestion, computeDangerCarries } from '../services/smartVisionOverlay';
-import { getLastFix, classifyAccuracy, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix, holeLengthYards, holePar } from '../services/smartFinderService';
+import { getLastFix, subscribeFixChange, classifyAccuracy, resolveGreenCoords, resolveTeeCoords, setMarkedFix, holeLengthYards, holePar } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
 import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
 import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
