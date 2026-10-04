@@ -2883,7 +2883,9 @@ export default function SwingDetail() {
                 // play. Only the deferred ?watch=1 analysis path auto-plays (needs playthrough to analyze).
                 shouldPlay={shouldAutoplayThenAnalyze}
                 isLooping={false}
-                isMuted={!shouldAutoplayThenAnalyze}
+                // 2026-10-03 (review) — this was `!shouldAutoplayThenAnalyze`, and with ?watch=1 gone it muted
+                // every clip forever. An upload with audio (a coach's voice) plays with it; captures stay quiet.
+                isMuted={!(session?.source === 'uploaded_video' && session?.upload?.has_audio)}
                 rate={playbackRate}
                 shouldCorrectPitch={false}
                 onLoad={onVideoLoad}
@@ -2952,7 +2954,7 @@ export default function SwingDetail() {
                     onPress={async () => {
                       setVideoError(null);
                       const re = await resolveClipUri(shot.clipUri);
-                      if (re) { setPlaybackUri(re); try { await videoRef.current?.loadAsync({ uri: re }, { shouldPlay: true }, false); } catch { /* */ } }
+                      if (re) { setPlaybackUri(re); try { await videoRef.current?.loadAsync({ uri: re }, { shouldPlay: !analysisRunningRef.current }, false); } catch { /* */ } }
                       else setVideoError('Video file not found on this device.');
                     }}
                     style={{ marginTop: 14, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5, borderColor: '#88F700' }}

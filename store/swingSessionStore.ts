@@ -1768,7 +1768,9 @@ export const useSwingSessionStore = create<SwingSessionState>()(
               windowSec: shot0?.clipStartSeconds != null && shot0?.clipEndSeconds != null
                 ? Math.round((shot0.clipEndSeconds - shot0.clipStartSeconds) * 10) / 10 : null,
               shots: before.shots?.length ?? 0,
-            }, 'analysis_error');
+            // 2026-10-03 (review) — a clip that is gone, or an upload with no swing in it, is the player's
+            // situation, not a defect: keep it on the device log, out of the owner inbox.
+            }, /isn't on this device|No usable swing/i.test(error ?? '') ? 'diag' : 'analysis_error');
           } catch { /* the report must never block the status write */ }
         }
         set(s => {

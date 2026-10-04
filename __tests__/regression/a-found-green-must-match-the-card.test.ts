@@ -42,4 +42,19 @@ describe('a green vision found has to agree with the card', () => {
     const g = await deriveHoleGeometry({ seed: GREEN, holeNumber: 5, par: 3, yardage: 150, knownTee: TEE_400, knownGreen: GREEN });
     expect(g?.green).toEqual(GREEN);
   });
+
+  /**
+   * 2026-10-03 — Tim at Hemet: "yardage started wrong on hole one". No green in any source, no tee,
+   * so the round start asked vision for the green nearest the PLAYER — at the pro shop, the practice
+   * green or 18 — and cached it as hole 1. Before a shot on the hole, the player is at the tee, so
+   * the green has to be about a tee shot away.
+   */
+  it('round start, no tee known: a green right next to the player is not hole 1 (322y card)', async () => {
+    const g = await deriveHoleGeometry({ seed: GREEN, holeNumber: 1, par: 4, yardage: 322, knownTee: null, seedIs: 'tee' });
+    expect(g).toBeNull();
+  });
+
+  it('mid-hole, the green can be close — but never farther than the card', async () => {
+    expect(await deriveHoleGeometry({ seed: GREEN, holeNumber: 1, par: 4, yardage: 322, knownTee: null, seedIs: 'on_hole' })).toBeTruthy();
+  });
 });

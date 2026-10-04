@@ -20,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
-import { usePracticePlanStore } from '../../store/practicePlanStore';
+import { usePracticePlanStore, doneDaysOf } from '../../store/practicePlanStore';
 import {
   buildGoalPlan,
   PRACTICE_GOALS,
@@ -73,6 +73,13 @@ export default function SmartPlanScreen() {
   const activePriorities = priorityFocuses.filter((f) => f.untilMs > Date.now());
 
   const setGoal = (g: typeof goal) => setConfig({ goal: g });
+  /** Untick a done day: drop one tick of its focus (the exact key if present). */
+  const toggleDay = (day: number, focusKey: string) => {
+    const dayKey = `${day}_${focusKey}`;
+    if (!doneDays.has(day) || completed[dayKey]) { toggleComplete(dayKey); return; }
+    const other = Object.keys(completed).find((k) => k.slice(k.indexOf('_') + 1) === focusKey);
+    if (other) toggleComplete(other);
+  };
   const setDays = (d: number) => setConfig({ daysPerWeek: d });
   const setMinutes = (m: number) => setConfig({ minutesPerSession: m });
   const setLocation = (l: typeof location) => setConfig({ location: l });
@@ -83,6 +90,7 @@ export default function SmartPlanScreen() {
     () => buildGoalPlan({ goal, daysPerWeek: days, minutesPerSession: minutes, location, priorityFocuses: priorityKeys ? priorityKeys.split(',') : [] }),
     [goal, days, minutes, location, priorityKeys],
   );
+  const doneDays = doneDaysOf(plan, completed);
 
   const runDay = (focusKey: string, reps: number) => {
     startSession('focus', { focus: focusKey, targetReps: reps, environment: location === 'home' ? 'home' : 'range' });
@@ -166,11 +174,11 @@ export default function SmartPlanScreen() {
               // 2026-07-30 (audit #19) — key completion by DAY (+focus), not focusKey alone: weekly plans
               // repeat the same focusKey on multiple days, so keying by focusKey marked every day with
               // that focus done off a single check.
-              const dayKey = `${s.day}_${s.focusKey}`;
-              const done = !!completed[dayKey];
+              // Counted by focus (store/practicePlanStore.doneDaysOf) so a reshuffled week keeps its ticks.
+              const done = doneDays.has(s.day);
               return (
                 <View key={s.day} style={[styles.dayRow, { borderBottomColor: colors.border }]}>
-                  <TouchableOpacity onPress={() => toggleComplete(dayKey)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} accessibilityLabel={`Mark day ${s.day} ${done ? 'not done' : 'done'}`}>
+                  <TouchableOpacity onPress={() => toggleDay(s.day, s.focusKey)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} accessibilityLabel={`Mark day ${s.day} ${done ? 'not done' : 'done'}`}>
                     <Ionicons name={done ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={done ? colors.accent : colors.text_muted} />
                   </TouchableOpacity>
                   <Text style={[styles.dayNum, { color: colors.text_muted }]}>D{s.day}</Text>

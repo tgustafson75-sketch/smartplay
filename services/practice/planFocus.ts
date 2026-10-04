@@ -16,14 +16,16 @@
 
 const FOCUS_PATTERNS: [string, RegExp][] = [
   // Order matters: the more specific reading wins before a broader word inside it.
-  ['shot_shape', /\bshot[\s-]?shap|\bshap(e|es|ing)\b|\bdraws?\b|\bfades?\b|\bwork(ing)? the ball\b|\bcurv(e|ing)\b/],
-  ['driver_speed', /\bswing speed\b|\bclub ?head speed\b|\bball speed\b|\boverspeed\b|\bspeed\b/],
+  // 2026-10-03 (review) — every pattern needs GOLF-SWING context: "speed of the greens" is not driver
+  // speed, "my driving range sessions" is not driver distance, "fade the putts" is not shot shaping.
+  ['shot_shape', /\bshot[\s-]?shap|\bshap(e|es|ing) (the|my|a)? ?(ball|shots?)\b|\bwork(ing)? the ball\b|\b(hit|hitting|play|playing|shape|curve)( a| my)? (draw|fade)s?\b|\bdraws? and fades?\b|\bfades? and draws?\b/],
+  ['driver_speed', /\bswing speed\b|\bclub ?head speed\b|\bball speed\b|\boverspeed\b|\bspeed training\b|\bdriver speed\b|\bmore speed\b|\bswing faster\b/],
   ['putting', /\bputt(s|ing)?\b|\bputter\b|\blag putt/],
-  ['short_game', /\bshort game\b|\bchip(s|ping)?\b|\bpitch(es|ing)?\b|\bwedges?\b|\bbunkers?\b|\bsand\b|\bscoring zone\b/],
-  ['irons', /\birons?\b|\biron play\b|\bapproach(es)?\b/],
-  ['contact_lowpoint', /\bcontact\b|\bstrik(e|ing)\b|\bfat\b|\bthin\b|\blow ?point\b|\bdivots?\b/],
+  ['short_game', /\bshort game\b|\bchip(s|ping)?\b|\bpitch(es|ing)?\b|\bwedges?\b|\bbunkers?\b|\bsand (shots?|save)\b|\bscoring zone\b/],
+  ['irons', /\birons?\b(?! distance)|\biron play\b|\bapproach (shots?|play)\b/],
+  ['contact_lowpoint', /\bcontact\b|\bball striking\b|\bstrik(e|ing) (it|the ball)\b|\bhitting it (fat|thin)\b|\blow ?point\b/],
   ['hands_transition', /\btempo\b|\btransition\b|\brhythm\b|\btiming\b/],
-  ['driver_distance', /\bdriv(er|ing|es)\b|\btee shots?\b|\boff the tee\b|\bdistance\b(?! control)/],
+  ['driver_distance', /\bdriver\b(?! speed)|\bdrives\b|\bdriving\b(?! range| iron)|\btee shots?\b|\boff the tee\b|\bmore distance\b|\b(driver|tee shot) distance\b|\bhit it farther\b|\blonger drives\b/],
 ];
 
 /** Every SmartPlan focus the words name, in the order they were checked. Empty when none. */
@@ -56,6 +58,14 @@ export function parsePlanPeriodDays(text: string | null | undefined): number | n
     return Math.max(1, Math.min(60, n * unit));
   }
   if (/\b(this|next|the|for the|all) month\b/.test(t)) return 30;
-  if (/\b(this|next|the|for the|all|rest of the) week\b|\bweekly\b/.test(t)) return 7;
+  if (/\b(this|next|the|for the|for a|all|rest of the) week\b|\bweekly\b/.test(t)) return 7;
   return null;
+}
+
+/**
+ * 2026-10-03 (review) — "let's work on putting TODAY, tournament next week" is a session focus. When
+ * the words say today / this session / right now, that wins over any week word elsewhere in the turn.
+ */
+export function saysToday(text: string | null | undefined): boolean {
+  return /\b(today|tonight|this session|right now|this round|this practice)\b/i.test(text ?? '');
 }

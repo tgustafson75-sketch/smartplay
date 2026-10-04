@@ -8,7 +8,7 @@
  */
 import type { IntentHandler, IntentResult, VoiceIntent } from '../../types/voiceIntent';
 import { useSessionFocusStore } from '../../store/sessionFocusStore';
-import { parsePlanPeriodDays } from '../practice/planFocus';
+import { parsePlanPeriodDays, saysToday } from '../practice/planFocus';
 import { applyPlanFocusWords } from '../../store/practicePlanStore';
 
 export const sessionFocusHandler: IntentHandler = {
@@ -64,7 +64,7 @@ export const sessionFocusHandler: IntentHandler = {
      * name no plan focus ("my slice this week") go to him too; he keeps them as a reminder or asks.
      */
     const said = [intent.raw_text, goal, note].filter((x) => typeof x === 'string' && x.trim()).join(' ');
-    const periodDays = parsePlanPeriodDays(said);
+    const periodDays = saysToday(said) ? null : parsePlanPeriodDays(said);
     if (periodDays != null) {
       const keys = applyPlanFocusWords(goal, periodDays);
       // success:false + route_to_brain is the "answer this conversationally" shape every path honours:

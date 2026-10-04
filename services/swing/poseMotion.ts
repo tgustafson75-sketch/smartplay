@@ -76,7 +76,10 @@ export function deriveSwingAnchors(samples: MotionSample[]): SwingAnchors | null
   // START (address) ≈ last near-baseline-motion sample before the takeaway rise.
   const baseline = median(speed.slice(0, Math.min(4, speed.length)));
   let start = 0;
-  for (let i = top; i >= 0; i--) {
+  // 2026-10-03 (review) — begin BEFORE the top: with dense samples around the apex the hands are nearly
+  // still at the transition, so testing speed[top] itself returned start = top and cut the backswing out
+  // of the window (2-5% of short clips in a 200-trial sim).
+  for (let i = top - 1; i >= 0; i--) {
     if (speed[i] <= baseline * 1.5) { start = i; break; }
   }
 

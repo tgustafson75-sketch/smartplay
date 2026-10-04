@@ -27,7 +27,7 @@ const WEEK = 7 * DAY;
 
 const fresh = () => usePracticePlanStore.setState({
   goal: 'break_90', daysPerWeek: 3, minutesPerSession: 60, location: 'full', narrative: '',
-  completed: {}, weekStartMs: null, reminders: [], priorityFocuses: [], lastPlanNudgeDay: null, updatedAt: 0,
+  completed: {}, weekStartMs: null, reminders: [], priorityFocuses: [], lastPlanNudgeDay: null, configuredAt: 0, updatedAt: 0,
 });
 
 beforeEach(() => { fresh(); useSessionFocusStore.getState().clearFocus(); });
@@ -155,6 +155,38 @@ describe('the caddie sees the plan he is meant to steer', () => {
     );
     expect(r.route_to_brain).toBe(true);
     expect(r.voice_response ?? '').not.toMatch(/coming soon/i);
+  });
+});
+
+describe('2026-10-03 review fixes', () => {
+  it("adding a priority mid-week keeps the days already done (ticks count by focus)", () => {
+    const s = usePracticePlanStore.getState();
+    s.setConfig({ goal: 'break_90', daysPerWeek: 3 });
+    const before = currentWeekPlan();
+    const firstFocus = before.sessions[0].focusKey;
+    s.toggleComplete(`1_${firstFocus}`);
+    s.setPriorityFocus(['irons'], 7, 'my irons');
+    expect(practicePlanPromptBlock()).toMatch(/\(done\)/);
+  });
+
+  it('a reminder alone is not a plan', () => {
+    usePracticePlanStore.getState().addReminder('hit the range', 'Thursday');
+    expect(planIsConfigured()).toBe(false);
+    expect(planNudgeHint()).toBeNull();
+  });
+
+  it('"putting today, tournament next week" stays a session focus', async () => {
+    const r = await sessionFocusHandler.execute(
+      { intent_type: 'set_session_focus', parameters: { goal: 'putting' }, confidence: 'high', follow_up_question: null, raw_text: "let's work on putting today, tournament next week" } as never, {} as never,
+    );
+    expect(r.success).toBe(true);
+    expect(usePracticePlanStore.getState().priorityFocuses).toEqual([]);
+  });
+
+  it('green speed is not driver speed; driving range is not driver distance; fading putts is not shaping', () => {
+    expect(resolvePracticeFocusKeys('speed of the greens')).toEqual([]);
+    expect(resolvePracticeFocusKeys('my driving range sessions')).toEqual([]);
+    expect(resolvePracticeFocusKeys('fade the putts')).toEqual(['putting']);
   });
 });
 

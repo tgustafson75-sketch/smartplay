@@ -4,7 +4,7 @@ import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/v
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
-import { noteTurnState, noteTurnIntent, noteTurnClosing } from './voice/turnAnswerWatch';
+import { noteTurnState, noteTurnIntent, noteTurnClosing, noteTurnActed } from './voice/turnAnswerWatch';
 import { adviceIsStillWorthSaying, captureShotEpoch, currentTurnEpoch } from './adviceFreshness';
 import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
@@ -1533,6 +1533,7 @@ async function openSession() {
             if (r.toolActions?.length) {
               const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
               dispatchConversationalToolActions(r.toolActions);
+            noteTurnActed();
             }
             /**
              * 2026-08-27 — the fifth brain site, and it had the same hole as the other four: the
@@ -1648,6 +1649,7 @@ async function openSession() {
 
       const result = await handlerP;
       const t_response_start = Date.now();
+      if (result.success && (result.tool_action || !result.voice_response)) noteTurnActed();
 
       // Phase V.7+ — the response is user-initiated (mic-tap reply), so it
       // speaks at L1 too via { userInitiated: true }. Opener + filler stay
@@ -1664,6 +1666,7 @@ async function openSession() {
           if (r.toolActions?.length) {
             const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
             dispatchConversationalToolActions(r.toolActions);
+            noteTurnActed();
           }
           await deliverBrainReply({
             reply: r,
@@ -1967,6 +1970,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         if (r.toolActions?.length) {
           const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
           dispatchConversationalToolActions(r.toolActions);
+            noteTurnActed();
         }
         // 2026-07-01 (re-audit — voice H1) — respect the SAME phone-speaker gate the
         // main path uses: don't talk out loud when audio is on the phone speaker and
@@ -2047,6 +2051,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         if (r.toolActions?.length) {
           const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
           dispatchConversationalToolActions(r.toolActions);
+            noteTurnActed();
         }
         const ttsAllowed2 = (settings.voiceEnabled ?? true);
         /**

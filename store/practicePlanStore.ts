@@ -59,6 +59,8 @@ interface PracticePlanState {
   priorityFocuses: PlanPriorityFocus[];
   /** Local day (YYYY-MM-DD) the app-open opener last mentioned the plan — once a day, not every launch. */
   lastPlanNudgeDay: string | null;
+  /** When the player set the plan up on the SmartPlan screen (a chip tap) — reminders do not count. */
+  configuredAt: number;
   updatedAt: number;
 
   setConfig: (patch: Partial<Pick<PracticePlanState, 'goal' | 'daysPerWeek' | 'minutesPerSession' | 'location'>>) => void;
@@ -111,9 +113,10 @@ export const usePracticePlanStore = create<PracticePlanState>()(
       reminders: [],
       priorityFocuses: [],
       lastPlanNudgeDay: null,
+      configuredAt: 0,
       updatedAt: 0,
 
-      setConfig: (patch) => set({ ...patch, updatedAt: Date.now() }),
+      setConfig: (patch) => set({ ...patch, configuredAt: Date.now(), updatedAt: Date.now() }),
       setNarrative: (text) => set({ narrative: text, updatedAt: Date.now() }),
       toggleComplete: (focusKey) =>
         set((s) => {
@@ -188,12 +191,17 @@ export const usePracticePlanStore = create<PracticePlanState>()(
         if (!planIsConfigured(now)) return false;
         const s = get();
         const plan = currentWeekPlan(now);
-        const done = s.effectiveCompleted();
-        const day = plan.sessions.find((d) => d.focusKey === focusKey && !done[`${d.day}_${d.focusKey}`]);
+        const done = doneDaysOf(plan, s.effectiveCompleted());
+        const day = plan.sessions.find((d) => d.focusKey === focusKey && !done.has(d.day));
         if (!day) return false;
         // Same week-roll rule as toggleComplete, so a tick never lands in a lapsed week.
         const weekStartMs = s.weekStartMs && now - s.weekStartMs < WEEK_MS ? s.weekStartMs : now;
-        const completed = { ...(weekStartMs === s.weekStartMs ? s.completed : {}), [`${day.day}_${day.focusKey}`]: now };
+        // A unique key per tick: counts are what matter (doneDaysOf), and a reshuffled week can put this
+        // focus on a day number that already holds an older tick of the same focus.
+        const prior = weekStartMs === s.weekStartMs ? s.completed : {};
+        let key = `${day.day}_${day.focusKey}`;
+        for (let n = 2; prior[key]; n++) key = `${day.day}.${n}_${day.focusKey}`;
+        const completed = { ...prior, [key]: now };
         set({ completed, weekStartMs, updatedAt: now });
         return true;
       },
@@ -226,12 +234,39 @@ export function currentWeekPlan(now = Date.now()): GoalPlan {
 }
 
 /**
+ * 2026-10-03 (review) — which DAYS of this week's plan are done, counted by FOCUS. A tick is stored as
+ * `${day}_${focusKey}`, but the plan reshuffles when a priority is added or lapses ("irons this week"
+ * on Wednesday turns D1 into irons), and keying done-ness by day number then un-ticked the putting the
+ * player did on Monday. Counting ticks per focus and handing them to that focus's days in order keeps
+ * every finished session finished, whatever the week looks like now.
+ */
+export function doneDaysOf(plan: GoalPlan, completed: Record<string, number>): Set<number> {
+  const counts = new Map<string, number>();
+  for (const key of Object.keys(completed)) {
+    const focus = key.slice(key.indexOf('_') + 1);
+    counts.set(focus, (counts.get(focus) ?? 0) + 1);
+  }
+  const done = new Set<number>();
+  for (const d of plan.sessions) {
+    const n = counts.get(d.focusKey) ?? 0;
+    if (n > 0) { done.add(d.day); counts.set(d.focusKey, n - 1); }
+  }
+  return done;
+}
+
+/**
  * The player has actually set a plan up (touched a chip, a day, the notes, a reminder or a priority).
  * The defaults alone are not a plan anyone chose, and the caddie should not talk about one.
  */
 export function planIsConfigured(now = Date.now()): boolean {
   const p = usePracticePlanStore.getState();
-  return p.updatedAt > 0 || p.activePriorityFocuses(now).length > 0;
+  // 2026-10-03 (review) — NOT `updatedAt > 0`: addReminder bumps that, so anyone who once said "remind
+  // me…" was treated as having the default break-90 plan (prompt block, daily nudge, auto-ticks).
+  const chose = p.goal !== 'break_90' || p.daysPerWeek !== 3 || p.minutesPerSession !== 60 || p.location !== 'full';
+  // Plans set up before configuredAt existed: an edit with no reminder behind it was a chip tap.
+  const legacy = p.updatedAt > 0 && p.reminders.length === 0;
+  return chose || legacy || p.configuredAt > 0 || p.narrative.trim().length > 0
+    || Object.keys(p.effectiveCompleted()).length > 0 || p.activePriorityFocuses(now).length > 0;
 }
 
 function labelsOf(keys: string[]): string {
@@ -265,8 +300,8 @@ export function practicePlanPromptBlock(now = Date.now()): string {
       parts.push(`Priority they asked for: ${priorities.map((f) => `${getFocus(f.key)?.label ?? f.key} ("${f.said}", until ${shortDate(f.untilMs)})`).join('; ')}.`);
     }
     if (plan.sessions.length > 0) {
-      const done = p.effectiveCompleted();
-      parts.push(`This week: ${plan.sessions.map((d) => `D${d.day} ${d.focusLabel} ${done[`${d.day}_${d.focusKey}`] ? '(done)' : '(left)'}`).join(' · ')}.`);
+      const done = doneDaysOf(plan, p.effectiveCompleted());
+      parts.push(`This week: ${plan.sessions.map((d) => `D${d.day} ${d.focusLabel} ${done.has(d.day) ? '(done)' : '(left)'}`).join(' · ')}.`);
     }
     // Location caveats and priorities the location cannot hold — not the generic framing line.
     const caveats = plan.notes.filter((n) => !/No promises|Consistency over cramming/.test(n));
@@ -297,8 +332,8 @@ export function planNudgeHint(now = Date.now()): string | null {
     if (!planIsConfigured(now)) return null;
     if (p.lastPlanNudgeDay === localDay(now)) return null;
     const plan = currentWeekPlan(now);
-    const done = p.effectiveCompleted();
-    const left = plan.sessions.filter((d) => !done[`${d.day}_${d.focusKey}`]);
+    const done = doneDaysOf(plan, p.effectiveCompleted());
+    const left = plan.sessions.filter((d) => !done.has(d.day));
     if (left.length === 0) return null;
     const priorities = p.activePriorityFocuses(now);
     const priorityText = priorities.length > 0

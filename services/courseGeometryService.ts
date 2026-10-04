@@ -460,7 +460,9 @@ export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeome
 // Offline: persisted to AsyncStorage; hydrated lazily into memory on first read.
 // v2 (2026-09-23): v1 greens were unprojected with twice Mapbox's true scale — see
 // mapboxImagery.MAPBOX_Z0_METERS_PER_PX. They are not read again; the hole is derived afresh.
-const DERIVED_KEY_PREFIX = 'course-geometry-derived-v2::';
+// 2026-10-03 — v2 -> v3: greens derived before the card check above (e.g. a hole-1 green read from the
+// pro shop at Hemet) were cached and reused every round. Re-derive them under the check.
+const DERIVED_KEY_PREFIX = 'course-geometry-derived-v3::';
 const derivedMemCache: Map<string, Record<number, HoleGeometry>> = new Map();
 
 function derivedKey(courseId: string): string {

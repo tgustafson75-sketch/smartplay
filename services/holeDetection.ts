@@ -480,6 +480,7 @@ async function ensureGreenForCurrentHole(
     if (getDerivedHoleGeometry(courseId, hole)?.green) return;
     const { deriveHoleGeometry } = await import('./holeGeometryDerivation');
     const known = getHoleGeometry(courseId, hole);
+    const shotsHere = useRoundStore.getState().shots.filter((sh) => sh.hole === hole).length;
     await deriveHoleGeometry({
       seed: at,
       holeNumber: hole,
@@ -487,6 +488,8 @@ async function ensureGreenForCurrentHole(
       yardage: known?.yardage ?? null,
       courseId,
       knownTee: known?.tee ?? resolveTeeCoords(hole).tee ?? null,
+      // The card check needs to know where the player is on the hole (see deriveHoleGeometry).
+      seedIs: shotsHere === 0 ? 'tee' : 'on_hole',
     });
   } catch (e) {
     // Never let a vision derive disturb hole detection — it is an enrichment, not a dependency.

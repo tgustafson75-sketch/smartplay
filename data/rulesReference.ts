@@ -69,7 +69,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'In a casual round, a slope reading is ordinary equipment use and it is the fastest way to learn how much elevation actually costs you — that is what slope-enabled rangefinders are for, and most golfers use them exactly this way. Switch it off for two situations: a competition, and any round you are POSTING for handicap, because a posted round has to be played under the Rules. If you are unsure whether devices are permitted at all at a club, ask before the first tee rather than after.',
     official_reference: 'Rule 4.3a(1); Model Local Rule G-5',
     common_misconceptions: 'Two, in opposite directions. People assume that because a rangefinder is legal everything it displays is legal — the slope function is the exception and must be off where the Rules apply, and "it was only a phone" is no defence because the rule is about the USE, not the hardware. But the other mistake is treating a Saturday game with friends as if it were a championship: outside competition and handicap posting there is nothing to switch off, and reading slope is how you build the feel for it.',
-    keywords: ['rangefinder', 'gps', 'slope', 'measuring device', 'dmd', 'elevation', 'is this legal', 'laser', 'uphill downhill reading', 'level', 'bubble level', 'putt slope', 'green slope', 'reading the green', 'smartfinder slope'],
+    keywords: ['rangefinder', 'range finder', 'gps', 'slope', 'measuring device', 'dmd', 'elevation', 'is this legal', 'laser', 'uphill downhill reading', 'level', 'bubble level', 'putt slope', 'green slope', 'reading the green', 'smartfinder slope'],
   },
   {
     rule_id: 'casual_water',
@@ -102,7 +102,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Verify the ball is actually embedded (in its own pitch mark, partly below ground) before claiming relief. Mark, lift, then drop within one club length of where it sat, no closer to the hole.',
     official_reference: 'Rule 16.3',
     common_misconceptions: 'Pre-2019 the rule limited relief to the fairway only. Now it applies anywhere in the general area including the rough. But still NOT in bunkers — a plugged ball in the bunker does not get free relief.',
-    keywords: ['embedded', 'plugged', 'pitch mark', 'rough', 'fairway', 'buried', 'plug'],
+    keywords: ['embedded', 'plugged', 'pitch mark', 'buried', 'plug', 'plugged lie'],
   },
   {
     rule_id: 'animal_hole',
@@ -159,7 +159,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'If you suspect a tee shot might be OB, ALWAYS hit a provisional ball before walking forward. Saves a long walk back if the original is lost. If a course uses Model Local Rule E-5 (alternative to stroke and distance), you may instead drop in the fairway with two penalty strokes — check the local rules.',
     official_reference: 'Rule 18.2',
     common_misconceptions: 'You cannot drop near where the ball went OB — it is not a penalty area. The only standard option is stroke and distance back to the previous spot.',
-    keywords: ['ob', 'out of bounds', 'white stake', 'lost ball', 'stroke and distance', 'provisional'],
+    keywords: ['ob', 'out of bounds', 'white stake', 'white stakes', 'stroke and distance'],
   },
   {
     rule_id: 'lost_ball',
@@ -170,7 +170,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Hit a provisional ball whenever a shot might be lost — saves the long walk back. If you find the original within 3 minutes, the provisional is abandoned with no penalty. If you cannot find it, the provisional is your ball with the standard one-stroke penalty.',
     official_reference: 'Rule 18.2',
     common_misconceptions: 'The 5-minute search rule is gone since 2019. It is now 3 minutes, and the clock starts the moment search begins.',
-    keywords: ['lost ball', 'cannot find', '3 minute', 'three minute', 'search', 'gone'],
+    keywords: ['lost ball', 'lost my ball', 'cannot find', "can't find", 'cant find', '3 minute', 'three minute', 'search time'],
   },
   {
     rule_id: 'red_penalty_area',
@@ -181,7 +181,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Option 3 (two-club-length drop near where it crossed) is usually the play unless the lie or stance would be terrible. The opposite-side option was REMOVED in 2019 — you cannot drop on the other side of a red penalty area unless the local committee has reinstated it as a local rule.',
     official_reference: 'Rule 17',
     common_misconceptions: 'The "opposite side" relief option was removed in 2019. You also do not have to play from inside the penalty area — none of these options require it (though you can if you choose).',
-    keywords: ['red', 'lateral', 'water hazard', 'penalty area', 'two club lengths', 'drop'],
+    keywords: ['red stake', 'red stakes', 'red line', 'lateral', 'water hazard', 'penalty area', 'two club lengths', '2 club lengths', 'in the water', 'into the water', 'hit it in the water', 'went in the water', 'in the lake', 'in the pond', 'in the creek'],
   },
   {
     rule_id: 'yellow_penalty_area',
@@ -192,7 +192,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Option 2 is usually the play. Pick a comfortable distance back from the crossing point that gives you a clean lie and a yardage you like. Yellow penalty areas do NOT have the two-club-length option that red areas do.',
     official_reference: 'Rule 17',
     common_misconceptions: 'Yellow does NOT have the lateral two-club-length option. That is only for red. Get the color right before deciding.',
-    keywords: ['yellow', 'water hazard', 'penalty area', 'back on line'],
+    keywords: ['yellow stake', 'yellow stakes', 'yellow line', 'water hazard', 'penalty area', 'back on line'],
   },
   {
     rule_id: 'unplayable_lie',
@@ -203,7 +203,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'When stuck under a tree, against a wall, or in deep brush, the unplayable option is often the smart play. Most amateurs try the heroic recovery and turn one bad shot into three. Take the stroke; live to fight on the next shot.',
     official_reference: 'Rule 19',
     common_misconceptions: 'You cannot declare unplayable inside a penalty area — different rules apply there. But anywhere else (general area, bunker), the choice is yours alone.',
-    keywords: ['unplayable', 'unplayable lie', 'stuck', 'tree', 'against', 'declare'],
+    keywords: ['unplayable', 'unplayable lie', 'stuck in a tree', 'against a tree', 'against the fence', 'in a bush', 'declare it unplayable'],
   },
   {
     rule_id: 'provisional_ball',
@@ -227,7 +227,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Play from the new position without panic. The 2019 change was specifically meant to remove this trap — you no longer have to call a penalty on yourself for ground vibrations or wind pushing the ball during setup.',
     official_reference: 'Rule 9.4',
     common_misconceptions: 'Pre-2019 this was almost always a one-stroke penalty. The new rule reverses the presumption: no penalty unless you clearly caused the movement.',
-    keywords: ['ball moved', 'address', 'accidental', 'rolled', 'no penalty'],
+    keywords: ['ball moved', 'moved at address', 'ball moved at address', 'accidentally moved', 'rolled after i addressed'],
   },
   {
     rule_id: 'ball_moved_outside_agency',
@@ -237,7 +237,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     detailed_explanation: 'Outside agency means anyone or anything other than you, your caddie, your equipment, or natural forces — e.g., another player, an animal, a spectator. If they move your ball at rest, replace it where it was and play on with no penalty.',
     tactical_advice: 'Mark the original spot before lifting if there is any ambiguity about location. If the spot is unknown, estimate the original spot reasonably and place the ball there.',
     official_reference: 'Rule 9.6',
-    keywords: ['outside agency', 'animal', 'another player', 'moved', 'replace'],
+    keywords: ['outside agency', 'animal moved', 'another player moved', 'someone moved my ball', 'dog took my ball', 'bird took my ball'],
   },
   {
     rule_id: 'ball_moved_wind_water',
@@ -247,7 +247,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     detailed_explanation: 'Wind and water are natural forces. If they move your ball at rest, you play from where it ends up — no penalty, no replacement. The exception is on the putting green: if you have already marked and replaced the ball, and then wind moves it, you replace it back to the marked spot.',
     tactical_advice: 'On a windy day on a fast green, mark and replace the ball promptly so you have a defined spot if wind moves it again.',
     official_reference: 'Rule 9.3',
-    keywords: ['wind', 'water', 'moved', 'natural', 'no penalty'],
+    keywords: ['wind moved', 'wind blew', 'blown by the wind', 'moved by the wind', 'moved by water', 'current moved'],
   },
   {
     rule_id: 'divot_in_fairway',
@@ -258,7 +258,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Take less club, swing slightly steeper, and accept reduced spin. Aim safely — distance control will be off. If the divot is severe and a green is unreachable, consider an unplayable for a clean lie.',
     official_reference: 'Rule 8.1',
     common_misconceptions: 'Many amateurs believe divots qualify for free relief — they do not, no matter how unfair it feels.',
-    keywords: ['divot', 'fairway', 'no relief', 'unfair', 'sand filled'],
+    keywords: ['divot', 'in a divot', 'divot hole', 'sand filled'],
   },
   {
     rule_id: 'identifying_ball',
@@ -268,7 +268,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     detailed_explanation: 'You may mark and lift the ball to identify it any time you reasonably need to verify it is yours. Tell your playing partner before lifting if practical. Place the ball back at the original spot.',
     tactical_advice: 'Always put a unique mark on your ball before each round (a colored dot, your initials) so identification is fast and unambiguous.',
     official_reference: 'Rule 7.3',
-    keywords: ['identify', 'mark and lift', 'verify', 'my ball'],
+    keywords: ['identify', 'identify my ball', 'is this my ball', 'mark and lift to identify', 'verify'],
   },
 
   // ─── PUTTING GREEN ────────────────────────────────────────────────
@@ -281,7 +281,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Repair what is on your line before putting. The 2019 change removed a frustrating loophole — there is no longer any rule against fixing spike marks on your line.',
     official_reference: 'Rule 13.1c',
     common_misconceptions: 'Pre-2019 you could NOT repair spike marks. The change is one of the most welcomed in the modern rule revisions.',
-    keywords: ['spike marks', 'ball marks', 'damage', 'green', 'repair', 'fix'],
+    keywords: ['spike marks', 'spike mark', 'ball marks', 'ball mark', 'repair the green', 'fix a ball mark', 'damage on the green'],
   },
   {
     rule_id: 'flagstick_in',
@@ -321,7 +321,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     tactical_advice: 'Caddies should clear the line as soon as the player begins to take their stance. The penalty applies when the caddie is in position when the stance is set, not just present in the area.',
     official_reference: 'Rule 10.2b(4)',
     common_misconceptions: 'The caddie may verify alignment BEFORE you take your stance — the rule only kicks in once you have begun the stance.',
-    keywords: ['caddie', 'alignment', 'behind', 'line', 'stance', 'penalty'],
+    keywords: ['caddie behind', 'caddie alignment', 'caddie stand behind', 'stand behind me', 'line me up'],
   },
   {
     rule_id: 'mark_lift_replace',
@@ -331,7 +331,7 @@ export const RULES_REFERENCE: RuleEntry[] = [
     detailed_explanation: 'On the putting green you may always mark, lift, and clean your ball. Use a small object (typically a coin or commercial ball marker) placed directly behind or beside the ball. After cleaning or after others have putted, replace the ball at the marked spot.',
     tactical_advice: 'Standard procedure: mark behind the ball, lift, clean if needed, replace before putting. If your marker is on a partner\'s line, move it to the side along the line of a club head, then move it back before you putt.',
     official_reference: 'Rule 14.1',
-    keywords: ['mark', 'lift', 'replace', 'green', 'coin', 'marker'],
+    keywords: ['mark my ball', 'mark the ball', 'lift my ball', 'ball marker', 'coin', 'marker', 'mark and lift'],
   },
 
   // ─── PACE OF PLAY ────────────────────────────────────────────────

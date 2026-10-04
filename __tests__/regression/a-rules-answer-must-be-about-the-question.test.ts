@@ -63,6 +63,18 @@ describe('a rules answer must be about the question that was asked', () => {
     }
   });
 
+  it('generic words no longer pick the WRONG rule (2026-10-03 review)', () => {
+    // "water" used to land on ball-moved-by-wind-or-water ("no penalty") — confidently wrong.
+    expect(top('I hit it in the water')).toBe('red_penalty_area');
+    expect(top('I lost my ball')).toBe('lost_ball');
+    expect(top("what if I can't find my ball")).toBe('lost_ball');
+    expect(top('can I hit a provisional')).toBe('provisional_ball');
+    // No specific rule for these — the brain answers, not a wrong rule.
+    for (const q of ['penalty for hitting the wrong ball', 'double hit penalty', 'can I take a free drop', 'tee it up in the fairway', 'ball in a bunker, can I touch the sand']) {
+      expect([q, top(q)]).toEqual([q, null]);
+    }
+  });
+
   it('a question the reference does not cover goes to the caddie brain, not a dead end', async () => {
     const r = await rulesQueryHandler.execute(
       { intent_type: 'rules_query', parameters: { query_text: 'is there a dress code' } } as never,

@@ -175,6 +175,15 @@ export async function deriveHoleGeometry(input: {
    */
   knownGreen?: LatLng | null;
   knownTee?: LatLng | null;
+  /**
+   * 2026-10-03 (Tim at Hemet: "yardage started wrong on hole one"). Where the seed is, relative to the
+   * hole, when no tee is known — so a found green can still be checked against the card:
+   *   'tee'      the player has not hit a shot on this hole yet → the green must be about a tee shot
+   *              away (0.6-1.35x the card). Standing at the pro shop, the nearest green is the practice
+   *              green or 18 — that read used to be saved as hole 1 and reused next round.
+   *   'on_hole'  shots logged → the green can be no farther than the card from anywhere on the hole.
+   */
+  seedIs?: 'tee' | 'on_hole' | null;
 }): Promise<DerivedHoleGeometry | null> {
   if (!isMapboxConfigured()) return null;
   const { seed, holeNumber } = input;
@@ -359,6 +368,16 @@ export async function deriveHoleGeometry(input: {
       const measured = haversineMeters(verifiedTee, green) * 1.09361;
       if (measured > cardYards * 1.35 || measured < cardYards * 0.65) {
         console.log(`[holeGeometry] hole ${holeNumber}: found green ${Math.round(measured)}y from the known tee vs card ${cardYards}y — discarding`);
+        return null;
+      }
+    }
+    if (!seeded && !teeIsKnown && cardYards > 0 && input.seedIs) {
+      const fromSeed = haversineMeters(seed, green) * 1.09361;
+      const bad = input.seedIs === 'tee'
+        ? fromSeed > cardYards * 1.35 || fromSeed < cardYards * 0.6
+        : fromSeed > cardYards * 1.1;
+      if (bad) {
+        console.log(`[holeGeometry] hole ${holeNumber}: found green ${Math.round(fromSeed)}y from the player (${input.seedIs}) vs card ${cardYards}y — discarding, not caching`);
         return null;
       }
     }

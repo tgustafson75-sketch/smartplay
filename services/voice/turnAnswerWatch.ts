@@ -38,5 +38,12 @@ export function noteTurnState(prev: string, next: string): void {
 
 export function noteTurnIntent(intentType: string): void { intent = intentType; }
 
+/**
+ * 2026-10-03 (review) — the turn ACTED instead of speaking: a silent tool-open (the screen change is
+ * the answer, 08-06), a navigation, a successful command with no line, brain tool actions. Those are
+ * answers. Without this every "open SmartVision" filed a voice_silent_fail to the owner inbox.
+ */
+export function noteTurnActed(): void { owed = null; }
+
 /** Bracket a close so the idle it causes is attributed to it. */
 export function noteTurnClosing(reason: CloseReason | null): void { closing = reason; }

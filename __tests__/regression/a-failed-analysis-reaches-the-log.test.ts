@@ -22,11 +22,17 @@ beforeEach(() => mockAdd.mockClear());
 describe('a failed swing analysis reaches the issue log', () => {
   it('reports the reason and what the clip was, as an analysis_error', () => {
     seed('analyzing_pose');
-    useSwingSessionStore.getState().setSessionAnalysisStatus('s1', 'failed', 'No usable swing in the upload.');
+    useSwingSessionStore.getState().setSessionAnalysisStatus('s1', 'failed', 'Analysis hit a snag — tap Analyze to try again.');
     expect(mockAdd).toHaveBeenCalledWith('swing_analysis_failed', expect.objectContaining({
-      reason: 'No usable swing in the upload.', from: 'analyzing_pose', source: 'uploaded_video',
+      reason: 'Analysis hit a snag — tap Analyze to try again.', from: 'analyzing_pose', source: 'uploaded_video',
       durationSec: 14.5, clipExt: 'mp4', windowSec: 2.5,
     }), 'analysis_error');
+  });
+
+  it("the player's situation (no swing in the clip, clip gone) is kept on the device, not mailed", () => {
+    seed('analyzing_pose');
+    useSwingSessionStore.getState().setSessionAnalysisStatus('s1', 'failed', 'No usable swing in the upload.');
+    expect(mockAdd).toHaveBeenCalledWith('swing_analysis_failed', expect.anything(), 'diag');
   });
 
   it('once per failure, not on every re-write of the same status', () => {
