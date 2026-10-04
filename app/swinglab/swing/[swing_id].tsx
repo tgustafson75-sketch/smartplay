@@ -9,7 +9,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { liveDistanceUnit, toDisplayDistance, unitLabel } from '../../../services/distanceUnits';
-import { impactAnchorMs, narrowClubPathWindow } from '../../../services/swing/clubPathWindow';
+import { impactAnchorMs, narrowClubPathWindow, poseImpactFromFrames, clubArcAnchorMs } from '../../../services/swing/clubPathWindow';
 import { wristCentroid, deriveSwingAnchors } from '../../../services/swing/poseMotion';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
@@ -85,16 +85,6 @@ import { titleForUpload } from '../../../services/swing/swingTitle';
 import { useTranslation } from 'react-i18next';
 import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
 
-/**
- * 2026-09-14 — hoisted out of the component. It is a compile-time feature flag, never state, and
- * declaring it inside the render made it a fresh binding every pass — which is why
- * react-hooks/exhaustive-deps kept demanding it in two dependency arrays.
- *
- * Meaning is unchanged: the screen is STATIC on open; the user initiates analysis with the Analyze
- * button (onReanalyze). This gates every auto-process-on-open path — the on-open re-processing and
- * racing that it was introduced to stop.
- */
-const LIBRARY_AUTO_PROCESS = false;
 
 // 2026-06-12 — shared Smart Motion control badges, so Library video controls match
 // the SmartMotion review badges (whole-app control consistency).
@@ -145,20 +135,13 @@ export default function SwingDetail() {
   const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
-  const { swing_id, watch } = useLocalSearchParams<{ swing_id: string; watch?: string }>();
-  // 2026-05-25 — Path A: when upload routed here with ?watch=1 (short
-  // clip, analysis deferred), auto-play the video on mount and fire
-  // runPhaseKOnSession on didJustFinish. The watchFiredRef gate stops
-  // a second navigation to this screen from re-firing the analysis on
-  // an already-analyzed session.
-  const shouldAutoplayThenAnalyze = watch === '1';
+  const { swing_id } = useLocalSearchParams<{ swing_id: string }>();
   // 2026-06-15 (Tim) — the swing LIBRARY is MANUAL: an upload verifies + lands
   // STATIC; the USER initiates analysis (and biomech/mechanics) via the Analyze
   // button. No auto-analyze/auto-biomech on open — that was the on-open
   // re-processing + racing. This flag gates every auto-process-on-open path; the
   // explicit Analyze/Re-analyze button (onReanalyze) is the only trigger.
   const analyzeInFlightRef = useRef(false);
-  const watchFiredRef = useRef(false);
   const trustLevel = useTrustLevelStore(s => s.level);
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   // 2026-05-28 — Fix FI: caddie persona for presence brain calls.
@@ -656,33 +639,10 @@ export default function SwingDetail() {
    * strike. Placed at a FRACTION of the clip (positionSource 'estimated') it is a placeholder, and
    * falls through to the motion-derived anchor below — which actually looks at the swing.
    */
-  const poseImpactMs = useMemo(() => {
-    const f = poseFrames.find((p) => p.position === 'P6_impact');
-    if (f?.positionSource !== 'estimated' && typeof f?.timestampMs === 'number' && Number.isFinite(f.timestampMs)) {
-      return f.timestampMs;
-    }
-    /**
-     * 2026-09-01 (adversarial audit; Tim's call: "timing only, never geometry") — DERIVE IMPACT FROM
-     * THE MOTION WHEN NOTHING LABELLED IT.
-     *
-     * `P6_impact` exists only if the pose pipeline labelled a frame, and on the swings that need an
-     * anchor most it often has not: Tim's log shows the network locate aborting twice in one
-     * afternoon (dead_host), which drops the analysis to a whole-clip fallback with no labelled
-     * positions — precisely when the club path is left searching blind.
-     *
-     * poseMotion.deriveSwingAnchors has found impact from the hand-speed PEAK since 07-21: pure,
-     * unit-tested, no audio, no network, no labels. Impact is the fastest moment of a swing, so the
-     * peak is a measurement rather than a guess.
-     *
-     * THE LINE THAT MUST NOT MOVE: this is a TIME, never a POSITION. The trace stays
-     * clubhead-or-nothing — a wrist path drawn as if it were the clubhead is the defect that was
-     * deliberately removed, and nothing here feeds arc geometry. All this decides is WHICH four
-     * seconds the clubhead detector searches; if it finds no clubhead there, the answer is still
-     * nothing. Guarded by the-wrist-informs-timing-never-geometry test.
-     * [[smartmotion-clubhead-trace-root-cause]] [[orphans-are-live-bugs-not-dead-code]]
-     */
-    return motionAnchors && Number.isFinite(motionAnchors.impactMs) ? motionAnchors.impactMs : null;
-  }, [poseFrames, motionAnchors]);
+  // 2026-10-04 (orchestrator phase 3) — the rule (labelled-from-a-strike, else derived from the wrists'
+  // motion — Tim's 09-01 "timing only, never geometry") moved to services/swing/clubPathWindow
+  // .poseImpactFromFrames so every club-arc runner uses the same one.
+  const poseImpactMs = useMemo(() => poseImpactFromFrames(poseFrames), [poseFrames]);
   // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — the pose pipeline already
   // labels the key swing positions (address/top/impact/finish) on the frames; the SmartMotion review
   // has jump-to-stage chips but the library detail didn't. Surface them here too, reusing scrubTo.
@@ -1139,134 +1099,12 @@ export default function SwingDetail() {
     })();
   }, [swing_id, session?.biomechanics, session?.analysis_status, session?.club]);
 
-  // Backfill biomechanics for older swings captured before the pose pipeline
-  // shipped. Fires once per swing_id; failure is silent (pose API is opt-in
-  // and known to be flaky — same posture as the upload pipeline's branch).
-  const poseBackfillRef = useRef<string | null>(null);
+  // 2026-10-04 (orchestrator phase 3) — the on-open biomech backfill that lived here is gone. It was
+  // gated off by a constant (LIBRARY_AUTO_PROCESS = false, Tim 06-15: "the library is manual"), so it
+  // could not run, and it duplicated the pose stage of the Analyze button's orchestrator run
+  // (services/swing/orchestrator/uploadRun → videoUpload.runUploadPosePass), which is what fills
+  // biomechanics now. Unreachable by construction AND a duplicate.
   const shotBackfillRef = useRef<string | null>(null);
-  useEffect(() => {
-    // 2026-06-15 (Tim — mechanics manual) — no auto-biomech on open; the user runs
-    // it via Analyze. Static library until the user acts.
-    if (!LIBRARY_AUTO_PROCESS) return;
-    if (!swing_id || !shot?.clipUri) return;
-    if (session?.biomechanics !== undefined) return;
-    if (poseBackfillRef.current === swing_id) return;
-    // 2026-06-11 (cage test) — state-aware: do NOT full-clip-backfill biomech on
-    // a practice multi-swing session. Its clip is a ~60s recording with several
-    // swings, so analyzeSwingFromVideo would "watch the whole minute" as one
-    // swing — the 1-min-stuck Tim hit in the library. Cage biomech is computed
-    // per-swing by SmartMotion's Motion step; this backfill is only for legacy
-    // single-swing uploads. Extra guard: skip any implausibly-long clip
-    // (a single swing is <~10s), so a long upload can't trigger it either.
-    const durationMs = (session?.upload?.duration_sec ?? 3) * 1000;
-    /**
-     * 2026-08-14 (Tim: "by the time you step up and swing and pre-swing, they can get to twenty six
-     * seconds on a single swing") — the 20s cap is GONE.
-     *
-     * It was written when this backfill sampled the WHOLE clip by fixed fractions, so a long upload
-     * really did compute metrics off a minute of standing around. That was fixed on 2026-07-25 by
-     * threading the trimmed swing window, and again on 08-09 by threading the located impact — but the
-     * cap stayed in front of both, returning before either could run. A 26-second single swing, which
-     * is just a normal pre-shot routine, was refused by a guard protecting against a bug the code no
-     * longer has.
-     *
-     * What replaces it is below: we now REFUSE TO ANALYSE WITHOUT A WINDOW. Length stops being the
-     * question; knowing where the swing is becomes the question, which is the thing that actually
-     * mattered all along.
-     *
-     * The live_cage skip stays for now — a practice clip is genuinely several swings, and the answer to
-     * that is partitioning, not a longer window. That is the next step, kept separate so this one
-     * stays verifiable.
-     */
-    if (session?.source === 'live_capture') return;
-    poseBackfillRef.current = swing_id;
-    void (async () => {
-      try {
-        const poseMod = await import('../../../services/poseAnalysisApi');
-        // 2026-07-20 — re-anchor the persisted path (iOS rotates the container UUID on
-        // reinstall) so post-reinstall biomech backfill reads the real file, matching every
-        // other read site here; falls back to the raw path if resolution can't improve it.
-        const analyzeUri = (await resolveClipUri(shot.clipUri!).catch(() => null)) || shot.clipUri!;
-        // 2026-07-23 (QA honesty) — thread the upload's camera angle (default down_the_line) so the
-        // width-foreshortening metrics (hip/shoulder turn, weight shift) are NULLED for DTL rather
-        // than shown as "Measured" — they're geometrically invalid from behind. Matches the primary
-        // path (services/videoUpload.ts) which already passes angleOverride; this backfill dropped it.
-        // 2026-07-24 (full-app audit, root D) — thread handedness so a lefty's weight-shift
-        // sign isn't inverted (default 'right' read it backwards on this backfill path).
-        const { resolveSwingerHandedness } = await import('../../../services/swingerHandedness');
-        // 2026-07-25 (Tim — "body mechanics run before the swing even starts in the library") — the
-        // backfill sampled the WHOLE clip by fixed fractions (address=5%, top=50%…), so on an upload with
-        // pre-swing setup/waggle the metrics were computed off pre-swing frames. When the shot carries a
-        // trimmed swing window, pass it so sampling stays INSIDE the actual swing (address→finish).
-        const wStart = shot.clipStartSeconds != null ? shot.clipStartSeconds * 1000 : null;
-        const wEnd = shot.clipEndSeconds != null ? shot.clipEndSeconds * 1000 : null;
-        let swingWindow = (wStart != null && wEnd != null && wEnd - wStart >= 500) ? { startMs: wStart, endMs: wEnd } : null;
-        let locatedImpactMs: number | null = null;
-        /**
-         * 2026-08-14 — LOCATE the swing when the shot doesn't already carry a trimmed window.
-         *
-         * Without this, a clip with no window fell through to extractKeyFrames' fraction spread
-         * ([0.20 0.40 0.60 0.78 0.92] across the whole clip) — guessing where the swing is by
-         * position. On a 26s clip that is mostly pre-shot routine, most of those frames land on a
-         * player standing still, which is exactly the "body mechanics run before the swing even
-         * starts" complaint. The fraction spread is a LAST RESORT, not a normal path.
-         *
-         * Same locator SmartMotion and the upload path already use, so all three now answer "where is
-         * the swing" the same way instead of two of them guessing.
-         */
-        if (!swingWindow) {
-          /**
-           * 2026-09-01 — ON DEVICE FIRST. The network locate below is a cold-Lambda vision call with a
-           * 25s client budget; Tim's log on 09-01 shows it aborting twice in an afternoon (dead_host,
-           * ~9s each), and each abort drops the read to sampling the whole clip. On-device costs a
-           * dozen thumbnails and some arithmetic — seconds, offline, and free — because a swing is
-           * the fastest thing in the clip and poseMotion has been able to read that since 07-21.
-           *
-           * Null here is cheap: the network locate still runs exactly as before. So this can only
-           * make the path faster, never less capable. [[speed-is-the-wow]]
-           */
-          try {
-            const { locateSwingWindowOnDevice } = await import('../../../services/swing/onDeviceLocate');
-            const onDev = await locateSwingWindowOnDevice(analyzeUri, durationMs);
-            if (onDev && onDev.endSec > onDev.startSec) {
-              swingWindow = { startMs: Math.round(onDev.startSec * 1000), endMs: Math.round(onDev.endSec * 1000) };
-              locatedImpactMs = Math.round(onDev.swingTimeSec * 1000);
-            }
-          } catch { /* on-device is best-effort — the network locate below is the fallback */ }
-        }
-        if (!swingWindow) {
-          try {
-            const { locateSwingWindow } = await import('../../../services/poseDetection');
-            const loc = await locateSwingWindow(analyzeUri, durationMs);
-            if (loc && loc.endSec > loc.startSec) {
-              swingWindow = { startMs: Math.round(loc.startSec * 1000), endMs: Math.round(loc.endSec * 1000) };
-              locatedImpactMs = Math.round(loc.swingTimeSec * 1000);
-            }
-          } catch { /* locator is best-effort — fall through to the shot's own impact below */ }
-        }
-        // 2026-08-09 (verification wave C1) — thread the vision-located impact so the pose pass anchors
-        // the stage frames on the REAL strike instead of the 65%-of-window fraction (~1.1s late).
-        const backfillImpactMs = typeof shot.locatedImpactSec === 'number' && shot.locatedImpactSec > 0
-          ? shot.locatedImpactSec * 1000
-          : locatedImpactMs;
-        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null, false, swingWindow, backfillImpactMs, resolveSwingerHandedness());
-        useSwingSessionStore.getState().setSessionBiomechanics(swing_id, biomech);
-      } catch (e) {
-        console.log('[swing-detail] pose backfill failed', e);
-        // 2026-06-11 — mark the backfill ATTEMPTED (null, not undefined) so the
-        // slow full-clip analysis does NOT re-run on every re-open of a saved
-        // swing (Tim: "we only need it done once, then it's saved"). null trips
-        // the `biomechanics !== undefined` guard above on the next open.
-        try { useSwingSessionStore.getState().setSessionBiomechanics(swing_id, null); } catch { /* non-fatal */ }
-      }
-    })();
-    /**
-     * 2026-09-14 — the clip WINDOW and the angle override decide what this analyses, and none of
-     * them were listed. Re-trimming a swing, or correcting its camera angle, left the backfill
-     * working from the values captured when the screen opened.
-     */
-  }, [swing_id, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.locatedImpactSec,
-      session?.biomechanics, session?.upload?.duration_sec, session?.source, session?.upload?.angleOverride]);
 
   // 2026-08-01 (Tim — per-swing breakdown). LAZY per-SHOT biomech + clubhead arc: when the user selects
   // a swing in the reel that has no per-shot read yet, extract pose for JUST that swing's WINDOW (bounded
@@ -1329,9 +1167,11 @@ export default function SwingDetail() {
            */
           // 2026-09-01 — same honest anchor rule as the sibling call site above; without it the
           // sampler spreads its dense band across the whole back half of the window.
-          const arcAnchorMs = impactAnchorMs({
+          // 2026-10-04 — the ONE anchor rule (it had no pose impact here; the sibling above did).
+          const arcAnchorMs = clubArcAnchorMs({
             detectionMethod: selShot.detectionMethod,
             detectionOffsetSeconds: selShot.detectionOffsetSeconds,
+            frames: biomech?.frames ?? null,
             rawStartMs: wStart,
             rawEndMs: wEnd,
           });
@@ -1344,8 +1184,7 @@ export default function SwingDetail() {
           // so its frames are the freshest bounds available for this clip.
           const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames), sourceFps: swingCapturedFps });
           // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
-          // would drop a valid 3-point arc and persist []. (Dead today under LIBRARY_AUTO_PROCESS=false, but
-          // keep it consistent so flipping that flag can't silently lose 3-point arcs.)
+          // would drop a valid 3-point arc and persist [].
           if (arc && arc.points.length >= 3) {
             useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
           } else {
@@ -1574,27 +1413,8 @@ export default function SwingDetail() {
     // the first frame; the user taps to play (togglePlayPause restarts from the
     // top when at end). Autoplay was also what left the controls dead — it ran
     // the clip to the end on open, so the user's first tap hit a finished video
-    // and did nothing. The ?watch=1 path below keeps its own shouldPlay.
-    // 2026-05-25 — Path A: when the user routed here with ?watch=1
-    // (analysis was deferred at upload time for short clips), fire
-    // runPhaseKOnSession the moment the video plays through. Gated
-    // by watchFiredRef so re-mounts can't double-fire, and by
-    // analysisStatus so we don't clobber a result if one's already
-    // present (e.g. user navigated back-and-forth after analysis ran).
-    if (
-      LIBRARY_AUTO_PROCESS &&
-      s.didJustFinish &&
-      shouldAutoplayThenAnalyze &&
-      !watchFiredRef.current &&
-      analysisStatus === 'pending' &&
-      swing_id
-    ) {
-      watchFiredRef.current = true;
-      uploadLog('watch-then-analyze-fire', { from_status: analysisStatus }, swing_id);
-      useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
-      void runPhaseKOnSession(swing_id);
-    }
-  }, [analysisStatus, shouldAutoplayThenAnalyze, swing_id]);
+    // and did nothing.
+  }, []);
 
   // 2026-08-07 (Tim — the video-loop crash keeps coming back). ROOT CAUSE, made structural: EVERY prop
   // passed to the native <Video> must be referentially STABLE, or a re-render (the position updates 25×/s
@@ -1620,8 +1440,7 @@ export default function SwingDetail() {
     // 2026-08-07 (Tim — "when opening a file in the swing library it automatically plays"). Only the deferred
     // ?watch=1 analysis path auto-plays (it needs playthrough to fire analysis); a normal library open now
     // sits STATIC on the first frame — tap to play. Removes the "auto-plays into a crash" trigger entirely.
-    if (shouldAutoplayThenAnalyze) { try { await videoRef.current?.playAsync(); } catch { /* best-effort */ } }
-  }, [shot?.clipStartSeconds, shouldAutoplayThenAnalyze]);
+  }, [shot?.clipStartSeconds]);
   const onVideoError = useCallback((e: unknown) => {
     const msg = typeof e === 'string' ? e : 'This video could not be played on this device.';
     console.error('[swing-detail] video error:', e);
@@ -1728,38 +1547,6 @@ export default function SwingDetail() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // 2026-05-25 — Safety-net auto-fire for stuck-on-pending analysis.
-  // For uploaded clips that landed with ?watch=1, analysis ONLY fires
-  // when the video plays through (didJustFinish). If the user pauses
-  // mid-play, never starts playback, or the video errors silently,
-  // analysisStatus sits at 'pending' forever. Tonight Tim reported a
-  // 3-minute "Kevin is reviewing" hang on a real upload — this watchdog
-  // fixes that: when ?watch=1 AND status is 'pending' AND we haven't
-  // fired yet, schedule an auto-fire after 25s. By then the video has
-  // either auto-played through (fired naturally) OR not — in which case
-  // we kick off analysis anyway so the user isn't stranded. Cleaned up
-  // on unmount + on status change.
-  useEffect(() => {
-    if (!LIBRARY_AUTO_PROCESS) return; // 2026-06-15 (Tim) — library is manual; no watchdog auto-fire
-    if (!swing_id) return;
-    if (!shouldAutoplayThenAnalyze) return;
-    if (analysisStatus !== 'pending') return;
-    if (watchFiredRef.current) return;
-    const timer = setTimeout(() => {
-      if (watchFiredRef.current) return;
-      if (useSwingSessionStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status !== 'pending') return;
-      watchFiredRef.current = true;
-      // 2026-05-25 — bumped 25s → 60s per Tim's request. Longer clips
-      // (uploaded coach lessons, multi-swing demos) need more time
-      // for natural play-through completion before we override with
-      // the watchdog. 60s still bounds the worst-case "stuck on
-      // Kevin is reviewing forever" UX.
-      uploadLog('watch-then-analyze-watchdog-fire', { reason: 'pending_60s' }, swing_id);
-      useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
-      void runPhaseKOnSession(swing_id);
-    }, 60_000);
-    return () => clearTimeout(timer);
-  }, [swing_id, shouldAutoplayThenAnalyze, analysisStatus]);
 
   // 2026-07-21 (BETA — analysis P0) — surface an EARLY manual escape on a slow upload analysis:
   // after 30s of 'pending' show a subtle "taking longer than usual — tap to retry" so the tester
@@ -2816,9 +2603,9 @@ export default function SwingDetail() {
                 // 2026-08-07 (Tim — "when opening a file it automatically plays" + it crashed). A normal
                 // library open no longer auto-plays: it sits STATIC on the located frame; the user taps to
                 // play. Only the deferred ?watch=1 analysis path auto-plays (needs playthrough to analyze).
-                shouldPlay={shouldAutoplayThenAnalyze}
+                shouldPlay={false}
                 isLooping={false}
-                // 2026-10-03 (review) — this was `!shouldAutoplayThenAnalyze`, and with ?watch=1 gone it muted
+                // 2026-10-03 (review) — this was `!shouldAutoplayThenAnalyze` (the removed ?watch=1 path), which muted
                 // every clip forever. An upload with audio (a coach's voice) plays with it; captures stay quiet.
                 isMuted={!(session?.source === 'uploaded_video' && session?.upload?.has_audio)}
                 rate={playbackRate}

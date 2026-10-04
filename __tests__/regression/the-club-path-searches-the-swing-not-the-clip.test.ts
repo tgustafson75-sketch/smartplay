@@ -125,7 +125,8 @@ describe('the screen actually applies it', () => {
   });
 
   it('feeds it the pose impact frame it derives on screen', () => {
-    expect(src).toMatch(/p\.position === 'P6_impact'/);
+    // 2026-10-04 — derived by the shared rule (clubPathWindow.poseImpactFromFrames).
+    expect(src).toMatch(/poseImpactFromFrames\(poseFrames\)/);
     expect(src).toMatch(/poseImpactMs,/);
     // and re-runs when any input to the anchor changes
     expect(src).toMatch(/shot\?\.detectionMethod, shot\?\.detectionOffsetSeconds, poseImpactMs,/);

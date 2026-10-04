@@ -14,6 +14,8 @@
  * [[two-owners-is-the-root-cause]] [[break-test-every-guard-you-write]]
  */
 import { PRE_STRIKE_MS, POST_STRIKE_MS } from './swingSegmentation';
+import { wristCentroid, deriveSwingAnchors } from './poseMotion';
+import type { PoseFrame } from '../poseAnalysisApi';
 
 /** Wider than any real swing (4,000ms segment + headroom for a slow, wide capture). */
 export const MAX_SWING_WINDOW_MS = 6000;
@@ -145,4 +147,48 @@ export function narrowClubPathWindow(
     startMs: Math.max(rawStartMs, anchorMs - PRE_STRIKE_MS),
     endMs: Math.min(rawEndMs, anchorMs + POST_STRIKE_MS),
   };
+}
+
+/**
+ * 2026-10-04 (orchestrator phase 3) — THE pose impact for a club arc, from a swing's pose frames.
+ *
+ * Four club-arc runners built this four ways: the swing screen labelled-then-derived, its per-shot
+ * re-analyse passed no pose impact at all, SmartMotion refused anything but a labelled frame, and the
+ * upload pass passed no anchor whatsoever. One rule now:
+ *   1. a P6_impact the pose pipeline labelled from a strike (never an 'estimated' fraction);
+ *   2. else the impact DERIVED from the wrists' motion (deriveSwingAnchors — timing, not geometry,
+ *      Tim's 09-01 call), which is what reads a swing nobody labelled.
+ * Null when neither exists. impactAnchorMs still decides whether it is inside the window.
+ */
+export function poseImpactFromFrames(frames: readonly PoseFrame[] | null | undefined): number | null {
+  if (!frames || frames.length === 0) return null;
+  const f = frames.find((p) => p.position === 'P6_impact');
+  if (f && f.positionSource !== 'estimated' && typeof f.timestampMs === 'number' && Number.isFinite(f.timestampMs)) {
+    return f.timestampMs;
+  }
+  const samples = frames
+    .map((fr) => {
+      const c = wristCentroid(fr);
+      return c && Number.isFinite(fr.timestampMs) ? { tMs: fr.timestampMs, x: c.x, y: c.y } : null;
+    })
+    .filter((v): v is { tMs: number; x: number; y: number } => v !== null);
+  const a = deriveSwingAnchors(samples);
+  return a && Number.isFinite(a.impactMs) ? a.impactMs : null;
+}
+
+/** The ONE anchor every club-arc runner passes to detectClubPath: heard strike → pose impact → none. */
+export function clubArcAnchorMs(input: {
+  detectionMethod?: string | null;
+  detectionOffsetSeconds?: number | null;
+  frames: readonly PoseFrame[] | null | undefined;
+  rawStartMs: number;
+  rawEndMs: number;
+}): number | null {
+  return impactAnchorMs({
+    detectionMethod: input.detectionMethod,
+    detectionOffsetSeconds: input.detectionOffsetSeconds,
+    poseImpactMs: poseImpactFromFrames(input.frames),
+    rawStartMs: input.rawStartMs,
+    rawEndMs: input.rawEndMs,
+  });
 }

@@ -22,12 +22,19 @@
  * services/swing/analysisPipeline still records what ran (observation); this decides what runs.
  */
 
+import { ON_DEVICE_LOCATE_MIN_CLIP_MS } from './analysisFrames';
+
 export type UploadSwingWindow = {
   startSec: number;
   endSec: number;
   /** A measured impact, when the method that found the window measured one (pose locate). */
   impactSec: number | null;
   via: 'motion' | 'whole_clip' | 'on_device' | 'network' | 'middle';
+  /**
+   * The locator's own window, before the ±0.5s address/finish padding (pose locate only). The read's
+   * nine frames want the tight span — denser around impact — and analyzeSwing samples it.
+   */
+  core?: { startSec: number; endSec: number };
 };
 
 /** A clip this short IS the swing; locating it costs more than it saves. */
@@ -98,9 +105,14 @@ export async function findUploadSwingWindow(
    * allowNetwork:false — the live capture path right after Stop: a fast on-device answer (or the whole
    * clip) beats a 35s network locate while the player stands there waiting for the read.
    */
-  opts: { allowNetwork?: boolean } = {},
+  opts: {
+    allowNetwork?: boolean;
+    /** Why the network locate gave up — analyzeSwing reports it as `locate_degraded`. */
+    onNetworkAbort?: (cause: 'dead_host' | 'ceiling' | 'unknown') => void;
+  } = {},
 ): Promise<UploadSwingWindow> {
   const dur = Math.max(0.5, durationSec);
+  let motionRan = false;
   // 1. The web SmartMotion way: localised motion between tiny frames (seconds, no pose), then a few
   //    pose reads to tell the swing burst from the other motion in the clip.
   try {
@@ -108,6 +120,7 @@ export async function findUploadSwingWindow(
     if (Platform.OS === 'android') {
       const fe = require('../frameEngine') as typeof import('../frameEngine');
       if (await fe.ensureFrameEngine(5_000)) {
+        motionRan = true;
         const m = await fe.findMotionWindow(clipUri);
         const bursts = m.bursts ?? [];
         console.log('[window] motion pass', JSON.stringify({ window: m.window, bursts: bursts.length }));
@@ -144,21 +157,26 @@ export async function findUploadSwingWindow(
     }
   } catch (e) { console.log('[window] motion pass failed', e instanceof Error ? e.message : String(e)); }
 
-  // 2. Short clip: the clip is the swing.
-  if (dur <= SHORT_CLIP_NO_LOCATE_SEC) return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
+  // 2. Short clip: the clip is the swing — once the motion pass has had its look. Where there IS no
+  //    motion pass (iOS) a clip long enough to hold a walk-up still gets the on-device locate: exact
+  //    native frames make it a few seconds there, and it is what analyzeSwing did before it came here.
+  if (dur <= SHORT_CLIP_NO_LOCATE_SEC && (motionRan || dur * 1000 < ON_DEVICE_LOCATE_MIN_CLIP_MS)) {
+    return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
+  }
 
   // 3/4. Pose locate on the device, then the network.
   try {
     const { locateSwingWindowOnDevice } = require('./onDeviceLocate') as typeof import('./onDeviceLocate');
     const onDev = await locateSwingWindowOnDevice(clipUri, dur * 1000).catch(() => null);
     if (onDev && onDev.endSec > onDev.startSec) {
-      return { startSec: Math.max(0, onDev.startSec - 0.5), endSec: Math.min(dur, onDev.endSec + 0.5), impactSec: onDev.swingTimeSec, via: 'on_device' };
+      return { startSec: Math.max(0, onDev.startSec - 0.5), endSec: Math.min(dur, onDev.endSec + 0.5), impactSec: onDev.swingTimeSec, via: 'on_device', core: { startSec: onDev.startSec, endSec: onDev.endSec } };
     }
+    if (dur <= SHORT_CLIP_NO_LOCATE_SEC) return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
     if (opts.allowNetwork === false) throw new Error('network locate not allowed here');
     const { locateSwingWindow } = require('../poseDetection') as typeof import('../poseDetection');
-    const net = await locateSwingWindow(clipUri, dur * 1000);
+    const net = await locateSwingWindow(clipUri, dur * 1000, { onAbort: opts.onNetworkAbort });
     if (net && net.endSec > net.startSec) {
-      return { startSec: Math.max(0, net.startSec - 0.5), endSec: Math.min(dur, net.endSec + 0.5), impactSec: net.swingTimeSec, via: 'network' };
+      return { startSec: Math.max(0, net.startSec - 0.5), endSec: Math.min(dur, net.endSec + 0.5), impactSec: net.swingTimeSec, via: 'network', core: { startSec: net.startSec, endSec: net.endSec } };
     }
   } catch { /* fall through to the middle */ }
 

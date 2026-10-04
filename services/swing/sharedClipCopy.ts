@@ -63,7 +63,7 @@ export async function acquireExistingClipCopy(
 ): Promise<{ uri: string; release: () => void } | null> {
   const e = entries.get(videoUri);
   if (!e) return null;
-  return attach(e, videoUri);
+  return attach(e);
 }
 
 export async function acquireClipCopy(
@@ -98,20 +98,38 @@ export async function acquireClipCopy(
     e = entry;
     entries.set(videoUri, e);
   }
-  return attach(e, videoUri);
+  return attach(e);
+}
+
+/**
+ * 2026-10-04 (orchestrator phase 3) — THE SECOND COPY. SmartMotion starts the read on the recorder's
+ * raw file the instant Stop lands, then persistClipToDocuments makes the durable file the pose pass
+ * and club arc read — the same bytes under a second URI, so the pool made a second full private copy
+ * (37MB for Tim's 14.5s clip) of a clip it was already holding. Calling this when one file is a
+ * byte-for-byte copy of another lets the second URI share the first's live entry. No entry, or the
+ * second URI already pooled: nothing to share, nothing done.
+ */
+export function aliasClipCopy(sameBytesUri: string, pooledUri: string): void {
+  if (sameBytesUri === pooledUri || entries.has(sameBytesUri)) return;
+  const e = entries.get(pooledUri);
+  if (e) entries.set(sameBytesUri, e);
+}
+
+/** Drop every key (a URI and its aliases) that maps to this entry. */
+function forget(e: Entry): void {
+  for (const [k, v] of entries) if (v === e) entries.delete(k);
 }
 
 /** Take a reference on an existing entry and hand back its handle. Shared by both acquire paths. */
 async function attach(
   e: Entry,
-  videoUri: string,
 ): Promise<{ uri: string; release: () => void } | null> {
   if (e.linger) { clearTimeout(e.linger); e.linger = null; }
   e.refs++;
   const uri = await e.ready;
   if (!uri) {
     e.refs--;
-    if (e.refs <= 0) entries.delete(videoUri);
+    if (e.refs <= 0) forget(e);
     return null;
   }
   const held = e;
@@ -126,7 +144,7 @@ async function attach(
         held.linger = setTimeout(() => {
           // Only reap if no one re-acquired during the linger.
           if (held.refs <= 0) {
-            entries.delete(videoUri);
+            forget(held);
             if (held.copyUri) {
               void FileSystem.deleteAsync(held.copyUri, { idempotent: true }).catch(() => undefined);
             }

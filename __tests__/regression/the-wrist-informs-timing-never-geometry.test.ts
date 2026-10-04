@@ -15,26 +15,59 @@
  */
 import fs from 'fs';
 import path from 'path';
+import fixture from '../fixtures/locate-3870-wrists.json';
+import { poseImpactFromFrames } from '../../services/swing/clubPathWindow';
+import { deriveSwingAnchors } from '../../services/swing/poseMotion';
+import type { PoseFrame } from '../../services/poseAnalysisApi';
 
 const root = path.join(__dirname, '..', '..');
 const screen = fs.readFileSync(path.join(root, 'app/swinglab/swing/[swing_id].tsx'), 'utf8');
 
+/**
+ * 2026-10-04 (orchestrator phase 3) — the impact rule moved out of the screen into
+ * services/swing/clubPathWindow.poseImpactFromFrames, the one every club-arc runner calls. Tested by
+ * BEHAVIOUR now (the source shape it used to pin is gone), on Tim's real 3870 wrist samples.
+ */
+const frameAt = (tMs: number, x: number, y: number, extra: Partial<PoseFrame> = {}): PoseFrame => ({
+  timestampMs: tMs,
+  keypoints: [
+    { name: 'left_wrist', x, y, score: 0.9 },
+    { name: 'right_wrist', x, y, score: 0.9 },
+  ],
+  ...extra,
+} as unknown as PoseFrame);
+const tim = (fixture.samples as number[][]).map(([t, x, y]) => frameAt(t, x, y));
+
 describe('the wrist may inform timing', () => {
   it('impact falls back to the motion-derived anchor when nothing is labelled', () => {
-    expect(screen).toMatch(/return deriveSwingAnchors\(samples\);/);
-    expect(screen).toMatch(/motionAnchors && Number\.isFinite\(motionAnchors\.impactMs\) \? motionAnchors\.impactMs : null/);
+    const derived = deriveSwingAnchors((fixture.samples as number[][]).map(([t, x, y]) => ({ tMs: t, x, y })));
+    expect(derived).not.toBeNull();
+    expect(poseImpactFromFrames(tim)).toBe(derived!.impactMs);
   });
 
   it('and only after the labelled P6_impact frame is tried first', () => {
-    const memo = screen.slice(screen.indexOf('const poseImpactMs'), screen.indexOf('const poseImpactMs') + 2200);
-    expect(memo.indexOf("position === 'P6_impact'")).toBeLessThan(memo.indexOf('deriveSwingAnchors'));
+    const labelled = [...tim];
+    labelled[3] = { ...labelled[3], position: 'P6_impact', positionSource: 'strike' } as PoseFrame;
+    expect(poseImpactFromFrames(labelled)).toBe(labelled[3].timestampMs);
   });
 
-  it('it produces NUMBERS of milliseconds, nothing else', () => {
-    // x/y go IN to the anchor derivation; only times come OUT of it.
+  it("an 'estimated' label (a fraction of the window) is NOT an impact — the motion decides", () => {
+    const estimated = [...tim];
+    estimated[3] = { ...estimated[3], position: 'P6_impact', positionSource: 'estimated' } as PoseFrame;
+    expect(poseImpactFromFrames(estimated)).toBe(poseImpactFromFrames(tim));
+  });
+
+  it('it produces NUMBERS of milliseconds, nothing else — and nothing from nothing', () => {
+    expect(typeof poseImpactFromFrames(tim)).toBe('number');
+    expect(poseImpactFromFrames([])).toBeNull();
+    expect(poseImpactFromFrames(null)).toBeNull();
+  });
+
+  it('the screen uses that rule, and its chips still read the motion anchors', () => {
+    expect(screen).toMatch(/const poseImpactMs = useMemo\(\(\) => poseImpactFromFrames\(poseFrames\), \[poseFrames\]\);/);
+    expect(screen).toMatch(/return deriveSwingAnchors\(samples\);/);
     const memo = screen.slice(screen.indexOf('const motionAnchors'), screen.indexOf('const motionAnchors') + 1400);
     expect(memo).toMatch(/tMs: fr\.timestampMs, x: c\.x, y: c\.y/);
-    expect(screen).toMatch(/motionAnchors\.impactMs/);
     expect(screen).toMatch(/motionAnchors\?\.topMs/);
   });
 });

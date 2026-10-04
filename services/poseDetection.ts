@@ -1415,14 +1415,21 @@ export async function analyzeSwing(
        * import, and a static edge here would be a needless cycle.
        * [[speed-is-the-wow]] [[the-client-must-be-the-last-to-give-up]]
        */
-      let located: { startSec: number; endSec: number; swingTimeSec: number } | null = null;
+      /**
+       * 2026-10-04 (orchestrator phase 3) — through the ONE window finder (motion → burst+pose →
+       * on-device → network), not a private copy of its last two steps. 'middle' means nothing was
+       * found: null here, so the degraded / whole-clip handling below is unchanged. The network step
+       * keeps this plan's rule (long clips only) and its abort reason.
+       */
+      let located: { startSec: number; endSec: number } | null = null;
       try {
-        const { locateSwingWindowOnDevice } = await import('./swing/onDeviceLocate');
-        located = await locateSwingWindowOnDevice(clipUri, probedDurMs);
-      } catch { /* on-device is best-effort — the network locate below is the fallback */ }
-      if (!located && locatePlan === 'full') located = await locateSwingWindow(clipUri, probedDurMs, {
-        onAbort: (cause) => { locateDegraded = cause; },
-      });
+        const { findUploadSwingWindow } = await import('./swing/analysisOrchestrator');
+        const w = await findUploadSwingWindow(clipUri, probedDurMs / 1000, {
+          allowNetwork: locatePlan === 'full',
+          onNetworkAbort: (cause) => { locateDegraded = cause; },
+        });
+        if (w.via !== 'middle' && w.endSec > w.startSec) located = w.core ?? { startSec: w.startSec, endSec: w.endSec };
+      } catch { /* best-effort — the whole clip below */ }
       locateMs = Date.now() - tLocate;
       if (located) {
         effectiveBoundaries = located;

@@ -1174,7 +1174,8 @@ check('Swing-library video: every <Video> prop is STABLE (no re-subscribe loop) 
       /onLoad=\{onVideoLoad\}/.test(d) && /onError=\{onVideoError\}/.test(d) &&
       // Motion overlay OFF by default; only the deferred-analysis path auto-plays.
       /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(d) &&
-      /shouldPlay=\{shouldAutoplayThenAnalyze\}/.test(d)
+      // 2026-10-04 — the ?watch=1 autoplay path is deleted (no screen passed it); the library never autoplays.
+      /shouldPlay=\{false\}/.test(d)
     );
   })(),
   'the swing-library <Video> has fully referentially-stable props (memoized source/style + useCallback status/load/error) so a 25x/s re-render can never re-subscribe expo-av into the fatal update-depth loop; Motion overlay defaults OFF and a normal open does not auto-play');
@@ -3306,7 +3307,9 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
       /input\.durationMs, input\.context\?\.angle \?\? null, false, null, null, lefty \? 'left' : 'right'\)/.test(estimator) &&
       /computeBiomechanicsFromFrames\(adjusted\)/.test(estimator) &&
       // the swing-detail backfill threads handedness too.
-      /resolveSwingerHandedness\(\)\)/.test(detail)
+      // 2026-10-04 — the on-open backfill is gone (unreachable, duplicated the Analyze run's pose stage);
+      // the per-shot pass threads it.
+      /resolveSwingerHandedness\(\),?\s*\)/.test(detail)
     );
   })(),
   'the Coach lesson + upload backfill no longer speak DTL-invalid turn/weight numbers as measured (angle inferred from geometry), and lefty weight-shift reads with the correct sign on every analysis path');
@@ -6623,8 +6626,10 @@ check('Swing localizer: locate_swing API mode + client locator wired into analyz
     // 2026-09-29 — the network locate is gated on the locate PLAN: clips of 2.5-6s are located on
     // the device only (they used to skip locating entirely); ≥6s still fall back to the network.
     /const locatePlan = locatePlanFor\(probedDurMs\)/.test(poseSrc) &&
-    /if \(!located && locatePlan === 'full'\) located = await locateSwingWindow/.test(poseSrc) &&
-    /locateSwingWindowOnDevice\(clipUri, probedDurMs\)/.test(poseSrc) &&
+    // 2026-10-04 (orchestrator phase 3) — through the ONE finder: device first, the network only on
+    // the 'full' plan, and the abort reason still reaches locate_degraded.
+    /findUploadSwingWindow\(clipUri, probedDurMs \/ 1000, \{\s*allowNetwork: locatePlan === 'full',\s*onNetworkAbort:/.test(poseSrc) &&
+    /locateSwingWindow\(clipUri, dur \* 1000, \{ onAbort: opts\.onNetworkAbort \}\)/.test(read('services/swing/analysisOrchestrator.ts')) &&
     /effectiveBoundaries = located/.test(poseSrc),
   'unbounded long uploads run an AI locate pass (find the swing) then analyze a tight window around it — no acoustics, no manual marking');
 
@@ -9697,10 +9702,16 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
    */
   check('Swing Library: never analyses a clip whole — locates the swing, and still skips cage multi-swing',
     (() => {
-      const skipsCage = /if \(session\?\.source === 'live_capture'\) return;/.test(swingDetailSrc2);
-      // and it must LOCATE a window rather than falling through to the fraction spread
-      const locatesWindow = /const \{ locateSwingWindow \} = await import\('\.\.\/\.\.\/\.\.\/services\/poseDetection'\);/.test(swingDetailSrc2) &&
-        /if \(!swingWindow\) \{/.test(swingDetailSrc2);
+      /**
+       * 2026-10-04 (orchestrator phase 3) — the screen's on-open backfill (where this used to look) is
+       * deleted: gated off by a constant and a duplicate of the Analyze run. The run is where the window
+       * is found now: uploadRun's window stage, through the ONE finder, only for single-swing uploads —
+       * a cage / live multi-swing session never gets a single window forced on it.
+       */
+      const run = read('services/swing/orchestrator/uploadRun.ts');
+      const skipsCage = /if \(!s \|\| !shot\?\.clipUri \|\| s\.source !== 'uploaded_video'\) return false;/.test(run);
+      const locatesWindow = /const w = await findUploadSwingWindow\(shot\.clipUri, s\.upload\?\.duration_sec \?\? 0\);/.test(run) &&
+        /when: \(\{ input \}\) => needsWindow\(input\.sessionId\)/.test(run);
       // the old length cap must NOT come back — it is what refused a 26s single swing
       const noLengthCap = !/durationMs > 20_000/.test(swingDetailSrc2);
       return skipsCage && locatesWindow && noLengthCap;
@@ -16905,7 +16916,7 @@ check(
     // an 'estimated' fraction-of-window label). Never the video-located / synthesized strikeMs.
     /const heardStrikeMs = \(seg\.peakDb \?\? 0\) !== 0 && typeof seg\.strikeMs === 'number' && !seg\.synthesized/
       .test(readCode('app/swinglab/smartmotion.tsx')) &&
-      /const segStrikeMs = heardStrikeMs \?\? impactAnchorMs\(\{/.test(readCode('app/swinglab/smartmotion.tsx')),
+      /const segStrikeMs = clubArcAnchorMs\(\{\s*detectionMethod: heardStrikeMs != null \? 'audio_transient' : 'manual',/.test(readCode('app/swinglab/smartmotion.tsx')),
     'peakDb === 0 marks a video-located swing and synthesized marks the whole-clip 0.6*duration guess — neither is a strike to cluster on',
   );
 }

@@ -79,3 +79,35 @@ describe('no video player loops with ExoPlayer repeat mode', () => {
     expect(src).not.toMatch(/\bisLooping(?!=\{false\})(?=[\s/>]|=\{true\})/);
   });
 });
+
+/**
+ * 2026-10-04 (phase 3) — the upload pass ran detectClubPath with NO impact anchor, so its dense samples
+ * spread across the whole window while every other runner clustered them on impact. Every runner now
+ * passes an anchor, and the ones that build it from pose frames use the shared rule.
+ */
+describe('every club-arc runner anchors on impact by the one rule', () => {
+  const walk = (dir: string): string[] => fs.readdirSync(path.join(__dirname, '..', '..', dir), { withFileTypes: true })
+    .flatMap((d) => d.isDirectory() ? walk(`${dir}/${d.name}`) : /\.tsx?$/.test(d.name) ? [`${dir}/${d.name}`] : []);
+  const files = [...walk('app'), ...walk('services'), ...walk('components')].filter((f) => f !== 'services/swing/clubPath.ts');
+  const calls = files.flatMap((f) => {
+    const src = code(f);
+    return [...src.matchAll(/detectClubPath\(\{([\s\S]*?)\}\)/g)].map((m) => ({ f, args: m[1] }));
+  });
+
+  it('finds the runners', () => {
+    expect(calls.map((c) => c.f).sort()).toEqual([
+      'app/swinglab/smartmotion.tsx', 'app/swinglab/swing/[swing_id].tsx', 'app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts',
+    ]);
+  });
+
+  it.each([0, 1, 2, 3])('runner %i passes an impact anchor', (i) => {
+    expect(calls[i].args).toMatch(/impactMs:/);
+  });
+
+  it('pose-built anchors go through clubArcAnchorMs / poseImpactFromFrames', () => {
+    expect(code('services/videoUpload.ts')).toMatch(/const arcAnchorMs = clubArcAnchorMs\(\{[\s\S]{0,900}?impactMs: arcAnchorMs,/);
+    expect(sm).toMatch(/const segStrikeMs = clubArcAnchorMs\(\{/);
+    expect(detail).toMatch(/const arcAnchorMs = clubArcAnchorMs\(\{/);
+    expect(detail).toMatch(/useMemo\(\(\) => poseImpactFromFrames\(poseFrames\)/);
+  });
+});

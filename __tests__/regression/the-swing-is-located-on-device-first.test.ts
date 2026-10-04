@@ -47,22 +47,28 @@ describe('the sample plan covers the swing without sampling the button press', (
   });
 });
 
-describe('it is tried BEFORE the network, and never replaces it', () => {
-  const screen = read('app/swinglab/swing/[swing_id].tsx');
+/**
+ * 2026-10-04 (orchestrator phase 3) — the order "device first, network as the fallback" now lives in
+ * ONE place, services/swing/analysisOrchestrator.findUploadSwingWindow (behaviour-tested in
+ * one-owner-runs-swing-analysis). The swing screen and analyzeSwing used to carry private copies of
+ * it; they now ask the finder. What these guard: nobody calls the network locate except the finder
+ * and the upload impact-search (which still asks the device first), and the finder keeps the order.
+ */
+const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
 
-  it('THE ORDER: on-device runs first', () => {
-    const onDev = screen.indexOf('locateSwingWindowOnDevice');
-    const net = screen.indexOf("await import('../../../services/poseDetection');\n            const loc = await locateSwingWindow");
+describe('it is tried BEFORE the network, and never replaces it', () => {
+  const finder = strip(read('services/swing/analysisOrchestrator.ts'));
+
+  it('THE ORDER: on-device runs first, inside the one finder', () => {
+    const onDev = finder.indexOf('locateSwingWindowOnDevice(clipUri');
+    const net = finder.indexOf('await locateSwingWindow(clipUri');
     expect(onDev).toBeGreaterThan(-1);
     expect(net).toBeGreaterThan(-1);
     expect(onDev).toBeLessThan(net);
   });
 
-  it('the network locate is still there — this adds a path, it does not remove one', () => {
-    expect(screen).toMatch(/const loc = await locateSwingWindow\(analyzeUri, durationMs\)/);
-    // and it only runs when on-device produced nothing
-    const after = screen.slice(screen.indexOf('locateSwingWindowOnDevice'));
-    expect(after).toMatch(/if \(!swingWindow\) \{[\s\S]{0,400}?locateSwingWindow\(analyzeUri/);
+  it('the network locate is still there, after the device came back empty', () => {
+    expect(finder).toMatch(/if \(onDev && onDev\.endSec > onDev\.startSec\) \{[\s\S]{0,300}?return[\s\S]{0,400}?await locateSwingWindow\(clipUri/);
   });
 });
 
@@ -140,49 +146,41 @@ describe('it produces timing, never evidence', () => {
 });
 
 describe('EVERY surface that asks where the swing is asks the device first', () => {
-  it('the review path and the upload path both try on-device before the network', () => {
-    for (const f of ['app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts', 'services/poseDetection.ts']) {
-      const src = read(f);
-      const onDev = src.indexOf('locateSwingWindowOnDevice');
-      const net = src.indexOf('locateSwingWindow(');
-      expect(onDev).toBeGreaterThan(-1);
-      expect(onDev).toBeLessThan(src.lastIndexOf('await locateSwingWindow('));
-      expect(net).toBeGreaterThan(-1);
-    }
+  const walk = (dir: string): string[] => fs.readdirSync(path.join(root, dir), { withFileTypes: true })
+    .flatMap((d) => d.isDirectory() ? walk(`${dir}/${d.name}`) : /\.tsx?$/.test(d.name) ? [`${dir}/${d.name}`] : []);
+  const files = [...walk('app'), ...walk('services'), ...walk('components'), ...walk('hooks')];
+
+  it('the analysis and the upload run ask the ONE finder', () => {
+    expect(strip(read('services/poseDetection.ts'))).toMatch(/findUploadSwingWindow\(clipUri, probedDurMs \/ 1000, \{/);
+    expect(strip(read('services/swing/orchestrator/uploadRun.ts'))).toMatch(/findUploadSwingWindow\(shot\.clipUri,/);
   });
 
-  it('and both still fall back to it — the network locate is removed nowhere', () => {
-    expect(read('services/videoUpload.ts')).toMatch(/if \(!loc\) loc = await locateSwingWindow\(/);
-    expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/const loc = await locateSwingWindow\(analyzeUri, durationMs\)/);
+  it('only the finder and the upload impact-search call the network locate — and both ask the device first', () => {
+    const callers = files.filter((f) => /await locateSwingWindow\(/.test(strip(read(f))));
+    expect(callers.sort()).toEqual(['services/swing/analysisOrchestrator.ts', 'services/videoUpload.ts']);
+    for (const f of callers) {
+      const src = strip(read(f));
+      expect(src.indexOf('locateSwingWindowOnDevice(')).toBeGreaterThan(-1);
+      expect(src.indexOf('locateSwingWindowOnDevice(')).toBeLessThan(src.indexOf('await locateSwingWindow('));
+    }
+    expect(strip(read('services/videoUpload.ts'))).toMatch(/if \(!loc\) loc = await locateSwingWindow\(/);
   });
 });
 
 describe('the analysis itself locates on-device — every caller benefits', () => {
-  const pose = read('services/poseDetection.ts');
+  const pose = strip(read('services/poseDetection.ts'));
+  const finder = strip(read('services/swing/analysisOrchestrator.ts'));
 
-  it('analyzeSwing tries the device before the cold Lambda', () => {
-    expect(pose).toMatch(/locateSwingWindowOnDevice\(clipUri, probedDurMs\)/);
-    // 2026-09-29 — the network locate now runs only on the 'full' plan (clips ≥6s); a 2.5-6s clip is
-    // located on the device alone. The order — device first, network as the fallback — is unchanged.
-    expect(pose).toMatch(/if \(!located && locatePlan === 'full'\) located = await locateSwingWindow\(clipUri, probedDurMs/);
+  it('analyzeSwing keeps its plan: the network only for long clips', () => {
+    expect(pose).toMatch(/allowNetwork: locatePlan === 'full'/);
   });
 
   it('the abort reason is still reported when the network locate DOES run', () => {
-    // locateDegraded is what tells the player the read is rough rather than clean.
-    expect(pose).toMatch(/onAbort: \(cause\) => \{ locateDegraded = cause; \}/);
+    expect(pose).toMatch(/onNetworkAbort: \(cause\) => \{ locateDegraded = cause; \}/);
+    expect(finder).toMatch(/locateSwingWindow\(clipUri, dur \* 1000, \{ onAbort: opts\.onNetworkAbort \}\)/);
   });
 
   it('it is a DYNAMIC import — a static edge here would be a needless cycle', () => {
-    expect(pose).toMatch(/await import\('\.\/swing\/onDeviceLocate'\)/);
-  });
-
-  it('NO surface calls the network locate without trying the device first', () => {
-    const surfaces = ['app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts', 'services/poseDetection.ts'];
-    for (const f of surfaces) {
-      const src = read(f);
-      const netCalls = (src.match(/await locateSwingWindow\(/g) ?? []).length;
-      const onDevCalls = (src.match(/locateSwingWindowOnDevice\(/g) ?? []).length;
-      expect(onDevCalls).toBeGreaterThanOrEqual(netCalls);
-    }
+    expect(pose).toMatch(/await import\('\.\/swing\/analysisOrchestrator'\)/);
   });
 });

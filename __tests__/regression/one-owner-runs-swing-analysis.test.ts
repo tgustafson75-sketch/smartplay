@@ -43,6 +43,40 @@ describe('one owner decides where the swing is', () => {
     expect((await findUploadSwingWindow('file:///c.mp4', 30)).via).toBe('middle');
   });
 
+  // 2026-10-04 (phase 3) — analyzeSwing and the swing screen ask this finder now, so its short-clip
+  // rule must not take the on-device locate away where there is no motion pass to replace it.
+  it('iOS: a short clip with room for a walk-up still gets the on-device locate', async () => {
+    mockPlatform.OS = 'ios';
+    mockOnDevice.mockResolvedValue({ startSec: 2, endSec: 3.6, swingTimeSec: 3 });
+    const w = await findUploadSwingWindow('file:///c.mp4', 5.5);
+    expect(w).toEqual(expect.objectContaining({ via: 'on_device', core: { startSec: 2, endSec: 3.6 } }));
+    expect(mockNetwork).not.toHaveBeenCalled();   // short clips never pay the network
+  });
+
+  it('iOS: nothing found on a short clip is the whole clip, never the network', async () => {
+    mockPlatform.OS = 'ios';
+    mockOnDevice.mockResolvedValue(null);
+    expect((await findUploadSwingWindow('file:///c.mp4', 5.5)).via).toBe('whole_clip');
+    expect(mockNetwork).not.toHaveBeenCalled();
+  });
+
+  it('a clip under 2.5s is the swing on every platform', async () => {
+    mockPlatform.OS = 'ios';
+    expect((await findUploadSwingWindow('file:///c.mp4', 2)).via).toBe('whole_clip');
+    expect(mockOnDevice).not.toHaveBeenCalled();
+  });
+
+  it('allowNetwork:false stops at the device; the abort reason reaches the caller', async () => {
+    mockPlatform.OS = 'ios';
+    mockOnDevice.mockResolvedValue(null);
+    expect((await findUploadSwingWindow('file:///c.mp4', 30, { allowNetwork: false })).via).toBe('middle');
+    expect(mockNetwork).not.toHaveBeenCalled();
+    const onNetworkAbort = jest.fn();
+    mockNetwork.mockImplementation(async (_u: string, _d: number, o: { onAbort?: (c: string) => void }) => { o.onAbort?.('dead_host'); return null; });
+    await findUploadSwingWindow('file:///c.mp4', 30, { onNetworkAbort });
+    expect(onNetworkAbort).toHaveBeenCalledWith('dead_host');
+  });
+
   it('iOS skips the browser pass (no engine there)', async () => {
     mockPlatform.OS = 'ios';
     mockOnDevice.mockResolvedValue({ startSec: 6, endSec: 8, swingTimeSec: 7 });

@@ -118,7 +118,7 @@ import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { anchorToleranceMs, impactAnchorMs } from '../../services/swing/clubPathWindow';
+import { anchorToleranceMs, clubArcAnchorMs } from '../../services/swing/clubPathWindow';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useRoundStore } from '../../store/roundStore';
 import { SmartMotionHeader, CaptureGuides, SpeedStat, TempoBar, BodyAnalysisRow, AcousticPickupCard, VerdictBadge, FooterChips, type Angle, type MetricSpec, ICON_BIOMECH, deriveBodyItems, type SmTone, SwingBreakdownCard } from '../../components/smartmotion/SmartMotionHud';
@@ -2293,10 +2293,12 @@ export default function SmartMotion() {
      * the one on screen. Now: the heard strike, else the pose impact (refused when it is only a
      * fraction of the window), and this result is what gets saved.
      */
-    const poseImpact = poseFrames?.find((f) => f.position === 'P6_impact') ?? null;
-    const segStrikeMs = heardStrikeMs ?? impactAnchorMs({
-      poseImpactMs: poseImpact?.timestampMs ?? null,
-      poseImpactSource: poseImpact?.positionSource ?? null,
+    // 2026-10-04 (phase 3) — through the ONE anchor rule every club-arc runner shares (clubArcAnchorMs):
+    // heard strike, else a strike-labelled or motion-derived pose impact inside the window.
+    const segStrikeMs = clubArcAnchorMs({
+      detectionMethod: heardStrikeMs != null ? 'audio_transient' : 'manual',
+      detectionOffsetSeconds: heardStrikeMs != null ? heardStrikeMs / 1000 : null,
+      frames: poseFrames,
       rawStartMs: seg.startMs,
       rawEndMs: seg.endMs,
     });
@@ -2957,6 +2959,11 @@ export default function SmartMotion() {
       try {
         const { persistClipToDocuments } = await import('../../services/videoUpload');
         uri = await persistClipToDocuments(rawUri);
+        // Same bytes, second name: the pose pass and club arc (on `uri`) share the private copy the read
+        // (on rawUri) already holds instead of making a second one. See sharedClipCopy.aliasClipCopy.
+        if (uri !== rawUri) {
+          try { (require('../../services/swing/sharedClipCopy') as typeof import('../../services/swing/sharedClipCopy')).aliasClipCopy(uri, rawUri); } catch { /* sharing is an optimisation */ }
+        }
         // Point review/replay + re-analyze at the DURABLE copy (survives cache eviction).
         if (uri !== rawUri) setClipUri(uri);
       } catch { /* use rawUri */ }
