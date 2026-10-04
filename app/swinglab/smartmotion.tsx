@@ -3423,10 +3423,12 @@ export default function SmartMotion() {
           frames = poseExtractCacheRef.current.frames;
         } else if (inflight) {
           // The warm is decoding these exact frames right now — join it, never decode twice.
-          // Bounded (sweep 10-04): a stalled warm must not hold the review's own pass forever.
+          // Bounded (sweep 10-04): a STALLED warm must not hold the review's own pass forever — but a slow
+          // one is still the cheapest way to these frames (20s re-decoded them on a slow decoder), so the
+          // bound is the pose stage's own 90s budget.
           frames = await Promise.race([
             inflight.catch(() => null),
-            new Promise<null>((res) => setTimeout(() => res(null), 20_000)),
+            new Promise<null>((res) => setTimeout(() => res(null), 90_000)),
           ]);
           if (cancelled) return;
           if (frames) poseExtractCacheRef.current = { key: extractKey, frames };
