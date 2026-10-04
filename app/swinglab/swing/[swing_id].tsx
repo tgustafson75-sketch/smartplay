@@ -95,8 +95,6 @@ import { setActiveSurface, clearActiveSurface } from '../../../services/activeSu
  * racing that it was introduced to stop.
  */
 const LIBRARY_AUTO_PROCESS = false;
-/** A clip this short is the swing — no locate before the read (see the auto-analyze effect). */
-const SHORT_CLIP_NO_LOCATE_SEC = 8;
 
 // 2026-06-12 — shared Smart Motion control badges, so Library video controls match
 // the SmartMotion review badges (whole-app control consistency).
@@ -2227,76 +2225,19 @@ export default function SwingDetail() {
     if (analyzeInFlightRef.current) return;
     autoAnalyzeFiredRef.current = true;
     void (async () => {
-      // 2026-07-01 (audit M2 + C1 root) — the old path blindly windowed the geometric
-      // MIDDLE of the clip. For a practice-heavy upload the real swing usually isn't
-      // mid-clip, so we analyzed walk-up/setup and then FEATURED a pavement/setup frame
-      // (the "pretty bad report" garbage frame). Instead, LOCATE the real swing first
-      // and window that; only fall back to the middle when the locator can't find it
-      // (short clips where the whole clip is the swing, or a locate miss/timeout).
-      let startSec: number;
-      let endSec: number;
-      let locatedImpactSec: number | null = null;
-      let located = false;
-      try {
-        /**
-         * 2026-10-03 (Tim: "it's a 6 second video… this needs to happen in under 15 seconds") — on a
-         * short clip the swing IS the clip. Locating it cost 6-18s (on-device, then the network
-         * fallback) before the read could even start. Window the whole clip and go; the pose pass after
-         * the read still finds the exact impact for the skeleton.
-         */
-        /**
-         * 2026-10-03 (Tim: "can the web be used instead?") — FIRST the web SmartMotion's way: find the
-         * swing by motion between tiny frames in the hidden browser (services/frameEngine). Seconds, no
-         * pose. Pose and body mechanics are the SECOND pass, after the read, on this same window — the
-         * upload's pose pass locates the exact impact inside it without the player waiting.
-         */
-        try {
-          const { Platform } = await import('react-native');
-          if (Platform.OS === 'android') {
-            const fe = await import('../../../services/frameEngine');
-            if (await fe.ensureFrameEngine(5_000)) {
-              const m = await fe.findMotionWindow(shot.clipUri!);
-              uploadLog('motion-window', { found: !!m.window, startMs: m.window?.startMs ?? null, endMs: m.window?.endMs ?? null }, swing_id);
-              if (m.window && m.window.endMs > m.window.startMs) {
-                useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, m.window.startMs / 1000, m.window.endMs / 1000, null);
-                useToastStore.getState().show('Found your swing — analyzing…');
-                onReanalyze();
-                return;
-              }
-            }
-          }
-        } catch { /* the web pass is a fast path; the locate below still answers */ }
-        if (duration <= SHORT_CLIP_NO_LOCATE_SEC) throw new Error('short clip: whole clip is the swing');
-        // 2026-09-01 — on-device first here too; see services/swing/onDeviceLocate. Same question,
-        // same answer in seconds instead of a cold-Lambda vision call.
-        const { locateSwingWindow } = await import('../../../services/poseDetection');
-        const { locateSwingWindowOnDevice } = await import('../../../services/swing/onDeviceLocate');
-        const win = (await locateSwingWindowOnDevice(shot.clipUri!, duration * 1000).catch(() => null))
-          ?? await locateSwingWindow(shot.clipUri!, duration * 1000);
-        if (win && win.endSec > win.startSec) {
-          // Pad the located window a touch so P1/P10 aren't clipped.
-          startSec = Math.max(0, win.startSec - 0.5);
-          endSec = Math.min(duration, win.endSec + 0.5);
-          locatedImpactSec = win.swingTimeSec; // C1 — carry the real anchor with the window
-          located = true;
-        } else {
-          const center = duration / 2;
-          startSec = Math.max(0, center - 2.5);
-          endSec = Math.min(duration, center + 3);
-        }
-      } catch {
-        if (duration <= SHORT_CLIP_NO_LOCATE_SEC) {
-          startSec = 0;
-          endSec = duration;
-        } else {
-          const center = duration / 2;
-          startSec = Math.max(0, center - 2.5);
-          endSec = Math.min(duration, center + 3);
-        }
-      }
-      useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, locatedImpactSec);
+      /**
+       * 2026-10-03 (Tim: "Is all of this being managed by an orchestrator?") — WHERE THE SWING IS comes
+       * from one owner now (services/swing/analysisOrchestrator.findUploadSwingWindow): the web
+       * SmartMotion motion pass first, the whole clip when it is short, then the pose locates, then the
+       * middle. This effect only applies the answer and starts the read; the read's own second pass
+       * does pose / body mechanics afterwards.
+       */
+      const { findUploadSwingWindow } = await import('../../../services/swing/analysisOrchestrator');
+      const w = await findUploadSwingWindow(shot.clipUri!, duration);
+      uploadLog('swing-window', { via: w.via, startSec: Math.round(w.startSec * 10) / 10, endSec: Math.round(w.endSec * 10) / 10 }, swing_id);
+      useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, w.startSec, w.endSec, w.impactSec);
       useToastStore.getState().show(
-        located ? 'Found your swing — analyzing…' : 'Analyzing your swing… scrub + re-analyze to fine-tune.',
+        w.via === 'middle' ? 'Analyzing your swing… scrub + re-analyze to fine-tune.' : 'Found your swing — analyzing…',
       );
       onReanalyze();
     })();

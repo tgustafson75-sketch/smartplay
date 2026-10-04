@@ -1,0 +1,172 @@
+/**
+ * 2026-10-03 (Tim: "Is all of this being managed by an orchestrator?" — it was not).
+ *
+ * Swing analysis stages were started from five places — the swing screen's open effect, its own pose
+ * backfill, the upload service, SmartMotion, the Analyze button — and nothing owned the ORDER. That is
+ * how one 6-second upload collided with itself: a second 37MB clip copy, a pose pass competing with the
+ * read's frames on the same reader, the locate run twice, two reads of one clip.
+ *
+ * This module owns it:
+ *
+ *   1. WHERE IS THE SWING  — findUploadSwingWindow: the web SmartMotion motion pass (Android, hidden
+ *      browser), the whole clip when the clip is short, the on-device locate, the network locate, the
+ *      middle of the clip. One answer, one place, in that order.
+ *   2. THE READ            — runPhaseKOnSession (key frames → /api/swing-analysis → classify → store):
+ *      what the player waits for.
+ *   3. THE SECOND PASS     — pose / body mechanics / trace, started by the read when it finishes
+ *      (videoUpload's post-Phase-K pose pass). Never on the critical path.
+ *
+ * And ONE RUN PER SWING: analyzeOnce joins an in-flight run for the same session instead of starting a
+ * second, so a re-tap, a remount or a second trigger cannot double the work.
+ *
+ * services/swing/analysisPipeline still records what ran (observation); this decides what runs.
+ */
+
+export type UploadSwingWindow = {
+  startSec: number;
+  endSec: number;
+  /** A measured impact, when the method that found the window measured one (pose locate). */
+  impactSec: number | null;
+  via: 'motion' | 'whole_clip' | 'on_device' | 'network' | 'middle';
+};
+
+/** A clip this short IS the swing; locating it costs more than it saves. */
+const SHORT_CLIP_NO_LOCATE_SEC = 8;
+
+type PoseReader = (clipUri: string, tMs: number) => Promise<{ handsHigh: boolean } | null>;
+const PICK_BUDGET_MS = 4_000;
+
+/**
+ * Hands above the shoulders in one frame — the top of a backswing or a finish. Walking, setting up and
+ * turning to watch the ball never put them there, which is what tells a swing apart from the other
+ * bursts of motion in a busy clip.
+ */
+const readHandsHigh: PoseReader = async (clipUri, tMs) => {
+  const VT = require('../../utils/videoThumbnail') as typeof import('../../utils/videoThumbnail');
+  const mp = require('../mediaPipePoseService') as typeof import('../mediaPipePoseService');
+  const FS = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
+  try {
+    const thumb = await VT.getThumbnailAsync(clipUri, { time: Math.max(0, Math.round(tMs)), quality: 0.6 });
+    const f = await mp.detectPoseFromUri(thumb.uri, undefined, tMs);
+    void FS.deleteAsync(thumb.uri, { idempotent: true }).catch(() => undefined);
+    if (!f) return null;
+    const kp = (n: string) => f.keypoints.find((k) => k.name === n && k.score > 0.3) ?? null;
+    const wrists = [kp('left_wrist'), kp('right_wrist')].filter((k): k is NonNullable<typeof k> => k != null);
+    const shoulders = [kp('left_shoulder'), kp('right_shoulder')].filter((k): k is NonNullable<typeof k> => k != null);
+    if (wrists.length === 0 || shoulders.length === 0) return { handsHigh: false };
+    const highestWrist = Math.min(...wrists.map((w) => w.y));      // y grows downward
+    const shoulderLine = Math.min(...shoulders.map((k) => k.y));
+    return { handsHigh: highestWrist < shoulderLine - 0.02 };
+  } catch { return null; }
+};
+
+/**
+ * 2026-10-03 (Tim's 14.5s clip: wind in the trees, the setup, the swing at ~7s, turning to watch at
+ * ~10.5s — which out-scores the swing). Motion alone cannot tell those apart; the web SmartMotion's
+ * "last burst" rule would pick the turn. So motion PROPOSES and pose CONFIRMS: a few reads around each
+ * burst's peak, strongest bursts first, and the swing is the burst where the hands go above the
+ * shoulders. Exported for the test.
+ */
+export async function pickSwingBurst(
+  clipUri: string,
+  bursts: { startMs: number; endMs: number; peakMs: number; peak: number }[],
+  read: PoseReader = readHandsHigh,
+  budgetMs = PICK_BUDGET_MS,
+  clock: () => number = Date.now,
+): Promise<{ startMs: number; endMs: number; peakMs: number } | null> {
+  const ranked = [...bursts].sort((a, b) => b.peak - a.peak).slice(0, 4);
+  // A budget, not a hope: where pose is slow (no native engine, the browser fallback warming up) this
+  // gives up and the caller uses the motion window instead of waiting.
+  const deadline = clock() + budgetMs;
+  for (const b of ranked) {
+    let high = 0;
+    for (const t of [b.peakMs - 350, b.peakMs, b.peakMs + 350]) {
+      if (clock() > deadline) return null;
+      const left = Math.max(1, deadline - clock());
+      const r = await Promise.race([read(clipUri, t), new Promise<null>((res) => setTimeout(() => res(null), left))]);
+      if (r?.handsHigh) high++;
+      if (high >= 1) return b;
+    }
+  }
+  return null;
+}
+
+export async function findUploadSwingWindow(clipUri: string, durationSec: number): Promise<UploadSwingWindow> {
+  const dur = Math.max(0.5, durationSec);
+  // 1. The web SmartMotion way: localised motion between tiny frames (seconds, no pose), then a few
+  //    pose reads to tell the swing burst from the other motion in the clip.
+  try {
+    const { Platform } = require('react-native') as typeof import('react-native');
+    if (Platform.OS === 'android') {
+      const fe = require('../frameEngine') as typeof import('../frameEngine');
+      if (await fe.ensureFrameEngine(5_000)) {
+        const m = await fe.findMotionWindow(clipUri);
+        const bursts = m.bursts ?? [];
+        // Short clips: the motion window is enough — no pose on the critical path at all.
+        if (dur <= SHORT_CLIP_NO_LOCATE_SEC) {
+          if (m.window && m.window.endMs > m.window.startMs) {
+            return { startSec: m.window.startMs / 1000, endSec: Math.min(dur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
+          }
+          return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
+        }
+        let swing: { startMs: number; endMs: number; peakMs: number } | null = null;
+        if (bursts.length > 1) {
+          // Read the pooled PRIVATE COPY, never the file the player may be decoding (the native
+          // retriever vs ExoPlayer SIGSEGV class — see services/swing/sharedClipCopy).
+          const { acquireClipCopy } = require('./sharedClipCopy') as typeof import('./sharedClipCopy');
+          const shared = await acquireClipCopy(clipUri).catch(() => null);
+          if (shared) {
+            try { swing = await pickSwingBurst(shared.uri, bursts); } finally { shared.release(); }
+          }
+        }
+        if (swing) {
+          // Address (~1.8s before the fastest moment) through the finish (~1.5s after).
+          return {
+            startSec: Math.max(0, (swing.peakMs - 1800) / 1000),
+            endSec: Math.min(dur, (swing.peakMs + 1500) / 1000),
+            impactSec: null,
+            via: 'motion',
+          };
+        }
+        if (m.window && m.window.endMs > m.window.startMs) {
+          return { startSec: m.window.startMs / 1000, endSec: Math.min(dur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
+        }
+      }
+    }
+  } catch { /* a fast path only — the rest still answers */ }
+
+  // 2. Short clip: the clip is the swing.
+  if (dur <= SHORT_CLIP_NO_LOCATE_SEC) return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
+
+  // 3/4. Pose locate on the device, then the network.
+  try {
+    const { locateSwingWindowOnDevice } = require('./onDeviceLocate') as typeof import('./onDeviceLocate');
+    const onDev = await locateSwingWindowOnDevice(clipUri, dur * 1000).catch(() => null);
+    if (onDev && onDev.endSec > onDev.startSec) {
+      return { startSec: Math.max(0, onDev.startSec - 0.5), endSec: Math.min(dur, onDev.endSec + 0.5), impactSec: onDev.swingTimeSec, via: 'on_device' };
+    }
+    const { locateSwingWindow } = require('../poseDetection') as typeof import('../poseDetection');
+    const net = await locateSwingWindow(clipUri, dur * 1000);
+    if (net && net.endSec > net.startSec) {
+      return { startSec: Math.max(0, net.startSec - 0.5), endSec: Math.min(dur, net.endSec + 0.5), impactSec: net.swingTimeSec, via: 'network' };
+    }
+  } catch { /* fall through to the middle */ }
+
+  // 5. Nothing found anything: the middle of the clip.
+  const c = dur / 2;
+  return { startSec: Math.max(0, c - 2.5), endSec: Math.min(dur, c + 3), impactSec: null, via: 'middle' };
+}
+
+const inflight = new Map<string, Promise<unknown>>();
+
+/**
+ * Run `work` for this session unless a run is already in flight — then join that one. The run is
+ * forgotten when it settles, so the next explicit re-analyze starts fresh.
+ */
+export function analyzeOnce<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
+  const running = inflight.get(sessionId) as Promise<T> | undefined;
+  if (running) return running;
+  const p = work().finally(() => { if (inflight.get(sessionId) === p) inflight.delete(sessionId); });
+  inflight.set(sessionId, p);
+  return p;
+}

@@ -129,9 +129,22 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
           }, function () { /* a failed probe leaves a gap */ }).then(step);
         }
         return step().then(function () {
-          var out = { type: 'motion', id: id, ok: true, durationMs: Math.round(dur * 1000), window: null };
+          var out = { type: 'motion', id: id, ok: true, durationMs: Math.round(dur * 1000), window: null, bursts: [] };
           if (energy.length < 3) return post(out);
           var peak = Math.max.apply(null, energy), base = median(energy);
+          // 2026-10-03 — BURSTS: distinct short peaks of motion (stricter floor than the window below), so
+          // a busy clip (wind, setup, the swing, turning to watch) still yields candidates the app can
+          // check with a couple of pose reads each. The swing is the burst where the hands go up.
+          var bfloor = Math.max(base * 1.25, peak * 0.55), blo = -1;
+          for (var b = 0; b <= energy.length; b++) {
+            var on = b < energy.length && energy[b] >= bfloor;
+            if (on && blo === -1) blo = b;
+            if (!on && blo !== -1) {
+              var bpk = blo; for (var bb = blo; bb < b; bb++) if (energy[bb] > energy[bpk]) bpk = bb;
+              out.bursts.push({ startMs: Math.round((blo > 0 ? times[blo - 1] : 0) * 1000), endMs: Math.round(times[b - 1] * 1000), peakMs: Math.round(times[bpk] * 1000), peak: Math.round(energy[bpk] * 10) / 10 });
+              blo = -1;
+            }
+          }
           if (peak < 1.5 || peak < base * 1.8) return post(out);
           var floor = Math.max(base, peak * 0.35), events = [], lo = -1;
           for (var j = 0; j < energy.length; j++) {

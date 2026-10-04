@@ -277,7 +277,17 @@ export async function probeVideo(uri: string): Promise<{ has_audio: boolean; dur
  * Phase V — emits analysis-status transitions throughout so the swing
  * detail surface can render real progress copy and surface failures.
  */
-export async function runPhaseKOnSession(sessionId: string): Promise<{
+export function runPhaseKOnSession(sessionId: string): Promise<{
+  primary_issue: PrimaryIssue | null;
+  drill_recommendation: DrillRecommendation | null;
+}> {
+  // 2026-10-03 — ONE read per swing at a time (services/swing/analysisOrchestrator): a second trigger
+  // while a read is running joins it instead of starting another read of the same clip.
+  const { analyzeOnce } = require('./swing/analysisOrchestrator') as typeof import('./swing/analysisOrchestrator');
+  return analyzeOnce(sessionId, () => runPhaseKOnSessionImpl(sessionId));
+}
+
+async function runPhaseKOnSessionImpl(sessionId: string): Promise<{
   primary_issue: PrimaryIssue | null;
   drill_recommendation: DrillRecommendation | null;
 }> {

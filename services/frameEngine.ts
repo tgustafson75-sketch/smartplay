@@ -25,6 +25,8 @@
 type Grab = { b64: string; width: number; height: number };
 /** Where the swing is, found the web SmartMotion way (motion between tiny frames). */
 export type MotionWindow = { startMs: number; endMs: number; peakMs: number };
+/** A distinct short peak of motion — a candidate for the swing (see findUploadSwingWindow). */
+export type MotionBurst = { startMs: number; endMs: number; peakMs: number; peak: number };
 export type WebLandmark = { x: number; y: number; z: number; visibility: number; presence: number };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Pending = { resolve: (g: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
@@ -104,7 +106,7 @@ export async function ensureFrameEngine(waitMs = 2_500): Promise<boolean> {
 
 /** Messages posted by the page (window.ReactNativeWebView.postMessage). */
 export function onFrameEngineMessage(raw: string): void {
-  let msg: { type?: string; id?: number; ok?: boolean; b64?: string; w?: number; h?: number; error?: string; landmarks?: WebLandmark[]; durationMs?: number; window?: MotionWindow | null };
+  let msg: { type?: string; id?: number; ok?: boolean; b64?: string; w?: number; h?: number; error?: string; landmarks?: WebLandmark[]; durationMs?: number; window?: MotionWindow | null; bursts?: MotionBurst[] };
   try { msg = JSON.parse(raw); } catch { return; }
   if (msg.type === 'ready') { ready = true; return; }
   if ((msg.type !== 'frame' && msg.type !== 'pose' && msg.type !== 'motion') || typeof msg.id !== 'number') return;
@@ -113,7 +115,7 @@ export function onFrameEngineMessage(raw: string): void {
   pending.delete(msg.id);
   clearTimeout(p.timer);
   if (msg.type === 'motion') {
-    if (msg.ok) p.resolve({ durationMs: msg.durationMs ?? 0, window: msg.window ?? null });
+    if (msg.ok) p.resolve({ durationMs: msg.durationMs ?? 0, window: msg.window ?? null, bursts: Array.isArray(msg.bursts) ? msg.bursts : [] });
     else p.reject(new Error(msg.error ?? 'frame engine: no motion read'));
     return;
   }
@@ -158,7 +160,7 @@ export function grabExactFrame(videoUri: string, timeMs: number, maxDim = 1280, 
  * the web SmartMotion (smartmotion/src/lib/frames.ts findMotionWindow). No pose: tiny blurred frames,
  * the last substantial burst of motion. `window` is null when nothing stands out (sample the whole clip).
  */
-export function findMotionWindow(videoUri: string, timeoutMs = 20_000): Promise<{ durationMs: number; window: MotionWindow | null }> {
+export function findMotionWindow(videoUri: string, timeoutMs = 20_000): Promise<{ durationMs: number; window: MotionWindow | null; bursts: MotionBurst[] }> {
   return request(
     (id) => `window.__motion && window.__motion(${id}, ${JSON.stringify(videoUri)}); true;`,
     timeoutMs, 'motion window',
