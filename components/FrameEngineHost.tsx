@@ -81,6 +81,81 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
       });
     });
   };
+  // 2026-10-03 (Tim: "can the web be used instead?") — the web SmartMotion's motion window, ported
+  // from smartmotion/src/lib/frames.ts findMotionWindow. Finds the swing by LOCALISED MOTION between
+  // tiny blurred frames (128x72) — no pose — and takes the LAST substantial event, because people press
+  // record, set up, swing, and stop. Seconds, where locating with pose cost 10-20s.
+  var PW = 128, PH = 72, GRID = 8;
+  function median(a) { if (!a.length) return 0; var s = a.slice().sort(function (x, y) { return x - y; }); var m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+  function blur(src, w, h) {
+    var out = new Float32Array(src.length);
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      var sum = 0, n = 0;
+      for (var dy = -1; dy <= 1; dy++) { var yy = y + dy; if (yy < 0 || yy >= h) continue;
+        for (var dx = -1; dx <= 1; dx++) { var xx = x + dx; if (xx < 0 || xx >= w) continue; sum += src[yy * w + xx]; n++; } }
+      out[y * w + x] = sum / n;
+    }
+    return out;
+  }
+  function cellDiffs(a, b, w, h) {
+    var cells = [], cw = Math.floor(w / GRID), ch = Math.floor(h / GRID);
+    for (var gy = 0; gy < GRID; gy++) for (var gx = 0; gx < GRID; gx++) {
+      var sum = 0, n = 0;
+      for (var y = gy * ch; y < (gy + 1) * ch; y++) for (var x = gx * cw; x < (gx + 1) * cw; x++) { sum += Math.abs(a[y * w + x] - b[y * w + x]); n++; }
+      cells.push(n ? sum / n : 0);
+    }
+    return cells;
+  }
+  window.__motion = function (id, src) {
+    if (idle) { clearTimeout(idle); idle = null; }
+    frameQ = frameQ.then(function () {
+      return within(load(src), 5000, 'load').then(function () {
+        var dur = v.duration;
+        if (!isFinite(dur) || dur <= 0) throw new Error('no duration');
+        var count = Math.max(12, Math.min(44, Math.round(dur / 0.35)));
+        var cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+        var cx = cv.getContext('2d', { willReadFrequently: true });
+        var times = [], energy = [], prev = null, i = 0;
+        function step() {
+          if (i >= count) return Promise.resolve();
+          var t = Math.min((dur * i) / (count - 1), Math.max(0, dur - 0.05)); i++;
+          return within(seek(t), 4000, 'seek').then(function () {
+            cx.drawImage(v, 0, 0, PW, PH);
+            var d = cx.getImageData(0, 0, PW, PH).data, px = PW * PH, luma = new Float32Array(px);
+            for (var k = 0; k < px; k++) { var o = k * 4; luma[k] = 0.299 * d[o] + 0.587 * d[o + 1] + 0.114 * d[o + 2]; }
+            var sm = blur(luma, PW, PH);
+            if (prev) { var cells = cellDiffs(sm, prev, PW, PH); times.push(t); energy.push(Math.max(0, Math.max.apply(null, cells) - median(cells))); }
+            prev = sm;
+          }, function () { /* a failed probe leaves a gap */ }).then(step);
+        }
+        return step().then(function () {
+          var out = { type: 'motion', id: id, ok: true, durationMs: Math.round(dur * 1000), window: null };
+          if (energy.length < 3) return post(out);
+          var peak = Math.max.apply(null, energy), base = median(energy);
+          if (peak < 1.5 || peak < base * 1.8) return post(out);
+          var floor = Math.max(base, peak * 0.35), events = [], lo = -1;
+          for (var j = 0; j < energy.length; j++) {
+            if (energy[j] >= floor) { if (lo === -1) lo = j; }
+            else if (lo !== -1) { events.push({ lo: lo, hi: j - 1, peak: Math.max.apply(null, energy.slice(lo, j)) }); lo = -1; }
+          }
+          if (lo !== -1) events.push({ lo: lo, hi: energy.length - 1, peak: Math.max.apply(null, energy.slice(lo)) });
+          if (!events.length) return post(out);
+          var sub = events.filter(function (e) { return e.peak >= peak * 0.25; });
+          var ch = sub.length ? sub[sub.length - 1] : events[events.length - 1];
+          var rawStart = ch.lo > 0 ? times[ch.lo - 1] : 0, rawEnd = times[ch.hi];
+          var pad = Math.max(0.25, (rawEnd - rawStart) * 0.4);
+          var st = Math.max(0, rawStart - pad);
+          var en = Math.min(dur, rawEnd + pad >= dur - 0.5 ? dur : rawEnd + pad);
+          // Where in the event the motion peaked — the downswing — as a hint for impact.
+          var pk = ch.lo; for (var q = ch.lo; q <= ch.hi; q++) if (energy[q] > energy[pk]) pk = q;
+          if (en - st < dur * 0.92) out.window = { startMs: Math.round(st * 1000), endMs: Math.round(en * 1000), peakMs: Math.round(times[pk] * 1000) };
+          post(out);
+        });
+      }).catch(function (e) {
+        post({ type: 'motion', id: id, ok: false, error: String(e && e.message || e) });
+      }).then(function () { if (idle) clearTimeout(idle); idle = setTimeout(release, 8000); });
+    });
+  };
   // 2026-10-03 — pose, in the browser, for when the phone's native engine fails (a GPU delegate that
   // builds and then rejects every frame). Same model file the native module uses, read from the APK.
   var landmarker = null, loading = null;

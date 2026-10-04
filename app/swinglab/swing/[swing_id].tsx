@@ -95,6 +95,8 @@ import { setActiveSurface, clearActiveSurface } from '../../../services/activeSu
  * racing that it was introduced to stop.
  */
 const LIBRARY_AUTO_PROCESS = false;
+/** A clip this short is the swing — no locate before the read (see the auto-analyze effect). */
+const SHORT_CLIP_NO_LOCATE_SEC = 8;
 
 // 2026-06-12 — shared Smart Motion control badges, so Library video controls match
 // the SmartMotion review badges (whole-app control consistency).
@@ -470,6 +472,10 @@ export default function SwingDetail() {
    * read here because togglePlayPause is declared first.
    */
   const analysisRunningRef = useRef(false);
+  // 2026-10-03 — warm the frame engine on open (re-analyze and library opens skip the upload screen).
+  useEffect(() => {
+    (require('../../../services/frameEngine') as typeof import('../../../services/frameEngine')).warmFrameEngine();
+  }, []);
   /**
    * 2026-08-19 (Tim, reviewing his round: "play button does not fade out").
    *
@@ -1271,6 +1277,10 @@ export default function SwingDetail() {
   // rest — on demand, bounded, safe.
   useEffect(() => {
     if (!swing_id) return;
+    // 2026-10-03 — never while the read itself is running: this pose pass and the read's key frames
+    // queue on the same frame reader, and the read is what the player is waiting for. The read's
+    // own pose pass runs after it; this one picks up anything left once it is done.
+    if (analysisRunning) return;
     const selShot = session?.shots[selectedShotIdx];
     if (!selShot?.clipUri || selShot.biomechanics !== undefined) return;             // already has / computing
     if (selectedShotIdx === 0 && session?.biomechanics !== undefined) return;        // shot 0 uses session-level
@@ -1345,7 +1355,7 @@ export default function SwingDetail() {
     // made the fix itself a half-fix.
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedShotIdx, swing_id, session?.shots, session?.biomechanics, session?.upload?.angleOverride]);
+  }, [selectedShotIdx, swing_id, session?.shots, session?.biomechanics, session?.upload?.angleOverride, analysisRunning]);
 
   // 2026-06-13 — Prewarm the TTS function WHILE the analysis is still running, so
   // the "Okay, I watched it…" read fires hot instead of paying cold-start on top
@@ -1475,6 +1485,15 @@ export default function SwingDetail() {
         const FS = await import('expo-file-system/legacy');
         const docDir = FS.documentDirectory;
         if (docDir && uri.startsWith(docDir)) return; // already durable
+        /**
+         * 2026-10-03 (Tim: "under 15 seconds") — a FRESH upload lands here before ingest's own
+         * background copy has repointed the shot, so this made a second 37MB copy (2.3s on the
+         * critical path) and then swapped the clip URI under a running analysis. Give ingest a moment;
+         * if it repointed the shot meanwhile, there is nothing to rescue.
+         */
+        await new Promise((r) => setTimeout(r, 6_000));
+        const now = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === swing_id)?.shots.find((x) => x.id === shotId)?.clipUri;
+        if (!now || now !== uri || (docDir && now.startsWith(docDir))) return;
         // Only rescue what's actually still readable; a gone file can't be saved
         // (the onReanalyze guard already gives that case an honest message).
         if (uri.startsWith('file:')) {
@@ -2219,6 +2238,35 @@ export default function SwingDetail() {
       let locatedImpactSec: number | null = null;
       let located = false;
       try {
+        /**
+         * 2026-10-03 (Tim: "it's a 6 second video… this needs to happen in under 15 seconds") — on a
+         * short clip the swing IS the clip. Locating it cost 6-18s (on-device, then the network
+         * fallback) before the read could even start. Window the whole clip and go; the pose pass after
+         * the read still finds the exact impact for the skeleton.
+         */
+        /**
+         * 2026-10-03 (Tim: "can the web be used instead?") — FIRST the web SmartMotion's way: find the
+         * swing by motion between tiny frames in the hidden browser (services/frameEngine). Seconds, no
+         * pose. Pose and body mechanics are the SECOND pass, after the read, on this same window — the
+         * upload's pose pass locates the exact impact inside it without the player waiting.
+         */
+        try {
+          const { Platform } = await import('react-native');
+          if (Platform.OS === 'android') {
+            const fe = await import('../../../services/frameEngine');
+            if (await fe.ensureFrameEngine(5_000)) {
+              const m = await fe.findMotionWindow(shot.clipUri!);
+              uploadLog('motion-window', { found: !!m.window, startMs: m.window?.startMs ?? null, endMs: m.window?.endMs ?? null }, swing_id);
+              if (m.window && m.window.endMs > m.window.startMs) {
+                useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, m.window.startMs / 1000, m.window.endMs / 1000, null);
+                useToastStore.getState().show('Found your swing — analyzing…');
+                onReanalyze();
+                return;
+              }
+            }
+          }
+        } catch { /* the web pass is a fast path; the locate below still answers */ }
+        if (duration <= SHORT_CLIP_NO_LOCATE_SEC) throw new Error('short clip: whole clip is the swing');
         // 2026-09-01 — on-device first here too; see services/swing/onDeviceLocate. Same question,
         // same answer in seconds instead of a cold-Lambda vision call.
         const { locateSwingWindow } = await import('../../../services/poseDetection');
@@ -2237,9 +2285,14 @@ export default function SwingDetail() {
           endSec = Math.min(duration, center + 3);
         }
       } catch {
-        const center = duration / 2;
-        startSec = Math.max(0, center - 2.5);
-        endSec = Math.min(duration, center + 3);
+        if (duration <= SHORT_CLIP_NO_LOCATE_SEC) {
+          startSec = 0;
+          endSec = duration;
+        } else {
+          const center = duration / 2;
+          startSec = Math.max(0, center - 2.5);
+          endSec = Math.min(duration, center + 3);
+        }
       }
       useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, locatedImpactSec);
       useToastStore.getState().show(

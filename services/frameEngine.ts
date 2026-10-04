@@ -23,6 +23,8 @@
  */
 
 type Grab = { b64: string; width: number; height: number };
+/** Where the swing is, found the web SmartMotion way (motion between tiny frames). */
+export type MotionWindow = { startMs: number; endMs: number; peakMs: number };
 export type WebLandmark = { x: number; y: number; z: number; visibility: number; presence: number };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Pending = { resolve: (g: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
@@ -77,6 +79,14 @@ export function isFrameEngineReady(): boolean {
   return ready && inject != null;
 }
 
+/** Start the engine now without waiting — call it where an analysis is about to be needed. */
+export function warmFrameEngine(): void {
+  try {
+    const { Platform } = require('react-native') as typeof import('react-native');
+    if (Platform.OS === 'android') want();
+  } catch { /* warming is best-effort */ }
+}
+
 /**
  * Ask for the engine and wait briefly for it to come up. False means "use native this time" — the
  * first frames of the very first analysis may come from the native retriever while the page loads.
@@ -94,14 +104,19 @@ export async function ensureFrameEngine(waitMs = 2_500): Promise<boolean> {
 
 /** Messages posted by the page (window.ReactNativeWebView.postMessage). */
 export function onFrameEngineMessage(raw: string): void {
-  let msg: { type?: string; id?: number; ok?: boolean; b64?: string; w?: number; h?: number; error?: string; landmarks?: WebLandmark[] };
+  let msg: { type?: string; id?: number; ok?: boolean; b64?: string; w?: number; h?: number; error?: string; landmarks?: WebLandmark[]; durationMs?: number; window?: MotionWindow | null };
   try { msg = JSON.parse(raw); } catch { return; }
   if (msg.type === 'ready') { ready = true; return; }
-  if ((msg.type !== 'frame' && msg.type !== 'pose') || typeof msg.id !== 'number') return;
+  if ((msg.type !== 'frame' && msg.type !== 'pose' && msg.type !== 'motion') || typeof msg.id !== 'number') return;
   const p = pending.get(msg.id);
   if (!p) return;
   pending.delete(msg.id);
   clearTimeout(p.timer);
+  if (msg.type === 'motion') {
+    if (msg.ok) p.resolve({ durationMs: msg.durationMs ?? 0, window: msg.window ?? null });
+    else p.reject(new Error(msg.error ?? 'frame engine: no motion read'));
+    return;
+  }
   if (msg.type === 'pose') {
     if (msg.ok && Array.isArray(msg.landmarks)) p.resolve(msg.landmarks);
     else p.reject(new Error(msg.error ?? 'frame engine: no pose'));
@@ -139,6 +154,18 @@ export function grabExactFrame(videoUri: string, timeMs: number, maxDim = 1280, 
 }
 
 /**
+ * 2026-10-03 (Tim: "can the web be used instead?") — the swing window from LOCALISED MOTION, ported from
+ * the web SmartMotion (smartmotion/src/lib/frames.ts findMotionWindow). No pose: tiny blurred frames,
+ * the last substantial burst of motion. `window` is null when nothing stands out (sample the whole clip).
+ */
+export function findMotionWindow(videoUri: string, timeoutMs = 20_000): Promise<{ durationMs: number; window: MotionWindow | null }> {
+  return request(
+    (id) => `window.__motion && window.__motion(${id}, ${JSON.stringify(videoUri)}); true;`,
+    timeoutMs, 'motion window',
+  );
+}
+
+/**
  * 2026-10-03 — BlazePose landmarks (33, normalized) for a JPEG, computed in the browser with the same
  * model the native module loads. The fallback for a native engine that fails at inference. The first
  * call loads the web runtime (from the CDN, then cached); a failed load is remembered for a few
@@ -147,10 +174,6 @@ export function grabExactFrame(videoUri: string, timeMs: number, maxDim = 1280, 
 let poseWarm = false;
 let poseUnavailableUntil = 0;
 const POSE_RETRY_AFTER_MS = 5 * 60_000;
-
-export function browserPoseAvailable(): boolean {
-  return isFrameEngineReady() && Date.now() >= poseUnavailableUntil;
-}
 
 export async function detectPoseInBrowser(b64: string): Promise<WebLandmark[]> {
   if (Date.now() < poseUnavailableUntil) throw new Error('browser pose unavailable (recent load failure)');

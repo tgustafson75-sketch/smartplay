@@ -49,6 +49,11 @@ export default function UploadSwing() {
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = getApiBaseUrl();
 
+  // 2026-10-03 — start the hidden browser frame engine while the player picks a clip, so the fast
+  // motion pass and the exact frames are ready the moment the swing screen opens.
+  useEffect(() => {
+    (require('../../services/frameEngine') as typeof import('../../services/frameEngine')).warmFrameEngine();
+  }, []);
   // 2026-05-27 — Fix EK: pre-warm /api/swing-analysis on mount so the
   // first uploaded swing doesn't pay Vercel cold-start.
   useEffect(() => {

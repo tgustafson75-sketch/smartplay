@@ -172,6 +172,28 @@ async function copyOf(entry: CacheEntry): Promise<VideoThumbnails.VideoThumbnail
  */
 let engineFailures = 0;
 let exactSeq = 0;
+/**
+ * 2026-10-03 (Tim: "this needs to happen in under 15 seconds") — the engine MEASURES ITSELF. Exact frames
+ * are worth a little time, never a wait: if its grabs average over ENGINE_SLOW_MS on this device, the
+ * rest of the session goes to the native retriever (keyframe-accurate, but fast). Re-tried after a few
+ * minutes, since the first grabs of a session include the page warming up.
+ */
+// 2026-10-03 — measured: falling back at 700ms traded the read itself ("I couldn't see the top of your
+// swing in these frames" — keyframe-snapped frames) for 3s, and then paid a 7.5s retry call. Native only
+// takes over when the engine is effectively broken, never merely slower.
+const ENGINE_SLOW_MS = 2_500;
+let engineAvgMs = 0;
+let engineSamples = 0;
+let engineSlowUntil = 0;
+function noteEngineMs(ms: number): void {
+  engineSamples++;
+  engineAvgMs = engineSamples === 1 ? ms : engineAvgMs * 0.6 + ms * 0.4;
+  if (engineSamples >= 2 && engineAvgMs > ENGINE_SLOW_MS) {
+    engineSlowUntil = Date.now() + 3 * 60_000;
+    engineSamples = 0;
+    console.log('[frames] browser engine slow on this device (' + Math.round(engineAvgMs) + 'ms/frame) — native for now');
+  }
+}
 async function exactOrNative(
   sourceFilename: string,
   options?: VideoThumbnails.VideoThumbnailsOptions,
@@ -188,7 +210,7 @@ async function exactOrNative(
      */
     const wantsExact = q >= 0.5 && q <= 0.8;
     if (
-      Platform.OS === 'android' && wantsExact && engineFailures < 3
+      Platform.OS === 'android' && wantsExact && engineFailures < 3 && Date.now() >= engineSlowUntil
       && sourceFilename.startsWith('file://') && typeof options?.time === 'number'
     ) {
       const fe = require('../services/frameEngine') as typeof import('../services/frameEngine');
@@ -196,7 +218,9 @@ async function exactOrNative(
         // Pose and the locator need the body, not detail: 640px for the locator's quick looks
         // (quality 0.6), 960px for pose frames.
         const maxDim = q <= 0.6 ? 640 : 960;
+        const t0 = Date.now();
         const g = await fe.grabExactFrame(sourceFilename, options.time, maxDim);
+        noteEngineMs(Date.now() - t0);
         const uri = `${FileSystem.cacheDirectory}exact_${Date.now()}_${++exactSeq}.jpg`;
         await FileSystem.writeAsStringAsync(uri, g.b64, { encoding: FileSystem.EncodingType.Base64 });
         engineFailures = 0;
