@@ -58,6 +58,7 @@ import { recommendDrill } from '../../../services/drillRecommendation';
 // read of their game).
 import { presenceFill } from '../../../services/presenceCaddie';
 import { uploadLog } from '../../../services/uploadDiagnostic';
+import { isAnalysisSettled } from '../../../services/swing/analysisSettled';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import AskYourSwingCard from '../../../components/swinglab/AskYourSwingCard';
 import ZoomableView from '../../../components/swinglab/ZoomableView';
@@ -454,9 +455,16 @@ export default function SwingDetail() {
    */
   const analysisRunningRef = useRef(false);
   // 2026-10-03 — warm the frame engine on open (re-analyze and library opens skip the upload screen).
+  // 2026-10-04 (Tim: "once an uploaded video gets a high confidence finding … it should be marked as
+  // essentially done … in terms of opening it") — not for a SETTLED swing: opening it is for watching
+  // (and Smart Capture); Re-analyze warms what it needs when the player asks.
+  const settledOnOpenRef = useRef<boolean | null>(null);
   useEffect(() => {
+    const st = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === swing_id);
+    settledOnOpenRef.current = isAnalysisSettled(st);
+    if (settledOnOpenRef.current) return;
     (require('../../../services/frameEngine') as typeof import('../../../services/frameEngine')).warmFrameEngine();
-  }, []);
+  }, [swing_id]);
   /**
    * 2026-08-19 (Tim, reviewing his round: "play button does not fade out").
    *
@@ -674,9 +682,14 @@ export default function SwingDetail() {
     return STAGES
       .map((s) => {
         const f = poseFrames.find((p) => p.position === s.pos);
-        if (f && Number.isFinite(f.timestampMs)) return { label: s.label, ms: f.timestampMs };
         const d = derived[s.pos];
-        return typeof d === 'number' && Number.isFinite(d) ? { label: s.label, ms: d } : null;
+        // 2026-10-04 (emulator, Tim's 3870 clip: the Impact chip landed on the follow-through) — a label
+        // the sampler PLACED at a fixed fraction of the window ('estimated') is not a measurement; the
+        // position derived from the wrists' motion is. A label anchored on a real strike still wins.
+        const labelIsMeasured = f && Number.isFinite(f.timestampMs) && f.positionSource !== 'estimated';
+        if (labelIsMeasured) return { label: s.label, ms: f!.timestampMs };
+        if (typeof d === 'number' && Number.isFinite(d)) return { label: s.label, ms: d };
+        return f && Number.isFinite(f.timestampMs) ? { label: s.label, ms: f.timestampMs } : null;
       })
       .filter((c): c is { label: string; ms: number } => c != null);
   }, [poseFrames, motionAnchors]);
@@ -1043,27 +1056,9 @@ export default function SwingDetail() {
     }
   }, [analysisStatus, swing_id, session?.primary_issue, session?.drill_recommendation, session?.analysis_error]);
 
-  // Auto-default the trace ONCE per swing, after the analysis resolves. The ref makes it a one-time
-  // default so a later manual toggle (the escape hatch) is never overwritten.
-  // 2026-07-27 (Tim — "not seeing the clubhead or swing arc at all now") — default the trace ON whenever
-  // the swing has pose (was: only for a CONFIRMED shot, so uploads showed nothing). Safe + honest: the
-  // trace is clubhead-OR-NOTHING, so a swing where no real clubhead is detected simply draws nothing.
-  const autoTraceAppliedForRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!swing_id || autoTraceAppliedForRef.current === swing_id) return;
-    if (analysisStatus === 'pending' || analysisStatus === 'analyzing_frames'
-      || analysisStatus === 'analyzing_pose' || analysisStatus === 'analyzing_pattern') return; // wait for the read
-    // 2026-08-08 (Tim — "still don't see club trace", verification wave) — the upload pipeline commits
-    // 'ok' at Phase K and runs pose/biomech AFTER, fire-and-forget. On the exact analyze→open flow, this
-    // effect used to fire in that window (status 'ok', pose not landed yet), latch the ref, and set the
-    // trace OFF — permanently, because the latch blocked a re-run when pose arrived moments later. Every
-    // downstream trace path (persisted club_arc read + live extraction) is gated on showTrace, so the
-    // whole chain went dark on first open. Latch ONLY once pose is present (apply-ON-only): while pose
-    // is still absent the default is simply not decided yet, and showTrace already starts false.
-    if (!hasPose) return;
-    autoTraceAppliedForRef.current = swing_id;
-    setShowTrace(true);
-  }, [swing_id, hasPose, analysisStatus]);
+  // 2026-10-04 (Tim: "those should be off by default and only activated after analysis when user
+  // activates them") — the swing trace is NOT switched on after the read any more. Body and trace both
+  // start off and appear only once the analysis has pose frames; the player turns them on.
 
   // 2026-05-23 — Auto-suggest 1-2 relevant comparisons once analysis
   // completes and biomechanics is present. Idempotent per swing_id;
@@ -1139,12 +1134,13 @@ export default function SwingDetail() {
       try {
         const poseMod = await import('../../../services/poseAnalysisApi');
         const analyzeUri = (await resolveClipUri(selShot.clipUri!).catch(() => null)) || selShot.clipUri!;
-        const { resolveSwingerHandedness } = await import('../../../services/swingerHandedness');
+        // 2026-10-04 — the TAGGED golfer's hand, not whoever is active on the phone.
+        const { swingerForSession } = await import('../../../services/swing/sessionSwinger');
         const clipDurMs = Math.max(wEnd + 1000, (session?.upload?.duration_sec ?? 0) * 1000);
         // C1 — per-shot windows from the multi-swing expansion carry their own located impact.
         const shotImpactMs = typeof selShot.locatedImpactSec === 'number' && selShot.locatedImpactSec > 0 ? selShot.locatedImpactSec * 1000 : null;
         const biomech = await poseMod.analyzeSwingFromVideo(
-          analyzeUri, clipDurMs, session?.upload?.angleOverride ?? null, false, { startMs: wStart, endMs: wEnd }, shotImpactMs, resolveSwingerHandedness(),
+          analyzeUri, clipDurMs, session?.upload?.angleOverride ?? null, false, { startMs: wStart, endMs: wEnd }, shotImpactMs, swingerForSession(session).handedness,
         );
         useSwingSessionStore.getState().setShotBiomechanics(swing_id, selShot.id, biomech);
         try {
@@ -2156,7 +2152,7 @@ export default function SwingDetail() {
     // 2026-08-09 (C1) — the frame the user scrubbed to IS their declared swing moment: use it as the
     // impact anchor (user-supplied signal, not a fabricated fraction). The old path windowed around it
     // and then sampled "impact" at 65% of that window — 1.1s after the very frame they pointed at.
-    useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, center);
+    useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, center, 'user');
     useToastStore.getState().show(`Analyzing the swing at 0:${Math.floor(center).toString().padStart(2, '0')}…`);
     onReanalyze();
   };

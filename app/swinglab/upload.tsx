@@ -18,7 +18,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 // viewport. Same isWide + WIDE_CONTENT_MAX_WIDTH pattern used by Play
 // tab + SmartMotion analysis (commits 538cfb3, 446b537).
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
-import { pickVideo, probeVideo, ingestVideoFromPick, MAX_FILE_SIZE_MB } from '../../services/videoUpload';
+import { pickVideo, pickVideoFromFiles, probeVideo, ingestVideoFromPick, MAX_FILE_SIZE_MB } from '../../services/videoUpload';
 import { uploadLog } from '../../services/uploadDiagnostic';
 import { useSwingSessionStore, type SwingTag } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -142,8 +142,8 @@ export default function UploadSwing() {
   // the engine withholds face-on metrics (sway/weight/rotation) thinking it's DTL.
   const [angle, setAngle] = useState<'down_the_line' | 'face_on'>('down_the_line');
 
-  const onPick = async () => {
-    const result = await pickVideo();
+  const onPick = async (from: 'photos' | 'files' = 'photos') => {
+    const result = from === 'files' ? await pickVideoFromFiles() : await pickVideo();
     if (result.kind === 'cancelled') return;
     if (result.kind === 'permission_denied') {
       Alert.alert(t('swinglab_upload.alert.permission_needed'), t('swinglab_upload.alert.allow_access_to_your_video'));
@@ -282,8 +282,16 @@ export default function UploadSwing() {
             <Text style={[styles.copySub, { color: colors.text_muted }]}>
               {t('swinglab_upload.upload_swing.videos_with_coaching_audio_a')}
             </Text>
-            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={onPick}>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={() => { void onPick('photos'); }}>
               <Text style={styles.primaryBtnText}>{t('swinglab_upload.upload_swing.pick_video')}</Text>
+            </TouchableOpacity>
+            {/* 2026-10-04 — Downloads / iCloud Drive / Files (the Mac, a USB stick, a coach's AirDrop). */}
+            <TouchableOpacity
+              style={[styles.primaryBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.accent, marginTop: 10 }]}
+              onPress={() => { void onPick('files'); }}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.primaryBtnText, { color: colors.accent }]}>{t('swinglab_upload.upload_swing.pick_from_files')}</Text>
             </TouchableOpacity>
           </View>
         )}

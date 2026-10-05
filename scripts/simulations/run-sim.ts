@@ -3264,7 +3264,9 @@ check('Uploads: skeleton + 4-card read windowed on the pointed swing',
       // weight-shift sign isn't inverted (default 'right' read it backwards).
       // 2026-08-09 (verification wave C1) — the null impact slot became poseImpactMs: the vision-located
       // impact now selects the strike-anchored sampling branch (stage labels on the real swing points).
-      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, session\.upload\?\.angleOverride \?\? null, false, poseWindow, poseImpactMs, resolveSwingerHandedness\(\)\)/.test(up) &&
+      // 2026-10-04 — the hand is the TAGGED golfer's (services/swing/sessionSwinger), not the active member's.
+      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, session\.upload\?\.angleOverride \?\? null, false, poseWindow, poseImpactMs, swingerHand\)/.test(up) &&
+      /const swingerHand = \(require\('\.\/swing\/sessionSwinger'\)[\s\S]{0,80}\.swingerForSession\(session\)\.handedness;/.test(up) &&
       /session\.source === 'uploaded_video' \? \(/.test(detail) &&
       /onPress=\{onAnalyzeAtPosition\}/.test(detail)
     );
@@ -3308,8 +3310,8 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
       /computeBiomechanicsFromFrames\(adjusted\)/.test(estimator) &&
       // the swing-detail backfill threads handedness too.
       // 2026-10-04 — the on-open backfill is gone (unreachable, duplicated the Analyze run's pose stage);
-      // the per-shot pass threads it.
-      /resolveSwingerHandedness\(\),?\s*\)/.test(detail)
+      // the per-shot pass threads it — the TAGGED golfer's hand since 10-04 (sessionSwinger).
+      /shotImpactMs, swingerForSession\(session\)\.handedness,/.test(detail)
     );
   })(),
   'the Coach lesson + upload backfill no longer speak DTL-invalid turn/weight numbers as measured (angle inferred from geometry), and lefty weight-shift reads with the correct sign on every analysis path');

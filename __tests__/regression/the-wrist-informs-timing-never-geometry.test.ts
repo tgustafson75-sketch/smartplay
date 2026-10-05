@@ -90,7 +90,11 @@ describe('the swing-position chips always find their points', () => {
 
   it('a stage with neither a label nor an anchor is omitted, never faked', () => {
     const chips = screen.slice(screen.indexOf('const swingStageChips'), screen.indexOf('const swingStageChips') + 2600);
-    expect(chips).toMatch(/Number\.isFinite\(d\) \? \{ label: s\.label, ms: d \} : null/);
+    // 2026-10-04 — a measured label, else the motion-derived point, else an estimated label; else omitted.
+    expect(chips).toMatch(/if \(labelIsMeasured\) return \{ label: s\.label, ms: f!\.timestampMs \};/);
+    expect(chips).toMatch(/if \(typeof d === 'number' && Number\.isFinite\(d\)\) return \{ label: s\.label, ms: d \};/);
+    expect(chips).toMatch(/return f && Number\.isFinite\(f\.timestampMs\) \? \{ label: s\.label, ms: f\.timestampMs \} : null;/);
+    expect(chips).toMatch(/f\.positionSource !== 'estimated'/);
     expect(chips).toMatch(/\.filter\(\(c\): c is \{ label: string; ms: number \} => c != null\)/);
   });
 

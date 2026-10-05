@@ -43,6 +43,53 @@ export type PickResult =
   | { kind: 'permission_denied' }
   | { kind: 'error'; message: string };
 
+/**
+ * 2026-10-04 (Tim, running the iPad app on his Mac: "it doesn't seem to allow me to upload videos from
+ * the videos on my mac downloads") — the Photos picker only sees the Photos library; a clip in
+ * Downloads, iCloud Drive, a USB stick or the Files app was unreachable. This is the FILES picker
+ * (expo-document-picker — already in the store build; Settings uses it), copied into the app's cache
+ * so every reader gets a stable file:// URI. Same result shape as pickVideo, so the rest of the upload
+ * (probe, settings, ingest, analysis) is the same path.
+ */
+export async function pickVideoFromFiles(): Promise<PickResult> {
+  uploadResetTiming();
+  uploadLog('capture-start', { source: 'files' });
+  try {
+    const DocumentPicker = await import('expo-document-picker');
+    const r = await DocumentPicker.getDocumentAsync({
+      type: ['video/*', 'public.movie', 'video/mp4', 'video/quicktime'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (r.canceled) {
+      uploadLog('capture-end', { status: 'cancelled', source: 'files' });
+      return { kind: 'cancelled' };
+    }
+    const asset = r.assets?.[0];
+    if (!asset?.uri) {
+      uploadLog('capture-end', { status: 'failed', reason: 'no_uri', source: 'files' });
+      return { kind: 'error', message: 'No file came back from Files.' };
+    }
+    const sizeMB = typeof asset.size === 'number' ? asset.size / 1_000_000 : null;
+    if (sizeMB != null && sizeMB > MAX_FILE_SIZE_MB) {
+      uploadLog('capture-end', { status: 'failed', reason: 'oversize', size_mb: sizeMB, source: 'files' });
+      return { kind: 'error', message: `Video is ${sizeMB.toFixed(0)}MB — over the ${MAX_FILE_SIZE_MB}MB cap.` };
+    }
+    const looksVideo = /^video\//.test(asset.mimeType ?? '') || /\.(mp4|mov|m4v|3gp|webm)$/i.test(asset.name ?? asset.uri);
+    if (!looksVideo) {
+      uploadLog('capture-end', { status: 'failed', reason: 'not_video', mime: asset.mimeType ?? null, source: 'files' });
+      return { kind: 'error', message: 'That file isn\'t a video. Pick an .mp4 or .mov.' };
+    }
+    uploadLog('capture-end', { status: 'ok', size_mb: sizeMB, uri_tail: asset.uri.slice(-40), source: 'files' });
+    // Duration is read from the file by probeVideo, exactly as for a Photos pick.
+    return { kind: 'ok', uri: asset.uri, durationMillis: null, fileSize: typeof asset.size === 'number' ? asset.size : null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    uploadLog('capture-end', { status: 'failed', reason: 'exception', message: msg.slice(0, 160), source: 'files' });
+    return { kind: 'error', message: msg };
+  }
+}
+
 /** Open the system video picker. */
 export async function pickVideo(): Promise<PickResult> {
   uploadResetTiming();
@@ -606,16 +653,26 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
       experience?: string | null;
       first_name?: string | null;
     } | undefined;
+    // 2026-10-04 (Tim: "player … set correctly. Make sure those are all wired") — the context is the
+    // golfer TAGGED on this upload (services/swing/sessionSwinger), not always the account holder:
+    // a swing tagged "Matt" was read with Tim's handicap and Tim's usual miss.
+    const swinger = (require('./swing/sessionSwinger') as typeof import('./swing/sessionSwinger')).swingerForSession(session);
+    playerContext = {
+      handicap: swinger.handicap,
+      dominant_miss: swinger.dominantMiss,
+      experience: swinger.experience,
+      first_name: swinger.firstName,
+    };
+    let readLanguage: 'en' | 'es' | 'zh' | undefined;
     try {
-      const profileMod = await import('../store/playerProfileStore');
-      const p = profileMod.usePlayerProfileStore.getState();
-      playerContext = {
-        handicap: typeof p.handicap_index === 'number' ? p.handicap_index : (typeof p.handicap === 'number' ? p.handicap : null),
-        dominant_miss: p.dominantMiss ?? null,
-        experience: p.experienceContext ?? null,
-        first_name: p.firstName ?? p.name ?? null,
-      };
-    } catch { /* profile lookup optional */ }
+      const lang = (require('../store/settingsStore') as typeof import('../store/settingsStore')).useSettingsStore.getState().language;
+      if (lang === 'en' || lang === 'es' || lang === 'zh') readLanguage = lang;
+    } catch { /* English */ }
+    V6('STAGE 0 — upload settings', {
+      club: session.club ?? null, swinger: swinger.who, handedness: swinger.handedness,
+      angle: session.upload?.angleOverride ?? 'auto', perspective: session.upload?.perspective ?? null,
+      device: session.upload?.source_device ?? null, tag: session.upload?.tag ?? null, language: readLanguage ?? 'en',
+    });
     const swingTag = session.upload?.tag ?? null;
     // Phase 502 — Reanalyze "look for something else" signal (see
     // longer comment below in commit-2 batch closure).
@@ -793,6 +850,10 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
         ball_area_norm: ballAreaCtx,
         target_norm: targetCtx,
         tier: 'quick',
+        // 2026-10-04 — the read was never told which hand: a lefty's over-the-top / early-extension sides
+        // were read as a right-hander's. Null (a guest, unknown) lets the model judge from the frames.
+        handedness: swinger.handedness,
+        ...(readLanguage ? { language: readLanguage } : {}),
         ...(cageAngleCtx ? { angle: cageAngleCtx } : {}),
         ...(coachAudio.length > 0 ? { coach_audio: coachAudio } : {}),
         // 2026-06-08 — fold the coach's typed note into the analysis so a
@@ -1453,7 +1514,6 @@ export async function runUploadPosePass(sessionId: string, signal?: AbortSignal)
       await (async () => {
         try {
           const poseMod = await import('./poseAnalysisApi');
-          const { resolveSwingerHandedness } = await import('./swingerHandedness');
           // 2026-08-06 (Tim — "analysis does everything / takes too long"; the mp4 run showed a single-swing
           // upload with no manual trim ran pose over the ENTIRE clip — windowed:false — so a 53s clip sampled
           // ~53s of frames across the whole file). The vision stage already LOCATED the swing but the window
@@ -1521,7 +1581,9 @@ export async function runUploadPosePass(sessionId: string, signal?: AbortSignal)
           // live SmartMotion path would have nulled).
           // 2026-07-24 (full-app audit, root D) — also thread handedness so a lefty's
           // weight-shift sign isn't inverted (default 'right' read it backwards).
-          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, poseImpactMs, resolveSwingerHandedness());
+          // 2026-10-04 — the TAGGED golfer's hand (sessionSwinger), not whoever is active on the phone.
+          const swingerHand = (require('./swing/sessionSwinger') as typeof import('./swing/sessionSwinger')).swingerForSession(session).handedness;
+          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, poseImpactMs, swingerHand);
           liveSessionStore(signal).setSessionBiomechanics(sessionId, biomech);
           uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
 

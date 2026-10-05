@@ -1547,6 +1547,7 @@ export async function extractPoseFramesFromVideo(
   }
   if (frames.length > 0) lastFrameFailure = null;
   console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
+  (require('./analysisTrace') as typeof import('./analysisTrace')).traceStep('pose frames', { requested: sampleTimes.length, got: frames.length, window: window ? `${Math.round(window.startMs)}-${Math.round(window.endMs)}ms` : 'whole clip' });
   if (frames.length === 0) {
     // Asked for N frames and got none: the swing has no measured read at all. Console-only until now,
     // so a device failing EVERY extraction looked identical to a device that was never asked.

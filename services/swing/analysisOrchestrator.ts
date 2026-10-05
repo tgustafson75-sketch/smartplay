@@ -23,6 +23,7 @@
  */
 
 import { ON_DEVICE_LOCATE_MIN_CLIP_MS } from './analysisFrames';
+import { traceStep } from '../analysisTrace';
 
 export type UploadSwingWindow = {
   startSec: number;
@@ -123,8 +124,10 @@ export async function findUploadSwingWindow(
   // Clamp to the LONGER of the stated duration and the one the motion pass measured: an upload's
   // metadata can under-report, and clamping to it threw away a correct window past the stated end.
   const measured = { durSec: 0 };
-  const w = await findUploadSwingWindowRaw(clipUri, durationSec, opts, measured);
-  return clampWindow(w, Math.max(0.5, durationSec, measured.durSec));
+  traceStep('find swing window', { clip_s: Math.round(durationSec * 10) / 10, network: opts.allowNetwork !== false });
+  const w = clampWindow(await findUploadSwingWindowRaw(clipUri, durationSec, opts, measured), Math.max(0.5, durationSec, measured.durSec));
+  traceStep('window chosen', { via: w.via, start_s: Math.round(w.startSec * 100) / 100, end_s: Math.round(w.endSec * 100) / 100, impact_s: w.impactSec });
+  return w;
 }
 
 async function findUploadSwingWindowRaw(
@@ -161,6 +164,7 @@ async function findUploadSwingWindowRaw(
         const mdur = Math.max(dur, measured.durSec);
         const bursts = m.bursts ?? [];
         console.log('[window] motion pass', JSON.stringify({ window: m.window, bursts: bursts.length }));
+        traceStep('motion pass', { window: m.window ? `${m.window.startMs}-${m.window.endMs}ms` : null, bursts: bursts.length, measured_s: measured.durSec });
         // Short clips: the motion window is enough — no pose on the critical path at all.
         if (dur <= SHORT_CLIP_NO_LOCATE_SEC) {
           if (m.window && m.window.endMs > m.window.startMs) {
@@ -169,7 +173,10 @@ async function findUploadSwingWindowRaw(
           return { startSec: 0, endSec: mdur, impactSec: null, via: 'whole_clip' };
         }
         let swing: { startMs: number; endMs: number; peakMs: number } | null = null;
-        if (bursts.length > 1) swing = await pickSwingBurst(shared.uri, bursts);
+        if (bursts.length > 1) {
+          swing = await pickSwingBurst(shared.uri, bursts);
+          traceStep('burst pick (pose: hands above shoulders)', { bursts: bursts.length, picked: swing ? `peak ${swing.peakMs}ms` : 'none confirmed' });
+        }
         if (swing) {
           // Address (~1.8s before the fastest moment) through the finish (~1.5s after).
           return {
@@ -193,7 +200,10 @@ async function findUploadSwingWindowRaw(
         if (bursts.length > 1) console.log('[window] several bursts, none confirmed by pose — locating with pose instead of guessing the last one');
       } finally { shared.release(); }
     }
-  } catch (e) { console.log('[window] motion pass failed', e instanceof Error ? e.message : String(e)); }
+  } catch (e) {
+    console.log('[window] motion pass failed', e instanceof Error ? e.message : String(e));
+    traceStep('motion pass failed', { error: e instanceof Error ? e.message : String(e) });
+  }
 
   // 2. Short clip: the clip is the swing — once the motion pass has had its look. Where there IS no
   //    motion pass (iOS) a clip long enough to hold a walk-up still gets the on-device locate: exact

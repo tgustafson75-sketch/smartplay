@@ -205,6 +205,7 @@ export async function detectPoseFromBase64(
     if (++nativeFailStreak >= 2 && browserFallbackPossible()) {
       nativeInferenceBroken = true;
       devLog('[mediaPipe] native inference failing — using the browser engine for this session');
+      try { (require('./analysisTrace') as typeof import('./analysisTrace')).traceStep('native pose failing → browser pose'); } catch { /* */ }
     }
     return nativeInferenceBroken ? detectInBrowser(b64, timestampMs, opts) : null;
   }

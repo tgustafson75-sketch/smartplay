@@ -37,6 +37,7 @@
  * A run is identified by `(clipUri, startMs, endMs)` — the same key the club-arc effect already uses,
  * so two screens analysing the same swing share a run rather than inventing two.
  */
+import { traceStep } from '../analysisTrace';
 
 export type Stage = 'locate' | 'anchor' | 'pose' | 'frame' | 'metrics' | 'club';
 
@@ -165,6 +166,7 @@ export function noteStage(
   try {
     getRun(keyForStage(key, stage)).stages[stage] = { status, at: Date.now(), detail };
   } catch { /* observation must never break analysis */ }
+  traceStep(`${stage} ${status}`, detail ?? null);
 }
 
 /**

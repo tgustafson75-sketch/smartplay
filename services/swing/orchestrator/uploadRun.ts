@@ -41,7 +41,10 @@ function needsWindow(id: string): boolean {
   const s = session(id);
   const shot = s?.shots?.[0];
   if (!s || !shot?.clipUri || s.source !== 'uploaded_video') return false;
-  if (shot.clipStartSeconds != null && shot.clipEndSeconds != null && shot.clipEndSeconds > shot.clipStartSeconds) return false;
+  // Only a window the PLAYER chose is kept; the finder's own answer is re-found on every analysis
+  // (an automatic window that was wrong used to be re-read forever — Tim's 3870 clip, 10-04).
+  if (shot.clipWindowSource === 'user' && shot.clipStartSeconds != null && shot.clipEndSeconds != null
+    && shot.clipEndSeconds > shot.clipStartSeconds) return false;
   const dur = s.upload?.duration_sec ?? 0;
   return dur > 0 && dur < MULTI_SWING_UPLOAD_SEC;
 }
@@ -65,7 +68,7 @@ function stages(): StageDef<In>[] {
         const w = await findUploadSwingWindow(shot.clipUri, s.upload?.duration_sec ?? 0);
         // Overran its budget or the run was replaced: the read has moved on without this window.
         if (signal.aborted) return null;
-        useSwingSessionStore.getState().setShotClipBoundaries(input.sessionId, shot.id, w.startSec, w.endSec, w.impactSec);
+        useSwingSessionStore.getState().setShotClipBoundaries(input.sessionId, shot.id, w.startSec, w.endSec, w.impactSec, 'auto');
         try {
           (require('../../../store/toastStore') as typeof import('../../../store/toastStore')).useToastStore.getState()
             .show(w.via === 'middle' ? 'Analyzing your swing… scrub + re-analyze to fine-tune.' : 'Found your swing — analyzing…');
@@ -128,7 +131,36 @@ export function runUploadAnalysis(sessionId: string): Promise<ReadResult> {
     const st = snap.stages.read?.status;
     return st != null && st !== 'pending' && st !== 'running';
   };
-  const run = getOrStartRun<In>(`upload:${sessionId}`, () => ({ stages: stages(), input: { sessionId }, hooks: { onStageFailed: report } }), readSettled);
+  const run = getOrStartRun<In>(`upload:${sessionId}`, () => {
+    // 2026-10-04 — one issue-log trace per run (services/analysisTrace; Owner Tools → Analysis).
+    const traceId = `upload:${sessionId}:${Date.now()}`;
+    const s = session(sessionId);
+    const { beginAnalysisTrace, traceStep, endAnalysisTrace } = require('../../analysisTrace') as typeof import('../../analysisTrace');
+    beginAnalysisTrace(traceId, 'upload', {
+      clip_s: s?.upload?.duration_sec != null ? Math.round(s.upload.duration_sec * 10) / 10 : null,
+      club: s?.club ?? null,
+      putt: isPutt(sessionId),
+      trimmed: s?.shots?.[0]?.clipStartSeconds != null,
+    });
+    return {
+      stages: stages(),
+      input: { sessionId },
+      hooks: {
+        onStageFailed: report,
+        onStageDone: (_k, stage, st) => traceStep(`stage ${stage}: ${st.status}`, { ms: st.ms ?? null, error: st.error ?? null }),
+      },
+      onDone: () => {
+        const fin = session(sessionId);
+        const pi = fin?.primary_issue as { issue_id?: string; name?: string; confidence?: string } | null | undefined;
+        endAnalysisTrace(traceId, {
+          result: fin?.analysis_status ?? 'unknown',
+          issue: pi?.issue_id ?? pi?.name ?? null,
+          confidence: pi?.confidence ?? null,
+          window: fin?.shots?.[0]?.clipStartSeconds != null ? `${fin.shots[0].clipStartSeconds?.toFixed(1)}-${fin.shots[0].clipEndSeconds?.toFixed(1)}s` : null,
+        });
+      },
+    };
+  }, readSettled);
   return new Promise<ReadResult>((resolve) => {
     const unsub = run.subscribe((snap) => {
       const st = snap.stages.read?.status;

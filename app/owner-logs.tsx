@@ -55,6 +55,7 @@ function kindLabel(kind: IssueLogKind): string {
     case 'voice_turn':        return 'VOICE';
     case 'boot':              return 'BOOT';
     case 'sim_round':         return 'SIM';
+    case 'analysis_trace':    return 'RUN';
     case 'user':              return 'USER';
   }
 }
@@ -72,11 +73,23 @@ function kindColor(kind: IssueLogKind): string {
     case 'voice_turn':        return '#22c55e'; // green — a full voice turn (his words → reply)
     case 'boot':              return '#64748b'; // slate — boot-timing breadcrumb (temporary)
     case 'sim_round':         return '#88F700'; // brand green — narrated sim-round trace
+    case 'analysis_trace':    return '#0ea5e9'; // sky — one analysis, its whole timeline
     case 'user':              return '#6b7280';
   }
 }
 
-type FilterTab = 'all' | 'errors' | 'user' | 'voice';
+type FilterTab = 'all' | 'errors' | 'user' | 'voice' | 'analysis';
+type EntryLike = { kind?: string; details?: Record<string, unknown> | null };
+// 2026-10-04 — an analysis trace is an error only when the run went wrong (details.problem).
+function isError(e: EntryLike): boolean {
+  return !!e.kind && e.kind !== 'user' && e.kind !== 'boot' && e.kind !== 'voice_turn'
+    && (e.kind !== 'analysis_trace' || e.details?.problem === true);
+}
+// 2026-10-04 (Tim: "everything can be diagnostically checked … when i try smartmotion analysis or
+// uploads") — every analysis run, with its timeline, plus analysis failures.
+function isAnalysis(e: EntryLike): boolean {
+  return e.kind === 'analysis_trace' || e.kind === 'analysis_error';
+}
 
 export default function OwnerLogsScreen() {
   const router = useRouter();
@@ -104,13 +117,13 @@ export default function OwnerLogsScreen() {
   // excludes 'user' feedback AND 'boot' breadcrumbs (the benign launch-timeline tracking he
   // wants to keep for timestamp analysis). Lets him spot a real problem at a glance without
   // losing the full 'All' timeline.
-  const errorEntryCount = useMemo(
-    () => allEntries.filter(e => e.kind && e.kind !== 'user' && e.kind !== 'boot' && e.kind !== 'voice_turn').length,
-    [allEntries],
-  );
+  const errorEntryCount = useMemo(() => allEntries.filter(isError).length, [allEntries]);
+  const analysisEntryCount = useMemo(() => allEntries.filter(isAnalysis).length, [allEntries]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const entries = useMemo(() => {
     if (tab === 'user') return allEntries.filter(e => !e.kind || e.kind === 'user');
-    if (tab === 'errors') return allEntries.filter(e => e.kind && e.kind !== 'user' && e.kind !== 'boot' && e.kind !== 'voice_turn');
+    if (tab === 'analysis') return allEntries.filter(isAnalysis);
+    if (tab === 'errors') return allEntries.filter(isError);
     if (tab === 'voice') return allEntries.filter(e => e.kind && e.kind !== 'user');
     return allEntries;
   }, [allEntries, tab]);
@@ -326,6 +339,7 @@ export default function OwnerLogsScreen() {
           { id: 'errors' as const, label: 'Errors', count: errorEntryCount },
           { id: 'user' as const,   label: 'Issues', count: userEntryCount },
           { id: 'voice' as const,  label: 'Voice',  count: voiceEntryCount },
+          { id: 'analysis' as const, label: 'Analysis', count: analysisEntryCount },
         ]).map(t => {
           const active = tab === t.id;
           return (
@@ -379,8 +393,9 @@ export default function OwnerLogsScreen() {
                       );
                     }}
                     delayLongPress={500}
+                    onPress={entry.kind === 'analysis_trace' ? () => setExpandedId(expandedId === entry.id ? null : entry.id) : undefined}
                     accessibilityRole="button"
-                    accessibilityLabel={`Issue: ${entry.text}. Long-press to delete.`}
+                    accessibilityLabel={`Issue: ${entry.text}. ${entry.kind === 'analysis_trace' ? 'Tap for the full timeline. ' : ''}Long-press to delete.`}
                   >
                     {/* Voice events get a colored kind chip so the eye
                         can scan a long list and pick the failures out. */}
@@ -398,9 +413,21 @@ export default function OwnerLogsScreen() {
                     {entry.details ? (
                       <Text style={[styles.detailsText, { color: colors.text_muted }]} numberOfLines={4}>
                         {Object.entries(entry.details)
+                          .filter(([k]) => k !== 'timeline')
                           .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
                           .join(' · ')}
                       </Text>
+                    ) : null}
+                    {entry.kind === 'analysis_trace' && Array.isArray(entry.details?.timeline) ? (
+                      expandedId === entry.id ? (
+                        <Text style={[styles.detailsText, { color: colors.text_primary }]} selectable>
+                          {(entry.details?.timeline as unknown[]).map(String).join('\n')}
+                        </Text>
+                      ) : (
+                        <Text style={[styles.detailsText, { color: colors.accent }]}>
+                          {`Tap for the timeline · ${(entry.details?.timeline as unknown[]).length} steps`}
+                        </Text>
+                      )
                     ) : null}
                     <Text style={[styles.entryMeta, { color: colors.text_muted }]}>
                       {formatTimestamp(entry.timestamp)}

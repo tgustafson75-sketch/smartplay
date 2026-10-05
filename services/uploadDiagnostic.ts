@@ -20,6 +20,7 @@
  */
 
 import { track } from './analytics';
+import { traceStep } from './analysisTrace';
 
 type StageData = Record<string, unknown> | undefined;
 
@@ -54,6 +55,8 @@ export function uploadLog(
     ...(data ?? {}),
   };
   console.log('[upload:' + stage + '] ' + JSON.stringify(payload));
+  // 2026-10-04 — and into the open analysis trace (Owner Tools → Analysis), not just the console.
+  if (stage !== 'ui-render') traceStep(`upload ${stage}`, data ?? null);
 
   // Mirror to analytics so post-failure debugging has a structured trail
   // beyond logcat (Sentry breadcrumbs once configured; in-house buffer

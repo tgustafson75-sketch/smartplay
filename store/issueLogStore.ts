@@ -51,6 +51,13 @@ export type IssueLogKind =
    * line in it is a line worth reading — successes buried the real errors this week.
    */
   | 'diag'
+  /**
+   * 2026-10-04 (Tim: "make sure everything can be diagnostically checked in my issue log … when i try
+   * smartmotion analysis or uploads in swing library") — ONE entry per analysis with its whole
+   * timeline (services/analysisTrace). Kept, shown under Owner Tools → Analysis, included in Send
+   * Report; auto-sent only when the run went wrong (`details.problem`).
+   */
+  | 'analysis_trace'
   // 2026-07-04 (Tim — "when I run the sim round, does it go to a log so you can
   // review the output?") — every sim-round event (start, narrated moves, tee
   // jumps, end) persists here so the post-run export carries the full trace.
@@ -140,6 +147,8 @@ interface IssueLogState {
     details?: Record<string, unknown>,
     kind?: 'analysis_error' | 'app_error' | 'sim_round' | 'diag',
   ) => void;
+  /** One analysis, start to finish (services/analysisTrace writes it). */
+  addAnalysisTrace: (t: { source: 'upload' | 'smartmotion'; summary: string; problem: boolean; details: Record<string, unknown> }) => void;
   /** Voice "log this issue" → a real user entry (ANY tester; un-gated 2026-07-30). Self-builds
    *  context + schedules the consented auto-send so the brain tool handler can call it directly. */
   addUserIssue: (text: string) => void;
@@ -346,6 +355,20 @@ export const useIssueLogStore = create<IssueLogState>()(
         console.log('[issueLog] app event:', summary);
         // Real failures (analysis_error/app_error) auto-send; sim_round is an owner-only trace → skip.
         if (kind !== 'sim_round') scheduleAutoSend();
+      },
+      addAnalysisTrace: ({ source, summary, problem, details }) => {
+        const entry: IssueLogEntry = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          text: `${problem ? 'analysis (PROBLEM)' : 'analysis'}: ${summary}`,
+          kind: 'analysis_trace',
+          stage: source,
+          details: { ...details, problem },
+          context: selfContext('analysis'),
+        };
+        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        console.log('[issueLog] analysis trace:', entry.text);
+        if (problem) scheduleAutoSend();
       },
       addVoiceTurn: (transcript, response, meta) => {
         const t = (transcript ?? '').trim();

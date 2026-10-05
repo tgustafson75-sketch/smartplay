@@ -104,10 +104,15 @@ function fmtTs(ms: number): string {
 function entryBlock(e: IssueLogEntry): string {
   const ctx = e.context;
   const ctxLine = `  [${fmtTs(e.timestamp)} · ${ctx.persona ?? '—'} · ${ctx.route ?? '—'} · ${ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round'}]`;
-  const detailsLine = e.details && Object.keys(e.details).length > 0
-    ? `\n  ${Object.entries(e.details).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')}`
+  const d = e.details ?? {};
+  // An analysis trace reads as a timeline, one step per line.
+  const timeline = e.kind === 'analysis_trace' && Array.isArray(d.timeline) ? (d.timeline as unknown[]).map(String) : null;
+  const rest = timeline ? Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'timeline')) : d;
+  const detailsLine = Object.keys(rest).length > 0
+    ? `\n  ${Object.entries(rest).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')}`
     : '';
-  return `• ${e.text}\n${ctxLine}${detailsLine}`;
+  const timelineBlock = timeline && timeline.length ? `\n    ${timeline.join('\n    ')}` : '';
+  return `• ${e.text}\n${ctxLine}${detailsLine}${timelineBlock}`;
 }
 
 /** Build the full email body (Reporter / Entries / Device + every entry w/ details). */
@@ -119,10 +124,18 @@ function entryBlock(e: IssueLogEntry): string {
 const REPORTABLE_KINDS = new Set([
   'user', 'voice_error', 'voice_silent_fail', 'transcribe_error', 'gps_error', 'analysis_error',
   'voice_miss', 'app_error',
+  // 2026-10-04 — every analysis's timeline goes with a Send Report (Tim: "everything can be
+  // diagnostically checked"). Auto-send takes only the ones flagged a problem — see isAutoSendable.
+  'analysis_trace',
 ]);
 function isReportable(e: { kind?: string }): boolean {
   // Legacy entries with no kind are manual user notes → keep.
   return e.kind == null || REPORTABLE_KINDS.has(e.kind);
+}
+/** What goes out WITHOUT a Send tap: reportable, and an analysis trace only when it went wrong. */
+function isAutoSendable(e: { kind?: string; details?: Record<string, unknown> }): boolean {
+  if (!isReportable(e)) return false;
+  return e.kind !== 'analysis_trace' || e.details?.problem === true;
 }
 
 /**
@@ -249,7 +262,7 @@ async function autoSendIssuesInner(): Promise<boolean> {
   // 2026-08-10 — only real errors + manual notes auto-send; the voice_turn / sim_round / boot
   // breadcrumbs stay device-side for owner-log review and never clutter the issue email.
   await hydrateSentIds();
-  const unsent = useIssueLogStore.getState().entries.filter(e => !sentIds.has(e.id) && isReportable(e));
+  const unsent = useIssueLogStore.getState().entries.filter(e => !sentIds.has(e.id) && isAutoSendable(e));
   if (unsent.length === 0) return false;
   /**
    * 2026-08-13 — attach the anonymous install id HERE, at the single send point, rather than at each

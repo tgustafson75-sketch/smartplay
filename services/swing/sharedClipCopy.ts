@@ -90,6 +90,7 @@ export async function acquireClipCopy(
         return dest;
       } catch (err) {
         console.log('[clipCopy] private copy failed', String(videoUri).slice(-60), err instanceof Error ? err.message : String(err));
+        try { (require('../analysisTrace') as typeof import('../analysisTrace')).traceStep('private clip copy FAILED', { error: err instanceof Error ? err.message : String(err) }); } catch { /* */ }
         // S5 class (ported from the old inline clubPath copy): copyAsync may have landed the file (or
         // a partial one) before getInfoAsync threw — a multi-hundred-MB orphan nothing references.
         // Best-effort delete so repeated failures can't accumulate.

@@ -62,6 +62,7 @@ function want(): void {
 
 /** Throw the page away and start a fresh one; every pending request fails now, not at its timeout. */
 export function resetFrameEngine(reason: string): void {
+  try { (require('./analysisTrace') as typeof import('./analysisTrace')).traceStep('frame engine reset', { reason }); } catch { /* */ }
   // 2026-10-04 (sweep) — the new page has no pose runtime loaded: the next pose call is a COLD load
   // again and gets the cold timeout. Left true, it got the warm 8s, timed out, reset again — a loop.
   poseWarm = false;

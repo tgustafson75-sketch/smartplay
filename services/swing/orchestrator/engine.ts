@@ -216,7 +216,7 @@ const lastRun = new Map<string, AnalysisRun<unknown>>();
 
 export function getOrStartRun<Input>(
   key: string,
-  build: () => { stages: StageDef<Input>[]; input: Input; hooks?: RunHooks },
+  build: () => { stages: StageDef<Input>[]; input: Input; hooks?: RunHooks; onDone?: (snap: RunSnapshot) => void },
   restart?: (live: RunSnapshot) => boolean,
 ): AnalysisRun<Input> {
   const existing = runs.get(key) as AnalysisRun<Input> | undefined;
@@ -224,8 +224,9 @@ export function getOrStartRun<Input>(
     if (!restart || !restart(existing.snapshot())) return existing;
   }
   lastRun.get(key)?.supersede();
-  const { stages, input, hooks } = build();
+  const { stages, input, hooks, onDone } = build();
   const run = new AnalysisRun<Input>(key, stages, input, hooks);
+  if (onDone) void run.done.then((snap) => { try { onDone(snap); } catch { /* observation only */ } });
   runs.set(key, run as AnalysisRun<unknown>);
   lastRun.set(key, run as AnalysisRun<unknown>);
   void run.done.then(() => { if (runs.get(key) === (run as AnalysisRun<unknown>)) runs.delete(key); });

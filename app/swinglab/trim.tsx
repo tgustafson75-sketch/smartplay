@@ -106,7 +106,7 @@ export default function TrimScreen() {
     if (withBoundaries) {
       // 2026-08-09 (C1) — a hand-trimmed window invalidates any vision-located impact anchor: clear it
       // so the pose pass re-derives honestly instead of anchoring to a point outside the new window.
-      useSwingSessionStore.getState().setShotClipBoundaries(session_id, shot.id, startSec, endSec, null);
+      useSwingSessionStore.getState().setShotClipBoundaries(session_id, shot.id, startSec, endSec, null, 'user');
     } else {
       useSwingSessionStore.getState().setShotClipBoundaries(session_id, shot.id, null, null, null);
     }

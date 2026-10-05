@@ -47,6 +47,12 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as VideoThumbnails from '../../utils/videoThumbnail';
 import { wristCentroid, deriveSwingAnchors, type MotionSample } from './poseMotion';
+import { traceStep } from '../analysisTrace';
+/** Console + the open analysis trace (2026-10-04). */
+function locNote(...a: unknown[]): void {
+  console.log(...a);
+  traceStep('on-device locate', { msg: a.map((x) => (typeof x === 'string' ? x.replace('[locate] ', '') : JSON.stringify(x))).join(' ') });
+}
 
 /** Enough to resolve a swing's shape; few enough to stay inside a couple of seconds. */
 export const LOCATE_FRAME_COUNT = 12;
@@ -132,7 +138,7 @@ async function locateSwingWindowOnDeviceImpl(
    */
   const mp = await import('../mediaPipePoseService');
   const status = await mp.getMediaPipeStatus().catch(() => null);
-  if (!status?.available) { console.log('[locate] on-device skipped: pose engine unavailable'); return null; }   // pre-build / unlinked: fall back to the network locate
+  if (!status?.available) { locNote('[locate] on-device skipped: pose engine unavailable'); return null; }   // pre-build / unlinked: fall back to the network locate
 
   /**
    * 2026-09-09 — READ A PRIVATE COPY, NEVER THE FILE THE PLAYER HOLDS.
@@ -161,7 +167,7 @@ async function locateSwingWindowOnDeviceImpl(
     const { acquireClipCopy } = await import('./sharedClipCopy');
     shared = await acquireClipCopy(clipUri);
   } catch { /* acquire failed — refused below, same as clubPath */ }
-  if (!shared) { console.log('[locate] on-device skipped: no private copy of the clip'); return null; }
+  if (!shared) { locNote('[locate] on-device skipped: no private copy of the clip'); return null; }
   const workUri = shared.uri;
 
   try {
@@ -219,13 +225,13 @@ export async function searchSwingWindow(
     if (!sample) {
       // Bail early rather than paying for a dozen decodes that are clearly going nowhere — the
       // caller's network locate is a better use of the time than finishing a hopeless sweep.
-      if (++consecutiveMisses >= 3 && samples.length === 0) { console.log('[locate] on-device gave up: first frames unreadable'); return null; }
+      if (++consecutiveMisses >= 3 && samples.length === 0) { locNote('[locate] on-device gave up: first frames unreadable'); return null; }
       continue;
     }
     consecutiveMisses = 0;
     samples.push(sample);
   }
-  if (samples.length < MIN_USABLE_SAMPLES) { console.log('[locate] on-device gave up: only', samples.length, 'frames read'); return null; }
+  if (samples.length < MIN_USABLE_SAMPLES) { locNote('[locate] on-device gave up: only', samples.length, 'frames read'); return null; }
 
   /**
    * 2026-10-03 (Tim's 14.5s upload: impact placed at 8.94s, the real strike is at 7.0s — he had
@@ -273,8 +279,8 @@ export async function searchSwingWindow(
   }
 
   const anchors = deriveSwingAnchors(samples);
-  if (!anchors) { console.log('[locate] on-device gave up: no clear swing in', samples.length, 'frames'); return null; }
-  console.log('[locate] on-device', { frames: samples.length, topMs: anchors.topMs, impactMs: anchors.impactMs });
+  if (!anchors) { locNote('[locate] on-device gave up: no clear swing in', samples.length, 'frames'); return null; }
+  locNote('[locate] on-device', { frames: samples.length, topMs: anchors.topMs, impactMs: anchors.impactMs });
   const { startMs, endMs, impactMs } = anchors;
   if (!(Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs)) return null;
 

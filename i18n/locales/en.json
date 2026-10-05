@@ -2849,7 +2849,8 @@
       "looking_down_at_your_own": "Looking down at your own setup — routes to grip / putting analysis.",
       "watching_another_golfer_swing_routes": "Watching another golfer swing — routes to full swing fault analysis.",
       "behind_you_looking_down_the": "Behind you, looking down the target line — reads path / plane / early extension.",
-      "facing_you_reads_weight_shift": "Facing you — reads weight shift / hip rotation / sway. Use this for an iPad/GoPro face-on clip."
+      "facing_you_reads_weight_shift": "Facing you — reads weight shift / hip rotation / sway. Use this for an iPad/GoPro face-on clip.",
+      "pick_from_files": "Choose from Files"
     },
     "placeholder": {
       "e_g_range_session_working": "e.g. range session, working on tempo",

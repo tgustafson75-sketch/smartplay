@@ -45,6 +45,13 @@ export interface SwingShot {
   // sampling automatically.
   clipStartSeconds?: number;
   clipEndSeconds?: number;
+  /**
+   * 2026-10-04 — WHO chose the window. 'user' = a trim or "Analyze this moment": kept on every
+   * re-analyze. 'auto' (or absent, from before this) = the swing finder's answer: a re-analyze looks
+   * for the swing again, so a wrong automatic window (Tim's 3870 clip: the turn to watch the ball)
+   * can never be re-read forever.
+   */
+  clipWindowSource?: 'auto' | 'user';
   /** 2026-08-09 (verification wave C1) — the vision locator's IMPACT estimate (seconds, absolute in the
    *  clip). Threading this into the pose pass selects the correct strike-anchored sampling branch —
    *  without it, "impact" was a fixed 65% window fraction that lands ~1.1s after the ball. Optional:
@@ -719,7 +726,7 @@ interface SwingSessionState {
    *  analyzeSwing's bounded-window path samples only within the user's
    *  marked swing window instead of the whole clip. Pass null to clear
    *  the bounds (reverts to whole-clip / tiered sampling). */
-  setShotClipBoundaries: (sessionId: string, shotId: string, startSec: number | null, endSec: number | null, impactSec?: number | null) => void;
+  setShotClipBoundaries: (sessionId: string, shotId: string, startSec: number | null, endSec: number | null, impactSec?: number | null, source?: 'auto' | 'user') => void;
   /** 2026-06-10 — Repoint a shot's source clip uri. Used when a legacy clip is
    *  re-persisted from a volatile cache/content uri into documentDirectory on
    *  first open, so replay + re-analyze read the durable copy from then on. */
@@ -1833,7 +1840,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           ),
         })),
 
-      setShotClipBoundaries: (sessionId, shotId, startSec, endSec, impactSec) =>
+      setShotClipBoundaries: (sessionId, shotId, startSec, endSec, impactSec, source) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : {
@@ -1846,6 +1853,8 @@ export const useSwingSessionStore = create<SwingSessionState>()(
                   // C1 — a REAL located impact rides along when the boundaries came from the locator;
                   // an explicit null (manual trim/clear) clears the stale anchor with the window.
                   locatedImpactSec: impactSec === undefined ? shot.locatedImpactSec : impactSec ?? undefined,
+                  // Cleared window → no source; otherwise the caller says who chose it (absent = auto).
+                  clipWindowSource: startSec == null || endSec == null ? undefined : (source ?? 'auto'),
                 }
               ),
             }

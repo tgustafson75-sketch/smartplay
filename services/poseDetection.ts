@@ -28,6 +28,7 @@ import { probeSoundOptions } from './audioPlaybackOptions';
 // instead of paying full timeout+retry per swing.
 import { recordSuccess, recordFailure } from './voiceCircuitBreaker';
 import { reportOnline, reportNetworkFailure } from '../store/connectivityStore';
+import { traceStep } from './analysisTrace';
 /**
  * Phase K — Pose detection client.
  *
@@ -231,6 +232,8 @@ const TENTATIVE_TIMEOUT_MS = 55_000;
 const V6 = (msg: string, data?: Record<string, unknown>): void => {
   if (data) console.log('[V6-DIAG] ' + msg + ' ' + JSON.stringify(data));
   else console.log('[V6-DIAG] ' + msg);
+  // 2026-10-04 — every V6 stage also lands in the open analysis trace (Owner Tools → Analysis).
+  traceStep(msg.replace(/^STAGE /, 'read '), data ?? null);
 };
 
 /**

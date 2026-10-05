@@ -59,6 +59,7 @@ import { computeTraceDirection, traceColor, buildShotTrace, type ShotTraceBuild 
 import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { detectBallPath } from '../../services/swing/ballPath';
 import { detectClubPath } from '../../services/swing/clubPath';
+import { beginAnalysisTrace, endAnalysisTrace } from '../../services/analysisTrace';
 // 2026-09-20 — moved to services/swing/bodyBounds so the three call sites that could not import a
 // SCREEN can crop too. See that file: three of four ran full-frame, including the persist pass.
 import { bodyBoundsFromPose } from '../../services/swing/bodyBounds';
@@ -2804,6 +2805,15 @@ export default function SmartMotion() {
       // the screen stuck on "Analyzing…" forever.
       // Hoisted so the catch/finally (siblings of the try body) can read the run token.
       let myRun = 0;
+      // 2026-10-04 (Tim: "everything can be diagnostically checked in my issue log") — one trace per
+      // SmartMotion read, timeline included (services/analysisTrace; Owner Tools → Analysis).
+      const traceId = `sm:${Date.now()}`;
+      beginAnalysisTrace(traceId, 'smartmotion', {
+        from: clipUriParam ? 'review a clip' : 'live capture',
+        mode: puttModeRef.current ? 'putt' : 'full swing',
+        window: segment ? `${(segment.startMs / 1000).toFixed(1)}-${(segment.endMs / 1000).toFixed(1)}s` : 'none (whole clip)',
+        strike: segment ? ((segment.peakDb ?? 0) !== 0 ? 'heard' : segment.synthesized ? 'guessed' : 'video') : null,
+      });
       try {
       // Prewarm the TTS function NOW (analysis takes seconds) so the spoken
       // verdict that follows fires hot, not cold (Tim's report-read lag).
@@ -3177,6 +3187,10 @@ export default function SmartMotion() {
         // every verdict.) The derived outer hang-guard is folded into analysisP so a true
         // hang still can't strand the screen, and a real-but-late read is never discarded.
         const result: Awaited<ReturnType<typeof analyzeSwing>> = await analysisP!;
+        // Kept open 45s more so the pose pass, club path and tempo that follow land in the same entry.
+        endAnalysisTrace(traceId, result.kind === 'ok'
+          ? { result: 'ok', issue: result.analysis.primary_fault ?? result.analysis.detected_issue ?? null, confidence: result.analysis.confidence ?? null, observation: (result.analysis.observation ?? '').slice(0, 90) }
+          : { result: result.kind, error: 'message' in result ? String((result as { message?: unknown }).message ?? '') : null }, 45_000);
         // A newer session started while this read was in flight — drop it entirely so it
         // can't land on the new session's clip, saved report, or CNS. (Mirrors the
         // multi-swing guard in runWindowedAnalysis.)
@@ -3365,7 +3379,7 @@ export default function SmartMotion() {
     // 2026-09-15 — `caddiePersonality` dropped: it was the recompute trigger for the persona, and
     // the persona is read through `analysisCaddieRef` now, so the ref is always current and the dep
     // bought nothing but churn. Verified unread anywhere in the body.
-    [angle, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill, drillShotCount, router, drillFocus, drillName],
+    [angle, language, clipUriParam, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill, drillShotCount, router, drillFocus, drillName],
   );
 
   // Pose biomechanics — only when the user opens the Motion overlay (step 2).
