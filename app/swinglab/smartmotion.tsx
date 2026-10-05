@@ -833,7 +833,7 @@ export default function SmartMotion() {
    */
   const clubPathCacheRef = useRef<Record<string, { x: number; y: number; tMs: number }[] | null>>({});
   // The frame size each READ arc was measured in (absent = the run never answered), for the saved arc.
-  const clubArcFrameRef = useRef<Record<string, { w: number | null; h: number | null } | null>>({});
+  const clubArcFrameRef = useRef<Record<string, { w: number | null; h: number | null; source?: 'tracker' | 'vision' } | null>>({});
   /**
    * 2026-09-09 — HAS THE POSE STAGE FINISHED FOR THIS CLIP + SWING? (success OR failure).
    *
@@ -1626,7 +1626,8 @@ export default function SmartMotion() {
     clubArcSessionRef.current = sid;
     const pts = clubPathCacheRef.current[key] ?? null;
     try {
-      useSwingSessionStore.getState().setSessionClubArc(sid, pts ?? [], pts ? clubArcFrameRef.current[key] ?? null : null);
+      const meta = clubArcFrameRef.current[key] ?? null;
+      useSwingSessionStore.getState().setSessionClubArc(sid, pts ?? [], pts && meta ? { w: meta.w, h: meta.h } : null, meta?.source);
     } catch { /* the detail screen still live-extracts as a fallback */ }
   }, []);
   const stoppingRef = useRef(false);
@@ -2355,7 +2356,7 @@ export default function SmartMotion() {
         strikeMs: segStrikeMs, toleranceMs: segToleranceMs, confidence: seg.confidence ?? null,
       });
     } catch { /* observation only */ }
-    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, toleranceMs: segToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: clipFpsRef.current })
+    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, toleranceMs: segToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: clipFpsRef.current, poseFrames })
       .then((r) => {
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a validated arc (detectClubPath returns [] for a clustered
@@ -2371,7 +2372,7 @@ export default function SmartMotion() {
         clubPathCacheRef.current[clubCacheKey] = pts;
         setClubArcPoints(pts);
         // The saved swing keeps THIS arc (swing 1 is the session's) — the swing-detail screen draws it.
-        if (r) clubArcFrameRef.current[clubCacheKey] = pts ? { w: r.frameW ?? null, h: r.frameH ?? null } : null;
+        if (r) clubArcFrameRef.current[clubCacheKey] = { w: pts ? r.frameW ?? null : null, h: pts ? r.frameH ?? null : null, source: r.source };
         if (selectedSwing === 0) persistSwing0Arc(clubCacheKey);
         try {
           noteStage(stageKey, 'club', !r ? 'skipped' : (r.points.length >= 3 ? 'ok' : 'empty'),

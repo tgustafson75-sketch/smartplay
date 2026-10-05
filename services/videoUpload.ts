@@ -1654,6 +1654,7 @@ export async function runUploadPosePass(sessionId: string, signal?: AbortSignal)
                 toleranceMs: arcToleranceMs,
                 shouldAbort: () => false,
                 bodyBounds: bodyBoundsFromPose(biomech?.frames ?? null),
+                poseFrames: biomech?.frames ?? null,
                 // 2026-09-29 — the clip's own capture rate (null for an upload = unknown, the 30fps floor).
                 sourceFps: (await import('./capture/clipFps')).sessionCapturedFps(
                   liveSessionStore(signal).sessionHistory.find((s) => s.id === sessionId) ?? null,
@@ -1665,9 +1666,10 @@ export async function runUploadPosePass(sessionId: string, signal?: AbortSignal)
                   sessionId,
                   arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + pw.startMs })),
                   { w: arc.frameW ?? null, h: arc.frameH ?? null },
+                  arc.source,
                 );
               } else {
-                liveSessionStore(signal).setSessionClubArc(sessionId, [], null);
+                liveSessionStore(signal).setSessionClubArc(sessionId, [], null, arc?.source);
               }
               /**
                * 2026-09-09 — this line was the exact ambiguity `f44f06d` set out to kill, still

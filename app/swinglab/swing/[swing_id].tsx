@@ -750,12 +750,15 @@ export default function SwingDetail() {
     // (which uses this shot's clip window), so a selected swing still gets its real clubhead arc.
     const shotArc = shot?.club_arc;
     const storedArc = shotArc !== undefined ? shotArc : (selectedShotIdx === 0 ? session?.club_arc : undefined);
+    // 2026-10-04 — only an arc the on-device TRACKER found is reused; a vision-model arc from before is
+    // tracked again now that the player has asked for the trace.
+    const storedSource = shotArc !== undefined ? shot?.club_arc_source : (selectedShotIdx === 0 ? session?.club_arc_source : undefined);
     // 2026-08-06 (Tim — the blue club was STUCK BLANK forever): only short-circuit on a REAL stored arc.
     // A stored empty [] (analyzed, clubhead not tracked) used to hard-return null and PERMANENTLY block the
     // live re-extraction below — so once a swing failed detection it never retried. Now empty/undefined
     // falls through to the paused-gated live extraction, which (with the loosened detection gates) can pick
     // up the club on a later paused pass instead of showing nothing forever.
-    if (storedArc && storedArc.length >= 3) {
+    if (storedArc && storedArc.length >= 3 && storedSource === 'tracker') {
       setClubArcPoints(storedArc);
       return;
     }
@@ -849,7 +852,7 @@ export default function SwingDetail() {
         // of fourteen sampled frames, which is what a ~6px clubhead looks like.
         // 2026-10-04 (sweep) — a pose-derived anchor carries the pose's slack; a heard strike is exact.
         const anchorTolMs = anchorMs == null || anchorIsHeard({ detectionMethod: shot.detectionMethod, detectionOffsetSeconds: shot.detectionOffsetSeconds }) ? 0 : POSE_ANCHOR_TOLERANCE_MS;
-        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, toleranceMs: anchorTolMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: swingCapturedFps });
+        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, toleranceMs: anchorTolMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: swingCapturedFps, poseFrames });
         try {
           const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
           pipe.noteStage(pipe.runKeyFor(uri, startMs, endMs), 'club',
@@ -870,7 +873,7 @@ export default function SwingDetail() {
           const pts = r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + startMs }));
           setClubArcPoints(pts);
           if (session?.id && shot.id) {
-            try { useSwingSessionStore.getState().setShotClubArc(session.id, shot.id, pts, { w: r.frameW ?? null, h: r.frameH ?? null }); } catch { /* drawing it is what matters */ }
+            try { useSwingSessionStore.getState().setShotClubArc(session.id, shot.id, pts, { w: r.frameW ?? null, h: r.frameH ?? null }, r.source); } catch { /* drawing it is what matters */ }
           }
         } else {
           /**
@@ -961,7 +964,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
    
-  }, [hasPose, poseFrames, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, session?.id, session?.club_arc, shot?.club_arc, shot?.id, selectedShotIdx, swingCapturedFps]);
+  }, [hasPose, poseFrames, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, session?.id, session?.club_arc, session?.club_arc_source, shot?.club_arc, shot?.club_arc_source, shot?.id, selectedShotIdx, swingCapturedFps]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -1177,13 +1180,13 @@ export default function SwingDetail() {
           } catch { /* observation only */ }
           // 2026-09-20 — the re-analyse path gets the crop too. `biomech` was just computed above,
           // so its frames are the freshest bounds available for this clip.
-          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, toleranceMs: arcToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames), sourceFps: swingCapturedFps });
+          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, toleranceMs: arcToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames), sourceFps: swingCapturedFps, poseFrames: biomech?.frames ?? poseFrames });
           // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
           // would drop a valid 3-point arc and persist [].
           if (arc && arc.points.length >= 3) {
-            useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
+            useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null }, arc.source);
           } else {
-            useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, [], null);
+            useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, [], null, arc?.source);
           }
         } catch { /* arc best-effort */ }
       } catch (e) {

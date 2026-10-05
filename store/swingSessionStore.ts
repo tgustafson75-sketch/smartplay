@@ -99,6 +99,13 @@ export interface SwingShot {
   biomechanics?: import('../services/poseAnalysisApi').SwingBiomechanics | null;
   club_arc?: import('../services/swing/clubPath').ClubPathPoint[] | null;
   club_arc_frame?: { w: number | null; h: number | null } | null;
+  /**
+   * 2026-10-04 — HOW the arc was found. 'tracker' = the on-device clubhead tracker (every frame,
+   * body-anchored; services/swing/clubTrackSource). 'vision' / absent = the old vision-model path
+   * (2 of 14 frames on Tim's report). A swing screen reuses only a tracked arc; anything else is
+   * tracked again when the player turns the trace on.
+   */
+  club_arc_source?: 'tracker' | 'vision';
 
   // Phase BZ-v1 — user annotations on a captured swing. All optional; absence
   // = no opinion logged. `isGoodRep` true marks the swing as a keeper for
@@ -288,6 +295,13 @@ export interface SwingSession {
   club_arc?: import('../services/swing/clubPath').ClubPathPoint[] | null;
   /** SOURCE frame dims the club_arc points are normalized against (for aspect mapping). */
   club_arc_frame?: { w: number | null; h: number | null } | null;
+  /**
+   * 2026-10-04 — HOW the arc was found. 'tracker' = the on-device clubhead tracker (every frame,
+   * body-anchored; services/swing/clubTrackSource). 'vision' / absent = the old vision-model path
+   * (2 of 14 frames on Tim's report). A swing screen reuses only a tracked arc; anything else is
+   * tracked again when the player turns the trace on.
+   */
+  club_arc_source?: 'tracker' | 'vision';
   /** 2026-05-22 — PuttingLab result attached to this session when the
    *  session was classified as putting (analyzer-router routed glasses
    *  POV / putt/chip tag through puttingAnalysisService instead of
@@ -683,10 +697,10 @@ interface SwingSessionState {
    *  this commits independently from setSessionAnalysis. */
   setSessionBiomechanics: (sessionId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
   /** Persist the clubhead arc detected during the analysis pass (see SwingSession.club_arc). */
-  setSessionClubArc: (sessionId: string, arc: import('../services/swing/clubPath').ClubPathPoint[] | null, frame?: { w: number | null; h: number | null } | null) => void;
+  setSessionClubArc: (sessionId: string, arc: import('../services/swing/clubPath').ClubPathPoint[] | null, frame?: { w: number | null; h: number | null } | null, source?: 'tracker' | 'vision') => void;
   /** Per-SHOT biomech + clubhead arc (lazy per-swing review in the library). */
   setShotBiomechanics: (sessionId: string, shotId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
-  setShotClubArc: (sessionId: string, shotId: string, arc: import('../services/swing/clubPath').ClubPathPoint[] | null, frame?: { w: number | null; h: number | null } | null) => void;
+  setShotClubArc: (sessionId: string, shotId: string, arc: import('../services/swing/clubPath').ClubPathPoint[] | null, frame?: { w: number | null; h: number | null } | null, source?: 'tracker' | 'vision') => void;
   /** Phase BZ-v1 — user annotation mutators. Each updates the named shot
    *  in-place; no-op if shot id not found. */
   updateShotTags: (sessionId: string, shotId: string, tags: {
@@ -1672,7 +1686,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           };
         }),
 
-      setSessionClubArc: (sessionId, arc, frame) =>
+      setSessionClubArc: (sessionId, arc, frame, source) =>
         set(s => {
           /**
            * 2026-09-12 — the 'club-arc-visible' checklist item. An arc with points in it means the
@@ -1694,8 +1708,11 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             // the stale 4 rejected a VALID 3-point re-run arc that the draw path accepts.
             const incomingLen = Array.isArray(arc) ? arc.length : 0;
             const existingLen = Array.isArray(session.club_arc) ? session.club_arc.length : 0;
-            if (incomingLen < 3 && existingLen >= 3) return session;
-            return { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null };
+            // 2026-10-04 — a TRACKED result is authoritative over a vision-model arc, even when shorter:
+            // the old arcs were mostly wrong, and keeping one because it had 3 points kept it forever.
+            const trackedOverVision = source === 'tracker' && session.club_arc_source !== 'tracker';
+            if (!trackedOverVision && incomingLen < 3 && existingLen >= 3) return session;
+            return { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null, club_arc_source: source ?? session.club_arc_source };
           };
           // 2026-07-30 (analysis audit P4) — dual-patch activeSession so a write that lands before
           // endSession isn't lost.
@@ -1728,7 +1745,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           };
         }),
 
-      setShotClubArc: (sessionId, shotId, arc, frame) =>
+      setShotClubArc: (sessionId, shotId, arc, frame, source) =>
         set(s => {
           const apply = (session: SwingSession): SwingSession => {
             if (session.id !== sessionId) return session;
@@ -1739,8 +1756,9 @@ export const useSwingSessionStore = create<SwingSessionState>()(
                 // P6 — same "don't downgrade good→empty" guard as the session-level arc (bar 3 = MIN_ARC_POINTS).
                 const incomingLen = Array.isArray(arc) ? arc.length : 0;
                 const existingLen = Array.isArray(sh.club_arc) ? sh.club_arc.length : 0;
-                if (incomingLen < 3 && existingLen >= 3) return sh;
-                return { ...sh, club_arc: arc, club_arc_frame: frame ?? sh.club_arc_frame ?? null };
+                const trackedOverVision = source === 'tracker' && sh.club_arc_source !== 'tracker';
+                if (!trackedOverVision && incomingLen < 3 && existingLen >= 3) return sh;
+                return { ...sh, club_arc: arc, club_arc_frame: frame ?? sh.club_arc_frame ?? null, club_arc_source: source ?? sh.club_arc_source };
               }),
             };
           };

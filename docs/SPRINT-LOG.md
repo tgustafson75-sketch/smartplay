@@ -5323,3 +5323,10 @@ orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-po
   timing, motion cancel, no reset loops, cool-offs, orphan sweep. Emulator after: 1 read / 1 pose /
   1 club path, 0 OOM. Open (plausible, not fixed): shotgun start on another tee; par-5 green beyond
   the imagery from the tee; the 15s live ceiling does not stop the abandoned finder's work.
+- **Clubhead tracking on device (2026-10-04, Tim: "primary function of the app"):** replaced the vision-model
+  clubhead finder ("detected 2 of 14") with a body-anchored motion tracker (services/swing/clubTrackSource)
+  run in the hidden WebView over every frame of the swing. Desk-validated on 3870 + swing6b (30fps): on the
+  head through takeaway, top, impact and follow-through; nothing at address. Android WebView: 127 frames,
+  57 points, gate-accepted (53s on the emulator's software decoder; phone hardware decode is far faster).
+  Stored arcs carry their source; only tracked arcs are reused. iOS keeps the vision fallback (no engine there).
+  Open: impact frames not always kept on wide windows; late-finish points near the body.

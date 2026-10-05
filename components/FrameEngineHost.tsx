@@ -9,9 +9,11 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import {
   attachFrameEngine, detachFrameEngine, onFrameEngineMessage, resetFrameEngine, subscribeFrameEngine, frameEngineState,
 } from '../services/frameEngine';
+import { CLUB_TRACK_JS } from '../services/swing/clubTrackSource';
 
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
 <canvas id="c"></canvas>
+<script>${CLUB_TRACK_JS}</script>
 <script>
 (function () {
   var post = function (o) { window.ReactNativeWebView.postMessage(JSON.stringify(o)); };
@@ -176,6 +178,68 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
         });
       }).catch(function (e) {
         post({ type: 'motion', id: id, ok: false, error: String(e && e.message || e) });
+      }).then(function () { delete cancelled[id]; settle(); });
+    });
+  };
+  // 2026-10-04 — a seek for reading MANY consecutive frames: the presented frame is ready when the
+  // compositor says so, and a hidden view that never says so waits 40ms, not the single grab's 120ms
+  // (150 frames x 120ms was 18s of waiting for nothing).
+  function seekFast(t) {
+    return new Promise(function (res, rej) {
+      var done = false;
+      var finish = function () { if (done) return; done = true; v.removeEventListener('seeked', onSeeked); v.removeEventListener('error', onErr); res(); };
+      var onErr = function () { if (done) return; done = true; rej(new Error('seek error')); };
+      var onSeeked = function () {
+        if (v.requestVideoFrameCallback) { v.requestVideoFrameCallback(function () { finish(); }); setTimeout(finish, 40); }
+        else finish();
+      };
+      v.addEventListener('seeked', onSeeked);
+      v.addEventListener('error', onErr);
+      if (Math.abs(v.currentTime - t) < 0.0005) { v.currentTime = t + 0.001; } else { v.currentTime = t; }
+    });
+  }
+  // 2026-10-04 — THE CLUBHEAD, every frame of the swing (services/swing/clubTrackSource). Decodes the
+  // window at the clip's own rate (plus 3 frames either side, so the tracker sees both neighbours of
+  // every swing frame), at a working size of 427px on the long edge, and tracks it with the pose
+  // frames the app already has as the body anchors. Points come back normalised to the frame.
+  window.__clubtrack = function (id, src, startMs, endMs, fps, poses) {
+    if (idle) { clearTimeout(idle); idle = null; }
+    queued++;
+    frameQ = frameQ.then(function () {
+      if (cancelled[id]) { delete cancelled[id]; settle(); return; }
+      begin(id);
+      return within(load(src), 5000, 'load').then(function () {
+        var vw = v.videoWidth, vh = v.videoHeight, dur = v.duration;
+        if (!vw || !vh || !isFinite(dur)) throw new Error('no video size');
+        var sc = 427 / Math.max(vw, vh), W = Math.round(vw * sc), H = Math.round(vh * sc);
+        var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        var cx = cv.getContext('2d', { willReadFrequently: true });
+        var step = 1 / Math.min(60, Math.max(15, fps || 30));
+        var t0 = Math.max(0, startMs / 1000 - 3 * step), t1 = Math.min(dur - 0.02, endMs / 1000 + 3 * step);
+        var n = Math.floor((t1 - t0) / step) + 1;
+        if (n > 150) { step = (t1 - t0) / 149; n = 150; }
+        if (n < 8) throw new Error('window too short');
+        var frames = [], i = 0;
+        function next() {
+          if (cancelled[id]) return Promise.reject(new Error('cancelled'));
+          if (i >= n) return Promise.resolve();
+          var t = t0 + i * step; i++;
+          return within(seekFast(t), 4000, 'seek').then(function () {
+            cx.drawImage(v, 0, 0, W, H);
+            var d = cx.getImageData(0, 0, W, H).data, L = new Uint8Array(W * H);
+            for (var p = 0, o = 0; p < W * H; p++, o += 4) L[p] = (d[o] * 77 + d[o + 1] * 150 + d[o + 2] * 29) >> 8;
+            frames.push({ t: Math.round(t * 1000), w: W, h: H, luma: L });
+          }).then(next);
+        }
+        return next().then(function () {
+          var at = window.ClubTrack.anchorsFromPoses(poses, W, H);
+          var r = window.ClubTrack.track(frames, at);
+          var pts = [];
+          r.points.forEach(function (q) { if (q) pts.push({ t: q.t, x: q.x / W, y: q.y / H, score: q.score }); });
+          post({ type: 'club', id: id, ok: true, points: pts, frames: frames.length, vw: vw, vh: vh, clubLen: r.clubLen / Math.max(W, H) });
+        });
+      }).catch(function (e) {
+        post({ type: 'club', id: id, ok: false, error: String(e && e.message || e) });
       }).then(function () { delete cancelled[id]; settle(); });
     });
   };

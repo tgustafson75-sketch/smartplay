@@ -156,7 +156,7 @@ describe('the page itself', () => {
   it('acks each job when it STARTS, and releases the decoder only when nothing is queued', () => {
     expect(page).toMatch(/function begin\(id\) \{[\s\S]{0,120}?post\(\{ type: 'start', id: id \}\)/);
     expect(page).toMatch(/function settle\(\) \{ queued--;[^}]*idle = queued > 0 \? null : setTimeout\(release, 8000\)/);
-    expect((page.match(/queued\+\+;/g) ?? []).length).toBe(2);      // grab + motion
+    expect((page.match(/queued\+\+;/g) ?? []).length).toBe(3);      // grab + motion + club track
   });
   it('a motion pass stops when the app cancels it', () => {
     expect(page).toMatch(/if \(cancelled\[id\]\) return Promise\.reject\(new Error\('cancelled'\)\);/);

@@ -27,6 +27,24 @@ type Grab = { b64: string; width: number; height: number };
 export type MotionWindow = { startMs: number; endMs: number; peakMs: number };
 /** A distinct short peak of motion — a candidate for the swing (see findUploadSwingWindow). */
 export type MotionBurst = { startMs: number; endMs: number; peakMs: number; peak: number };
+/** A tracked clubhead: `t` ms in the clip, x/y normalised to the frame (services/swing/clubTrackSource). */
+export type ClubTrackPoint = { t: number; x: number; y: number; score: number };
+/** Body anchors for the tracker: one pose frame, keypoints by COCO name → [x, y, score], normalised. */
+export type ClubTrackPose = { t: number; kp: Record<string, [number, number, number]> };
+
+/**
+ * 2026-10-04 — track the clubhead through every frame of [startMs, endMs] in the hidden page. A long job
+ * (≈ one seek + draw per frame): it is CANCELLED in the page on timeout, never answered with a reset.
+ */
+export function trackClubInBrowser(
+  videoUri: string, startMs: number, endMs: number, fps: number, poses: ClubTrackPose[], timeoutMs = 60_000,
+): Promise<{ points: ClubTrackPoint[]; frames: number; vw: number | null; vh: number | null; clubLen: number }> {
+  return request(
+    (id) => `window.__clubtrack && window.__clubtrack(${id}, ${JSON.stringify(videoUri)}, ${Math.round(startMs)}, ${Math.round(endMs)}, ${Math.round(fps)}, ${JSON.stringify(poses)}); true;`,
+    timeoutMs, 'club track', { onTimeout: 'cancel' },
+  );
+}
+
 export type WebLandmark = { x: number; y: number; z: number; visibility: number; presence: number };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Pending = { resolve: (g: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout>; started?: () => void };
@@ -116,15 +134,21 @@ export async function ensureFrameEngine(waitMs = 2_500): Promise<boolean> {
 
 /** Messages posted by the page (window.ReactNativeWebView.postMessage). */
 export function onFrameEngineMessage(raw: string): void {
-  let msg: { type?: string; id?: number; ok?: boolean; b64?: string; w?: number; h?: number; error?: string; landmarks?: WebLandmark[]; durationMs?: number; window?: MotionWindow | null; bursts?: MotionBurst[] };
+  let msg: { type?: string; id?: number; ok?: boolean; b64?: string; w?: number; h?: number; error?: string; landmarks?: WebLandmark[]; durationMs?: number; window?: MotionWindow | null; bursts?: MotionBurst[];
+    points?: ClubTrackPoint[]; frames?: number; vw?: number; vh?: number; clubLen?: number };
   try { msg = JSON.parse(raw); } catch { return; }
   if (msg.type === 'ready') { ready = true; return; }
   if (msg.type === 'start' && typeof msg.id === 'number') { pending.get(msg.id)?.started?.(); return; }
-  if ((msg.type !== 'frame' && msg.type !== 'pose' && msg.type !== 'motion') || typeof msg.id !== 'number') return;
+  if ((msg.type !== 'frame' && msg.type !== 'pose' && msg.type !== 'motion' && msg.type !== 'club') || typeof msg.id !== 'number') return;
   const p = pending.get(msg.id);
   if (!p) return;
   pending.delete(msg.id);
   clearTimeout(p.timer);
+  if (msg.type === 'club') {
+    if (msg.ok && Array.isArray(msg.points)) p.resolve({ points: msg.points, frames: msg.frames ?? 0, vw: msg.vw ?? null, vh: msg.vh ?? null, clubLen: msg.clubLen ?? 0 });
+    else p.reject(new Error(msg.error ?? 'frame engine: no club track'));
+    return;
+  }
   if (msg.type === 'motion') {
     if (msg.ok) p.resolve({ durationMs: msg.durationMs ?? 0, window: msg.window ?? null, bursts: Array.isArray(msg.bursts) ? msg.bursts : [] });
     else p.reject(new Error(msg.error ?? 'frame engine: no motion read'));

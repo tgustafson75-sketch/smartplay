@@ -163,3 +163,30 @@ export function classifyArc(raw: readonly ArcPoint[]): { rejection: ArcRejection
   if (Math.max(spanX, spanY) < 0.10 || spanX + spanY < 0.13) return { rejection: 'cluster', points };
   return { rejection: looksLikeClubArc(points) ? null : 'scatter', points };
 }
+
+/**
+ * 2026-10-04 — the gate for an arc from the on-device TRACKER (services/swing/clubTrackSource).
+ *
+ * The zig-zag test in looksLikeClubArc exists because the vision model's points were 14 INDEPENDENT
+ * guesses: three confident wrong ones (grip, ball, a background object) span a wide box. The tracker's
+ * points are one continuous path by construction (body-anchored candidates, Viterbi through time), and
+ * a dense real track legitimately wobbles where the club hangs at the top for a few frames — on Tim's
+ * own clips that tripped "scatter" on a clean arc. So a tracked arc keeps the gates that still mean
+ * something (enough points, not a cluster) and not the one written for a different failure.
+ */
+export function classifyTrackedArc(raw: readonly ArcPoint[]): { rejection: ArcRejection | null; points: ArcPoint[] } {
+  if (raw.length === 0) return { rejection: 'none', points: [] };
+  const points = dedupeArcPoints(raw);
+  if (points.length < MIN_ARC_POINTS) return { rejection: 'too_few', points };
+  let minX = 1, maxX = 0, minY = 1, maxY = 0;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const spanX = maxX - minX, spanY = maxY - minY;
+  if (Math.max(spanX, spanY) < 0.10 || spanX + spanY < 0.13) return { rejection: 'cluster', points };
+  return { rejection: null, points };
+}
+

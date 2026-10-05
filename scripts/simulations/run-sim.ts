@@ -1129,7 +1129,8 @@ check('Clubhead arc is computed at ANALYSIS time + persisted (not re-extracted o
       // view screen prefers a REAL persisted arc (this shot's own, or the session's for shot 0) before any
       // live extraction; 2026-08-06 — a stored EMPTY arc no longer locks it blank forever (falls through to
       // the paused-gated live re-extraction), so the guard now asserts the real-arc short-circuit.
-      /const storedArc = shotArc !== undefined \? shotArc/.test(detail) && /if \(storedArc && storedArc\.length >= 3\)/.test(detail)
+      // 2026-10-04 — and only an arc the on-device TRACKER found; a pre-tracker vision arc is re-tracked.
+      /const storedArc = shotArc !== undefined \? shotArc/.test(detail) && /if \(storedArc && storedArc\.length >= 3 && storedSource === 'tracker'\)/.test(detail)
     );
   })(),
   'the clubhead arc is detected during analysis (retriever runs while nothing plays) and stored, so it draws immediately on open regardless of autoplay — no view-time re-extraction race');

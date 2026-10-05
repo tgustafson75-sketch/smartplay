@@ -15,7 +15,7 @@
  */
 
 import * as VideoThumbnails from '../../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
-import { classifyArc } from './clubArcGate';
+import { classifyArc, classifyTrackedArc } from './clubArcGate';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from '../apiBase';
@@ -69,6 +69,8 @@ export interface ClubPathResult {
    * "rejected: scatter, detected: 8" is a completely different bug report from "rejected: none".
    */
   rejected?: { reason: 'none' | 'too_few' | 'cluster' | 'scatter'; detected: number; gate: 'server' | 'client' } | null;
+  /** 2026-10-04 — 'tracker' (on-device, every frame) or 'vision' (the model fallback). */
+  source?: 'tracker' | 'vision';
 }
 
 /**
@@ -447,6 +449,65 @@ function tidy(offsets: number[], minGapMs: number, keepMs: number | null = null)
   return out;
 }
 
+/**
+ * 2026-10-04 — the on-device clubhead tracker (services/swing/clubTrackSource) through the hidden browser
+ * engine. Null when it cannot run here (iOS / no engine / no usable pose) — the caller then falls back.
+ */
+async function trackedClubPath(
+  workUri: string,
+  startMs: number,
+  endMs: number,
+  poseFrames: readonly import('../poseAnalysisApi').PoseFrame[] | null,
+  sourceFps: number | null,
+  shouldAbort?: () => boolean,
+): Promise<ClubPathResult | null> {
+  const { Platform } = require('react-native') as typeof import('react-native');
+  const trace = (require('../analysisTrace') as typeof import('../analysisTrace')).traceStep;
+  const skip = (why: string, extra: Record<string, unknown> = {}) => {
+    console.log('[clubTrack] not run —', why, JSON.stringify(extra));
+    trace('club track not run → vision fallback', { why, ...extra });
+    return null;
+  };
+  if (Platform.OS !== 'android') return skip('not android');
+  const poses = (poseFrames ?? [])
+    .filter((f) => Number.isFinite(f.timestampMs) && (f.keypoints?.length ?? 0) > 0)
+    .map((f) => ({
+      t: Math.round(f.timestampMs),
+      kp: Object.fromEntries((f.keypoints ?? [])
+        .filter((k) => typeof k.name === 'string' && Number.isFinite(k.x) && Number.isFinite(k.y))
+        .map((k) => [k.name as string, [k.x, k.y, k.score ?? 0] as [number, number, number]])),
+    }));
+  if (poses.length < 4) return skip('too few pose frames', { pose: poses.length, given: poseFrames?.length ?? 0 });
+  const fe = require('../frameEngine') as typeof import('../frameEngine');
+  if (!(await fe.ensureFrameEngine(8_000))) return skip('frame engine not ready');
+  if (shouldAbort?.()) return skip('aborted');
+  const t0 = Date.now();
+  const fps = sourceFps && sourceFps > 0 ? sourceFps : 30;
+  // one seek + draw per frame: allow ~0.8s a frame on a slow decoder (the phone is far quicker) + 30s
+  const expected = Math.min(150, Math.ceil(((endMs - startMs) / 1000 + 0.2) * Math.min(60, fps)));
+  let r: Awaited<ReturnType<typeof fe.trackClubInBrowser>>;
+  try {
+    r = await fe.trackClubInBrowser(workUri, startMs, endMs, fps, poses, 30_000 + expected * 800);
+  } catch (e) {
+    return skip('tracker failed', { error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 });
+  }
+  const raw = r.points
+    .filter((p) => p.t >= startMs - 120 && p.t <= endMs + 120 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
+    .map((p) => ({ x: p.x, y: p.y, tMs: Math.max(0, p.t - startMs) }));
+  const { rejection, points } = classifyTrackedArc(raw);
+  trace('club track (on-device)', { frames: r.frames, seen: raw.length, kept: rejection ? 0 : points.length, rejected: rejection, ms: Date.now() - t0 });
+  console.log('[clubTrack]', JSON.stringify({ frames: r.frames, seen: raw.length, rejection, ms: Date.now() - t0 }));
+  return {
+    points: rejection ? [] : (points as ClubPathPoint[]),
+    framesSampled: r.frames,
+    framesPlanned: r.frames,
+    frameW: r.vw,
+    frameH: r.vh,
+    source: 'tracker' as const,
+    ...(rejection ? { rejected: { reason: rejection, detected: raw.length, gate: 'client' as const } } : {}),
+  };
+}
+
 export async function detectClubPath(args: {
   videoUri: string;
   startMs: number | null;
@@ -481,6 +542,12 @@ export async function detectClubPath(args: {
    * caller, never passed it, so a 120fps swing was sampled as if it were 30.
    */
   sourceFps?: number | null;
+  /**
+   * 2026-10-04 — the swing's pose frames (the body anchors for the on-device clubhead TRACKER). With
+   * them, on Android, every frame of the window is tracked in the hidden browser engine
+   * (services/swing/clubTrackSource) and the vision-model path below is not used at all.
+   */
+  poseFrames?: readonly import('../poseAnalysisApi').PoseFrame[] | null;
 }): Promise<ClubPathResult | null> {
   const base = apiUrl();
   if (!base) return null;
@@ -530,6 +597,14 @@ export async function detectClubPath(args: {
     logCapabilityLost('clubpath_no_private_copy', { videoUri: videoUri.slice(-40) });
     return null;
   }
+
+  // 2026-10-04 — THE TRACKER FIRST. Every frame, on the device, anchored on the body. It returns a result
+  // whenever it RAN (even an honest "too few"): a vision model that found the head in 2 of 14 frames is
+  // not a better second opinion. Only when the tracker cannot run (no engine, no pose) does the old path.
+  try {
+    const tracked = await trackedClubPath(tempCopy, startMs, endMs, args.poseFrames ?? null, args.sourceFps ?? null, shouldAbort);
+    if (tracked) { sharedCopy?.release(); return tracked; }
+  } catch { /* fall through to the vision path */ }
 
   // 2026-07-18 (Tim — crash mp4: hard crash to home during swing playback) — extract frames
   // SEQUENTIALLY, not with Promise.all. Firing SAMPLE_COUNT (12) concurrent
@@ -581,7 +656,7 @@ export async function detectClubPath(args: {
     if (data.rejected) {
       return {
         points: [], framesSampled: usable.length, framesPlanned: offsets.length, frameW, frameH,
-        rejected: { ...data.rejected, gate: 'server' },
+        rejected: { ...data.rejected, gate: 'server' }, source: 'vision',
       };
     }
 
@@ -613,10 +688,10 @@ export async function detectClubPath(args: {
        */
       return {
         points: [], framesSampled: usable.length, framesPlanned: offsets.length, frameW, frameH,
-        rejected: { reason: rejection, detected: deduped.length, gate: 'client' },
+        rejected: { reason: rejection, detected: deduped.length, gate: 'client' }, source: 'vision',
       };
     }
-    return { points: deduped as ClubPathPoint[], framesSampled: usable.length, framesPlanned: offsets.length, frameW, frameH, rejected: null };
+    return { points: deduped as ClubPathPoint[], framesSampled: usable.length, framesPlanned: offsets.length, frameW, frameH, rejected: null, source: 'vision' };
   } catch {
     return null;
   } finally {
