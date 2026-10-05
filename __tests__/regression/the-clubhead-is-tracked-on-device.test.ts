@@ -170,10 +170,17 @@ describe('a tracked arc replaces an old vision-model arc; a vision arc never rep
     expect(useSwingSessionStore.getState().sessionHistory[0].club_arc_source).toBe('tracker');
   });
 
-  it('the swing screen reuses only a TRACKED stored arc', () => {
-    const d = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app/swinglab/swing/[swing_id].tsx'), 'utf8') as string;
-    expect(d).toMatch(/if \(storedArc && storedArc\.length >= 3 && storedSource === 'tracker'\)/);
-    // every arc writer passes the result's source through
-    expect(d).toMatch(/setShotClubArc\(session\.id, shot\.id, pts, \{ w: r\.frameW \?\? null, h: r\.frameH \?\? null \}, r\.source\)/);
+  // 2026-10-05 — the one runner (the orchestrator's shot run) decides what a stored arc is worth.
+  it('a stored TRACKED arc is final; a vision arc is re-tracked where the tracker can run', () => {
+    const d = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'services/swing/orchestrator/shotDetail.ts'), 'utf8') as string;
+    expect(d).toMatch(/if \(src === 'tracker'\) return true;/);
+    // a stored VISION answer (arc or honest "no arc") is final where the tracker can't run; where it can,
+    // only the free tracker is tried again — never the paid model about the same frames
+    expect(d).toMatch(/return src === 'vision' && trackerUnavailable\(\);/);
+    expect(d).toMatch(/trackerOnly: !input\.force && \(shot\.club_arc_source \?\? \(first \? s\.club_arc_source : undefined\)\) === 'vision',/);
+    const cp = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'services/swing/clubPath.ts'), 'utf8') as string;
+    expect(cp).toMatch(/if \(args\.trackerOnly\) \{ sharedCopy\?\.release\(\); return null; \}/);
+    // the one arc writer passes the result's source through
+    expect(d).toMatch(/store\.setShotClubArc\(input\.sessionId, input\.shotId, pts, frame, arc\.source\);/);
   });
 });

@@ -197,6 +197,12 @@ export function findOrphanExports(): string[] {
  * you still remember what it was for — which is the entire point of this file.
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
+  // ── 2026-10-05: one analysis path ───────────────────────────────────────────
+  'services/swing/analysisPipeline.ts :: checkOrder':
+    'DUPE (kept for its tests). The club-before-pose ORDER it checked from two screens is now enforced by ' +
+    'the orchestrator itself (services/swing/orchestrator/shotDetail: arc runs `after: [\'pose\']`, pose ' +
+    'waits for the read), so no screen calls it. noteStage still feeds the trace; checkOrder stays only ' +
+    'as the observer\'s own unit-tested API.',
   // ── 2026-09-29: a still player keeps a GPS-grade fix ─────────────────────────
   'services/gpsManager.ts :: pollConfigFor':
     'TEST SEAM. POLL_CONFIG is module-private; the regression test for Tim\'s Hemet STATIC report ' +

@@ -34,25 +34,3 @@ export function poseExtractInputsFor(segments: SwingSegment[], selectedSwing: nu
   const acousticImpactMs = seg && seg.strikeMs != null && !seg.synthesized ? seg.strikeMs : null;
   return { poseWindow, acousticImpactMs };
 }
-
-/**
- * The cache key for one extraction.
- *
- * DURATION IS DELIBERATELY NOT PART OF IT, and that is a fix rather than an omission. The key used
- * to include `videoDurationMs`, which is MEASURED twice by two different mechanisms: a
- * `probeDurationMs` call on the record path, and the review player's own `onLoad durationMillis`.
- * Those disagree by a few milliseconds on the same file. Keying on a measurement of the clip means
- * the warm and the review read would miss each other over noise — the warm would decode, the review
- * would decode again, and the "optimisation" would cost twice what it saved. The clip URI already
- * identifies the clip; its duration is a property OF that clip, not an independent input.
- */
-export function poseExtractKeyFor(args: {
-  clipUri: string;
-  poseWindow: { startMs: number; endMs: number } | null;
-  selectedSwing: number;
-  handedness: string;
-  acousticImpactMs: number | null;
-}): string {
-  const w = args.poseWindow ? `${args.poseWindow.startMs}-${args.poseWindow.endMs}` : 'full';
-  return `${args.clipUri}|${w}|${args.selectedSwing}|${args.handedness}|${args.acousticImpactMs ?? ''}`;
-}

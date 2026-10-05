@@ -110,10 +110,11 @@ describe('SmartMotion reads the reviewed clip, and records the rate with the swi
     expect(src).toMatch(/captured_fps: clipFpsRef\.current,/);
   });
 
-  // 2026-10-04 (orchestrator phase 2) — ONE club-arc runner on the screen: the review read also saves
-  // swing 1's arc, so a second detectClubPath (the old persist path, its own anchor) must not return.
-  it('the one SmartMotion club-path read passes the clip rate', () => {
-    expect((src.match(/detectClubPath\(/g) ?? []).length).toBe(1);
-    expect((src.match(/detectClubPath\(\{[^}]*sourceFps: clipFpsRef\.current/g) ?? []).length).toBe(1);
+  // 2026-10-05 — ONE club-arc runner in the app (the orchestrator's shot run); it reads the rate the
+  // swing was SAVED with, which is the clip's (above), never the camera's current setting.
+  it('the one club-path read passes the clip rate saved with the swing', () => {
+    expect((src.match(/detectClubPath\(/g) ?? []).length).toBe(0);
+    const runner = fs.readFileSync(path.join(__dirname, '../../services/swing/orchestrator/shotDetail.ts'), 'utf8');
+    expect(runner).toMatch(/sourceFps: sessionCapturedFps\(s\),/);
   });
 });

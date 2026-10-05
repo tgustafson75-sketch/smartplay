@@ -20,11 +20,7 @@ import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import PrimaryIssueCard from '../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../components/swinglab/DrillCard';
 import { getDialog } from '../../services/dialogEngine';
-import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
-import { classifySession } from '../../services/swingIssueClassifier';
 import { recommendDrill } from '../../services/drillRecommendation';
-import { processSwingAnalysis } from '../../services/relationshipEngine';
-import { synthesizeCageInsight } from '../../services/contextSynthesizer';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import type { PrimaryIssue, DrillRecommendation } from '../../store/swingSessionStore';
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
@@ -115,66 +111,42 @@ export default function CageSummary() {
         session_id: session.id,
         swings_to_analyze: swingsWithClips.length,
       });
-      const results: { swing_id: string; analysis: SwingAnalysis }[] = [];
-      let anyNoFrames = false;
-      const CHUNK = 2;
-      for (let chunkStart = 0; chunkStart < swingsWithClips.length; chunkStart += CHUNK) {
-        if (cancelled) return;
-        const priorIssues = results.slice(-3).map(x => x.analysis.detected_issue).filter(x => x !== 'none');
-        const chunk = swingsWithClips.slice(chunkStart, chunkStart + CHUNK);
-        const chunkResults = await Promise.all(chunk.map((swing, j) => {
-          // 2026-07-21 (BETA — analysis dead-end) — guard each analyzeSwing with a 130s hang race
-          // (the same bound SmartMotion uses). Without it, a stalled native thumbnail extraction on
-          // one bad clip made this Promise.all never resolve → setAnalyzing(false) never ran →
-          // "Analyzing swings…" spun forever. A timeout degrades that one swing, loop still finishes.
-          type AnalyzeResult = Awaited<ReturnType<typeof analyzeSwing>>;
-          const guarded = Promise.race<AnalyzeResult>([
-            analyzeSwing(swing.clipUri!, {
-              club: session.club,
-              swing_number: chunkStart + j + 1,
-              prior_issues: priorIssues,
-            }),
-            new Promise<AnalyzeResult>((resolve) => setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' } as AnalyzeResult), 130_000)),
-          ]);
-          return guarded.then(r => ({ swing, r }));
-        }));
-        for (const { swing, r } of chunkResults) {
-          if (r.kind === 'ok') {
-            results.push({ swing_id: swing.id, analysis: r.analysis });
-            // 2026-08-09 (verification wave C2, every-surface pass) — persist ONLY the model's actual
-            // fault-frame moment, mirroring videoUpload: the raw per-frame sample times rendered as a
-            // fake "detected moments" grid (and the legacy guard now hides those arrays entirely, so
-            // this producer was silently losing cage sessions their one real moment).
-            const faultIdx = r.analysis.fault_frame_index;
-            const faultTs = faultIdx != null && faultIdx >= 0 ? r.frame_timestamps_sec[faultIdx] : undefined;
-            useSwingSessionStore.getState().setShotIssueTimestamps(session.id, swing.id, typeof faultTs === 'number' ? [faultTs] : []);
-          }
-          if (r.kind === 'no_frames') anyNoFrames = true;
-        }
-      }
+      /**
+       * 2026-10-05 (Tim: "one clean, fast, and correct analysis path that the orchestrator makes sure is
+       * correct") — the cage summary reads through THE run (services/swing/orchestrator/uploadRun), like
+       * the Swing Library and SmartMotion. It used to call analyzeSwing per swing itself (with no player
+       * context, no handedness, no window), classify, and save — a third read pipeline. The run's read
+       * saves the verdict, the fault timestamps, the relationship note and the cage insight; this screen
+       * shows them.
+       */
+      const { runSwingAnalysis } = require('../../services/swing/orchestrator/uploadRun') as typeof import('../../services/swing/orchestrator/uploadRun');
+      const out = await runSwingAnalysis(session.id);
       if (cancelled) return;
+      if (out.readFailed) {
+        // The run hands a failed read to the body read and settles once; wait for that answer.
+        const { whenStageSettled } = require('../../services/swing/orchestrator/engine') as typeof import('../../services/swing/orchestrator/engine');
+        const { swingRunKey } = require('../../services/swing/orchestrator/shotDetail') as typeof import('../../services/swing/orchestrator/shotDetail');
+        await whenStageSettled(swingRunKey(session.id), 'settle');
+        if (cancelled) return;
+      }
       setAnalyzing(false);
-      if (results.length === 0) {
-        setAnalysisStatus(anyNoFrames ? 'no_frames' : 'no_data');
+      const fresh = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === session.id);
+      const issue = (fresh?.analysis_status === 'ok' ? fresh.primary_issue : null) ?? out.primary_issue ?? null;
+      const drill = issue ? (fresh?.drill_recommendation ?? out.drill_recommendation ?? recommendDrill(issue.issue_id as never)) : null;
+      if (!issue) {
+        const noFrames = /frames/i.test(fresh?.analysis_error ?? out.readFailed ?? '');
+        setAnalysisStatus(noFrames ? 'no_frames' : 'no_data');
         practiceLog('summary-phase-k-result', 'fail', {
           session_id: session.id,
-          reason: anyNoFrames ? 'no_frames' : 'no_data',
+          reason: noFrames ? 'no_frames' : 'no_data',
         });
         return;
       }
-      const issue = classifySession(results);
-      const drill = issue ? recommendDrill(issue.issue_id as never) : null;
       setPrimaryIssue(issue);
       if (drill) setDrillRec(drill);
-      // 2026-08-09 (dead-trigger audit) — the team-intelligence CAGE boundary. evaluateCageEnd
-      // (drill-plateau: same dominant fault 3 sessions running) and evaluateCageShotStreak
-      // (frustration: N consecutive real mishits) were built + thresholded + had a full suggestion
-      // UI (CaddieSuggestionCard) — and were never called from anywhere. This is their designed
-      // boundary moment (session analysis complete). Best-effort; detection stays conservative.
       try {
         const ti = require('../../services/teamIntelligence') as typeof import('../../services/teamIntelligence');
         ti.evaluateCageEnd();
-        const fresh = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === session.id);
         let streak = 0; let maxStreak = 0;
         for (const sh of fresh?.shots ?? []) {
           const contact = sh.perShotAnalysis?.contact_read;
@@ -184,55 +156,12 @@ export default function CageSummary() {
         }
         ti.evaluateCageShotStreak(maxStreak);
       } catch { /* suggestions are best-effort — never block the summary */ }
-      practiceLog('summary-phase-k-result', issue ? 'ok' : 'partial', {
+      practiceLog('summary-phase-k-result', 'ok', {
         session_id: session.id,
-        results_count: results.length,
-        primary_issue: issue?.issue_id ?? null,
+        results_count: Object.keys(out.analyses).length,
+        primary_issue: issue.issue_id,
         drill_id: drill?.drill_id ?? null,
       });
-      // Phase R — persist analysis onto the session record so it surfaces in
-      // the unified swing library browse.
-      if (session) {
-        useSwingSessionStore.getState().setSessionAnalysis(session.id, issue, drill);
-        // Phase V.7+ — feed Kevin's relationship engine so technical
-        // observations accumulate across cage sessions too.
-        if (issue) {
-          try {
-            processSwingAnalysis({ club: session.club, primary_issue: issue });
-          } catch (e) {
-            console.log('[cage/summary] relationship engine error', e);
-          }
-          /**
-           * 2026-09-11 (full-app audit) — THE LIVE SESSION NEVER REACHED THE CADDIE'S MEMORY.
-           *
-           * services/videoUpload fires this beside processSwingAnalysis, and its comment states the
-           * intent: the note "persists into recentInsights, injected into pre-round briefing so
-           * practice meaningfully informs rounds". This screen — the LIVE post-session pipeline, and
-           * the path most players actually take — ran the relationship engine and stopped.
-           *
-           * Followed the writer chain rather than assuming: recentInsights has exactly one writer
-           * (addCageInsight), whose only caller is synthesizeCageInsight, whose only caller was
-           * videoUpload. So a player who practises live and never uploads a clip produced ZERO cage
-           * insights — `recentCageInsights` reached the brain empty every time, and
-           * maybeSynthesizePatterns, which needs three of them before it will run at all, was
-           * starved of half its input permanently.
-           *
-           * Fire-and-forget and deduped by session id inside the store, exactly as on the upload
-           * path. [[no-half-fixes-enforce-every-surface]] [[close-the-loop-strategy]]
-           */
-          try {
-            void synthesizeCageInsight({
-              sessionId: session.id,
-              club: session.club,
-              shotCount: session.shots.length,
-              primaryIssueName: issue.name,
-              severity: issue.severity,
-              drillName: drill?.drill_name ?? null,
-              dominantMiss: session.dominantMiss ?? null,
-            }).catch(() => {});
-          } catch { /* a memory note never blocks the summary */ }
-        }
-      }
       setAnalysisStatus('done');
       } catch (e) {
         if (!cancelled) { setAnalyzing(false); setAnalysisStatus('error'); }

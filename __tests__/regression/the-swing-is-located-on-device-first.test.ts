@@ -156,14 +156,16 @@ describe('EVERY surface that asks where the swing is asks the device first', () 
   });
 
   it('only the finder and the upload impact-search call the network locate — and both ask the device first', () => {
-    const callers = files.filter((f) => /await locateSwingWindow\(/.test(strip(read(f))));
-    expect(callers.sort()).toEqual(['services/swing/analysisOrchestrator.ts', 'services/videoUpload.ts']);
+    // 2026-10-05 — the body read's impact search moved from videoUpload's pose pass to the one shot runner.
+    const net = /await (?:\w+\.)?locateSwingWindow\(/;
+    const callers = files.filter((f) => net.test(strip(read(f))));
+    expect(callers.sort()).toEqual(['services/swing/analysisOrchestrator.ts', 'services/swing/orchestrator/shotDetail.ts']);
     for (const f of callers) {
       const src = strip(read(f));
       expect(src.indexOf('locateSwingWindowOnDevice(')).toBeGreaterThan(-1);
-      expect(src.indexOf('locateSwingWindowOnDevice(')).toBeLessThan(src.indexOf('await locateSwingWindow('));
+      expect(src.indexOf('locateSwingWindowOnDevice(')).toBeLessThan(src.search(net));
     }
-    expect(strip(read("services/videoUpload.ts"))).toMatch(/if \(!loc && !poseWindow\) loc = await locateSwingWindow\(/);
+    expect(strip(read('services/swing/orchestrator/shotDetail.ts'))).toMatch(/if \(!loc && !signal\.aborted\) loc = await pd\.locateSwingWindow\(/);
   });
 });
 

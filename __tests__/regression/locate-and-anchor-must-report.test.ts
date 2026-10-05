@@ -149,7 +149,7 @@ describe('every anchor decision reports itself', () => {
         const src = fs.readFileSync(full, 'utf8')
           .replace(/\/\*[\s\S]*?\*\//g, ' ')
           .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
-        if (/\b(impactAnchorMs|anchorToleranceMs)\s*\(/.test(src)) out.push(rel);
+        if (/\b(impactAnchorMs|anchorToleranceMs|clubArcAnchor)\s*\(/.test(src)) out.push(rel);
       }
     };
     for (const d of ['app', 'components', 'services', 'store']) {
@@ -162,10 +162,12 @@ describe('every anchor decision reports itself', () => {
   const deciders = anchorDeciders();
 
   it('finds the anchor deciders at all (a scan that finds nothing passes vacuously)', () => {
-    expect(deciders.length).toBeGreaterThanOrEqual(2);
+    // 2026-10-05 — ONE decider now: the orchestrator's shot run (services/swing/orchestrator/shotDetail).
+    expect(deciders).toEqual(['services/swing/orchestrator/shotDetail.ts']);
   });
 
   it.each(deciders)('%s notes the anchor stage', (rel) => {
-    expect(read(rel)).toMatch(/noteStage\((?:[\s\S]{0,120}?)'anchor'/);
+    // The run's trace (Owner Tools → Analysis) is where an anchor decision is reported now.
+    expect(read(rel)).toMatch(/noteStage\((?:[\s\S]{0,120}?)'anchor'|traceStep\('arc anchor'/);
   });
 });

@@ -129,7 +129,8 @@ describe('both callers that search for a green run the card check, and free the 
 describe('a score being tapped in survives the app going to the background (sweep 2026-10-04)', () => {
   it('the strip flushes its pending entry on any AppState change away from active', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', '..', 'components/CaddieDataStrip.tsx'), 'utf8');
-    expect(src).toMatch(/AppState\.addEventListener\('change', \(st\) => \{ if \(st !== 'active'\) commitRef\.current\(\); \}\)/);
+    // 'background' only (sweep 2): iOS 'inactive' (Control Center, a call) split a score from its putts
+    expect(src).toMatch(/AppState\.addEventListener\('change', \(st\) => \{ if \(st === 'background'\) commitRef\.current\(\); \}\)/);
     expect(src).toMatch(/return \(\) => \{ sub\.remove\(\); leave\(\); commitRef\.current\(\); \};/);
   });
 });

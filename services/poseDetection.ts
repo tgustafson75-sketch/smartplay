@@ -223,19 +223,25 @@ const REQUEST_TIMEOUT_MS = 63_000;
  * limit finds that out in seconds instead of a minute, and aborting it closes the dead socket, so the
  * real read goes out on a fresh one. Two tries; it never blocks the read — a failure is only logged.
  */
-async function clearDeadConnection(apiUrl: string): Promise<void> {
+/**
+ * 2026-10-05 (sweep 2) — returns whether the API answered at all. Two misses in a row (~10s) means the
+ * read cannot reach the server, and the caller says so NOW instead of sending a payload into a 63s wait
+ * that ends the same way (Tim's 5:01 AM read: a 63s hang, then a 55s fallback, then "failed").
+ */
+async function clearDeadConnection(apiUrl: string): Promise<boolean> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const t0 = Date.now();
     try {
       const r = await fetch(`${apiUrl}/api/health?lite=1`, { method: 'GET', signal: AbortSignal.timeout(5_000) });
       V6('read 3 — API reachable', { attempt, status: r.status, ms: Date.now() - t0 });
-      return;
+      return true;
     } catch (e) {
       V6('read 3 — API did not answer (dead connection?) — retrying on a fresh one', {
         attempt, ms: Date.now() - t0, error: e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80),
       });
     }
   }
+  return false;
 }
 // 2026-05-26 — Fix CO: tentative bumped 15s → 30s. Tim's swing
 // library upload was timing out the FALLBACK path too (primary 55s
@@ -792,8 +798,11 @@ export const RETRY_ELIGIBILITY_CAP_MS = 12_000;
 const RETRY_BACKOFF_MS = 1_200;
 
 /** The slowest run that could still legitimately succeed. Consumed by the screen's hang guard. */
+// 2026-10-05 — the two /api/health pings before the POST (clearDeadConnection, 5s each).
+const CONNECTION_CHECK_CEILING_MS = 10_000;
 export const ANALYSIS_WORST_CASE_MS =
   DURATION_PROBE_CEILING_MS +
+  CONNECTION_CHECK_CEILING_MS +
   LOCATE_TIMEOUT_MS +
   FRAME_EXTRACTION_CEILING_MS +
   RETRY_ELIGIBILITY_CAP_MS +
@@ -1569,7 +1578,11 @@ export async function analyzeSwing(
         throw err;
       }
     };
-    await clearDeadConnection(apiUrl);
+    if (!(await clearDeadConnection(apiUrl))) {
+      V6('STAGE 3 — API unreachable twice — not sending the read', {});
+      recordFailure('swing-analysis', 'network');
+      return { kind: 'no_network' };
+    }
     let res = await tryFetch(1);
     let elapsedMs = Date.now() - t0;
     requestMs = elapsedMs;
@@ -1883,7 +1896,7 @@ export async function analyzeSwingTentative(
 
   const apiUrl = getApiBaseUrl();
   try {
-    await clearDeadConnection(apiUrl);
+    if (!(await clearDeadConnection(apiUrl))) return { kind: 'no_network' };
     V6('TENTATIVE STAGE 3 — POST /api/swing-analysis (tentative mode)', {
       total_payload_kb: Math.round(frame.b64.length / 1024),
     });

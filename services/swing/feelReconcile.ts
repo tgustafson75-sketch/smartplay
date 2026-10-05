@@ -79,17 +79,6 @@ async function framesFrom(videoUri: string, timesMs: number[]): Promise<string[]
   }
 }
 
-/** Shared helper: extract a few base64 JPEG frames across a clip. Best-effort —
- *  returns whatever it can ([] on total failure). Reused by feel + putt. */
-export async function extractFramesB64(
-  videoUri: string,
-  durationMs: number | null,
-  fractions: number[] = FRAME_FRACTIONS,
-): Promise<string[]> {
-  const dur = durationMs && durationMs > 0 ? durationMs : 3000;
-  return framesFrom(videoUri, fractions.map((f) => dur * f));
-}
-
 /**
  * Ask the caddie to reconcile the player's feel with the real swing and coach
  * them. Returns the spoken-style answer, or null when it can't run honestly.

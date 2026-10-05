@@ -121,7 +121,6 @@ export function findProseAssertions(): string[] {
  */
 export const PROSE_ASSERTION_BASELINE: readonly string[] = [
   "Analysis honesty: kids\\ :: services/juniorSwingAnalyzer.ts :: /\\/\\/ Fallback score is a placeholder, so never claim a progress delta[\\s\\S]{0,40}vs_previous: null/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: app/swinglab/swing/[swing_id].tsx :: /PRIVATE COPY \\(distinct file handle\\)/",
   "Analyzer gets handedness + CNS-learned tendencies pretext :: services/simRound.ts :: /startGpsManager/",
   "Caddie CNS Phase 3: durable round reflections (baseline + re :: services/recapGenerator.ts :: /CNS Phase 3 — enrich the round's durable reflection/",
   "Caddie CNS Phase 4: signal-independence (answer from course  :: services/localStatusResponder.ts :: /CNS Phase 4 — signal-independence/",

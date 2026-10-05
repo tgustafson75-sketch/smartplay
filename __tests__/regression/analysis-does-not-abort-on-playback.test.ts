@@ -59,8 +59,11 @@ describe('playback never aborts analysis', () => {
   });
 
   it('the surviving abort is a LIFECYCLE flag, and it is actually wired', () => {
+    // 2026-10-05 — the one club-arc runner (the orchestrator's shot run) aborts on its RUN's signal:
+    // cancelled or superseded, never playback.
+    const runner = fs.readFileSync(path.join(ROOT, 'services/swing/orchestrator/shotDetail.ts'), 'utf-8');
+    expect(runner).toMatch(/shouldAbort: \(\) => signal\.aborted/);
     const src = fs.readFileSync(path.join(ROOT, 'app/swinglab/swing/[swing_id].tsx'), 'utf-8');
-    expect(src).toMatch(/shouldAbort: \(\) => cancelled/);
     // A `cancelled` flag with no cleanup to flip it is inert — that would be a half-fix of the fix.
     const flags = (src.match(/let cancelled = false;/g) ?? []).length;
     const cleanups = (src.match(/return \(\) => \{ cancelled = true; \};/g) ?? []).length;

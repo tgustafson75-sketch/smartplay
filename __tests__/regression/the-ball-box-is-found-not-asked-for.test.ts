@@ -121,7 +121,7 @@ describe('SmartMotion: the box is off screen by default and appears only when as
   it('every region update goes through the precedence, including the two automatic ones', () => {
     expect(src).toMatch(/applyBallRegion\(ballRegionFromFeet\(res\.feetCenter\)\)/);
     expect(src).toMatch(/applyBallRegion\(ballRegionFromDetection\(found\)\)/);
-    expect(src).toMatch(/setSessionBallArea\(sessionId, draftBallRef\.current, ballSourceRef\.current\)/);
+    expect(src).toMatch(/setSessionBallArea\((?:sessionId|sid), draftBallRef\.current, ballSourceRef\.current\)/);
   });
 
   it('the departure gate reads the saved region source', () => {

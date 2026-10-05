@@ -11,11 +11,21 @@
  * Every caller of videoUpload.runPhaseKOnSession (the swing screen, Analyze-at-position, trim, the
  * practice overlay, ingest) comes through here, so they all get the same order and one run per swing.
  */
-import { getOrStartRun, type StageDef } from './engine';
+import { cancelRunsWithPrefix, getOrStartRun, liveRun, whenStageSettled, type StageDef } from './engine';
 import { useSwingSessionStore } from '../../../store/swingSessionStore';
+import { runShotDetail, shotRunKey, swingRunKey } from './shotDetail';
+import type { ReadExtras } from '../../videoUpload';
 
-type In = { sessionId: string };
-type ReadResult = Awaited<ReturnType<typeof import('../../videoUpload').runPhaseKOnSession>>;
+/**
+ * 2026-10-05 (Tim: "We should have one clean, fast, and correct analysis path that the orchestrator
+ * makes sure is correct") — this is now THE run for every saved swing, not just uploads. SmartMotion's
+ * live captures used to read their swings with their own analyzeSwing calls, commit their own on-device
+ * verdict and draw their own arc; they now ingest the session and come through here like everything
+ * else. `extras` carries what only a live capture knows (its measured tempo and strike, a drill's focus,
+ * the per-swing callback that lets the pager show each swing as it lands).
+ */
+type In = { sessionId: string; extras?: ReadExtras };
+type ReadResult = Awaited<ReturnType<typeof import('../../videoUpload')._runPhaseKRead>>;
 
 /** A single-swing upload this long or longer is a range session — the read carves its swings. */
 const MULTI_SWING_UPLOAD_SEC = 15;
@@ -80,11 +90,25 @@ function stages(): StageDef<In>[] {
       id: 'read',
       critical: true,
       after: ['window'],
-      // The read's own worst case (probe + locate + frames + POST with retry) is ~150s.
-      budgetMs: 160_000,
+      /**
+       * 2026-10-05 — DERIVED from what this read has to do. One swing's worst case is poseDetection's
+       * ANALYSIS_WORST_CASE_MS; swings are read three at a time, so a range session needs one of those per
+       * batch (a fixed 160s cut off a 6-swing SmartMotion session mid-read), plus the transcript wait, the
+       * range split's locate and the tentative fallback. A backstop — every call inside has its own timeout.
+       */
+      budgetMs: ({ input }) => {
+        const one = (require('../../poseDetection') as typeof import('../../poseDetection')).ANALYSIS_WORST_CASE_MS;
+        const s = session(input.sessionId);
+        const dur = s?.upload?.duration_sec ?? 0;
+        const swings = s?.source === 'uploaded_video' && dur >= MULTI_SWING_UPLOAD_SEC
+          ? Math.ceil(dur / 6)                                   // split by the read: ~one swing per 6s at most
+          : Math.max(1, s?.shots.filter((x) => x.clipUri).length ?? 1);
+        const perSwing = Number.isFinite(one) && one > 0 ? one : 160_000;
+        return Math.min(15 * 60_000, perSwing * Math.ceil(swings / 3) + 100_000);
+      },
       run: async ({ input, signal }) => {
         const vu = require('../../videoUpload') as typeof import('../../videoUpload');
-        return vu._runPhaseKRead(input.sessionId, signal);
+        return vu._runPhaseKRead(input.sessionId, signal, input.extras);
       },
     },
     {
@@ -95,7 +119,9 @@ function stages(): StageDef<In>[] {
       after: ['pose'],
       budgetMs: 5_000,
       run: async ({ input, outputs }) => {
-        const failed = (outputs.read as { readFailed?: string } | undefined)?.readFailed;
+        // No read output = the read overran its budget or threw: that is a failed read too.
+        const out = outputs.read as { readFailed?: string } | undefined;
+        const failed = out ? out.readFailed : "Analysis didn't finish — tap Analyze to try again.";
         if (!failed) return null;
         const st = session(input.sessionId)?.analysis_status;
         const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
@@ -109,13 +135,86 @@ function stages(): StageDef<In>[] {
       },
     },
     {
+      // The first swing's body read (services/swing/orchestrator/shotDetail — the one recipe every screen
+      // uses), and the on-device verdict when the read could not name one. AFTER the read, not dependent
+      // on it: a read that overran is exactly when the body read has to answer.
       id: 'pose',
-      deps: ['read'],
-      budgetMs: 90_000,
+      after: ['read'],
+      budgetMs: 130_000,
       when: ({ input }) => !isPutt(input.sessionId),
       run: async ({ input, signal }) => {
-        const vu = require('../../videoUpload') as typeof import('../../videoUpload');
-        return vu.runUploadPosePass(input.sessionId, signal);
+        const shot0 = session(input.sessionId)?.shots.find((x) => x.clipUri);
+        if (!shot0) return null;
+        const shotRun = runShotDetail(input.sessionId, shot0.id, { force: true });
+        signal.addEventListener('abort', () => shotRun.cancel(), { once: true });
+        await whenStageSettled(shotRunKey(input.sessionId, shot0.id), 'pose', signal);
+        if (signal.aborted) return null;
+        const s = session(input.sessionId);
+        const shot = s?.shots.find((x) => x.id === shot0.id);
+        // THIS run's body read only — never frames stored by an earlier analysis of another window.
+        const ps = shotRun.snapshot();
+        const bio = ps.stages.pose?.status === 'ok' ? ps.outputs.pose as import('../../poseAnalysisApi').SwingBiomechanics : null;
+        if (!s || !shot) return null;
+        // A ball the camera SAW never leave (no_launch) is the answer whatever the body did: it stands.
+        if (s.analysis_status !== 'ok' && s.primary_issue?.issue_id === 'no_launch') {
+          const { liveSessionStore } = require('./liveSessionStore') as typeof import('./liveSessionStore');
+          liveSessionStore(signal).setSessionAnalysisStatus(input.sessionId, 'ok');
+          return true;
+        }
+        if (!bio?.frames?.length) return null;
+        if (s.analysis_status !== 'ok') {
+          try {
+            const poseMod = require('../../poseAnalysisApi') as typeof import('../../poseAnalysisApi');
+            const { buildPoseSwingRead } = require('../poseSwingRead') as typeof import('../poseSwingRead');
+            const { poseReadToPrimaryIssue } = require('../poseReadVerdict') as typeof import('../poseReadVerdict');
+            const impactMs = typeof shot?.locatedImpactSec === 'number' && shot.locatedImpactSec > 0 ? shot.locatedImpactSec * 1000 : null;
+            const pi = poseReadToPrimaryIssue(buildPoseSwingRead(bio, poseMod.tempoFromPoseFrames(bio.frames, impactMs, 'video')));
+            if (pi) {
+              const { liveSessionStore } = require('./liveSessionStore') as typeof import('./liveSessionStore');
+              liveSessionStore(signal).setSessionAnalysis(input.sessionId, pi, null);
+              liveSessionStore(signal).setSessionAnalysisStatus(input.sessionId, 'ok');
+              const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
+              traceStep('body read named the verdict', { issue: pi.issue_id });
+            } else {
+              /**
+               * The body read MEASURED the swing and nothing stood out — that is an answer, not a failure
+               * (SmartMotion's rule since 08-25: "a no-fault swing is recorded ok, not failed"). Said
+               * plainly, with low confidence, so a stale headline from an earlier read never stands in.
+               */
+              const { liveSessionStore } = require('./liveSessionStore') as typeof import('./liveSessionStore');
+              liveSessionStore(signal).setSessionAnalysis(input.sessionId, {
+                issue_id: 'no_clear_fault',
+                name: 'No clear fault',
+                category: 'other',
+                severity: 'minor',
+                occurrence_count: 1,
+                visual_reference_path: null,
+                mechanical_breakdown: 'The full read didn\'t come back, but I measured your body through the swing and nothing stood out.',
+                feel_cue: 'Re-analyze when you have a connection for the full read.',
+                detected_in_shots: [shot0.id],
+                confidence: 'low',
+              } as import('../../../store/swingSessionStore').PrimaryIssue, null);
+              liveSessionStore(signal).setSessionAnalysisStatus(input.sessionId, 'ok');
+              const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
+              traceStep('body read measured the swing, no fault — ok', {});
+            }
+          } catch { /* the settle stage reports the read's failure */ }
+        }
+        return true;
+      },
+    },
+    {
+      // The first swing's arc — the run is done when the whole swing is.
+      id: 'arc',
+      after: ['pose'],
+      budgetMs: 210_000,
+      when: ({ input }) => !isPutt(input.sessionId),
+      run: async ({ input }) => {
+        const shot0 = session(input.sessionId)?.shots.find((x) => x.clipUri);
+        const r = shot0 ? liveRun(shotRunKey(input.sessionId, shot0.id)) : null;
+        if (!r) return null;
+        const snap = await r.done;
+        return snap.stages.arc?.status === 'ok' ? true : null;
       },
     },
   ];
@@ -123,16 +222,10 @@ function stages(): StageDef<In>[] {
 
 function report(key: string, stage: string, error: string): void {
   try {
-    const sessionId = key.replace(/^upload:/, '');
-    if (stage === 'read') {
-      // The read is what the player waits for: a read that never finished must not leave a spinner.
-      const st = session(sessionId)?.analysis_status;
-      if (st !== 'ok' && st !== 'failed') {
-        useSwingSessionStore.getState().setSessionAnalysisStatus(sessionId, 'failed', "Analysis didn't finish — tap Analyze to try again.");
-      }
-    }
+    // A read that never finished is settled by the settle stage (after the body read has had its turn) —
+    // failing it here showed "failed" and then a verdict a minute later.
     (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore')).useIssueLogStore.getState()
-      // diag: a failed READ is already reported once, as swing_analysis_failed, by the status write above.
+      // diag: a failed READ is reported once, as swing_analysis_failed, by the settle stage's status write.
       .addAppEvent('orchestrator_stage_failed', { run: key, stage, error: error.slice(0, 120) }, 'diag');
   } catch { /* reporting never breaks a run */ }
 }
@@ -142,7 +235,7 @@ function report(key: string, stage: string, error: string): void {
  * the pose stage keeps going in the background, exactly as the old fire-and-forget tail did, but now
  * owned, ordered and budgeted.
  */
-export function runUploadAnalysis(sessionId: string): Promise<ReadResult> {
+export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promise<ReadResult> {
   /**
    * 2026-10-04 (sweep) — JOIN only while the read is still coming. Once it has settled the live run is
    * just its pose tail, and a new request (Analyze this moment after a scrub, the angle chip, a trim)
@@ -152,12 +245,14 @@ export function runUploadAnalysis(sessionId: string): Promise<ReadResult> {
     const st = snap.stages.read?.status;
     return st != null && st !== 'pending' && st !== 'running';
   };
-  const run = getOrStartRun<In>(`upload:${sessionId}`, () => {
+  const run = getOrStartRun<In>(swingRunKey(sessionId), () => {
+    // A new analysis may have moved the window: the swing's shot runs (body + arc) start over.
+    cancelRunsWithPrefix(`shot:${sessionId}:`);
     // 2026-10-04 — one issue-log trace per run (services/analysisTrace; Owner Tools → Analysis).
-    const traceId = `upload:${sessionId}:${Date.now()}`;
+    const traceId = `swing:${sessionId}:${Date.now()}`;
     const s = session(sessionId);
     const { beginAnalysisTrace, traceStep, endAnalysisTrace } = require('../../analysisTrace') as typeof import('../../analysisTrace');
-    beginAnalysisTrace(traceId, 'upload', {
+    beginAnalysisTrace(traceId, s?.source === 'uploaded_video' ? 'upload' : 'smartmotion', {
       clip_s: s?.upload?.duration_sec != null ? Math.round(s.upload.duration_sec * 10) / 10 : null,
       club: s?.club ?? null,
       putt: isPutt(sessionId),
@@ -165,7 +260,7 @@ export function runUploadAnalysis(sessionId: string): Promise<ReadResult> {
     });
     return {
       stages: stages(),
-      input: { sessionId },
+      input: { sessionId, extras },
       hooks: {
         onStageFailed: report,
         onStageDone: (_k, stage, st) => traceStep(`stage ${stage}: ${st.status}`, { ms: st.ms ?? null, error: st.error ?? null }),
@@ -187,8 +282,14 @@ export function runUploadAnalysis(sessionId: string): Promise<ReadResult> {
       const st = snap.stages.read?.status;
       if (st && st !== 'pending' && st !== 'running') {
         queueMicrotask(() => unsub());
-        resolve((snap.outputs.read as ReadResult | undefined) ?? { primary_issue: null, drill_recommendation: null });
+        // No read output = the read overran or threw: say so, so a caller waits for the run to settle (the
+        // body read may still answer) instead of reading a half-finished store.
+        resolve((snap.outputs.read as ReadResult | undefined)
+          ?? { primary_issue: null, drill_recommendation: null, analyses: {}, ...(st === 'cancelled' ? {} : { readFailed: "Analysis didn't finish — tap Analyze to try again." }) });
       }
     });
   });
 }
+
+/** The pre-10-05 name — every caller of videoUpload.runPhaseKOnSession still lands here. */
+export const runUploadAnalysis = (sessionId: string) => runSwingAnalysis(sessionId);

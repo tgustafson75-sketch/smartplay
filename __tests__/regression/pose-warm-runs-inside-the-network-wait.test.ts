@@ -14,44 +14,14 @@
  *
  * That is what this file pins, and the duration case is the one that would really have happened.
  */
-import { poseExtractKeyFor, poseExtractInputsFor } from '../../services/swing/poseExtractKey';
+import { poseExtractInputsFor } from '../../services/swing/poseExtractKey';
 
 const seg = (o: Partial<{ startMs: number; endMs: number; strikeMs: number | null; synthesized: boolean }>) =>
   ({ index: 0, startMs: 0, endMs: 2000, strikeMs: null, synthesized: false, ...o } as never);
 
-describe('the warm and the review read compute the same key', () => {
-  it('IGNORES the measured duration — the two paths measure it differently on the same file', () => {
-    /**
-     * The warm probes the file (`probeDurationMs`); the review read uses the player's own
-     * `onLoad durationMillis`. On one clip those disagree by a few milliseconds. The old key
-     * included the duration, so the warm and the read would have missed each other over
-     * measurement noise — decoding twice and costing more than it saved.
-     */
-    const base = { clipUri: 'file:///clip.mp4', poseWindow: null, selectedSwing: 0, handedness: 'right', acousticImpactMs: null };
-    expect(poseExtractKeyFor(base)).toBe(poseExtractKeyFor(base));
-    // Same inputs, whatever any duration measurement said — there is nowhere to put it.
-    expect(poseExtractKeyFor(base)).not.toContain('undefined');
-    expect(poseExtractKeyFor(base)).toBe('file:///clip.mp4|full|0|right|');
-  });
-
-  it('still separates the things that genuinely change the frames', () => {
-    const base = { clipUri: 'file:///a.mp4', poseWindow: null, selectedSwing: 0, handedness: 'right', acousticImpactMs: null };
-    const k = poseExtractKeyFor(base);
-    expect(poseExtractKeyFor({ ...base, clipUri: 'file:///b.mp4' })).not.toBe(k);
-    expect(poseExtractKeyFor({ ...base, selectedSwing: 1 })).not.toBe(k);
-    expect(poseExtractKeyFor({ ...base, handedness: 'left' })).not.toBe(k);
-    expect(poseExtractKeyFor({ ...base, acousticImpactMs: 1200 })).not.toBe(k);
-    expect(poseExtractKeyFor({ ...base, poseWindow: { startMs: 100, endMs: 900 } })).not.toBe(k);
-  });
-
-  it('the warm keying on the RAW uri would have missed — the review reads the persisted copy', () => {
-    // Why the warm is started only after persistClipToDocuments resolves.
-    const raw = poseExtractKeyFor({ clipUri: 'file:///cache/raw.mp4', poseWindow: null, selectedSwing: 0, handedness: 'right', acousticImpactMs: null });
-    const durable = poseExtractKeyFor({ clipUri: 'file:///documents/clip.mp4', poseWindow: null, selectedSwing: 0, handedness: 'right', acousticImpactMs: null });
-    expect(raw).not.toBe(durable);
-  });
-});
-
+// 2026-10-05 — the warm and its key are gone with the second pose pass they served: every saved swing's
+// body read is the orchestrator's shot run, ordered after the read (see the-club-stage-must-wait-for-pose).
+// The window/anchor rule below still decides what a capture calls a measured strike.
 describe('the window/anchor helper both paths share', () => {
   it('windows to the selected swing when the segment is long enough', () => {
     const { poseWindow } = poseExtractInputsFor([seg({ startMs: 500, endMs: 2500 })], 0);

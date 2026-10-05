@@ -9,7 +9,6 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { liveDistanceUnit, toDisplayDistance, unitLabel } from '../../../services/distanceUnits';
-import { impactAnchorMs, narrowClubPathWindow, poseImpactFromFrames, clubArcAnchor, anchorIsHeard, POSE_ANCHOR_TOLERANCE_MS } from '../../../services/swing/clubPathWindow';
 import { wristCentroid, deriveSwingAnchors } from '../../../services/swing/poseMotion';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
@@ -28,7 +27,6 @@ import * as VideoThumbnails from '../../../utils/videoThumbnail';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import SwingAnalysisSteps from '../../../components/swinglab/SwingAnalysisSteps';
-import { sessionCapturedFps } from '../../../services/capture/clipFps';
 import { useSwingSessionStore, OTHER_PLAYER_ID, type AnalysisStatus, type SwingShot, type SwingSession } from '../../../store/swingSessionStore';
 import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
@@ -40,10 +38,9 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { detectClubPath } from '../../../services/swing/clubPath';
+import { requestShotDetail, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
 // 2026-09-20 — this screen HAS pose frames (activeBiomech.frames) and was still asking the model
 // to find a ~6px clubhead in a full downscaled frame. See services/swing/bodyBounds.
-import { bodyBoundsFromPose } from '../../../services/swing/bodyBounds';
 import { readClubPath } from '../../../services/swing/clubPathRead';
 // 2026-06-23 — Fix: the swing-detail DrillCard showed the "appear once analysis
 // is available" placeholder even when analysis SUCCEEDED with a detected fault,
@@ -156,11 +153,6 @@ export default function SwingDetail() {
   const session = useSwingSessionStore(s =>
     swing_id ? s.sessionHistory.find(x => x.id === swing_id) ?? null : null,
   );
-  /**
-   * 2026-09-29 — the frame rate THIS swing was captured at (null = unknown: an upload, or a swing saved
-   * before the field existed), so the club-path schedule samples it at its real rate, not the 30 floor.
-   */
-  const swingCapturedFps = sessionCapturedFps(session);
   // Coach report export is an instructor tool — gate the button so a
   // golfer can't export a report headed with their own name as the
   // "instructor" (audit). Reactive so a role change in Settings reflects.
@@ -642,15 +634,6 @@ export default function SwingDetail() {
     return deriveSwingAnchors(samples);
   }, [poseFrames]);
 
-  /**
-   * 2026-09-01 — a P6_impact label is only an impact time when the sampler anchored it to a heard
-   * strike. Placed at a FRACTION of the clip (positionSource 'estimated') it is a placeholder, and
-   * falls through to the motion-derived anchor below — which actually looks at the swing.
-   */
-  // 2026-10-04 (orchestrator phase 3) — the rule (labelled-from-a-strike, else derived from the wrists'
-  // motion — Tim's 09-01 "timing only, never geometry") moved to services/swing/clubPathWindow
-  // .poseImpactFromFrames so every club-arc runner uses the same one.
-  const poseImpactMs = useMemo(() => poseImpactFromFrames(poseFrames), [poseFrames]);
   // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — the pose pipeline already
   // labels the key swing positions (address/top/impact/finish) on the frames; the SmartMotion review
   // has jump-to-stage chips but the library detail didn't. Surface them here too, reusing scrubTo.
@@ -724,247 +707,19 @@ export default function SwingDetail() {
   // The video's natural size is the ground-truth full-frame dimension — capture it from onLoad and hand
   // it to the overlay as the aligned-space fallback so the trace renders whenever we have a real arc.
   const [videoNatural, setVideoNatural] = useState<{ w: number; h: number } | null>(null);
-  // 2026-07-18 (Tim — crash mp4) — run the clubhead extraction AT MOST ONCE per unique clip
-  // window. The effect re-fires when `duration` settles and when the skeleton/trace toggles flip
-  // mid-playback; without this guard each re-fire could launch another native frame-extraction
-  // pass that overlaps the running one (two retriever loops on the live file → the native crash).
-  const clubArcRunKeyRef = useRef<string | null>(null);
+  /**
+   * 2026-10-05 (Tim: "one clean, fast, and correct analysis path") — THE SELECTED SWING'S ARC IS THE
+   * RUN'S (services/swing/orchestrator/shotDetail — the one recipe SmartMotion and the analysis run use).
+   * This screen used to run its own detectClubPath with its own window and anchor, so the same swing could
+   * carry a different arc here than in SmartMotion. It draws what is stored for the shot; the shot's body
+   * read and arc are asked for in the effect below.
+   */
   useEffect(() => {
-    // 2026-07-22 (Tim) — the club arc feeds the swing TRACE only, so only run the (expensive, native)
-    // clubhead-frame extraction when the trace is actually on.
-    // 2026-07-27 (Tim — "not seeing the clubhead or swing arc at all now") — REMOVED the extra
-    // `shotConfirmed` gate. It silently made the Swing Trace toggle DEAD on uploaded/unconfirmed swings
-    // (extraction never ran → no arc no matter what you tapped). The trace is clubhead-OR-NOTHING (draws
-    // only ≥4 REAL detected clubhead points, never a wrist proxy), so showing the real detected path on
-    // any swing is honest — it's the clubhead's PATH, not a claim about contact. The crash guards below
-    // (never extract while playing) are independent of this and unchanged.
-    if (!hasPose || !shot?.clipUri || !showTrace) { setClubArcPoints(null); return; }
-    // 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open") — PREFER the
-    // arc PERSISTED during the analysis pass. That path computed it while nothing was playing, so it
-    // sidesteps the view-time retriever-vs-ExoPlayer race entirely and draws immediately on open —
-    // even while the clip autoplays. `undefined` = a legacy swing analyzed before this field existed,
-    // so fall through to the (paused-gated) live extraction below. `null`/`[]` = analyzed, clubhead
-    // not trackable → draw nothing (honest).
-    // 2026-08-01 (per-swing) — prefer THIS shot's own arc; for shot 0 fall back to the session-level
-    // arc (legacy + primary write). undefined on a non-primary shot → fall through to live extraction
-    // (which uses this shot's clip window), so a selected swing still gets its real clubhead arc.
-    const shotArc = shot?.club_arc;
-    const storedArc = shotArc !== undefined ? shotArc : (selectedShotIdx === 0 ? session?.club_arc : undefined);
-    // 2026-10-04 — only an arc the on-device TRACKER found is reused; a vision-model arc from before is
-    // tracked again now that the player has asked for the trace.
-    const storedSource = shotArc !== undefined ? shot?.club_arc_source : (selectedShotIdx === 0 ? session?.club_arc_source : undefined);
-    // 2026-08-06 (Tim — the blue club was STUCK BLANK forever): only short-circuit on a REAL stored arc.
-    // A stored empty [] (analyzed, clubhead not tracked) used to hard-return null and PERMANENTLY block the
-    // live re-extraction below — so once a swing failed detection it never retried. Now empty/undefined
-    // falls through to the paused-gated live extraction, which (with the loosened detection gates) can pick
-    // up the club on a later paused pass instead of showing nothing forever.
-    if (storedArc && storedArc.length >= 3 && storedSource === 'tracker') {
-      setClubArcPoints(storedArc);
-      return;
-    }
-    // 2026-08-08 (Tim — "shot trace has yet to work right"). REMOVED the stale `if (isPlaying) return`
-    // crash-era guard. It predated the 07-30 private-copy fix: detectClubPath now extracts from its OWN
-    // copied file (services/swing/clubPath.ts hard-refuses to run without the copy), so a native retriever
-    // can never collide with ExoPlayer on the same handle — the SIGSEGV condition is structurally gone.
-    // But this leftover guard still blocked STARTING extraction whenever the clip was playing, so any
-    // swing without a stored arc showed NO trace while playing (the "trace never works" case). Extraction
-    // now starts regardless of playback, and the runKey below dedupes after the first real success.
-    // 2026-10-04 (orchestrator phase 2) — `isPlaying` LEFT the deps. Each play/pause tap cancelled the
-    // run in flight and started it again from the top (a clip copy, ~14 decodes, a server pass); with
-    // the private copy nothing about playback needs the run to stop. A found arc is now SAVED on the
-    // shot, so the next open draws it at once instead of reading the clip again.
-    const rawStartMs = (shot.clipStartSeconds ?? 0) * 1000;
-    const rawEndMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
-    /**
-     * 2026-08-31 (Tim, from the field: "swing trace is a little off", logged alongside
-     * windowMs: 11640) — NARROW AN UNBOUNDED WINDOW AROUND THE STRIKE.
-     *
-     * A detected swing segment is 4,000ms — 2,500 before the strike and 1,500 after
-     * (swingSegmentation PRE/POST_STRIKE_MS). His was ELEVEN AND A HALF SECONDS, because with no
-     * segment `clipEndSeconds` is null and this falls through to the whole clip duration. So the
-     * club path was hunting a clubhead across eleven seconds of walk-up, waggle and follow-through,
-     * and the arc it drew was assembled from whatever it found in all of it.
-     *
-     * When the window is implausibly wide for a swing, re-centre it on the best HONEST anchor —
-     * a heard strike, else the pose-labelled impact frame — using the SAME pre/post the segmenter
-     * uses. The rule, the tiers and the numbers live in services/swing/clubPathWindow.ts so this
-     * screen and its test cannot drift apart; read that file for why a 'manual' shot's stored
-     * offset is refused. With no anchor the window is left alone: a smeared arc beats an invented
-     * centre. [[two-owners-is-the-root-cause]]
-     */
-    const anchorMs = impactAnchorMs({
-      detectionMethod: shot.detectionMethod,
-      detectionOffsetSeconds: shot.detectionOffsetSeconds,
-      poseImpactMs,
-      rawStartMs,
-      rawEndMs,
-    });
-    const { startMs, endMs } = narrowClubPathWindow(rawStartMs, rawEndMs, anchorMs);
-    if (!(endMs > startMs)) { setClubArcPoints(null); return; }
-    // 2026-09-09 — `anchor` had no reporter anywhere. It decides which frames the arc is sampled
-    // from, so an unanchored run and a mis-seen clubhead used to arrive looking identical.
-    try {
-      const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
-      pipe.noteStage(pipe.runKeyFor(shot.clipUri, startMs, endMs), 'anchor',
-        anchorMs != null ? 'ok' : 'empty', { anchorMs, method: shot.detectionMethod ?? null });
-    } catch { /* observation only */ }
-    // Dedupe: a stable window (uri+start+end) that SUCCEEDED runs once. The key is set only after a
-    // real result below, so an extraction aborted by playback retries the next time we're paused.
-    const runKey = `${shot.clipUri}|${Math.round(startMs)}|${Math.round(endMs)}`;
-    if (clubArcRunKeyRef.current === runKey) return;
-    // 2026-08-08 (2-week audit S3 — swing A's arc rendered over swing B). The "keep prior points" retry
-    // semantics were meant for SAME-window retries, but the state also survived a WINDOW change (screen
-    // reuse without remount): if B's clubhead was never trackable, A's blue trace stayed on B forever —
-    // a clubhead-or-nothing violation. On entering extraction for a DIFFERENT window than the last
-    // committed one, blank the stale arc first; same-window retries still keep prior points.
-    if (clubArcRunKeyRef.current !== null && clubArcRunKeyRef.current !== runKey) {
-      setClubArcPoints(null);
-    }
-    let cancelled = false;
-    void (async () => {
-      // 2026-07-10 (audit SM5) — heal the clip URI first (iOS rotates the container UUID on
-      // reinstall/native build; the raw stored path 404s). The main player self-heals via
-      // resolveClipUri; the arc detector was using the raw path and silently never drawing.
-      const uri = (await resolveClipUri(shot.clipUri!).catch(() => null)) || shot.clipUri!;
-      if (cancelled) return;
-      try {
-        // 2026-07-30 (Tim — "analysis isn't watching the whole swing; playback and analysis are tied
-        // together"). detectClubPath now extracts from a PRIVATE COPY (distinct file handle), so a native
-        // retriever can NO LONGER collide with ExoPlayer looping the original — the old "bail the instant
-        // playback starts" guard was the crash-era workaround and, since the review surface auto-plays, it
-        // aborted the arc mid-swing on every open (→ no club trace / partial read). Only abort on genuine
-        // cancellation (unmount / swing change) now; the private copy makes concurrent playback safe.
-        // 2026-09-01 — the anchor that CHOSE this window is also the right centre for the samples
-        // inside it. Passing it stops the dense band running into the follow-through, where a real
-        // clubhead sits behind the player's shoulder and draws an arc that looks wrong.
-        /**
-         * 2026-09-06 — CLUB is the last stage and needs both `pose` and `frame` (the roi) to have
-         * happened. checkOrder does not block: it returns the unmet deps and files a diagnostic, so
-         * if this ever runs before pose has read the swing we find out from the field instead of
-         * guessing. Running early is usually still better than not running at all, which is why it
-         * reports rather than refuses.
-         */
-        try {
-          const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
-          pipe.checkOrder(pipe.runKeyFor(uri, startMs, endMs), 'club');
-        } catch { /* observation only */ }
-        // 2026-09-20 — crop to the player. Tim's Sentry from this very screen read `detected: 2`
-        // of fourteen sampled frames, which is what a ~6px clubhead looks like.
-        // 2026-10-04 (sweep) — a pose-derived anchor carries the pose's slack; a heard strike is exact.
-        const anchorTolMs = anchorMs == null || anchorIsHeard({ detectionMethod: shot.detectionMethod, detectionOffsetSeconds: shot.detectionOffsetSeconds }) ? 0 : POSE_ANCHOR_TOLERANCE_MS;
-        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, toleranceMs: anchorTolMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames), sourceFps: swingCapturedFps, poseFrames });
-        try {
-          const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
-          pipe.noteStage(pipe.runKeyFor(uri, startMs, endMs), 'club',
-            !r ? 'skipped' : (r.points.length >= 3 ? 'ok' : 'empty'),
-            { points: r?.points.length ?? 0 });
-        } catch { /* observation only */ }
-        if (cancelled) return;
-        // 2026-07-22 (Tim) — require a real arc (>= 3 validated points from detectClubPath, which
-        // now returns [] for a clustered mis-detection) before drawing the club. A sparse/degenerate
-        // set falls through to the honest hand trace instead of a wrong "club".
-        if (r && r.points.length >= 3) {
-          clubArcRunKeyRef.current = runKey; // mark THIS window done only on a real result
-          // 2026-07-27 (full-app audit) — detectClubPath returns WINDOW-RELATIVE tMs (0-based from swing
-          // start), but the overlay's live clubTip compares against ABSOLUTE playback position. Rebase to
-          // absolute (+ startMs) so the blue club tracks correctly on uploads-with-waggle and split swings
-          // (was pinning to the finish point → a wrong static shaft). Adding a constant doesn't affect the
-          // static trace's speed coloring (it uses deltas).
-          const pts = r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + startMs }));
-          setClubArcPoints(pts);
-          if (session?.id && shot.id) {
-            try { useSwingSessionStore.getState().setShotClubArc(session.id, shot.id, pts, { w: r.frameW ?? null, h: r.frameH ?? null }, r.source); } catch { /* drawing it is what matters */ }
-          }
-        } else {
-          /**
-           * 2026-08-22 (Tim — "you'll see in the downloads an example of how I wanted the swing arc
-           * that I've yet to ever see").
-           *
-           * This branch was EMPTY. An arc that came back with 0, 1 or 2 points drew nothing and said
-           * nothing — no log, no breadcrumb, no on-screen state — so "the club trace never appears"
-           * was unfalsifiable from the field and stayed that way for weeks. The gate itself is right
-           * (a 2-point "arc" is a mis-detection, not a swing); what was wrong is that failing it was
-           * invisible. Now the next round says exactly how far it got.
-           */
-          /**
-           * 2026-09-06 (Tim — "it's either analyzing every time I open, even if my swing file
-           * already has a reading, and there may be a second read coming after the first").
-           *
-           * Both, and this is why. `clubArcRunKeyRef` was marked ONLY on a successful arc, so a
-           * swing whose club path genuinely cannot be traced never recorded that it had been tried.
-           * (2026-10-04: `isPlaying` has since left the deps — see the effect's head.) It was in
-           * them then (a play/pause flip retried the extraction) — and combined with
-           * "mark only on success" that turns every open, every play and every pause into a fresh
-           * native extraction plus a PAID vision call, for a result that already came back empty.
-           *
-           * The distinction that fixes it is one the log already draws: `aborted: !r`.
-           *   r === null  -> we never got an answer (superseded / playback started). Retry: correct.
-           *   r truthy    -> we asked and the answer was "no traceable arc". That is a RESULT, and
-           *                  re-asking the same model about the same frames cannot change it.
-           *
-           * So mark the window done whenever we got an answer, however empty. A different window,
-           * clip or shot produces a different runKey and is still tried.
-           */
-          if (r) clubArcRunKeyRef.current = runKey;
-          try {
-            (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore'))
-              .useIssueLogStore.getState().addAppEvent(
-                r ? 'clubpath_arc_too_sparse' : 'clubpath_superseded',
-                {
-                  // 2026-09-09 — SmartMotion emits this same event now (it never did, which is why
-                  // the 09-06 fields never reached a device). Both surfaces name themselves.
-                  screen: 'swing-detail',
-                  points: r?.points.length ?? 0,
-                  aborted: !r,
-                  windowMs: Math.max(0, endMs - startMs),
-                  /**
-                   * 2026-09-06 — `points: 0` alone sent Tim's Sentry event to the wrong suspect. It
-                   * is produced when the model saw nothing AND when it saw plenty that a gate threw
-                   * out for clustering or zig-zagging, and those have opposite fixes. These three
-                   * say which: `rejected` (too_few / cluster / scatter / none), `detected` (how many
-                   * raw points existed before the gate) and `gate` (server or client).
-                   */
-                  rejected: r?.rejected?.reason ?? null,
-                  detected: r?.rejected?.detected ?? null,
-                  gate: r?.rejected?.gate ?? null,
-                  framesSampled: r?.framesSampled ?? null,
-                  framesPlanned: r?.framesPlanned ?? null,
-                  // 2026-09-20 — WHETHER WE CROPPED. Tim's report read detected 2 of 14 sampled and
-                  // there was no way to tell whether the ROI zoom had engaged, so the obvious
-                  // suspect could not be confirmed or ruled out from the log. It had not: three of
-                  // four call sites ran full-frame. A field that distinguishes "the fix ran and
-                  // still failed" from "the fix never ran" is the difference between a tuning
-                  // problem and a wiring one. [[missing-log-entry-is-the-evidence]]
-                  zoomed: bodyBoundsFromPose(poseFrames) != null,
-                },
-                /**
-                 * 2026-08-31 — AN ABORTED RUN IS NOT A FAILURE, and calling it one cost Tim a
-                 * false alarm from the field.
-                 *
-                 * `shouldAbort` is the effect's own cancellation flag: a run is superseded when its
-                 * inputs change (another swing selected, the window trimmed) — which is the system
-                 * working. (Until 2026-10-04 a play/pause flip superseded it too.) It was logged as `analysis_error` with
-                 * `points: 0`, indistinguishable from a genuine mis-detection, and read exactly
-                 * like the club trace had broken.
-                 *
-                 * Two different events now. A real arc that came back too sparse to draw is still
-                 * an analysis_error and still worth chasing. A superseded run is `diag`: visible
-                 * if someone goes looking, silent in the report Tim receives.
-                 * [[missing-log-entry-is-the-evidence]] cuts both ways — a log that cries wolf
-                 * hides the entries that matter.
-                 */
-                r ? 'analysis_error' : 'diag',
-              );
-          } catch { /* best-effort */ }
-          console.log('[swing-detail] club arc not drawn —', r ? `${r.points.length} point(s), need 3` : 'no result (aborted or none)');
-        }
-        // null = aborted (playback started) OR genuinely no arc; leave the key unset so a later
-        // paused pass can retry, and keep any prior points rather than blanking mid-study.
-      } catch { /* best-effort — falls back to wrist trace */ }
-    })();
-    return () => { cancelled = true; };
-   
-  }, [hasPose, poseFrames, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, session?.id, session?.club_arc, session?.club_arc_source, shot?.club_arc, shot?.club_arc_source, shot?.id, selectedShotIdx, swingCapturedFps]);
+    if (!showTrace || !session || !shot) { setClubArcPoints(null); return; }
+    const first = session.shots.find((x) => x.clipUri)?.id === shot.id;
+    const arc = shot.club_arc ?? (first ? session.club_arc : null) ?? null;
+    setClubArcPoints(arc && arc.length >= 3 ? arc.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
+  }, [showTrace, session, shot]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -1101,104 +856,22 @@ export default function SwingDetail() {
   // could not run, and it duplicated the pose stage of the Analyze button's orchestrator run
   // (services/swing/orchestrator/uploadRun → videoUpload.runUploadPosePass), which is what fills
   // biomechanics now. Unreachable by construction AND a duplicate.
-  const shotBackfillRef = useRef<string | null>(null);
-
-  // 2026-08-01 (Tim — per-swing breakdown). LAZY per-SHOT biomech + clubhead arc: when the user selects
-  // a swing in the reel that has no per-shot read yet, extract pose for JUST that swing's WINDOW (bounded
-  // — never the whole multi-swing clip) and store it on the shot, so its skeleton + numbers + blue club
-  // render. On-demand (only for swings you actually open), so capture stays fast — no N eager extractions.
-  // Shot 0 keeps using the session-level read (skipped here).
-  // 2026-08-09 (deep-audit B / finding 1) — NOT gated on LIBRARY_AUTO_PROCESS. That flag disables
-  // AUTO-processing on OPEN (unwanted); this fires only when the user EXPLICITLY taps swing 2..N in the
-  // reel, on that swing's BOUNDED window (~5s, not the whole clip), with the SIGSEGV shouldAbort guard.
-  // Lumping it under the flag left every non-primary swing with a BLANK skeleton/trace/numbers forever
-  // (shot.biomechanics is only written for swings scrubbed-to during capture). This is the fill for the
-  // rest — on demand, bounded, safe.
+  /**
+   * 2026-10-05 — THE SELECTED SWING'S BODY READ + ARC, asked of THE run (shotDetail) — once per shot,
+   * drawn from the store. Replaces this screen's own per-shot pose + arc backfill (a second recipe for
+   * the same thing). Only when the player asks: a swing other than the first selected in the reel, or the
+   * Body / Swing Trace view turned on (Tim: both off by default, the library is manual). The first
+   * swing's comes with the analysis run; the run waits for a live read before it decodes anything.
+   */
   useEffect(() => {
     if (!swing_id) return;
-    // 2026-10-03 — never while the read itself is running: this pose pass and the read's key frames
-    // queue on the same frame reader, and the read is what the player is waiting for. The read's
-    // own pose pass runs after it; this one picks up anything left once it is done.
-    if (analysisRunning) return;
-    // Shot 0 of an upload is the orchestrator run's pose stage — doing it here too was a duplicate pass.
-    if (selectedShotIdx === 0 && session?.source === 'uploaded_video') return;
     const selShot = session?.shots[selectedShotIdx];
-    if (!selShot?.clipUri || selShot.biomechanics !== undefined) return;             // already has / computing
-    if (selectedShotIdx === 0 && session?.biomechanics !== undefined) return;        // shot 0 uses session-level
-    const wStart = selShot.clipStartSeconds != null ? selShot.clipStartSeconds * 1000 : null;
-    const wEnd = selShot.clipEndSeconds != null ? selShot.clipEndSeconds * 1000 : null;
-    if (wStart == null || wEnd == null || wEnd - wStart < 500) return;               // need a real window
-    const key = `${swing_id}:${selShot.id}`;
-    if (shotBackfillRef.current === key) return;
-    shotBackfillRef.current = key;
-    // 2026-08-23 — lifecycle abort, so the run stops when the user LEAVES, not when the clip plays.
-    let cancelled = false;
-    void (async () => {
-      try {
-        const poseMod = await import('../../../services/poseAnalysisApi');
-        const analyzeUri = (await resolveClipUri(selShot.clipUri!).catch(() => null)) || selShot.clipUri!;
-        // 2026-10-04 — the TAGGED golfer's hand, not whoever is active on the phone.
-        const { swingerForSession } = await import('../../../services/swing/sessionSwinger');
-        const clipDurMs = Math.max(wEnd + 1000, (session?.upload?.duration_sec ?? 0) * 1000);
-        // C1 — per-shot windows from the multi-swing expansion carry their own located impact.
-        const shotImpactMs = typeof selShot.locatedImpactSec === 'number' && selShot.locatedImpactSec > 0 ? selShot.locatedImpactSec * 1000 : null;
-        const biomech = await poseMod.analyzeSwingFromVideo(
-          analyzeUri, clipDurMs, session?.upload?.angleOverride ?? null, false, { startMs: wStart, endMs: wEnd }, shotImpactMs, swingerForSession(session).handedness,
-        );
-        useSwingSessionStore.getState().setShotBiomechanics(swing_id, selShot.id, biomech);
-        try {
-          const { detectClubPath } = await import('../../../services/swing/clubPath');
-          /**
-           * 2026-08-23 (Tim — "when you open a file in swing library, sometimes it auto plays. And if
-           * you hit analysis, that might stop the playing. So I feel like there's a connection.")
-           *
-           * There was. This aborted extraction whenever the clip was PLAYING, and the library
-           * auto-plays on open — so opening a swing and asking for analysis killed the run before it
-           * produced anything, which is the "cannot read / cannot analyze on the first try, then some
-           * data later" he keeps hitting.
-           *
-           * The guard cited the MediaMetadataRetriever + ExoPlayer SIGSEGV, but that condition was
-           * removed on 07-30: detectClubPath extracts from its OWN private copy and clubPath.ts hard
-           * REFUSES to run without one, so it can never share a handle with the player. The sibling
-           * call site at the top of this file had this same stale guard removed on 08-08; this one
-           * was missed. Playback is not a reason to stop analysing — leaving the screen is.
-           */
-          // 2026-09-01 — same honest anchor rule as the sibling call site above; without it the
-          // sampler spreads its dense band across the whole back half of the window.
-          // 2026-10-04 — the ONE anchor rule (it had no pose impact here; the sibling above did).
-          const { anchorMs: arcAnchorMs, toleranceMs: arcToleranceMs } = clubArcAnchor({
-            detectionMethod: selShot.detectionMethod,
-            detectionOffsetSeconds: selShot.detectionOffsetSeconds,
-            frames: biomech?.frames ?? null,
-            rawStartMs: wStart,
-            rawEndMs: wEnd,
-          });
-          try {
-            const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
-            pipe.noteStage(pipe.runKeyFor(analyzeUri, wStart, wEnd), 'anchor',
-              arcAnchorMs != null ? 'ok' : 'empty', { anchorMs: arcAnchorMs, method: selShot.detectionMethod ?? null });
-          } catch { /* observation only */ }
-          // 2026-09-20 — the re-analyse path gets the crop too. `biomech` was just computed above,
-          // so its frames are the freshest bounds available for this clip.
-          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, toleranceMs: arcToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames), sourceFps: swingCapturedFps, poseFrames: biomech?.frames ?? poseFrames });
-          // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
-          // would drop a valid 3-point arc and persist [].
-          if (arc && arc.points.length >= 3) {
-            useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null }, arc.source);
-          } else {
-            useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, [], null, arc?.source);
-          }
-        } catch { /* arc best-effort */ }
-      } catch (e) {
-        console.log('[swing-detail] per-shot backfill failed', e);
-        try { useSwingSessionStore.getState().setShotBiomechanics(swing_id, selShot.id, null); } catch { /* non-fatal */ }
-      }
-    })();
-    // Without this the `cancelled` flag above never flips and the abort is inert — which would have
-    // made the fix itself a half-fix.
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedShotIdx, swing_id, session?.shots, session?.biomechanics, session?.upload?.angleOverride, analysisRunning]);
+    if (!selShot?.clipUri) return;
+    if (!(selectedShotIdx > 0 || showSkeleton || showTrace)) return;
+    // The arc only feeds the Swing Trace, which the player turns on — never a paid call for a tap on a row.
+    return requestShotDetail(swing_id, selShot.id, { arc: showTrace });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the shot's identity, not every store write to the session
+  }, [swing_id, selectedShotIdx, session?.shots[selectedShotIdx]?.id, session?.shots[selectedShotIdx]?.clipUri, showSkeleton, showTrace]);
 
   // 2026-06-13 — Prewarm the TTS function WHILE the analysis is still running, so
   // the "Okay, I watched it…" read fires hot instead of paying cold-start on top
@@ -1572,14 +1245,35 @@ export default function SwingDetail() {
     const nonTerminal = (st: string | undefined) =>
       st === 'pending' || st === 'analyzing_frames' || st === 'analyzing_pose' || st === 'analyzing_pattern';
     if (!nonTerminal(analysisStatus)) return;
-    const timer = setTimeout(() => {
+    const { isRunLive } = require('../../../services/swing/orchestrator/engine') as typeof import('../../../services/swing/orchestrator/engine');
+    let timer: ReturnType<typeof setTimeout>;
+    const check = () => {
       const cur = useSwingSessionStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status;
-      if (nonTerminal(cur)) {
-        useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'failed', "Analysis didn't finish — tap Re-analyze to try again.");
-      }
-    }, 150_000);
+      if (!nonTerminal(cur)) return;
+      // 2026-10-05 (sweep 2) — a LIVE run is not stuck: it is slower than 150s whenever the read hangs
+      // and the body read takes over (the orchestrator budgets each stage and settles the status itself).
+      // Failing it here and then landing the verdict was the "fails, then a read lower down" Tim saw.
+      if (isRunLive(swingRunKey(swing_id))) { timer = setTimeout(check, 30_000); return; }
+      useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'failed', "Analysis didn't finish — tap Re-analyze to try again.");
+    };
+    timer = setTimeout(check, 150_000);
     return () => clearTimeout(timer);
   }, [swing_id, analysisStatus]);
+
+  // 2026-10-05 (sweep 2) — a run that died with the app (killed mid-analysis) left 'analyzing_*' saved,
+  // and reopening showed "Watching the swing…" with every button disabled for 150s. With no live run
+  // behind it, an upload goes back to 'pending' at once and auto-analyze runs it again.
+  useEffect(() => {
+    if (!swing_id) return;
+    const s0 = useSwingSessionStore.getState().sessionHistory.find(s => s.id === swing_id);
+    const st0 = s0?.analysis_status;
+    if (!(st0 === 'analyzing_frames' || st0 === 'analyzing_pose' || st0 === 'analyzing_pattern')) return;
+    const { isRunLive } = require('../../../services/swing/orchestrator/engine') as typeof import('../../../services/swing/orchestrator/engine');
+    if (isRunLive(swingRunKey(swing_id))) return;
+    // 2026-10-05 — every analysis of a saved swing (uploads AND SmartMotion captures) is an orchestrator
+    // run now, so "no live run" is a fact for every source.
+    useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
+  }, [swing_id]);
 
   // Phase BZ-v1 — when in compare-picker mode, tapping a row picks the
   // right-pane swing instead of scrubbing the main video. Otherwise

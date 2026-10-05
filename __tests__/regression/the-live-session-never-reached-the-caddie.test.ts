@@ -33,32 +33,36 @@ describe('both capture paths feed the caddie', () => {
     expect(upload).toMatch(/synthesizeCageInsight\(\{/);
   });
 
-  it('and so does the LIVE path — this is the half that was missing', () => {
-    expect(live).toMatch(/import \{ synthesizeCageInsight \}/);
-    expect(live).toMatch(/void synthesizeCageInsight\(\{/);
+  /**
+   * 2026-10-05 — the LIVE path no longer keeps its own copy of the note: the cage summary reads through
+   * the orchestrator's run (services/swing/orchestrator/uploadRun), whose read is the one above. Two
+   * copies of "write the session note" was how the live half went missing in the first place.
+   */
+  it('and so does the LIVE path — through the same read, not a second copy', () => {
+    expect(live).toMatch(/const out = await runSwingAnalysis\(session\.id\);/);
+    expect(live).not.toMatch(/\banalyzeSwing\(/);
+    expect(live).not.toMatch(/synthesizeCageInsight/);
   });
 
-  it('the live call passes the session it just analysed, not a placeholder', () => {
-    const at = live.indexOf('void synthesizeCageInsight({');
+  it('the read passes the session it just analysed, not a placeholder', () => {
+    const at = upload.indexOf('void synthesizeCageInsight({');
     expect(at).toBeGreaterThan(-1);
-    const call = live.slice(at, at + 420);
-    expect(call).toMatch(/sessionId: session\.id/);
+    const call = upload.slice(at, at + 420);
+    expect(call).toMatch(/sessionId,/);
     expect(call).toMatch(/club: session\.club/);
-    expect(call).toMatch(/primaryIssueName: issue\.name/);
-    expect(call).toMatch(/severity: issue\.severity/);
+    expect(call).toMatch(/primaryIssueName: primary_issue\.name/);
+    expect(call).toMatch(/severity: primary_issue\.severity/);
   });
 
-  it('it is fire-and-forget — a memory note must never block the summary', () => {
-    const at = live.indexOf('void synthesizeCageInsight({');
-    expect(live.slice(at, at + 500)).toMatch(/\.catch\(\(\) => \{\}\)/);
+  it('it is fire-and-forget — a memory note must never block the read', () => {
+    const at = upload.indexOf('void synthesizeCageInsight({');
+    expect(upload.slice(at, at + 500)).toMatch(/\.catch\(\(\) => \{\}\)/);
   });
 
-  it('it sits inside the SAME `if (issue)` the relationship engine does', () => {
-    // Without a classified issue there is nothing to write a note about, and firing anyway would
-    // spend a synthesis call to say nothing.
-    const at = live.indexOf('void synthesizeCageInsight({');
-    const before = live.slice(0, at);
-    const lastIf = before.lastIndexOf('if (issue) {');
+  it('it sits inside the SAME `if (primary_issue)` the relationship engine does', () => {
+    const at = upload.indexOf('void synthesizeCageInsight({');
+    const before = upload.slice(0, at);
+    const lastIf = before.lastIndexOf('if (primary_issue) {');
     const lastEngine = before.lastIndexOf('processSwingAnalysis(');
     expect(lastIf).toBeGreaterThan(-1);
     expect(lastEngine).toBeGreaterThan(lastIf);

@@ -224,9 +224,10 @@ function browserFallbackPossible(): boolean {
 /** The browser never came up: stop waiting for it per frame for a while (re-review 10-04). */
 let browserUnreadyUntil = 0;
 async function detectInBrowser(b64: string, timestampMs: number, opts?: DetectOptions): Promise<PoseFrame | null> {
-  if (Date.now() < browserUnreadyUntil) return null;
+  const fe = require('./frameEngine') as typeof import('./frameEngine');
+  // The cool-off ends the moment the engine IS up (sweep 2: it held for 2 min after a slow cold start).
+  if (Date.now() < browserUnreadyUntil && !fe.isFrameEngineReady()) return null;
   try {
-    const fe = require('./frameEngine') as typeof import('./frameEngine');
     // 2026-10-04 (sweep) — the cold WebView takes 1-3s; wait for it ONCE. If it is still not up, it is
     // not coming up soon: remember that for 2 minutes instead of paying 6s on every frame.
     if (!(await fe.ensureFrameEngine(6_000))) { browserUnreadyUntil = Date.now() + 2 * 60_000; return null; }

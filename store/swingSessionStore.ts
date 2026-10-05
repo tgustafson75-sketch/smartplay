@@ -1398,8 +1398,12 @@ export const useSwingSessionStore = create<SwingSessionState>()(
               shots: session.shots.map(shot =>
                 shot.id !== shotId ? shot : { ...shot, perShotAnalysis: analysis },
               ),
-              analysis_status: 'ok' as AnalysisStatus,
-              analysis_error: null,
+              // 2026-10-05 (sweep 2) — NOT while a run is still analyzing: one swing's row landing flipped
+              // the whole session to 'ok' mid-read, flashing (and speaking) the PREVIOUS headline before the
+              // run went back to "Identifying patterns…". The run sets 'ok' itself when it is done.
+              ...(String(session.analysis_status ?? '').startsWith('analyzing')
+                ? {}
+                : { analysis_status: 'ok' as AnalysisStatus, analysis_error: null }),
             },
           ),
         })),

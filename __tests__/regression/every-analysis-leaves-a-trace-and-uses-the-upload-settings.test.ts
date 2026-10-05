@@ -61,8 +61,11 @@ describe('every analysis leaves ONE trace in the issue log, timeline included', 
     expect(code('services/uploadDiagnostic.ts')).toMatch(/traceStep\(`upload \$\{stage\}`/);
     expect(code('services/swing/analysisOrchestrator.ts')).toMatch(/traceStep\('window chosen'/);
     expect(code('services/swing/analysisPipeline.ts')).toMatch(/traceStep\(`\$\{stage\} \$\{status\}`/);
-    expect(code('services/swing/orchestrator/uploadRun.ts')).toMatch(/beginAnalysisTrace\(traceId, 'upload'/);
-    expect(code('app/swinglab/smartmotion.tsx')).toMatch(/beginAnalysisTrace\(traceId, 'smartmotion'/);
+    // 2026-10-05 — ONE trace per run, opened by the run for every source (a SmartMotion capture is a run
+    // too); SmartMotion adds what only it knows (live vs re-analyze, putt, the heard strike).
+    expect(code('services/swing/orchestrator/uploadRun.ts')).toMatch(/beginAnalysisTrace\(traceId, s\?\.source === 'uploaded_video' \? 'upload' : 'smartmotion'/);
+    expect(code('app/swinglab/smartmotion.tsx')).toMatch(/traceStep\('smartmotion capture'/);
+    expect(code('services/swing/orchestrator/shotDetail.ts')).toMatch(/traceStep\('body read'/);
   });
 
   it('it goes out with Send Report as a readable timeline, and auto-sends only when it went wrong', () => {

@@ -131,8 +131,14 @@ describe('an abandoned stage stops writing', () => {
   it('the read and the pose pass take the store only through that handle', () => {
     const fs = require('fs') as typeof import('fs');
     const path = require('path') as typeof import('path');
-    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'services/videoUpload.ts'), 'utf8');
-    for (const head of ['async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal)', 'export async function runUploadPosePass(sessionId: string, signal?: AbortSignal)']) {
+    // 2026-10-05 — the pose pass and the arc are the shot run's stages (services/swing/orchestrator/shotDetail).
+    const files: Record<string, string> = {
+      'async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, extras?: ReadExtras)': 'services/videoUpload.ts',
+      'async function poseStage(input: In, signal: AbortSignal)': 'services/swing/orchestrator/shotDetail.ts',
+      'async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomechanics | undefined)': 'services/swing/orchestrator/shotDetail.ts',
+    };
+    for (const [head, file] of Object.entries(files)) {
+      const src = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8');
       const i = src.indexOf(head);
       expect(i).toBeGreaterThan(-1);
       const rest = src.slice(i + head.length);

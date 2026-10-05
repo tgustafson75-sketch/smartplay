@@ -1124,13 +1124,15 @@ check('Clubhead arc is computed at ANALYSIS time + persisted (not re-extracted o
     return (
       /club_arc\?:/.test(store) && /setSessionClubArc:/.test(store) &&
       // both analysis paths (upload runPhaseK + cage/SmartMotion) persist the arc
-      /setSessionClubArc\(/.test(upload) && /detectClubPath\(/.test(upload) &&
-      /setSessionClubArc\(/.test(sm) &&
+      // 2026-10-05 — ONE runner for every analysis (the orchestrator's shot run), as the run's 'arc' stage
+      // after the body read; screens draw what it stored.
+      /setSessionClubArc\(/.test(read('services/swing/orchestrator/shotDetail.ts')) && /detectClubPath\(/.test(read('services/swing/orchestrator/shotDetail.ts')) && /id: 'arc',\s*after: \['pose'\]/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
+      void upload === undefined && !/detectClubPath\(/.test(sm) &&
       // view screen prefers a REAL persisted arc (this shot's own, or the session's for shot 0) before any
       // live extraction; 2026-08-06 — a stored EMPTY arc no longer locks it blank forever (falls through to
       // the paused-gated live re-extraction), so the guard now asserts the real-arc short-circuit.
       // 2026-10-04 — and only an arc the on-device TRACKER found; a pre-tracker vision arc is re-tracked.
-      /const storedArc = shotArc !== undefined \? shotArc/.test(detail) && /if \(storedArc && storedArc\.length >= 3 && storedSource === 'tracker'\)/.test(detail)
+      /const arc = shot\.club_arc \?\? \(first \? session\.club_arc : null\) \?\? null;/.test(detail) && /if \(src === 'tracker'\) return true;/.test(read('services/swing/orchestrator/shotDetail.ts'))
     );
   })(),
   'the clubhead arc is detected during analysis (retriever runs while nothing plays) and stored, so it draws immediately on open regardless of autoplay — no view-time re-extraction race');
@@ -1237,9 +1239,10 @@ check('Club trace extracts during playback (no stale isPlaying gate) + private-c
     const d = read('app/swinglab/swing/[swing_id].tsx');
     const cp = read('services/swing/clubPath.ts');
     // the extraction effect must not early-return on isPlaying anymore
-    const effect = d.slice(d.indexOf('const shotArc = shot?.club_arc'), d.indexOf('clubArcRunKeyRef.current === runKey'));
+    // 2026-10-05 — the one club-arc runner is the orchestrator's shot run; neither it nor the screen gates on playback.
+    const effect = read('services/swing/orchestrator/shotDetail.ts');
     return (
-      effect.length > 0 && !/if \(isPlaying\) return;/.test(effect) &&
+      effect.length > 0 && !/isPlaying/.test(effect) && !/if \(isPlaying\) return;/.test(d) &&
       // 2026-08-19 — was pinning the literal `if (!tempCopy) return null;`. The INVARIANT is that a
       // failed private copy REFUSES rather than falling back to decoding the file ExoPlayer is
       // playing (the SIGSEGV vector) — not the exact shape of the early return. The refusal now logs
@@ -3134,7 +3137,8 @@ check('Smart Motion: re-analyze the kept clip + auto-update on cold start (Tim)'
     return (
       // re-analyze the existing clip (not re-record)
       /const reanalyze = useCallback\(\(\) => \{/.test(sm) &&
-      /void runAnalysis\(clipUri, segmentsRef\.current\[0\]\)/.test(sm) &&
+      // 2026-10-05 — and it re-reads the swing ALREADY saved (never a duplicate library entry)
+      /void runAnalysis\(clipUri, segmentsRef\.current\[0\], \{ reuseSessionId: ingestedSessionIdRef\.current \}\)/.test(sm) &&
       /onPress=\{reanalyze\}/.test(sm) &&
       /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.re_analyze_this_swing'\)\}/.test(sm) &&
       /**
@@ -3214,11 +3218,15 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
       // Motion path trusts the player's real duration AND windows to the selected
       // swing (2026-07-06 H3) — and 2026-07-07 (biomech #8): extracts ONCE, computes
       // biomech from the SAME frames (skeleton + numbers can't diverge, half the poses).
-      /extractPoseFramesFromVideo\(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs\)/.test(sm) &&
+      // 2026-10-05 — the one body read (the orchestrator's shot run) trusts the PROBED duration and windows
+      // to the shot, with its heard / located impact; analyzeSwingFromVideo extracts once and computes the
+      // biomech from those same frames.
+      /uri, durMs, s\.upload\?\.angleOverride \?\? null, probed > 0, window, impactMs, swingerForSession\(s\)\.handedness/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
+      void sm === undefined &&
       // 2026-08-19 — was /computeBiomechanicsFromFrames\(frames, angle/. The camera angle is no longer
       // a value the screen holds and passes down; null makes the engine infer it from these very frames,
       // which is now the single source of truth. This guard is about the SHARED extraction, not the angle.
-      /computeBiomechanicsFromFrames\(frames, null/.test(sm)
+      /return computeBiomechanics\(frames, angle, handedness\);/.test(pose)
     );
   })(),
   'trusted real duration skips the reprobe (2-8s saved on Motion); acoustic strike anchors the phase frames; one extraction feeds both skeleton and biomech; on-device pose latency is measurable');
@@ -3236,13 +3244,13 @@ check('Timeliness: swing read runs in parallel with the clip persist (not behind
       // ref mirror, so it saw whatever putt mode was when the screen mounted. The ref is the same
       // fact read at call time. This guard is about the read being PRE-STARTED and putt-guarded —
       // not about which spelling of putt mode it uses.
-      /const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> \| null = (?:isPutt|puttModeRef\.current) \? null : Promise\.race\(\[\s*\n\s*analyzeSwing\(rawUri,/.test(sm) &&
-      // The verdict awaits the PRE-STARTED promise (not a fresh analyzeSwing after persist).
-      /const result: Awaited<ReturnType<typeof analyzeSwing>> = await analysisP!/.test(sm) &&
-      // persist still runs (durability) — just no longer in front of the read.
-      /uri = await persistClipToDocuments\(rawUri\)/.test(sm) &&
-      // and it is NOT re-awaited before an analyzeSwing on the verdict path anymore.
-      !/analyzeSwing\(uri, analyzeOpts, boundaries\)/.test(sm)
+      // 2026-10-05 — the swing is saved on the RECORDER file and THE run starts at once; the durable copy
+      // is made while the read runs and the shots are re-pointed to it afterwards.
+      /clipUri: rawUri,/.test(sm) && /masterVideoPath: rawUri,/.test(sm) &&
+      sm.indexOf('const readP = runSwingAnalysis(sid, {') > 0 &&
+      sm.indexOf('const readP = runSwingAnalysis(sid, {') < sm.indexOf('uri = await persistClipToDocuments(rawUri)') &&
+      /if \(sh\.clipUri === rawUri\) st\.setShotClipUri\(sid, sh\.id, uri\);/.test(sm) &&
+      !/\banalyzeSwing\(/.test(sm)
     );
   })(),
   'the first-verdict path pre-starts the vision read on the raw recorder file and awaits that promise, running the durable-clip copy + session ingest concurrently instead of blocking the verdict behind a full byte-copy');
@@ -3259,15 +3267,15 @@ check('Uploads: skeleton + 4-card read windowed on the pointed swing',
     const up = read('services/videoUpload.ts');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     return (
-      /firstClipSwing\.clipEndSeconds > firstClipSwing\.clipStartSeconds/.test(up) &&
+      // 2026-10-05 — the body read is the orchestrator's shot run: it windows to the shot's own window.
+      /&& shot\.clipEndSeconds > shot\.clipStartSeconds/.test(read('services/swing/orchestrator/shotDetail.ts')) && void up === undefined &&
       // 2026-07-07 (biomech #9) — the upload passes its KNOWN camera angle.
       // 2026-07-24 (full-app audit, root D) — AND threads handedness so a lefty's
       // weight-shift sign isn't inverted (default 'right' read it backwards).
       // 2026-08-09 (verification wave C1) — the null impact slot became poseImpactMs: the vision-located
       // impact now selects the strike-anchored sampling branch (stage labels on the real swing points).
       // 2026-10-04 — the hand is the TAGGED golfer's (services/swing/sessionSwinger), not the active member's.
-      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, session\.upload\?\.angleOverride \?\? null, false, poseWindow, poseImpactMs, swingerHand\)/.test(up) &&
-      /const swingerHand = \(require\('\.\/swing\/sessionSwinger'\)[\s\S]{0,80}\.swingerForSession\(session\)\.handedness;/.test(up) &&
+      /analyzeSwingFromVideo\(\s*uri, durMs, s\.upload\?\.angleOverride \?\? null, probed > 0, window, impactMs, swingerForSession\(s\)\.handedness,/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
       /session\.source === 'uploaded_video' \? \(/.test(detail) &&
       /onPress=\{onAnalyzeAtPosition\}/.test(detail)
     );
@@ -3312,7 +3320,8 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
       // the swing-detail backfill threads handedness too.
       // 2026-10-04 — the on-open backfill is gone (unreachable, duplicated the Analyze run's pose stage);
       // the per-shot pass threads it — the TAGGED golfer's hand since 10-04 (sessionSwinger).
-      /shotImpactMs, swingerForSession\(session\)\.handedness,/.test(detail)
+      // 2026-10-05 — every saved swing's body read is the orchestrator's shot run, with the tagged hand.
+      /swingerForSession\(s\)\.handedness/.test(read('services/swing/orchestrator/shotDetail.ts')) && void detail === undefined
     );
   })(),
   'the Coach lesson + upload backfill no longer speak DTL-invalid turn/weight numbers as measured (angle inferred from geometry), and lefty weight-shift reads with the correct sign on every analysis path');
@@ -4073,106 +4082,37 @@ check('LOCK: the setting nothing could set is gone, and cannot come back',
   })(),
   'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
 
-check('LOCK: the pose warm starts INSIDE the network wait, and both paths key it the same way',
+check('LOCK: no pose decode races the read — the body read waits for it, and there is one body read',
   /**
-   * 2026-08-31 (OPEN-ITEMS §10) — pose/biomech extraction used to wait for the ENTIRE vision
-   * round-trip: extract vision frames → POST → flip to 'review' → only THEN decode again for pose.
-   * The biomech effect returns early unless `phase === 'review'`, and runAnalysis nulls
-   * `videoDurationMs` at its start, so it was doubly blocked for the whole analysing phase. The
-   * decoder sat idle for the entire network wait.
+   * 2026-10-05 (Tim: "one clean, fast, and correct analysis path that the orchestrator makes sure is
+   * correct") — REPLACES "the pose warm starts INSIDE the network wait".
    *
-   * TWO THINGS MAKE THE FIX REAL, AND A UNIT TEST CAN ONLY SEE ONE OF THEM.
-   *
-   * 1. ORDER. The warm must be started BEFORE `await analysisP` — that is the whole point. Started
-   *    after, it is not an optimisation at all, just the same serial decode with extra steps. This
-   *    is a file-position assertion because ordering inside one function is not otherwise observable.
-   * 2. ONE KEY OWNER. A warm that computes a DIFFERENT key than the review read is strictly worse
-   *    than no warm: it pays for a decode and then pays again. Both must go through
-   *    services/swing/poseExtractKey, and no inline key may survive.
-   *
-   * It must also stay non-blocking (`void`, never awaited) so a slow or failed warm degrades to
-   * exactly today's behaviour rather than delaying the verdict.
+   * The warm existed because SmartMotion ran a SECOND pose pass of its own and wanted it to overlap the
+   * read's network wait without queueing in front of the read's decodes on the one media chain. That
+   * second pass is gone: every saved swing's body read is the orchestrator's shot run
+   * (services/swing/orchestrator/shotDetail), started after the read, and its pose stage waits for the
+   * swing's read to settle before it decodes anything. So the property the warm protected — the read's
+   * frames are never queued behind a pose decode — now holds by ORDER, and there is nothing to key.
+   * The verdict is still first; the body read lands after it. [[two-owners-is-the-root-cause]]
    */
   (() => {
-    const sm = read('app/swinglab/smartmotion.tsx');
-    /**
-     * COMMENTS STRIPPED. The first version of the duration assertions below failed on the helper's
-     * own doc comment, which NAMES `videoDurationMs` while explaining why it is excluded from the
-     * key. That is the third time in one session a guard has been defeated by prose describing the
-     * very thing it forbids. A file's account of itself is not the file doing the thing.
-     * [[a-stale-header-is-a-source-someone-trusts]] [[break-test-every-guard-you-write]]
-     */
-    const helper = read('services/swing/poseExtractKey.ts')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
-
-    /**
-     * 2026-08-31, corrected the same day it was written. This asserted the warm sat BETWEEN
-     * `const analysisP:` and `await analysisP!` in the file — position as a proxy for timing. That
-     * proxy was wrong in the way that mattered: analyzeSwing does its own probing, locating and
-     * extracting INSIDE that span, and every decode in this app runs through one serialized media
-     * chain. So a warm started there queued its 5-8 decodes IN FRONT OF the extraction the analysis
-     * was waiting on. A latency fix that added latency, and this guard called it correct.
-     *
-     * The real property is TIMING, and only analyzeSwing knows it: it fires `onFramesReady` the
-     * instant its decoding ends and the network wait begins. So that is what is asserted — the warm
-     * is invoked by that callback and by nothing else, and the callback is raised after extraction
-     * and before the response is awaited. Assert the relationship, not the byte offset.
-     * [[three-ways-a-guard-is-worthless]]
-     */
-    const pose = readCode('services/poseDetection.ts');
-    const extractAt = pose.indexOf('extractMs = Date.now() - tExtract;');
-    const signalAt = pose.indexOf('context.onFramesReady?.()');
-    const respAt = pose.indexOf('let res = await tryFetch(1);');
-    if (extractAt < 0 || signalAt < 0 || respAt < 0) { console.log('   onFramesReady anchors missing'); return false; }
-    if (!(extractAt < signalAt && signalAt < respAt)) { console.log('   the decoder-free signal is not between extraction and the response'); return false; }
-    // The screen must start the warm ONLY from that callback — never eagerly beside the request.
-    if (!/onFramesReady: startPoseWarm/.test(sm)) { console.log('   the screen does not hand analyzeSwing its warm'); return false; }
-    if (/^\s*startPoseWarm\(\);/m.test(sm)) { console.log('   the warm is still invoked directly — it would race the extraction again'); return false; }
-    if (!/let warmStarted = false;/.test(sm) || !/if \(warmStarted\) return;/.test(sm)) { console.log('   the warm is not guarded against running twice'); return false; }
-
+    const runner = readCode('services/swing/orchestrator/shotDetail.ts');
+    const run = readCode('services/swing/orchestrator/uploadRun.ts');
+    const sm = readCode('app/swinglab/smartmotion.tsx');
+    const detail = readCode('app/swinglab/swing/[swing_id].tsx');
     return (
-      // both paths import the ONE key owner
-      /import \{ poseExtractInputsFor, poseExtractKeyFor \} from '\.\.\/\.\.\/services\/swing\/poseExtractKey'/.test(sm) &&
-      /export function poseExtractKeyFor/.test(helper) &&
-      /export function poseExtractInputsFor/.test(helper) &&
-      // ...and no inline key survives in the screen
-      !/const extractKey = `/.test(sm) &&
-      // the review read and the warm both call the shared builder
-      (sm.match(/poseExtractKeyFor\(/g) ?? []).length >= 2 &&
-      (sm.match(/poseExtractInputsFor\(/g) ?? []).length >= 2 &&
-      // duration is NOT in the key: the warm probes the file, the review uses the player's onLoad,
-      // and those disagree on the same clip — keying on it makes the warm miss over measurement noise
-      !/durationMs.*\|\$\{/.test(helper) &&
-      !/videoDurationMs/.test(helper) &&
-      // non-blocking: fired with void, and its failures swallowed
-      /void \(async \(\) => \{[\s\S]{0,1600}?poseExtractCacheRef\.current = \{ key: warmKey, frames \};[\s\S]{0,200}?\} catch \{/.test(sm) &&
-      // 2026-10-04 — a warm still DECODING is joined, not repeated: on the emulator the review pass
-      // missed the cache mid-warm and decoded the same 20 frames twice.
-      /poseExtractInflightRef\.current = \{ key: warmKey, p \};/.test(sm) &&
-      /const inflight = poseExtractInflightRef\.current\?\.key === extractKey \? poseExtractInflightRef\.current\.p : null;/.test(sm) &&
-      /**
-       * warmed on the DURABLE uri — keying on rawUri would be a guaranteed miss.
-       *
-       * 2026-09-09 (triple-check) — THIS GUARD STATED THE PROPERTY AND ASSERTED THE BUG. It matched
-       * the literal `clipUri: uri`, and `uri` is a `let` that becomes the durable copy partway
-       * through runAnalysis. So what the warm keyed on depended on whether persistClipToDocuments
-       * had finished when analyzeSwing raised onFramesReady — a race, losing exactly on the long
-       * high-frame-rate clips whose decodes cost most, and losing SILENTLY: 5-8 decodes on the one
-       * serialized media chain, cached under a key the review read never looks up, then decoded
-       * again. The precise "latency fix that added latency" this scenario's own header describes.
-       *
-       * The comment was right the whole time; only the assertion was wrong. Assert the property:
-       * the warm AWAITS the copy the review will use, and both persist paths release it.
-       * [[three-ways-a-guard-is-worthless]] [[a-stale-header-is-a-source-someone-trusts]]
-       */
-      /clipUri: await durableUriP, poseWindow/.test(sm) &&
-      /const warmUri = await durableUriP;/.test(sm) &&
-      /extractPoseFramesFromVideo\(warmUri,/.test(sm) &&
-      // released on BOTH persist outcomes, or a failed copy would stall the warm forever
-      /markDurable\(uri\);/.test(sm)
+      // the body read waits for the read to finish decoding
+      /await whenStageSettled\(swingRunKey\(input\.sessionId\), 'read', signal\);/.test(runner) &&
+      // the run starts it after the read (any outcome)
+      /id: 'pose',\s*after: \['read'\],/.test(run) &&
+      // and no screen decodes pose frames of its own any more
+      !/extractPoseFramesFromVideo\(/.test(sm) && !/analyzeSwingFromVideo\(/.test(sm) &&
+      !/analyzeSwingFromVideo\(/.test(detail) &&
+      // one runner calls the pose decode for a saved swing
+      /poseMod\.analyzeSwingFromVideo\(/.test(runner)
     );
   })(),
-  'the pose decode moves inside the vision round-trip (started after the POST, before the verdict is awaited), both paths key it through one owner, and a failed warm degrades to the old serial extract');
+  'every saved swing has ONE body read (the orchestrator\'s shot run), ordered after the read so the read\'s frames are never queued behind a pose decode; no screen runs a second pose pass');
 
 check('LOCK: no persisted setting may have a setter nothing calls',
   /**
@@ -5864,8 +5804,8 @@ check('Real clubhead arc: detected-only, honestly gated, wired end-to-end',
       /MIN_CLUB_POINTS/.test(ov) &&
       /clubArc && clubArc\.length >= MIN_CLUB_POINTS/.test(ov) &&
       /clubDots/.test(ov) &&
-      // smartmotion runs it on the Motion step + passes it to the overlay.
-      /detectClubPath\(/.test(sm) &&
+      // the one runner (the orchestrator's shot run) finds it; smartmotion passes the stored arc to the overlay.
+      /detectClubPath\(/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
       /clubArc=\{clubArcPoints\}/.test(sm) &&
       // Routed.
       /"\/api\/club-path"/.test(read('vercel.json'))
@@ -5937,8 +5877,10 @@ check('Segmentation: rebounds filtered, sessions can\'t cross-poison, anchors ke
     const scaled = /mergeSwingDetections\(raw, Math\.min\(3\.5, Math\.max\(2\.5, frameIntervalSec\)\)\)/.test(read('services/poseDetection.ts'));
     // (c) session token + in-flight dedupe on the per-swing analysis cache.
     const sm = read('app/swinglab/smartmotion.tsx');
-    const tokenOk = /sessionRunRef\.current !== myRun\) return null/.test(sm) &&
-      /analysisInflightRef\.current\[idx\] = job/.test(sm) &&
+    // 2026-10-05 — the reads come from THE run; a superseded session's reads are dropped by the token and
+    // its waiters released, so they can never land on the next session's cache.
+    const tokenOk = /if \(sessionRunRef\.current !== myRun\) return;/.test(sm) &&
+      /shotReadWaitersRef\.current = \{\};/.test(sm) &&
       (sm.match(/sessionRunRef\.current \+= 1/g) ?? []).length >= 2;
     // (d) cage fallback keeps acoustic anchors; cage strikes rebound-filtered.
     const anchorsOk = /acousticStrikes\.length > 0\s*\n\s*\? correlateStrikesWithVideo\(acousticStrikes, swings, durMs\)/.test(sm) &&
@@ -6025,8 +5967,9 @@ check('Multi-swing: EVERY swing gets its own persisted diagnosis + range recover
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
       // per-swing persist inside the narration loop (idx>0), mapping segment→shot, mirroring swing 0
-      /if \(idx > 0\) \{[\s\S]*?setShotAnalysis\(sessionId, shotId, \{/.test(sm) &&
-      /const shotIdx = Math\.max\(0, \(segs\[idx\]\?\.index \?\? idx \+ 1\) - 1\)/.test(sm) &&
+      // 2026-10-05 — THE run reads every swing and saves each on its own shot row; the pager maps them back.
+      /liveSessionStore\(signal\)\.setShotAnalysis\(sessionId, swing\.id, \{/.test(read('services/videoUpload.ts')) &&
+      /const idx = shotIndexOf\(shotId\);/.test(sm) &&
       // range locate retry on a cold-Lambda empty return with no acoustic fallback
       /if \(swings\.length === 0 && acousticStrikes\.length === 0\) \{\s*\n\s*swings = await pose\.locateSwings/.test(sm)
     );
@@ -6071,14 +6014,15 @@ check('Library: a multi-swing reel is reviewable SWING-BY-SWING (own skeleton + 
       /biomechanics\?: import\('\.\.\/services\/poseAnalysisApi'\)\.SwingBiomechanics/.test(store) &&
       /setShotBiomechanics:/.test(store) && /setShotClubArc:/.test(store) &&
       // capture stores this swing's biomech on its shot
-      /useSwingSessionStore\.getState\(\)\.setShotBiomechanics\(sessionId, shotId, bio\)/.test(sm) &&
+      // 2026-10-05 — the orchestrator's shot run stores each swing's body read on its shot
+      /store\.setShotBiomechanics\(input\.sessionId, input\.shotId, biomech\);/.test(read('services/swing/orchestrator/shotDetail.ts')) && void sm === undefined &&
       // detail: selection + active biomech + shot follows selection + lazy backfill (bounded window)
       /const \[selectedShotIdx, setSelectedShotIdx\] = useState\(0\)/.test(detail) &&
       /const shot = session\?\.shots\[selectedShotIdx\]/.test(detail) &&
       /const activeBiomech =/.test(detail) &&
       /if \(idx >= 0\) setSelectedShotIdx\(idx\)/.test(detail) &&
-      /setShotBiomechanics\(swing_id, selShot\.id, biomech\)/.test(detail) &&
-      /startMs: wStart, endMs: wEnd/.test(detail)
+      /return requestShotDetail\(swing_id, selShot\.id, \{ arc: showTrace \}\);/.test(detail) &&
+      /startMs: shot\.clipStartSeconds \* 1000, endMs: shot\.clipEndSeconds \* 1000/.test(read('services/swing/orchestrator/shotDetail.ts'))
     );
   })(),
   'a multi-swing library reel is now reviewable one swing at a time — tap a swing and its own window, skeleton, blue-club arc, and Sway/Tilt/Posture/Weight numbers all show (computed lazily, bounded to that swing); the single-swing/primary view is unchanged');
@@ -6350,22 +6294,15 @@ check('Chunk honesty propagates to every swing-judge (not just the live badge)',
     return (
       // Shared contact helper reused everywhere (single source of truth).
       /function deriveContact\(/.test(smSrc) &&
-      /function contactIssue\(/.test(smSrc) &&
-      // Saved report: a contact mishit / no-launch OVERRIDES the motion classification. 2026-08-05 — the
-      // on-device pose read can commit the verdict first (fast/offline), so a contact mishit must STILL
-      // force the overwrite even when the pose verdict already landed (chunk honesty wins over pose).
-      /const contactPi = contactIssue\(contact\);/.test(smSrc) &&
-      /const primaryIssue: PrimaryIssue = contactPi/.test(smSrc) &&
-      // 2026-10-04 — contactPi still forces the overwrite first, unconditionally (the rest of the
-      // condition now also lets a named cloud fault win; see one-swing-one-headline-one-club-arc).
-      /if \(contactPi \|\| \(!contactAlreadySaved && \(cloudNamed \|\| poseVerdictSessionRef\.current !== sessionId\)\)\)/.test(smSrc) &&
+      // 2026-10-05 — the saved report's contact override is the READ's rule for every swing
+      // (services/swing/contactVerdict.applyContactHonesty), not a SmartMotion-only branch.
+      /export function contactMishitIssue\(/.test(read('services/swing/contactVerdict.ts')) &&
+      /primary_issue = applyContactHonesty\(primary_issue,/.test(read('services/videoUpload.ts')) &&
       // CNS learns the evidence-gated / contact fault, NOT the 'none'-biased detected_issue.
       /recordSwingFault\(\{ fault: learnedFault/.test(smSrc) &&
-      /contactMishitFaultId\(contact\.reportedMishit\)/.test(smSrc) &&
-      // Multi-swing report re-persists over the COMPLETE cache (was swing-0 only).
-      // 2026-09-01 — was /F2\b/, which matched only the comment naming the fix. Assert the
-      // re-classification over the COMPLETE cache instead.
-      /\.map\(\(\[idx2, an\]\) => \(\{ swing_id: `smresolve-swing-\$\{idx2\}`/.test(readCode('app/swinglab/smartmotion.tsx')) &&
+      /\? contactMishitFaultId\(m\)/.test(smSrc) &&
+      // The session report is classified over EVERY swing the run read.
+      /let primary_issue = classifySession\(results\);/.test(read('services/videoUpload.ts')) &&
       // Spoken narration + summary carry per-swing contact so they match the badge.
       /deriveVerdict\(a, false, deriveContact\(a\)\)/.test(smSrc) &&
       // Drill Check never grades a mishit 'got_it'.
@@ -6395,7 +6332,9 @@ check('Chunk honesty PERSISTS: a live-detected duff is written back so it never 
     /contact_read: 'fat'/.test(smSrc) &&
     // Session headline only UPGRADES a non-contact issue to the duff verdict.
     /!\(curIssueId && CONTACT_ISSUE_IDS\.includes\(curIssueId\)\)/.test(smSrc) &&
-    /const duff = contactIssue\(\{ ballLaunched: false, reportedMishit: null \}\)/.test(smSrc)
+    /store\.setSessionAnalysis\(sessionId, noLaunchIssue\(\), null\);/.test(smSrc) &&
+    // ...and the run's read KEEPS it, whether the duff lands before or after the read.
+    /if \(storedIssueId === 'no_launch'\) return noLaunchIssue\(\);/.test(read('services/swing/contactVerdict.ts'))
   ),
   'the lazily-computed ball-departure duff is persisted onto the per-shot row + session report when it resolves, so reopening the swing shows the chunk instead of a clean read — and the write is upgrade-only so it never overwrites a named mishit or downgrades a real launch');
 
@@ -6501,7 +6440,9 @@ check('Feels engine wired (capture → caddie brain reconcile)',
   "player feel → swing-question reconciles it with the real read + coaches back");
 
 check('Putt mode: explicit + decoupled from sticky club (no misroute)',
-  /const isPutt = puttMode/.test(smSrc) && /analyzePutt\(/.test(smSrc) &&
+  // 2026-10-05 — a putt is TAGGED on the saved swing and THE run's read routes it to the putt analyzer.
+  /const isPutt = puttMode/.test(smSrc) && /tag: puttModeRef\.current \? \('putt' as const\) : null,/.test(smSrc) &&
+    /putting\.analyzePutt\(/.test(read('services/videoUpload.ts')) &&
     /PUTT MODE/.test(smSrc) && /puttModeRef\.current/.test(smSrc) &&
     !/isPutt = club === 'PT'/.test(smSrc),
   'putt mode is explicit per-recording state (not derived from persisted club), routes to putt analysis + PUTT MODE pill; a sticky putter no longer sends swings to the putt analyzer');
@@ -6573,7 +6514,7 @@ check('startRecording clears prior-swing results (no stale data in loop)',
       // a cache hit. selectSwing's staleness guard compares the index, which is identical.
       'ballDepartureCacheRef.current = {}',
       'ballPathCacheRef.current = {}',
-      'clubPathCacheRef.current = {}',
+      // (the club arc is stored per SESSION by the run since 10-05 — a new recording is a new session)
       'analysisCacheRef.current = {}',
     ].every((call) => body.includes(call));
   })(),
@@ -7661,9 +7602,12 @@ check('SmartMotion warms the analyzer on open (warm first analysis)',
 
 // 2026-06-10 — Ball area threaded into the SWING read (was putt-only).
 check('Ball/stand anchor wired into swing analysis',
-  /ball_area_norm: draftBallRef\.current \?\? ballAreaRef\.current \?\? null/.test(smSrc) &&
-    /ball_area_norm: ballAreaRef\.current \?\? draftBallRef\.current \?\? null/.test(smSrc) &&
-    /target_norm: targetPointRef\.current \?\? null/.test(smSrc),
+  // 2026-10-05 — SmartMotion writes the ball/target onto the saved swing BEFORE starting the run, and the
+  // one read passes the session's anchor for every swing.
+  smSrc.indexOf('setSessionBallArea(sid, draftBallRef.current, ballSourceRef.current)') > 0 &&
+    smSrc.indexOf('setSessionBallArea(sid, draftBallRef.current, ballSourceRef.current)') < smSrc.indexOf('const readP = runSwingAnalysis(sid, {') &&
+    /ball_area_norm: ballAreaCtx,/.test(read('services/videoUpload.ts')) &&
+    /target_norm: targetCtx,/.test(read('services/videoUpload.ts')),
   'both swing analyzeSwing calls pass the ball/target anchor (read via refs) so the analyzer uses the setup prior');
 
 // 2026-06-10 — Foot-placement guides removed (read goofy; analysis never used them).
@@ -7863,7 +7807,8 @@ check('Pose/biomech pipeline is angle-aware (DTL vs FO)',
     // It used to be threaded down from a screen toggle the player could get wrong in daylight. Now the
     // caller passes null and the engine infers it from the swing's own frames, so assert exactly that:
     // the screen hands over nothing, and the engine's inference path is reachable.
-    /computeBiomechanicsFromFrames\(frames, null/.test(smSrc) &&
+    // 2026-10-05 — SmartMotion saves no angle on the swing, so the body read passes null and infers it.
+    !/angleOverride:/.test(smSrc) && /s\.upload\?\.angleOverride \?\? null/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
     /angle = inferCameraAngle\(frames\);/.test(poseApiSrc) &&
     // ...and a confident disagreement still overrides an explicitly-supplied label (uploads, coach
     // lesson), which is the invariant that made the toggle redundant in the first place.
@@ -7961,9 +7906,11 @@ check('Handicap tiers: single source of truth + behaviour-neutral refactor',
 check('Analyzer gets handedness + CNS-learned tendencies pretext',
   /handedness\?: 'left' \| 'right' \| null/.test(poseSrc) &&
     /Swinger is \$\{ctx\.handedness\.toUpperCase\(\)\}-HANDED/.test(swingApiSrc) &&
-    /handedness: swingerHandedness/.test(smSrc) &&
-    /dominant_miss: cnsTend\.dominantMiss \?\? profile\.dominantMiss/.test(smSrc) &&
-    /prior_issues: cnsTend\.recentFaults\.length > 0/.test(smSrc),
+    // 2026-10-05 — the one read, for every swing: the tagged golfer's hand, and (for the account holder's
+    // own swings) the CNS's learned miss + recent faults.
+    /handedness: swinger\.handedness,/.test(read('services/videoUpload.ts')) &&
+    /dominant_miss: cnsTend\.dominantMiss \?\? swinger\.dominantMiss,/.test(read('services/videoUpload.ts')) &&
+    /\? \(cnsTend\.recentFaults\.length > 0 \? cnsTend\.recentFaults : undefined\)/.test(read('services/videoUpload.ts')),
   'the swing analyzer is told handedness (mirrors direction-dependent faults) and the CNS learned dominant-miss + recent faults as soft priors — closing the brain→analysis loop, with the visual read still winning');
 
 // ─── Smart freehand annotation (geometry fitting) ───────────────────────────────
@@ -8826,7 +8773,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // analyzing_* but NOT 'pending'). Fix: the non-terminal watchdog now includes 'pending' and
     // flips to failed→Re-analyze; plus an early manual retry appears after 30s of pending.
     /const nonTerminal = \(st: string \| undefined\) =>\s*st === 'pending'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
-      /if \(nonTerminal\(cur\)\) \{[\s\S]{0,140}setSessionAnalysisStatus\(swing_id, 'failed'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      // 2026-10-05 — still flips to failed, but never under a run that is still LIVE (it settles itself).
+      /if \(!nonTerminal\(cur\)\) return;[\s\S]{0,500}?setSessionAnalysisStatus\(swing_id, 'failed'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /const \[pendingSlow, setPendingSlow\] = useState\(false\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /pendingSlow && \(/.test(read('app/swinglab/swing/[swing_id].tsx')),
     'a stuck-pending upload analysis recovers: an early "tap to retry" surfaces at 30s and the watchdog flips it to failed→Re-analyze — the "Analyzing your swing" spinner can no longer run forever');
@@ -8884,9 +8832,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       // `bodyBounds` argument after it broke a guard about ABORT BEHAVIOUR. What must hold is that
       // the abort is genuine cancellation and not the analysis-truncating isPlaying gate; the
       // closing punctuation is not the invariant. [[guards-that-copy-the-line-they-guard]]
-      /shouldAbort: \(\) => cancelled\b/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      // 2026-10-05 — the one club-arc runner aborts on its RUN's signal (cancelled / superseded), never playback.
+      /shouldAbort: \(\) => signal\.aborted/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
       !/shouldAbort: \(\) => (?:isPlaying|playing)\b/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
-      /PRIVATE COPY \(distinct file handle\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       // grab-frame still pauses before extracting; extraction routed through the queue wrapper
       /await videoRef\.current\?\.pauseAsync\(\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /from '\.\.\/\.\.\/\.\.\/utils\/videoThumbnail'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
@@ -9058,8 +9006,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'EditableCageTargets drags each marker with a PanResponder, smooth via local state, committing to the session only on release; wired draggable in setup (draftBall) and review (session) — so a box the Samsung record-crop nudged off can be fixed on the real recorded frame and stick');
 
   check('SmartMotion: multi-swing reads vary — earlier-swing faults drive a distinct secondary read',
-    /priorFaultSet\.add\(f\)/.test(smSrc2) &&
-      /prior_issues: sessionPriorFaults\.length > 0 \? sessionPriorFaults : undefined/.test(smSrc2) &&
+    // 2026-10-05 — the one read passes swing 2+ the distinct faults already found this session.
+    /const sessionFaults = \[\.\.\.new Set\(results/.test(read('services/videoUpload.ts')) &&
+      /: \(sessionFaults\.length > 0 \? sessionFaults : undefined\);/.test(read('services/videoUpload.ts')) && void smSrc2 === undefined &&
       /ctx\.swing_number === 'number' && ctx\.swing_number > 1/.test(swingApiSrc) &&
       /actively look for a genuinely distinct secondary fault/.test(swingApiSrc),
     'swing 2+ passes the distinct faults already found this session; the server treats them (only when swing_number>1) as a "confirm a repeat only with clean evidence, else surface a distinct secondary fault" directive — so four swings stop echoing one identical fault, while swing 1 keeps the neutral cross-session prior');
@@ -9092,7 +9041,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       const liveInfer = /inferCameraAngle\(liveAngleFramesRef\.current as never\)/.test(smSrc2)
         && /liveAngleFramesRef\.current = \[\.\.\.liveAngleFramesRef\.current, frame\]\.slice\(-4\)/.test(smSrc2);
       // ...and the recorded swing's own frames get the final word, ungated.
-      const swingWins = /if \(\(bio\.angle === 'face_on' \|\| bio\.angle === 'down_the_line'\) && bio\.angle !== angleRef\.current\) \{/.test(smSrc2);
+      const swingWins = /if \(bio && \(bio\.angle === 'face_on' \|\| bio\.angle === 'down_the_line'\) && bio\.angle !== angleRef\.current\) \{/.test(smSrc2);
       return twoWay && noExplicitFlag && liveInfer && swingWins;
     })(),
     'the mode control is Full swing / Putting only; the angle is inferred live from the framing pose and finally from the swing frames, with no user flag able to suppress the correction');
@@ -9293,9 +9242,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // still succeed was killed and shown as "Analysis timed out". The guard was green *because*
     // the bug was present, and went red the moment it was fixed. It now asserts the DERIVED
     // constant, so the number can never again disagree with the budgets it wraps.
-    /const hangGuardMs = ANALYSIS_WORST_CASE_MS;/.test(smA) &&
-      /resolve\(\{ kind: 'error', message: 'Analysis timed out' \}\), hangGuardMs\)/.test(smA) &&
-      /if \(result\.kind === 'ok'\)/.test(smA),
+    // 2026-10-05 — the screen awaits THE run; the run's read budget is derived from ANALYSIS_WORST_CASE_MS
+    // (per batch of swings), so no screen keeps a hang guard of its own.
+    /const readP = runSwingAnalysis\(sid, \{/.test(smA) && !/hangGuardMs/.test(smA) &&
+      /const one = \(require\('\.\.\/\.\.\/poseDetection'\)[\s\S]{0,80}\.ANALYSIS_WORST_CASE_MS;/.test(read('services/swing/orchestrator/uploadRun.ts')),
     'one awaited analysis call with a DERIVED hang guard (ANALYSIS_WORST_CASE_MS); the server-side tier retry handles cold-start, so the client no longer double-waits');
 
   check('Swing analysis: tempo derives for ALL swings (acoustic + video), honest impact source, degrades not fabricates',
@@ -9427,7 +9377,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // 2026-06-27 — refreshed to current caps (post provider-migration the main
     // analysis runs Gemini maxOutputTokens 800 + OpenAI max_tokens 1000; the old
     // "650" trim is no longer in the code). Still asserts output is bounded.
-    /maxOutputTokens: 800/.test(swingApiSrc2) && /max_tokens: 1000/.test(swingApiSrc2),
+    // 2026-10-05 — Gemini 2.5's thinking tokens count against maxOutputTokens: at 800 the JSON was cut off
+    // and every read came back non_json. Thinking is OFF for this call and the cap is 1200.
+    /maxOutputTokens: 1200,[^}\n]*thinkingConfig: \{ thinkingBudget: 0 \}/.test(swingApiSrc2) && /max_tokens: 1000/.test(swingApiSrc2),
     'the swing-analysis model calls cap output (Gemini 800, OpenAI 1000) — bounded cost; the JSON-only one-sentence schema keeps real usage well under the cap');
 
   const listenSrc = read('services/listeningSession.ts');
@@ -10267,11 +10219,11 @@ check('Swing points: upload pose pass is impact-anchored + honest moments/tempo 
     const det = read('services/poseDetection.ts');
     return (
       /swingTimeSec: t/.test(det) &&                                              // locator RETURNS the impact
-      /poseImpactMs = loc\.swingTimeSec \* 1000/.test(up) &&                      // locate-once threads it
-      /locatedImpactSec === 'number'/.test(up) &&                                 // persisted anchor read
+      /impactMs = loc\.swingTimeSec \* 1000/.test(read('services/swing/orchestrator/shotDetail.ts')) &&                      // locate-once threads it (10-05: the shot run)
+      /locatedImpactSec === 'number'/.test(read('services/swing/orchestrator/shotDetail.ts')) &&                                 // persisted anchor read
       /const faultTs = faultIdx != null && faultIdx >= 0/.test(up) &&             // only the fault moment persists
       !/setShotIssueTimestamps\(sessionId, swing\.id, r\.frame_timestamps_sec\)/.test(up) && // raw sample times DEAD
-      /tempoFromPoseFrames\(biomech\.frames, poseImpactMs, 'video'\)/.test(up) &&  // honest tempo in the verdict
+      /tempoFromPoseFrames\(bio\.frames, impactMs, 'video'\)/.test(read('services/swing/orchestrator/uploadRun.ts')) &&  // honest tempo in the verdict (the run's body stage)
       !/tempoFromBiomechanics\(biomech\)/.test(up) &&                              // fabricated-constant path DEAD
       // 2026-08-19 — this line used to assert the practice-swing gate's SOURCE TEXT was PRESENT, so it
       // went green on the defect and would have gone red on the fix. Removing the gate is the fix (the
@@ -10287,8 +10239,8 @@ check('Swing points: upload pose pass is impact-anchored + honest moments/tempo 
         const cage = read('app/practice-session/summary.tsx');
         const sm = read('app/swinglab/smartmotion.tsx');
         return (
-          !/setShotIssueTimestamps\(session\.id, swing\.id, r\.frame_timestamps_sec\)/.test(cage) &&
-          /const faultTs = faultIdx != null && faultIdx >= 0/.test(cage) &&
+          // 2026-10-05 — the cage summary reads through THE run, whose read persists only the fault moment.
+          !/\.setShotIssueTimestamps\(session/.test(cage) && /runSwingAnalysis\(session\.id\)/.test(cage) &&
           !/const confident = swings\.filter\(sw => sw\.confidence !== 'low'\)/.test(sm) &&
           /\[smartmotion\] re-analyze segmentation/.test(sm)
         );
@@ -10878,7 +10830,7 @@ check('Logic universal: voice yardage + putts + swing-caddie match every other p
       /tryAnswerOpenQuestion\(/.test(read('hooks/useCaddieTabMic.ts')) &&
       // 2026-09-01 — the 'cage' pillar is now 'practice'. It covers ALL swing work, not a venue.
       /getActiveCaddieForPillar\('practice'\)/.test(sm) &&                      // #3 narration = active caddie
-      /caddie_name: analysisCaddie/.test(sm) && !/caddie_name: caddiePersonality/.test(sm)
+      /caddie_name: getCaddieName\(analysisCaddieRef\.current\)/.test(sm) && !/caddie_name: caddiePersonality/.test(sm)
     );
   })(),
   'asking how far / logging putts / hearing your swing read is the SAME on the voice shortcut as on the screen and the brain — no divergent path');
@@ -11371,7 +11323,8 @@ check('LOCK: club trace ZOOMS to the player (pose-derived crop) instead of downs
      */
     const owner = /export function bodyBoundsFromPose/.test(read('services/swing/bodyBounds.ts'));
     const noScreenCopy = !/^function bodyBoundsFromPose/m.test(sm);
-    const callers = ['app/swinglab/smartmotion.tsx', 'app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts'];
+    // 2026-10-05 — ONE caller: the orchestrator's shot run, which every screen asks.
+    const callers = ['services/swing/orchestrator/shotDetail.ts'];
     const everyCallerCrops = callers.every((f) => {
       const src = read(f);
       const calls = src.split('detectClubPath({').slice(1);
@@ -11716,26 +11669,19 @@ check('LOCK: no third-party (Golfshot / Golf Pad) hole imagery is bundled',
 // FAULT. i.e. on a GOOD swing. The better the swing, the more likely it showed a failure banner.
 check('LOCK: a measured on-device read clears the transient cloud error, fault or no fault',
   (() => {
-    const sm = readCode('app/swinglab/smartmotion.tsx');
-    // the clear must happen BEFORE any fault-shaped early return
-    const clearIdx = sm.indexOf('if (biomech) setAnalysisError(null);');
-    const piIdx = sm.indexOf('const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, tempo));');
-    const clearsFirst = clearIdx > 0 && piIdx > 0 && clearIdx < piIdx;
     /**
-     * 2026-08-25 — the second clause used to match the COMMENT "no fault to name — the measured read
-     * stands on its own". A comment cannot tell you the code still does it; deleting the early
-     * return while leaving the sentence would have passed. Assert the STRUCTURE instead: in the
-     * no-fault path, the session is marked ok and the function returns BEFORE the fault-recording
-     * path below can run.
+     * 2026-10-05 — the on-device verdict is THE run's (uploadRun 'pose'), for every saved swing: a fault
+     * the body read names becomes the headline, and a swing it measured with no fault is recorded ok
+     * ("No clear fault", low confidence) — never failed. SmartMotion shows an error only when the RUN
+     * settled on failure, so a transient cloud error can no longer stick on screen over a measured read.
      */
-    const okIdx = sm.indexOf("setSessionAnalysisStatus(sessionId, 'ok');");
-    const returnIdx = sm.indexOf('return;', okIdx > 0 ? okIdx : 0);
-    const recordsFaultIdx = sm.indexOf('store.setSessionAnalysis(sessionId, pi, null);');
-    const statusFixed =
-      /if \(biomech\) \{[\s\S]{0,220}?setSessionAnalysisStatus\(sessionId, 'ok'\);/.test(sm) &&
-      okIdx > 0 && returnIdx > okIdx &&
-      recordsFaultIdx > returnIdx;          // the no-fault path exits before the fault path
-    return clearsFirst && statusFixed;
+    const run = readCode('services/swing/orchestrator/uploadRun.ts');
+    const sm = readCode('app/swinglab/smartmotion.tsx');
+    const names = /if \(pi\) \{[\s\S]{0,300}?setSessionAnalysisStatus\(input\.sessionId, 'ok'\);/.test(run);
+    const noFaultOk = /issue_id: 'no_clear_fault',[\s\S]{0,700}?setSessionAnalysisStatus\(input\.sessionId, 'ok'\);/.test(run);
+    const screenWaits = /if \(cageSession\?\.analysis_status === 'failed'\) setAnalysisError\(/.test(sm) &&
+      !/setAnalysisError\(msg\)/.test(sm);
+    return names && noFaultOk && screenWaits;
   })(),
   'transient cold-cloud error cleared by any measured read; a no-fault swing is recorded ok, not failed');
 
@@ -12238,7 +12184,9 @@ check('LOCK: the analysis hang guard is derived, and larger than the budgets it 
      */
     const screen = readCode('app/swinglab/smartmotion.tsx');
     const pose = readCode('services/poseDetection.ts');
-    const derived = /hangGuardMs\s*=\s*ANALYSIS_WORST_CASE_MS/.test(screen)
+    // 2026-10-05 — the guard is THE run's read budget now, derived per batch of swings from the constant.
+    const derived = /perSwing \* Math\.ceil\(swings \/ 3\)/.test(readCode('services/swing/orchestrator/uploadRun.ts'))
+      && /ANALYSIS_WORST_CASE_MS/.test(readCode('services/swing/orchestrator/uploadRun.ts'))
       && !/hangGuardMs\s*=\s*\d/.test(screen);
     const sums = /ANALYSIS_WORST_CASE_MS\s*=[\s\S]{0,320}?LOCATE_TIMEOUT_MS[\s\S]{0,320}?REQUEST_TIMEOUT_MS/.test(pose);
     const num = (re: RegExp) => { const m = pose.match(re); return m ? Number(m[1].replace(/_/g, '')) : NaN; };
@@ -12302,7 +12250,9 @@ check('LOCK: a read built on a failed locate is FLAGGED, never presented as a cl
 
     const reports = /onAbort\?\.\(abortCause \?\? 'unknown'\)/.test(pose);
     const carries = /locate_degraded: locateDegraded/.test(pose);
-    const captured = /setLocateDegraded\(result\.locate_degraded \?\? null\)/.test(screen);
+    // 2026-10-05 — carried from THE run's read per swing (ReadExtras.onShotRead), shown for the swing on screen.
+    const captured = /setLocateDegraded\(locateDegradedByShotRef\.current\[idx\] \?\? null\)/.test(screen) &&
+      /onShotRead\?\.\(swing\.id, r\.analysis, r\.locate_degraded \?\? null\)/.test(readCode('services/videoUpload.ts'));
     const rendered = /locateDegraded \?/.test(screen) && saysToPlayer(screen, 'Rough read');
     const cleared = /setLocateDegraded\(null\)/.test(screen);
     return reports && carries && captured && rendered && cleared;
@@ -14483,8 +14433,8 @@ check('LOCK: the ANALYSIS path has one ordered budget too — server < platform 
     const derived =
       /export const ANALYSIS_WORST_CASE_MS =\s*\n?\s*DURATION_PROBE_CEILING_MS \+/.test(client) &&
       /REQUEST_TIMEOUT_MS;/.test(client) &&
-      // the screen consumes the constant, not a number of its own
-      /ANALYSIS_WORST_CASE_MS/.test(read('app/swinglab/smartmotion.tsx')) &&
+      // the run's read budget consumes the constant, not a number of its own (2026-10-05)
+      /ANALYSIS_WORST_CASE_MS/.test(read('services/swing/orchestrator/uploadRun.ts')) &&
       !/hangGuardMs = [0-9_]+/.test(read('app/swinglab/smartmotion.tsx'));
     return ordered && derived;
   })(),
@@ -16917,9 +16867,13 @@ check(
     'CLUB ARC: a video-located swing is refused as an anchor on the live screen',
     // 2026-10-04 — the heard strike first, else a pose impact that impactAnchorMs accepts (it refuses
     // an 'estimated' fraction-of-window label). Never the video-located / synthesized strikeMs.
-    /const heardStrikeMs = \(seg\.peakDb \?\? 0\) !== 0 && typeof seg\.strikeMs === 'number' && !seg\.synthesized/
-      .test(readCode('app/swinglab/smartmotion.tsx')) &&
-      /const segStrikeMs = clubArcAnchorMs\(\{\s*detectionMethod: heardStrikeMs != null \? 'audio_transient' : 'manual',/.test(readCode('app/swinglab/smartmotion.tsx')),
+    // 2026-10-05 — the capture marks only a HEARD strike as one when it saves the swing (single swing: the
+    // impact only when heard; multi: audio_transient only for peakDb != 0), and the one runner anchors on
+    // detectionMethod — so a video-located or synthesized strike never reaches it as a strike.
+    /const heard = \(segment\.peakDb \?\? 0\) !== 0 && !segment\.synthesized;/.test(readCode('app/swinglab/smartmotion.tsx')) &&
+      /heard \? segment\.strikeMs \/ 1000 : undefined/.test(readCode('app/swinglab/smartmotion.tsx')) &&
+      /detectionMethod: \(s\.peakDb \?\? 0\) !== 0 \? 'audio_transient' as const : 'manual' as const/.test(readCode('app/swinglab/smartmotion.tsx')) &&
+      /detectionMethod: shot\.detectionMethod,/.test(readCode('services/swing/orchestrator/shotDetail.ts')),
     'peakDb === 0 marks a video-located swing and synthesized marks the whole-clip 0.6*duration guess — neither is a strike to cluster on',
   );
 }
@@ -17615,13 +17569,14 @@ check(
   const cq = readCode('services/captureQuality.ts');
 
   check('CAPTURE: when the clubhead could not be read, the caddie says so — once, and only for that reason',
-    /r\?\.rejected\?\.reason === 'too_few'/.test(sm) &&
-      /!useCaptureEngineStore\.getState\(\)\.clubheadNoticeShown/.test(sm) &&
-      /markClubheadNoticeShown\(\)/.test(sm) &&
+    // 2026-10-05 — moved with the arc into the one runner (services/swing/orchestrator/shotDetail).
+    /arc\.rejected\?\.reason === 'too_few'\) sayClubheadUnreadableOnce\(\)/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
+      /if \(ce\.getState\(\)\.clubheadNoticeShown\) return;/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
+      /markClubheadNoticeShown\(\)/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
       /clubheadNoticeShown: s\.clubheadNoticeShown/.test(store) &&   // persisted, so it cannot repeat
       /export function clubheadUnreadableNote/.test(cq) &&
       // ...and it must NOT fire on the mis-detection reasons
-      !/reason === 'cluster'/.test(sm) && !/reason === 'scatter'/.test(sm),
+      !/reason === 'cluster'/.test(read('services/swing/orchestrator/shotDetail.ts')) && !/reason === 'scatter'/.test(read('services/swing/orchestrator/shotDetail.ts')),
     "the `too_few` refusal is spoken in the caddie's voice — what he CAN read first, then what he could not, then the fix — once per install and never for cluster/scatter, which are our mis-detections rather than the player's capture");
 
   check('CAPTURE: the frame-rate ask comes BEFORE the first swing, and claims nothing about their phone',

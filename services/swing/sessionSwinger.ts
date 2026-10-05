@@ -14,7 +14,36 @@
  *   member → that family member (their hand, their approximate handicap, their name — not Tim's miss)
  *   guest  → the name given; handedness unknown (null → the pose geometry decides), no handicap
  */
-import { derivePlayerId, OTHER_PLAYER_ID, resolveSwingerToPlayerId, type SwingSession } from '../../store/swingSessionStore';
+import { OTHER_PLAYER_ID, type SwingSession } from '../../store/swingSessionStore';
+
+/**
+ * The ACCOUNT HOLDER's player id — never the active family member (sweep 2: derivePlayerId returns the
+ * active member first, so a swing tagged "Matt" analysed while Matt was active read as Tim's own, and
+ * Tim's swing analysed while a member was active fell through to "guest").
+ */
+function accountHolderId(): string {
+  try {
+    const email = (require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore')).usePlayerProfileStore.getState().email;
+    if (email && email.trim()) return email.trim().toLowerCase();
+  } catch { /* */ }
+  return 'account_holder';
+}
+
+/** From the upload's swinger NAME when the session predates player_id: me / a family member / a guest. */
+function idFromSwingerName(name: string | null | undefined): string {
+  const n = (name ?? '').trim().toLowerCase();
+  if (!n || n === 'me') return accountHolderId();
+  try {
+    const fam = (require('../../store/familyStore') as typeof import('../../store/familyStore')).useFamilyStore.getState();
+    const hit = (fam.members ?? []).find((m) => !(m as { archived?: boolean }).archived && (m.firstName ?? '').trim().toLowerCase() === n);
+    if (hit) return hit.id;
+  } catch { /* */ }
+  try {
+    const self = ((require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore')).usePlayerProfileStore.getState().name ?? '').trim().toLowerCase();
+    if (self && self === n) return accountHolderId();
+  } catch { /* */ }
+  return OTHER_PLAYER_ID;
+}
 
 export type SessionSwinger = {
   who: 'self' | 'member' | 'guest';
@@ -26,12 +55,12 @@ export type SessionSwinger = {
 };
 
 export function swingerForSession(session: Pick<SwingSession, 'player_id' | 'upload'> | null | undefined): SessionSwinger {
-  const pid = session?.player_id ?? resolveSwingerToPlayerId((session?.upload as { swinger?: string | null } | undefined)?.swinger ?? null);
+  const pid = session?.player_id ?? idFromSwingerName((session?.upload as { swinger?: string | null } | undefined)?.swinger ?? null);
   const profile = (() => {
     try { return (require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore')).usePlayerProfileStore.getState(); }
     catch { return null; }
   })();
-  if (!pid || pid === derivePlayerId()) {
+  if (!pid || pid === accountHolderId() || pid === 'account_holder') {
     const h = profile?.handedness;
     return {
       who: 'self',

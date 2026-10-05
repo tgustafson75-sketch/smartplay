@@ -21,44 +21,57 @@ const code = (rel: string) => fs.readFileSync(path.join(__dirname, '..', '..', r
 const sm = code('app/swinglab/smartmotion.tsx');
 const detail = code('app/swinglab/swing/[swing_id].tsx');
 
+/**
+ * 2026-10-05 (Tim: "one clean, fast, and correct analysis path that the orchestrator makes sure is
+ * correct") — the fix for all of the above was not five locks but ONE writer: SmartMotion, the Swing
+ * Library and the cage summary all go through the orchestrator's run, and the screens only draw.
+ */
+const runner = code('services/swing/orchestrator/shotDetail.ts');
+const run = code('services/swing/orchestrator/uploadRun.ts');
+const read = code('services/videoUpload.ts');
+
 describe('one swing, one headline, one club arc', () => {
-  it('the pose pass does not re-run when it sets the angle', () => {
+  it('the body read is drawn from the store — setting the angle re-runs nothing', () => {
     const at = sm.indexOf('setAngle(bio.angle);');
     expect(at).toBeGreaterThan(-1);
     const deps = sm.slice(at).match(/\}, \[([^\]]*)\]\);/)?.[1] ?? '';
-    expect(deps).toContain('selectedSwing');
-    expect(deps.split(',').map((d) => d.trim())).not.toContain('angle');
+    expect(deps.split(',').map((d) => d.trim())).toEqual(['selectedShotBio']);
   });
 
-  it('the screen has exactly one club-arc runner, and it saves swing 1', () => {
-    expect((sm.match(/detectClubPath\(/g) ?? []).length).toBe(1);
-    // 2026-10-04 (sweep) — saved once from wherever swing 1's arc lands: a fresh read, the cache, or the
-    // session appearing after the read.
-    expect(sm).toMatch(/if \(selectedSwing === 0\) persistSwing0Arc\(clubCacheKey\);\s*return;/);           // cache hit
-    expect(sm).toMatch(/if \(r\) clubArcFrameRef\.current\[clubCacheKey\][\s\S]{0,200}?if \(selectedSwing === 0\) persistSwing0Arc\(clubCacheKey\);/); // fresh read
-    expect(sm).toMatch(/persistSwing0Arc\(`\$\{clipUri\}\|0\|/);                                              // session appears later
-    expect(sm).toMatch(/setSessionClubArc\(sid, pts \?\? \[\]/);
+  it('there is exactly one club-arc runner in the app, and it saves the shot (and swing 1 on the session)', () => {
+    expect((sm.match(/detectClubPath\(/g) ?? []).length).toBe(0);
+    expect((detail.match(/detectClubPath\(/g) ?? []).length).toBe(0);
+    expect((runner.match(/detectClubPath\(/g) ?? []).length).toBe(1);
+    expect(runner).toMatch(/store\.setShotClubArc\(input\.sessionId, input\.shotId, pts, frame, arc\.source\);\s*if \(first\) store\.setSessionClubArc\(input\.sessionId, pts, frame, arc\.source\);/);
   });
 
-  it('a named cloud fault always takes the headline and is locked', () => {
-    expect(sm).toMatch(/const cloudNamed = rolled != null && rolled\.issue_id !== 'smartmotion_observation';/);
-    expect(sm).toMatch(/if \(contactPi \|\| \(!contactAlreadySaved && \(cloudNamed \|\| poseVerdictSessionRef\.current !== sessionId\)\)\)/);
-    expect(sm).toMatch(/if \(contactPi \|\| cloudNamed\) cloudVerdictLockRef\.current = sessionId;/);
-    // and the on-device re-commit respects the lock
-    expect(sm).toMatch(/cloudVerdictLockRef\.current === sessionId\) return;/);
+  it('SmartMotion writes no verdict of its own — only the camera\'s ball-never-left evidence', () => {
+    expect((sm.match(/setSessionAnalysis\(/g) ?? []).length).toBe(1);
+    expect(sm).toMatch(/store\.setSessionAnalysis\(sessionId, noLaunchIssue\(\), null\);/);
+    expect(sm).not.toMatch(/setSessionAnalysisStatus\(/);
+    expect(sm).not.toMatch(/\banalyzeSwing\(/);
+    expect(sm).toMatch(/runSwingAnalysis\(sid, \{/);
   });
 
-  it('a duff written after the save is locked against the tempo re-commit', () => {
-    expect(sm).toMatch(/store\.setSessionAnalysis\(sessionId, duff, null\);\s*cloudVerdictLockRef\.current = sessionId;/);
+  it('the read applies contact honesty for every swing, and keeps a strike the camera saw', () => {
+    expect(read).toMatch(/primary_issue = applyContactHonesty\(primary_issue, results\.map\(r => r\.analysis\.contact_read\), cur\?\.feel_note, cur\?\.primary_issue\?\.issue_id\);/);
+    const { applyContactHonesty } = require('../../services/swing/contactVerdict') as typeof import('../../services/swing/contactVerdict');
+    const fault = { issue_id: 'over_the_top' } as never;
+    expect(applyContactHonesty(fault, ['clean'], null, 'no_launch')?.issue_id).toBe('no_launch');
+    expect(applyContactHonesty(fault, ['clean'], 'felt a bit fat', null)?.issue_id).toBe('heavy_contact');
+    expect(applyContactHonesty(fault, [null, 'thin'], null, null)?.issue_id).toBe('thin_contact');
+    expect(applyContactHonesty(fault, ['clean'], null, 'over_the_top')?.issue_id).toBe('over_the_top');
+    // and the body read's fallback verdict never replaces it either
+    expect(run).toMatch(/if \(s\.analysis_status !== 'ok' && s\.primary_issue\?\.issue_id === 'no_launch'\) \{[\s\S]{0,200}setSessionAnalysisStatus\(input\.sessionId, 'ok'\);\s*return true;/);
   });
 
-  it('the detail screen club arc is not restarted by play/pause, and a found arc is saved', () => {
-    const at = detail.indexOf('const shotArc = shot?.club_arc');
+  it('the detail screen asks the run, keyed on the shot — play/pause restarts nothing', () => {
+    const at = detail.indexOf('return requestShotDetail(swing_id, selShot.id, { arc: showTrace });');
     expect(at).toBeGreaterThan(-1);
-    const deps = detail.slice(at).match(/\}, \[([^\]]*)\]\);/)?.[1] ?? '';
+    const open = detail.indexOf('}, [', at);
+    const deps = detail.slice(open, detail.indexOf(']);\n', open));
     expect(deps).toContain('showTrace');
-    expect(deps.split(',').map((d) => d.trim())).not.toContain('isPlaying');
-    expect(detail).toMatch(/setShotClubArc\(session\.id, shot\.id, pts,/);
+    expect(deps).not.toMatch(/isPlaying/);
   });
 });
 
@@ -98,31 +111,24 @@ describe('every club-arc runner anchors on impact by the one rule', () => {
     return [...src.matchAll(/detectClubPath\(\{([\s\S]*?)\}\)/g)].map((m) => ({ f, args: m[1] }));
   });
 
-  it('finds the runners', () => {
-    expect(calls.map((c) => c.f).sort()).toEqual([
-      'app/swinglab/smartmotion.tsx', 'app/swinglab/swing/[swing_id].tsx', 'app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts',
-    ]);
+  it('finds the one runner', () => {
+    expect(calls.map((c) => c.f)).toEqual(['services/swing/orchestrator/shotDetail.ts']);
   });
 
-  it.each([0, 1, 2, 3])('runner %i passes an impact anchor', (i) => {
-    expect(calls[i].args).toMatch(/impactMs:/);
-  });
-
-  it('pose-built anchors go through clubArcAnchorMs / poseImpactFromFrames', () => {
-    expect(code('services/videoUpload.ts')).toMatch(/const \{ anchorMs: arcAnchorMs, toleranceMs: arcToleranceMs \} = clubArcAnchor\(\{[\s\S]{0,900}?impactMs: arcAnchorMs,\s*toleranceMs: arcToleranceMs,/);
-    expect(sm).toMatch(/const segStrikeMs = clubArcAnchorMs\(\{/);
-    expect(detail).toMatch(/const \{ anchorMs: arcAnchorMs, toleranceMs: arcToleranceMs \} = clubArcAnchor\(\{/);
-    // 2026-10-04 (sweep) — a pose anchor never runs with a heard strike's 0ms slack.
-    expect(sm).toMatch(/heardStrikeMs != null \? anchorToleranceMs\(seg\.confidence, effectiveMode\) : POSE_ANCHOR_TOLERANCE_MS/);
-    expect(detail).toMatch(/toleranceMs: anchorTolMs,/);
-    expect(detail).toMatch(/useMemo\(\(\) => poseImpactFromFrames\(poseFrames\)/);
+  it('it passes the impact anchor and its tolerance, from the shared rule', () => {
+    expect(calls[0].args).toMatch(/impactMs: anchorMs, toleranceMs/);
+    expect(runner).toMatch(/const \{ anchorMs, toleranceMs \} = clubArcAnchor\(\{/);
+    expect(runner).toMatch(/narrowClubPathWindow\(rawStartMs, rawEndMs, anchorMs\)/);
   });
 });
 
 /** 2026-10-04 (sweep) — what the adversarial pass found on the live screen. */
 describe('the review loop and the third headline writer', () => {
-  it('the reel re-persist never replaces a saved strike headline with a swing fault', () => {
-    expect(sm).toMatch(/const strikeSaved = savedIssue != null && CONTACT_ISSUE_IDS\.includes\(savedIssue\);\s*if \(primaryIssue && \(!strikeSaved \|\| CONTACT_ISSUE_IDS\.includes\(primaryIssue\.issue_id\)\)\)/);
+  it('the reel narrates the run\'s reads and re-persists nothing (the run classifies across every swing)', () => {
+    const at = sm.indexOf('const pipelineNarrate = useCallback(');
+    const body = sm.slice(at, sm.indexOf('const selectSwing = useCallback(', at));
+    expect(body).not.toMatch(/setSessionAnalysis|setShotAnalysis|classifySession/);
+    expect(body).toMatch(/runWindowedAnalysis\(uri, segs\[0\], 0\)/);
   });
   it('Play on a clip parked at its end restarts from the swing (Android ENDED never re-fires didJustFinish)', () => {
     expect(sm).toMatch(/if \(atEnd\) await v\?\.playFromPositionAsync\(/);

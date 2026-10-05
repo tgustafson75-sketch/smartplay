@@ -548,6 +548,12 @@ export async function detectClubPath(args: {
    * (services/swing/clubTrackSource) and the vision-model path below is not used at all.
    */
   poseFrames?: readonly import('../poseAnalysisApi').PoseFrame[] | null;
+  /**
+   * 2026-10-05 — the on-device tracker ONLY: no vision fallback. For a swing whose vision answer is
+   * already stored — re-asking the paid model about the same frames cannot change it, but the free
+   * tracker (where it can run) can do better.
+   */
+  trackerOnly?: boolean;
 }): Promise<ClubPathResult | null> {
   const base = apiUrl();
   if (!base) return null;
@@ -605,6 +611,7 @@ export async function detectClubPath(args: {
     const tracked = await trackedClubPath(tempCopy, startMs, endMs, args.poseFrames ?? null, args.sourceFps ?? null, shouldAbort);
     if (tracked) { sharedCopy?.release(); return tracked; }
   } catch { /* fall through to the vision path */ }
+  if (args.trackerOnly) { sharedCopy?.release(); return null; }
 
   // 2026-07-18 (Tim — crash mp4: hard crash to home during swing playback) — extract frames
   // SEQUENTIALLY, not with Promise.all. Firing SAMPLE_COUNT (12) concurrent

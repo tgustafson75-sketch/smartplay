@@ -26,7 +26,7 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { fetchCourseGeometry, getHoleGeometry } from './courseGeometryService';
-import { getLastFix, classifyAccuracy, resolveGreenCoords, resolveTeeCoords } from './smartFinderService';
+import { getLastFix, classifyAccuracy, resolveGreenCoords, resolveTeeCoords, holeLengthYards, holePar } from './smartFinderService';
 // 2026-06-07 (audit N2) — gpsManager's fix carries `speed` (smartFinder's
 // LastFix does not), used for the cart-speed gate below.
 import { getLastFix as getGpsManagerFix } from './gpsManager';
@@ -101,8 +101,18 @@ export function noteManualOverride(): void {
  * chance of leakage through any subscriber path we haven't audited.
  * Subscribers can re-arm later by toggling Settings → Auto Hole Advance.
  */
+function haversineYds(a: LatLng, b: LatLng): number {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h)) * 1.09361;
+}
+
 export function startHoleDetection(): void {
   if (pollTimer) return;
+  // A new round: last round's green-search refusals and attempts do not carry over.
+  try { (require('./holeGeometryDerivation') as typeof import('./holeGeometryDerivation')).resetSeedRejections(); } catch { /* */ }
+  greenDeriveAttempts.clear();
   try {
     const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
     if (!settingsMod.useSettingsStore.getState().autoHoleAdvance) {
@@ -472,6 +482,17 @@ async function ensureGreenForCurrentHole(
   if (greenDeriveAttempts.has(key)) return;
   if (greenForHole(courseId, hole)) return;   // something in the cascade already answers
   if (!isValidGolfCoord(at.lat, at.lng)) return;
+  // 2026-10-05 (sweep 2) — with no tee known, search only while the player is STANDING (≤10y over the
+  // last 20s): a shotgun cart ride to hole 7 searched "hole 1" from every 40y of path, and a moving
+  // seed is never a tee. A player on the tee, or walking up to a shot, stands still.
+  if (!getHoleGeometry(courseId, hole)?.tee && !resolveTeeCoords(hole).tee) {
+    const now = Date.now();
+    const recent = positionHistory.filter((s) => s.ts >= now - 20_000);
+    const spanStart = recent.length ? recent[0].ts : now;
+    const still = recent.length >= 3 && now - spanStart >= 15_000
+      && recent.every((s) => haversineYds(s.loc, at) <= 10);
+    if (!still) return;
+  }
   greenDeriveAttempts.add(key);   // BEFORE any await — a second tick must not start a second search
   const { seedIsFor, seedRejectedNearby } = await import('./holeGeometryDerivation');
   // Refused from this very spot already (e.g. the practice green from the pro shop) — wait until the
@@ -488,8 +509,10 @@ async function ensureGreenForCurrentHole(
     const found = await deriveHoleGeometry({
       seed: at,
       holeNumber: hole,
-      par: known?.par ?? null,
-      yardage: known?.yardage ?? null,
+      // 2026-10-05 (sweep 2) — the CARD length when the geometry has none (|| so a stored 0 falls through
+      // too); without it the card check below was skipped entirely.
+      par: known?.par || holePar(hole) || null,
+      yardage: known?.yardage || holeLengthYards(hole) || null,
       courseId,
       knownTee: known?.tee ?? resolveTeeCoords(hole).tee ?? null,
       // The card check needs to know where the player is on the hole (see deriveHoleGeometry).

@@ -100,11 +100,12 @@ describe('the reason survives all the way to the log', () => {
   });
 
   it('the call site logs reason, detected and gate — not just a bare count', () => {
-    const screen = read('app/swinglab/swing/[swing_id].tsx');
-    const code = screen.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    expect(code).toContain('rejected: r?.rejected?.reason');
-    expect(code).toContain('detected: r?.rejected?.detected');
-    expect(code).toContain('gate: r?.rejected?.gate');
+    // 2026-10-05 — the one club-arc runner (the orchestrator's shot run) is the call site now.
+    const runner = read('services/swing/orchestrator/shotDetail.ts');
+    const code = runner.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code).toContain('rejected: arc?.rejected?.reason');
+    expect(code).toContain('detected: arc?.rejected?.detected');
+    expect(code).toContain('gate: arc?.rejected?.gate');
   });
 
   /**

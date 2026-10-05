@@ -55,8 +55,10 @@ type Posted = { frames: { b64: string; media_type: string; t_ms?: number }[]; mo
 
 function stubServer(): Posted[] {
   const posted: Posted[] = [];
-  (globalThis as { fetch?: unknown }).fetch = jest.fn(async (_url: string, init: { body: string }) => {
-    posted.push(JSON.parse(init.body) as Posted);
+  (globalThis as { fetch?: unknown }).fetch = jest.fn(async (url: string, init?: { body?: string }) => {
+    // 2026-10-05 — the read pings /api/health before it sends (and gives up fast when that is silent).
+    if (/\/api\/health/.test(url)) return { ok: true, status: 200, json: async () => ({ ok: true }), text: async (): Promise<string> => '' };
+    posted.push(JSON.parse(init?.body ?? '{}') as Posted);
     return {
       ok: true,
       status: 200,
@@ -65,7 +67,7 @@ function stubServer(): Posted[] {
         fault_frame_index: -1, primary_fault: 'no_dominant_fault',
         phases_visible: { address: true, top: true, impact: true, finish: true },
       }),
-      text: async () => '',
+      text: async (): Promise<string> => '',
     };
   });
   return posted;

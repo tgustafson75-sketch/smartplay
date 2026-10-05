@@ -60,7 +60,8 @@ describe('a zero-point arc must say why on every surface', () => {
   const callers = callersOfDetectClubPath();
 
   it('finds the arc-reading surfaces at all (a scan that finds nothing would pass vacuously)', () => {
-    expect(callers.length).toBeGreaterThanOrEqual(3);
+    // 2026-10-05 — ONE caller now: the orchestrator's shot run, which every screen asks.
+    expect(callers).toEqual(['services/swing/orchestrator/shotDetail.ts']);
   });
 
   it.each(callers)('%s reports the rejection reason, not just a point count', (rel) => {

@@ -933,7 +933,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }],
           config: {
             temperature: 0.0,
-            maxOutputTokens: 200,
+            maxOutputTokens: 200, thinkingConfig: { thinkingBudget: 0 },
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -1022,7 +1022,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           contents: [{ role: 'user', parts: locParts }],
           config: {
             temperature: 0.0,
-            maxOutputTokens: 120,
+            maxOutputTokens: 120, thinkingConfig: { thinkingBudget: 0 },
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -1084,7 +1084,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           contents: [{ role: 'user', parts: locParts }],
           config: {
             temperature: 0.0,
-            maxOutputTokens: 400,
+            maxOutputTokens: 400, thinkingConfig: { thinkingBudget: 0 },
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -1438,7 +1438,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: geminiContent }],
-          config: { temperature: 0.2, maxOutputTokens: 800, responseMimeType: 'application/json', responseSchema: SWING_ANALYSIS_GEMINI_SCHEMA },
+          // 2026-10-05 (sweep 2) — gemini-2.5-flash THINKS by default, and its thinking tokens count against
+          // maxOutputTokens: with 800 the JSON was cut off and every read came back non_json, so every read
+          // paid Gemini's time and then OpenAI's. A structured read needs no thinking; the room goes to the JSON.
+          config: { temperature: 0.2, maxOutputTokens: 1200, responseMimeType: 'application/json', responseSchema: SWING_ANALYSIS_GEMINI_SCHEMA, thinkingConfig: { thinkingBudget: 0 } },
         }), 13_000);
         const rawText = (gem.text ?? '').trim();
         const parsed = normalizeAnalysis(rawText, frames.length, mode, coverage);

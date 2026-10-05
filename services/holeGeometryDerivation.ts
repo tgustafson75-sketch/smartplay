@@ -182,6 +182,13 @@ export function seedIsFor(
  * The spot is remembered instead, and the hole is tried again once the player has moved 40y from it.
  */
 const seedRejections = new Map<string, { at: LatLng; count: number }>();
+/** A new round: forget last round's refusals (they were spent on a different day's walk). */
+export function resetSeedRejections(): void { seedRejections.clear(); }
+/**
+ * 2026-10-05 (sweep 2) — ONE search per hole at a time. Hole detection and the SmartVision map each kept
+ * their own "attempted" set, so with the map open both searched the same hole from the same spot.
+ */
+const inflightSearches = new Map<string, Promise<DerivedHoleGeometry | null>>();
 const RETRY_AFTER_MOVING_YDS = 40;
 /**
  * At most this many position refusals per hole per session (re-review 10-04): a player who logs no
@@ -198,7 +205,17 @@ export function seedRejectedNearby(courseId: string | null | undefined, holeNumb
 /** Test seam. */
 export function _clearSeedRejectionsForTest(): void { seedRejections.clear(); }
 
-export async function deriveHoleGeometry(input: {
+export function deriveHoleGeometry(input: Parameters<typeof deriveHoleGeometryOnce>[0]): Promise<DerivedHoleGeometry | null> {
+  if (!input.courseId || input.knownGreen) return deriveHoleGeometryOnce(input);
+  const key = `${input.courseId}:${input.holeNumber}`;
+  const live = inflightSearches.get(key);
+  if (live) return live;
+  const p = deriveHoleGeometryOnce(input).finally(() => { inflightSearches.delete(key); });
+  inflightSearches.set(key, p);
+  return p;
+}
+
+async function deriveHoleGeometryOnce(input: {
   seed: LatLng;              // player GPS or course centroid to center the satellite tile on
   holeNumber: number;
   par?: number | null;
@@ -401,7 +418,7 @@ export async function deriveHoleGeometry(input: {
       ? input.knownTee
       : tee;
     const teeIsKnown = verifiedTee === input.knownTee && verifiedTee != null;
-    const cardYards = input.yardage ?? 0;
+    const cardYards = typeof input.yardage === 'number' && input.yardage > 0 ? input.yardage : 0;
     /**
      * 2026-09-23 (Tim — "SmartVision images correctly every time") — the same card check for the
      * GREEN. A vision-found green, measured from a KNOWN tee, that disagrees with the scorecard is a
@@ -413,6 +430,27 @@ export async function deriveHoleGeometry(input: {
       const measured = haversineMeters(verifiedTee, green) * 1.09361;
       if (measured > cardYards * 1.35 || measured < cardYards * 0.65) {
         console.log(`[holeGeometry] hole ${holeNumber}: found green ${Math.round(measured)}y from the known tee vs card ${cardYards}y — discarding`);
+        return null;
+      }
+    }
+    /**
+     * 2026-10-05 (sweep 2) — NO CARD LENGTH IS NOT "NOTHING TO CHECK". On a course with no geometry
+     * row (exactly the AI-fallback case) the length can be missing, and the check was skipped: the
+     * practice green found from the pro shop was cached as hole 1 and shared as card-checked. With no
+     * length, the hole's PAR bounds the distance; with neither, a searched green is not kept.
+     */
+    if (!seeded && !teeIsKnown && cardYards <= 0 && input.seedIs) {
+      const PAR_YDS: Record<number, [number, number]> = { 3: [80, 260], 4: [230, 500], 5: [420, 650] };
+      const band = typeof input.par === 'number' ? PAR_YDS[input.par] : undefined;
+      const fromSeed = haversineMeters(seed, green) * 1.09361;
+      const bad = !band
+        || (input.seedIs === 'tee' ? fromSeed < band[0] * 0.75 || fromSeed > band[1] * 1.15 : fromSeed > band[1] * 1.1);
+      if (bad) {
+        console.log(`[holeGeometry] hole ${holeNumber}: no card length — found green ${Math.round(fromSeed)}y from the player vs par ${input.par ?? '?'} — discarding, not caching`);
+        if (band) {
+          const rk = `${input.courseId ?? ''}:${holeNumber}`;
+          seedRejections.set(rk, { at: seed, count: (seedRejections.get(rk)?.count ?? 0) + 1 });
+        }
         return null;
       }
     }

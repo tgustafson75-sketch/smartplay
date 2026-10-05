@@ -169,7 +169,9 @@ export default function CaddieDataStrip({
     const leave = registerPendingScoreFlush(() => commitRef.current());
     // 2026-10-04 (sweep) — and when the app goes to the background: a score tapped and the phone
     // pocketed could be killed by the OS inside the 2.5s settle and never written.
-    const sub = AppState.addEventListener('change', (st) => { if (st !== 'active') commitRef.current(); });
+    // 'background' only: iOS goes 'inactive' for Control Center, a call or a permission sheet, and a
+    // score committed there without its putts let the round advance before the putts tap landed.
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'background') commitRef.current(); });
     return () => { sub.remove(); leave(); commitRef.current(); };
   }, []);
   const narrowStrip = screenW < 500;

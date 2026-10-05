@@ -46,7 +46,8 @@ function callSites(): { file: string; line: number; text: string }[] {
 
 describe('every club-path call crops to the player', () => {
   it('there are call sites to check — never pass vacuously', () => {
-    expect(callSites().length).toBeGreaterThanOrEqual(3);
+    // 2026-10-05 — one runner (the orchestrator's shot run) serves every screen.
+    expect(callSites().map((c) => c.file)).toEqual(['services/swing/orchestrator/shotDetail.ts']);
   });
 
   it('no call site asks the model to find a clubhead in a full frame', () => {
@@ -73,17 +74,16 @@ describe('every club-path call crops to the player', () => {
   it('the crop helper is a service, not a screen — or three callers cannot reach it', () => {
     expect(fs.existsSync(path.join(ROOT, 'services/swing/bodyBounds.ts'))).toBe(true);
     const sm = fs.readFileSync(path.join(ROOT, 'app/swinglab/smartmotion.tsx'), 'utf8');
-    // The screen must IMPORT it rather than keep a second copy that can drift.
-    expect(sm).toMatch(/import \{ bodyBoundsFromPose \} from '\.\.\/\.\.\/services\/swing\/bodyBounds'/);
+    const runner = fs.readFileSync(path.join(ROOT, 'services/swing/orchestrator/shotDetail.ts'), 'utf8');
+    // The runner must IMPORT it rather than keep a second copy that can drift.
+    expect(runner).toMatch(/const \{ bodyBoundsFromPose \} = await import\('\.\.\/bodyBounds'\);/);
     expect(sm).not.toMatch(/^function bodyBoundsFromPose/m);
   });
 
   it('the diagnostic says whether the crop actually engaged', () => {
     // Without this, "detected: 2" cannot be told apart from "the zoom never ran".
-    for (const f of ['app/swinglab/swing/[swing_id].tsx', 'app/swinglab/smartmotion.tsx']) {
-      const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
-      expect(src).toMatch(/zoomed: bodyBoundsFromPose\(poseFrames\) != null/);
-    }
+    const src = fs.readFileSync(path.join(ROOT, 'services/swing/orchestrator/shotDetail.ts'), 'utf8');
+    expect(src).toMatch(/zoomed: bodyBoundsFromPose\(frames\) != null/);
   });
 
   it('bounds → a crop that actually zooms a small player', () => {

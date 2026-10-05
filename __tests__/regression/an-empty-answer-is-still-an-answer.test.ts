@@ -2,62 +2,44 @@
  * 2026-09-06 (Tim) — "I think it's either analyzing every time I open, even if my swing file already
  * has a reading, and there may be a second read coming after the first."
  *
- * Both were happening, from one line.
+ * The club-arc runner marked a window "done" only when it found an arc, so a swing whose club path
+ * genuinely cannot be traced re-asked the (paid) vision model every open, play and pause.
  *
- * The club-arc effect guards itself with `clubArcRunKeyRef`, keyed on clip + window. That ref was
- * assigned ONLY inside the success branch — `if (r && r.points.length >= 3)`. So a swing whose club
- * path genuinely cannot be traced never recorded that it had been tried, and every subsequent run of
- * the effect started over.
+ *   no answer (no copy, no network, cancelled) → asked again next time;
+ *   an answer, even "no traceable arc"          → never re-asked about the same frames.
  *
- * `isPlaying` is in that effect's dependency list deliberately: native frame extraction cannot run
- * while ExoPlayer holds the same file, so a play/pause flip has to retry. Correct on its own. Paired
- * with "mark only on success" it meant every open, every play and every pause fired a fresh native
- * extraction and a PAID vision call — to re-ask a question that had already been answered "no".
- *
- * The fix uses a distinction the code was already logging, `aborted: !r`:
- *
- *   r === null → no answer (superseded, playback started). Retrying is right.
- *   r truthy   → we asked, and the answer was "no traceable arc". Re-asking the same model about the
- *                same frames cannot produce a different result.
- *
- * These lock that, because the failure is invisible: everything looks fine, it just costs money and
- * battery every time he opens a swing.
+ * 2026-10-05 — the runner is the orchestrator's shot run now (services/swing/orchestrator/shotDetail),
+ * the one every screen asks; these pin the same rule there.
  */
 import fs from 'fs';
 import path from 'path';
 
-const src = fs.readFileSync(
-  path.join(__dirname, '../../app/swinglab/swing/[swing_id].tsx'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '../../services/swing/orchestrator/shotDetail.ts'), 'utf8');
 const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 describe('a club-arc window is retried only when it was never answered', () => {
-  it('marks the window done on a REAL result', () => {
-    // The original behaviour, unchanged: a good arc closes the window.
-    expect(code).toMatch(/if \(r && r\.points\.length >= 3\)[\s\S]{0,200}clubArcRunKeyRef\.current = runKey/);
+  it('stores a REAL result — and an empty one, with its source', () => {
+    expect(code).toMatch(/const pts = arc\.points\.length >= 3 \? arc\.points\.map[\s\S]{0,200}: \[\];/);
+    expect(code).toMatch(/store\.setShotClubArc\(input\.sessionId, input\.shotId, pts, frame, arc\.source\);/);
   });
 
-  it('ALSO marks it done when the answer came back empty', () => {
-    // The fix. Without this the effect re-runs forever on any swing that cannot be traced.
-    expect(code).toContain('if (r) clubArcRunKeyRef.current = runKey;');
+  it('remembers the answer, even when it was "no arc"', () => {
+    expect(code).toMatch(/if \(!arc\) return null;[^\n]*\n\s*answered\.add\(answerKey\(s, shot\)\);/);
+    expect(code).toMatch(/if \(answered\.has\(answerKey\(s, shot\)\)\) return true;/);
+    // a tracked answer, found or honestly empty, is final across app restarts too
+    expect(code).toMatch(/if \(src === 'tracker'\) return true;/);
   });
 
   it('still retries when there was no answer at all', () => {
-    // `aborted: !r` — a null result must NOT close the window, or a run cancelled by playback
-    // would never be retried and the arc would be permanently absent.
-    expect(code).toContain('aborted: !r');
-    // The guard is conditional on r, never unconditional.
-    expect(code).not.toMatch(/^\s*clubArcRunKeyRef\.current = runKey;\s*$/m);
+    // `if (!arc) return null` comes BEFORE the answer is remembered — a null never closes the window.
+    expect(code.indexOf('if (!arc) return null;')).toBeLessThan(code.indexOf('answered.add('));
   });
 
-  it('keeps isPlaying in the deps — the retry it enables is legitimate', () => {
-    // Removing it would be the wrong fix for the same symptom: native extraction genuinely cannot
-    // run while playback holds the file, and that retry is why the arc appears at all after a pause.
-    const effectTail = code.slice(code.indexOf('clubArcRunKeyRef'));
-    expect(effectTail).toMatch(/isPlaying[^\]]*\]/);
+  it('the answer key names clip and window, so a DIFFERENT swing (or a trimmed one) is tried', () => {
+    expect(code).toMatch(/`\$\{s\.id\}\|\$\{shot\.id\}\|\$\{shot\.clipUri\}\|\$\{shot\.clipStartSeconds \?\? ''\}\|\$\{shot\.clipEndSeconds \?\? ''\}`/);
   });
 
-  it('the run key still distinguishes clip and window, so a DIFFERENT swing is tried', () => {
-    // Marking done must not become "never analyse anything again".
-    expect(code).toMatch(/const runKey = `\$\{shot\.clipUri\}\|\$\{Math\.round\(startMs\)\}\|\$\{Math\.round\(endMs\)\}`/);
+  it('a new analysis (force) asks again — the window may have moved', () => {
+    expect(code).toMatch(/if \(!input\.force && hasFinalArc\(hit\.s, hit\.shot, hit\.first\)\) return false;/);
   });
 });

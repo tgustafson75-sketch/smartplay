@@ -152,12 +152,16 @@ describe('the call sites report', () => {
     expect(src).toContain("pipe.noteStage(key, 'frame'");
   });
 
-  it('club checks order BEFORE it runs, and reports after', () => {
-    const src = read('app/swinglab/swing/[swing_id].tsx');
-    const check = src.indexOf("checkOrder(pipe.runKeyFor(uri, startMs, endMs), 'club')");
-    const call = src.indexOf('const r = await detectClubPath(');
-    expect(check).toBeGreaterThan(-1);
-    expect(call).toBeGreaterThan(check);          // checked first, or it proves nothing
-    expect(src).toContain("pipe.noteStage(pipe.runKeyFor(uri, startMs, endMs), 'club'");
+  /**
+   * 2026-10-05 — club after pose is no longer something a screen checks and reports: the ONE club runner
+   * is a stage of the orchestrator's shot run, ORDERED after the pose stage by the engine, and the pose
+   * stage itself waits for the swing's read to finish decoding.
+   */
+  it('club runs after pose, and pose after the read — by the engine, not by convention', () => {
+    const src = read('services/swing/orchestrator/shotDetail.ts');
+    expect(src).toMatch(/id: 'arc',\s*after: \['pose'\],/);
+    expect(src).toMatch(/await whenStageSettled\(swingRunKey\(input\.sessionId\), 'read', signal\);/);
+    const run = read('services/swing/orchestrator/uploadRun.ts');
+    expect(run).toMatch(/id: 'pose',\s*after: \['read'\],/);
   });
 });

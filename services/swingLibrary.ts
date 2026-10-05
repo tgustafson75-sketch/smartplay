@@ -62,8 +62,9 @@ export function getAnalyzerKind(session: SwingSession): AnalyzerKind {
   const tag = session.upload?.tag;
   const perspective = session.upload?.perspective;
 
-  // Explicit perspective wins over source_device.
-  if (perspective === 'watching_someone') return 'swing';
+  // 2026-10-05 — a putt is a putt whoever is holding the camera: SmartMotion tags a putt it records of
+  // a family member as 'watching_someone', and that used to send it through the full-swing read.
+  if (perspective === 'watching_someone') return tag === 'putt' ? 'putting' : 'swing';
   if (perspective === 'pov_self') {
     if (tag === 'putt' || tag === 'chip') return 'putting';
     return 'swing';

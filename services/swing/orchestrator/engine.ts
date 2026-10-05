@@ -26,7 +26,8 @@ export interface StageDef<Input> {
   after?: string[];
   /** Critical stages run before any secondary stage starts. */
   critical?: boolean;
-  budgetMs: number;
+  /** A number, or computed when the stage starts (the read's grows with the swings it has to read). */
+  budgetMs: number | ((ctx: StageContext<Input>) => number);
   /** Skip this stage for this input (e.g. no ball area). Checked when its deps are done. */
   when?: (ctx: StageContext<Input>) => boolean;
   /** Return the output; `null`/`undefined` means the stage ran and found nothing ('empty'). */
@@ -173,10 +174,12 @@ export class AnalysisRun<Input> {
     this.state[s.id] = { status: 'running' };
     let timer: ReturnType<typeof setTimeout> | null = null;
     try {
+      // Inside the try: a budget function that throws fails the stage, never strands it 'running'.
+      const budgetMs = typeof s.budgetMs === 'function' ? s.budgetMs(ctx) : s.budgetMs;
       const out = await Promise.race([
         s.run(ctx),
         new Promise<never>((_, rej) => {
-          timer = setTimeout(() => { rej(new Error('budget')); this.stageCtrls[s.id]?.abort(); }, s.budgetMs);   // budget wins the race, THEN the work is told to stop
+          timer = setTimeout(() => { rej(new Error('budget')); this.stageCtrls[s.id]?.abort(); }, budgetMs);   // budget wins the race, THEN the work is told to stop
         }),
         new Promise<never>((_, rej) => {
           if (ctx.signal.aborted) rej(new Error('cancelled'));
@@ -232,6 +235,44 @@ export function getOrStartRun<Input>(
   void run.done.then(() => { if (runs.get(key) === (run as AnalysisRun<unknown>)) runs.delete(key); });
   run.start();
   return run;
+}
+
+/** Is a run for this key still going? (The swing screen's watchdog must not fail a live run.) */
+export function isRunLive(key: string): boolean {
+  const r = runs.get(key);
+  return !!r && !r.snapshot().done;
+}
+
+/** The live (unfinished) run for this key, if any. */
+export function liveRun(key: string): AnalysisRun<unknown> | null {
+  const r = runs.get(key);
+  return r && !r.snapshot().done ? r : null;
+}
+
+/**
+ * Resolve once `stage` of the live run for `key` has settled (any outcome) — at once when there is no
+ * live run or the stage is already settled. How a dependent run waits on another run's stage (a swing's
+ * body pass must never decode while that swing's read is still decoding).
+ */
+export function whenStageSettled(key: string, stage: string, signal?: AbortSignal): Promise<void> {
+  const r = liveRun(key);
+  if (!r) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let unsub: (() => void) | null = null;
+    const finish = () => { if (unsub) { const u = unsub; unsub = null; queueMicrotask(u); } resolve(); };
+    unsub = r.subscribe((snap) => {
+      const st = snap.stages[stage]?.status;
+      if (snap.done || (st != null && st !== 'pending' && st !== 'running')) finish();
+    });
+    signal?.addEventListener('abort', finish, { once: true });
+  });
+}
+
+/** Cancel every live run whose key starts with `prefix` (a new analysis of a swing retires its shot runs). */
+export function cancelRunsWithPrefix(prefix: string): void {
+  for (const [k, r] of [...runs.entries()]) {
+    if (k.startsWith(prefix)) r.cancel();
+  }
 }
 
 /** Test seam. */

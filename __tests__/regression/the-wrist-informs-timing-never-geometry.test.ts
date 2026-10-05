@@ -64,7 +64,8 @@ describe('the wrist may inform timing', () => {
   });
 
   it('the screen uses that rule, and its chips still read the motion anchors', () => {
-    expect(screen).toMatch(/const poseImpactMs = useMemo\(\(\) => poseImpactFromFrames\(poseFrames\), \[poseFrames\]\);/);
+    // 2026-10-05 — the arc's impact anchor is decided by the one runner, through the shared rule.
+    expect(fs.readFileSync(path.join(root, 'services/swing/clubPathWindow.ts'), 'utf8')).toMatch(/poseImpactMs: poseImpactFromFrames\(input\.frames\)/);
     expect(screen).toMatch(/return deriveSwingAnchors\(samples\);/);
     const memo = screen.slice(screen.indexOf('const motionAnchors'), screen.indexOf('const motionAnchors') + 1400);
     expect(memo).toMatch(/tMs: fr\.timestampMs, x: c\.x, y: c\.y/);

@@ -325,27 +325,45 @@ export async function probeVideo(uri: string): Promise<{ has_audio: boolean; dur
  * Phase V — emits analysis-status transitions throughout so the swing
  * detail surface can render real progress copy and surface failures.
  */
-export function runPhaseKOnSession(sessionId: string): Promise<{
-  primary_issue: PrimaryIssue | null;
-  drill_recommendation: DrillRecommendation | null;
-}> {
+export function runPhaseKOnSession(sessionId: string): Promise<ReadOutcome> {
   // 2026-10-04 — every caller goes through the orchestrator's upload run (window → read → pose), which
   // also makes it one run per swing: a second trigger joins the run already going.
   const { runUploadAnalysis } = require('./swing/orchestrator/uploadRun') as typeof import('./swing/orchestrator/uploadRun');
   return runUploadAnalysis(sessionId);
 }
 
-/** The read stage itself — called only by the orchestrator (services/swing/orchestrator/uploadRun). */
-export function _runPhaseKRead(sessionId: string, signal?: AbortSignal): ReturnType<typeof runPhaseKOnSessionImpl> {
-  return runPhaseKOnSessionImpl(sessionId, signal);
-}
+/**
+ * 2026-10-05 — what only a LIVE capture knows, carried into the one read (SmartMotion used to send these
+ * on its own analyzeSwing call; it now reads through the orchestrator like every other swing).
+ */
+export type ReadExtras = {
+  /** The first swing's camera measurements (tempo, body, ball launch, heard strike). */
+  measured?: NonNullable<Parameters<typeof analyzeSwing>[1]['measured']>;
+  drill_focus?: string;
+  drill_name?: string;
+  caddie_name?: string;
+  /** The view the capture screen is set to — used when the session carries no explicit angle. */
+  angle?: 'down_the_line' | 'face_on';
+  /** Each swing's read as it lands — the SmartMotion pager shows and speaks them one by one. */
+  onShotRead?: (shotId: string, analysis: import('./poseDetection').SwingAnalysis, locateDegraded: 'dead_host' | 'ceiling' | 'unknown' | null) => void;
+};
 
-async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): Promise<{
+export type ReadOutcome = {
   primary_issue: PrimaryIssue | null;
   drill_recommendation: DrillRecommendation | null;
   /** The read could not be done — the run settles with this if the body read finds nothing either. */
   readFailed?: string;
-}> {
+  /** Every swing's full read, by shot id (the SmartMotion cards draw from the whole analysis). */
+  analyses: Record<string, { analysis: import('./poseDetection').SwingAnalysis; locate_degraded: 'dead_host' | 'ceiling' | 'unknown' | null }>;
+};
+
+/** The read stage itself — called only by the orchestrator (services/swing/orchestrator/uploadRun). */
+export function _runPhaseKRead(sessionId: string, signal?: AbortSignal, extras?: ReadExtras): Promise<ReadOutcome> {
+  return runPhaseKOnSessionImpl(sessionId, signal, extras);
+}
+
+async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, extras?: ReadExtras): Promise<ReadOutcome> {
+  const analyses: ReadOutcome['analyses'] = {};
   uploadLog('phase-k-enter', { session_id: sessionId }, sessionId);
   V6('STAGE 0 — runPhaseKOnSession enter', { sessionId });
   practiceLog('phase-k-enter', 'ok', { session_id: sessionId });
@@ -355,7 +373,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
     uploadLog('phase-k-abort', { status: 'failed', reason: 'session_not_in_store' }, sessionId);
     V6('STAGE 0 ABORT — session not in store', { sessionId });
     practiceLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'session_not_in_store' });
-    return { primary_issue: null, drill_recommendation: null };
+    return { primary_issue: null, drill_recommendation: null, analyses };
   }
 
   // 2026-05-22 — Putting sessions (glasses POV or putt/chip tag) do NOT
@@ -385,7 +403,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
       // can't strand on the spinner with the retry button disabled). The IIFE
       // below writes the terminal 'ok' (addPuttingAnalysis) or 'failed'.
       liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'analyzing_pose');
-      void (async () => {
+      // 2026-10-05 — AWAITED: the run is done when the putt read is, so the screen that asked (SmartMotion's
+      // putt card, the swing screen) gets the answer from the run instead of a detached promise.
+      await (async () => {
         try {
           // 2026-05-22 — Extract putt-phase key frames locally before
           // the analyze call. Mirrors the full-swing pipeline (which
@@ -463,7 +483,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
           } catch { /* non-fatal */ }
         }
       })();
-      return { primary_issue: null, drill_recommendation: null };
+      return { primary_issue: null, drill_recommendation: null, analyses };
     }
   } catch (e) {
     console.log('[videoUpload] analyzer-router check failed (non-fatal, continuing with swing pipeline):', e);
@@ -613,7 +633,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
     V6('STAGE 6 FINAL — failed: no usable swings');
     practiceLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'no_usable_swings', shot_count: session.shots.length });
     store.setSessionAnalysisStatus(sessionId, 'failed', 'No usable swing in the upload.');
-    return { primary_issue: null, drill_recommendation: null };
+    return { primary_issue: null, drill_recommendation: null, analyses };
   }
 
   // 2026-05-28 — Fix FP: audio transcription is handled by the
@@ -645,8 +665,8 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
     // swings.length of redundant store reads/dynamic imports and sets
     // up commit 2 (parallel batches) so closures don't re-resolve in
     // every concurrent task.
-    let caddieName: string | undefined;
-    try {
+    let caddieName: string | undefined = extras?.caddie_name;
+    if (!caddieName) try {
       const { getActiveCaddie } = await import('./caddieResolver');
       const { getCaddieName } = await import('../lib/persona');
       caddieName = getCaddieName(getActiveCaddie());
@@ -661,9 +681,22 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
     // golfer TAGGED on this upload (services/swing/sessionSwinger), not always the account holder:
     // a swing tagged "Matt" was read with Tim's handicap and Tim's usual miss.
     const swinger = (require('./swing/sessionSwinger') as typeof import('./swing/sessionSwinger')).swingerForSession(session);
+    /**
+     * 2026-10-05 — the CNS's LEARNED tendencies are soft priors for the account holder's own swings
+     * (SmartMotion has sent them since 06-10; the library read never did, so the same swing was read with
+     * different priors depending on where it was opened). Only for 'self': Tim's learned miss is not a
+     * family member's.
+     */
+    const cnsTend = (() => {
+      if (swinger.who !== 'self') return { dominantMiss: null as string | null, recentFaults: [] as string[] };
+      try {
+        const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
+        return mem.useCaddieMemoryStore.getState().getPlayer().tendencies;
+      } catch { return { dominantMiss: null as string | null, recentFaults: [] as string[] }; }
+    })();
     playerContext = {
       handicap: swinger.handicap,
-      dominant_miss: swinger.dominantMiss,
+      dominant_miss: cnsTend.dominantMiss ?? swinger.dominantMiss,
       experience: swinger.experience,
       first_name: swinger.firstName,
     };
@@ -704,7 +737,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
       // SmartMotion rebuild), which masqueraded as an explicit choice and forced a face-on swing — opened
       // by voice/library without touching the toggle — to be mis-read as down-the-line. Let the AI decide.
       // (undefined, not null — computeBiomechanics treats `angle == null` (both) as "infer".)
-      cageAngleCtx = undefined;
+      // 2026-10-05 — SmartMotion's on-screen view, when it sent one (ReadExtras.angle); the body read still
+      // infers the view from the frames.
+      cageAngleCtx = extras?.angle;
     }
 
     // 2026-05-28 — Fix FQ (bug #3) / Fix FU: bounded wait for the
@@ -719,7 +754,8 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
     // Otherwise wait up to 5s for transcripts to land, polling every
     // 250ms. Past 5s we proceed and let the re-analyze path catch the
     // late transcript (typical Whisper return is 3-8s).
-    if (session.upload?.has_audio) {
+    // A live capture has no commentary transcription to wait for (only an imported clip's coach audio).
+    if (session.upload?.has_audio && session.source === 'uploaded_video') {
       const haveTranscriptAlready = session.shots.some(
         s => (s.commentary_transcript ?? '').trim().length > 0,
       );
@@ -806,7 +842,18 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
       // all swings in a batch see the same snapshot (the prior batch's
       // results) — acceptable since prior_issues is loose informational
       // context for the prompt, not a hard dependency.
-      const priorIssuesSnapshot = results.slice(-3).map(x => x.analysis.detected_issue);
+      /**
+       * 2026-10-05 — swing 1 gets the CNS's recent faults (a neutral cross-session prior); swing 2+ gets the
+       * DISTINCT faults already found this session, which the server reads (swing_number > 1 only) as
+       * "confirm a repeat only on clean evidence, else name a distinct secondary fault" — SmartMotion's
+       * multi-swing rule since 07, now the read's for every swing.
+       */
+      const sessionFaults = [...new Set(results
+        .map((x): string | null => x.analysis.primary_fault ?? x.analysis.detected_issue ?? null)
+        .filter((f): f is string => !!f && f !== 'none' && f !== 'no_dominant_fault' && f !== 'inconclusive'))];
+      const priorIssuesSnapshot = i === 0
+        ? (cnsTend.recentFaults.length > 0 ? cnsTend.recentFaults : undefined)
+        : (sessionFaults.length > 0 ? sessionFaults : undefined);
       // 2026-05-27 — Fix ES (Phase 2.5): pass the session's cage
       // targeting markers (if any) into the analyzer context. Server
       // uses them as a strong anchor in the vision prompt — "ball at
@@ -865,6 +912,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
         ...((liveSession?.coach_note ?? '').trim().length > 0 ? { coach_note: (liveSession!.coach_note ?? '').trim() } : {}),
         // 2026-06-30 (audit C11) — fold the player's own felt sense into the read.
         ...((liveSession?.feel_note ?? '').trim().length > 0 ? { feel_note: (liveSession!.feel_note ?? '').trim() } : {}),
+        ...(extras?.drill_focus ? { drill_focus: extras.drill_focus } : {}),
+        ...(extras?.drill_name ? { drill_name: extras.drill_name } : {}),
+        ...(i === 0 && extras?.measured ? { measured: extras.measured } : {}),
       }, boundaries, {
         faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
       });
@@ -900,7 +950,10 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
         confidence: r.kind === 'ok' ? r.analysis.confidence : null,
       });
       if (r.kind === 'ok') {
+        if (signal?.aborted) return;   // a replaced read keeps quiet — the store handle already does
         results.push({ swing_id: swing.id, analysis: r.analysis });
+        analyses[swing.id] = { analysis: r.analysis, locate_degraded: r.locate_degraded ?? null };
+        try { extras?.onShotRead?.(swing.id, r.analysis, r.locate_degraded ?? null); } catch { /* a screen callback never breaks the read */ }
         // 2026-08-09 (verification wave C2 — Tim's "DETECTED MOMENTS 0:01/0:06/0:11/0:16") — those chips
         // were ONE PER EXTRACTED FRAME: raw sample times (on a locate miss, an even spread across the
         // whole clip), rendered under a label claiming detection. Persist ONLY the model's actual
@@ -1003,7 +1056,14 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
       });
 
       const firstSwingWithClip = swings.find(s => s.clipUri);
-      if (firstSwingWithClip?.clipUri) {
+      /**
+       * 2026-10-05 (sweep 2) — NO second network read after the first could not reach the server or hung:
+       * the tentative is another POST to the same API, and on Tim's 5:01 AM read it added 55s to a 63s
+       * hang before "failed". The run's body read (on-device, seconds) is the fallback now.
+       */
+      const unreachable = perSwingOutcomes.every(o => o.kind === 'no_network' || /took too long/i.test(o.detail ?? ''));
+      if (unreachable) V6('STAGE 6 — read unreachable / timed out: no tentative network retry; the body read answers', { failure_kinds: failureKinds });
+      if (!unreachable && firstSwingWithClip?.clipUri) {
         uploadLog('tentative-fallback-start', {
           swing_id: firstSwingWithClip.id,
         }, sessionId);
@@ -1052,7 +1112,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
           V6('STAGE 6 FINAL — tentative ok', {
             observation_head: tentative.analysis.observation.slice(0, 200),
           });
-          return { primary_issue: tentativeIssue, drill_recommendation: null };
+          return { primary_issue: tentativeIssue, drill_recommendation: null, analyses };
         }
       }
 
@@ -1092,7 +1152,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
        * body verdict, or this message if that finds nothing (services/swing/orchestrator/uploadRun).
        */
       liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'analyzing_pose');
-      return { primary_issue: null, drill_recommendation: null, readFailed: message };
+      return { primary_issue: null, drill_recommendation: null, readFailed: message, analyses };
     }
 
     liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'analyzing_pattern');
@@ -1232,6 +1292,17 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
         confidence: 'low',
       };
     }
+    // 2026-10-05 — contact honesty is the read's rule for every swing (services/swing/contactVerdict).
+    {
+      const { applyContactHonesty } = require('./swing/contactVerdict') as typeof import('./swing/contactVerdict');
+      const cur = liveSessionStore(signal).sessionHistory.find(s => s.id === sessionId);
+      const before = primary_issue?.issue_id ?? null;
+      primary_issue = applyContactHonesty(primary_issue, results.map(r => r.analysis.contact_read), cur?.feel_note, cur?.primary_issue?.issue_id);
+      if ((primary_issue?.issue_id ?? null) !== before) {
+        V6('STAGE 5 — contact honesty replaced the headline', { from: before, to: primary_issue?.issue_id ?? null });
+        if (primary_issue) primary_issue = { ...primary_issue, detected_in_shots: results.map(r => r.swing_id), occurrence_count: Math.max(1, primary_issue.occurrence_count) };
+      }
+    }
     V6('STAGE 5 — classifySession returned', {
       primary_issue_id: primary_issue?.issue_id ?? null,
       primary_issue_name: primary_issue?.name ?? null,
@@ -1296,9 +1367,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
     // Failures silent (pose API has known reliability variance, env-var
     // gated). Detail screen renders the Biomechanics card iff result is
     // present — zero UX regression when API isn't configured.
-    // 2026-10-04 — the post-read pose / body-mechanics / club-arc pass is the orchestrator's SECOND
-    // stage now (services/swing/orchestrator/uploadRun → runUploadPosePass), not a fire-and-forget tail.
-    // It runs after this read, once, under its own budget, and the screen shows it when it lands.
+    // 2026-10-05 — the body read, the on-device verdict and the club arc are the orchestrator's later
+    // stages (uploadRun 'pose' / 'arc' → services/swing/orchestrator/shotDetail, the one recipe every
+    // screen uses). They run after this read, once, under their own budgets.
 
     // 2026-07-09 — recompute this club's confidence (clean-strike rate) from the now-updated
     // cage history, so the cage setup "X% confidence" badge has a real value.
@@ -1306,16 +1377,16 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
       (require('./clubConfidence') as typeof import('./clubConfidence')).updateClubConfidenceFromCage(session.club);
     } catch { /* non-fatal */ }
 
-    return { primary_issue, drill_recommendation };
+    return { primary_issue, drill_recommendation, analyses };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     uploadLog('phase-k-throw', { status: 'failed', message: msg }, sessionId);
     V6('STAGE 6 FINAL — failed: pipeline threw', { error: msg, stack: e instanceof Error ? (e.stack ?? '').split('\n').slice(0, 5).join(' | ') : null });
-    liveSessionStore(signal).setSessionAnalysisStatus(
-      sessionId, 'failed',
-      "I had trouble watching this one — could be lighting, angle, or video quality.",
-    );
-    return { primary_issue: null, drill_recommendation: null };
+    // 2026-10-05 (sweep 2) — like every other failed read: hand over to the body read and let the run's
+    // settle stage decide, once. Writing 'failed' here and then the body read's 'ok' was "failed, then a
+    // read" again.
+    liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'analyzing_pose');
+    return { primary_issue: null, drill_recommendation: null, analyses, readFailed: "I had trouble watching this one — could be lighting, angle, or video quality." };
   }
 }
 
@@ -1496,219 +1567,4 @@ export async function ingestVideoFromPick(args: {
     });
   }
   return sessionId;
-}
-
-/**
- * 2026-10-04 — the post-read pose pass (was a void tail inside runPhaseKOnSession): pose frames on the
- * shot's window, biomechanics, the on-device verdict when the cloud read did not commit, and the
- * persisted club arc. Called by the orchestrator's 'pose' stage, after the read, once per run.
- */
-export async function runUploadPosePass(sessionId: string, signal?: AbortSignal): Promise<true | null> {
-  const session = liveSessionStore(signal).sessionHistory.find((x) => x.id === sessionId);
-  if (!session) return null;
-  const swings = session.shots;
-  const firstClipSwing = swings.find(s => s.clipUri);
-    if (firstClipSwing?.clipUri) {
-      const durationSec = session.upload?.duration_sec ?? 3;
-      // 2026-06-15 (Tim — uploads never produced a usable skeleton) — if the user
-      // pointed at their swing ("Analyze this moment" sets clipStart/EndSeconds),
-      // window the on-device pose on THAT span so the skeleton lands on the swing
-      // instead of being smeared across a 30-60s clip. No boundaries → full-clip
-      // tiered sampling as before (short single-swing uploads still work).
-      const hasWindow =
-        typeof firstClipSwing.clipStartSeconds === 'number' &&
-        typeof firstClipSwing.clipEndSeconds === 'number' &&
-        firstClipSwing.clipEndSeconds > firstClipSwing.clipStartSeconds;
-      let poseWindow = hasWindow
-        ? { startMs: firstClipSwing.clipStartSeconds! * 1000, endMs: firstClipSwing.clipEndSeconds! * 1000 }
-        : null;
-      await (async () => {
-        try {
-          const poseMod = await import('./poseAnalysisApi');
-          // 2026-08-06 (Tim — "analysis does everything / takes too long"; the mp4 run showed a single-swing
-          // upload with no manual trim ran pose over the ENTIRE clip — windowed:false — so a 53s clip sampled
-          // ~53s of frames across the whole file). The vision stage already LOCATED the swing but the window
-          // was never handed here. When there's no window, locate the swing ONCE and crop the pose pass to it
-          // (~2s around the swing) instead of smearing across the clip. Best-effort: a locate miss falls back
-          // to the full-clip sampling (unchanged), so this only ever speeds things up, never breaks them.
-          // 2026-08-09 (verification wave C1) — the REAL impact anchor for the pose pass. Priority:
-          // (1) the shot's persisted vision-located impact (set at ingest by the single-swing locate),
-          // (2) the impact from the locate-once fallback below. With it, analyzeSwingFromVideo runs its
-          // strike-anchored branch — the fixed 65%-of-window "impact" fraction (which lands ~1.1s after
-          // the ball and mislabeled every stage) is no longer used for located uploads.
-          let poseImpactMs: number | null =
-            typeof firstClipSwing.locatedImpactSec === 'number' && firstClipSwing.locatedImpactSec > 0
-              ? firstClipSwing.locatedImpactSec * 1000
-              : null;
-          // 2026-08-09 (swing-analysis audit #1) — gate on a MISSING IMPACT, not a missing window. A
-          // manual trim ("point at your swing") sets a window but CLEARS locatedImpactSec (trim.tsx), so
-          // the old `if (!poseWindow)` skipped the locate and left poseImpactMs null → the fixed 65%
-          // fraction came back for trimmed uploads (the exact bug C1 claims to kill). Now: if we have no
-          // impact, locate it. When a window already exists (trim), keep that window and only ADOPT the
-          // located impact if it lands inside it (the dominant swing is why they trimmed there); an
-          // out-of-window locate falls back to the window CENTRE — both beat the downswing-fraction.
-          if (poseImpactMs == null) {
-            try {
-              const { locateSwingWindow, probeDurationMs } = await import('./poseDetection');
-              const durMs = await probeDurationMs(firstClipSwing.clipUri!).catch(() => durationSec * 1000);
-              /**
-               * 2026-09-01 — ON DEVICE FIRST, same as the review path. A swing is the fastest thing
-               * in the clip, so a dozen thumbnails through on-device pose answer "where is the swing"
-               * in seconds; locateSwingWindow is a cold-Lambda vision call with a 25s budget that
-               * aborted twice in Tim's 09-01 log. Fixing only the review path would have left the
-               * upload path paying the old cost for the same question.
-               * [[no-half-fixes-enforce-every-surface]] [[speed-is-the-wow]]
-               */
-              let loc: { startSec: number; endSec: number; swingTimeSec: number } | null = null;
-              if (durMs && durMs > 0) {
-                try {
-                  const { locateSwingWindowOnDevice } = await import('./swing/onDeviceLocate');
-                  loc = await locateSwingWindowOnDevice(firstClipSwing.clipUri!, durMs);
-                } catch { /* on-device is best-effort; the network locate below is the fallback */ }
-                // 2026-10-04 (sweep) — with a window already in hand (a trim, or the orchestrator's window
-                // stage) the network locate only refines an IMPACT, and it costs up to 35s of this stage's
-                // 90s budget; a miss falls back to the window centre below. Without a window it still runs.
-                if (!loc && !poseWindow) loc = await locateSwingWindow(firstClipSwing.clipUri!, durMs);
-              }
-              if (loc && loc.endSec > loc.startSec) {
-                if (!poseWindow) {
-                  poseWindow = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };
-                  poseImpactMs = loc.swingTimeSec * 1000;
-                } else {
-                  const impMs = loc.swingTimeSec * 1000;
-                  poseImpactMs = (impMs >= poseWindow.startMs && impMs <= poseWindow.endMs)
-                    ? impMs
-                    : Math.round((poseWindow.startMs + poseWindow.endMs) / 2);
-                }
-                uploadLog('pose-window-located', { startSec: Math.round(loc.startSec), endSec: Math.round(loc.endSec), impact_ms: Math.round(poseImpactMs) }, sessionId);
-              } else if (poseWindow) {
-                // locate failed but the user trimmed → anchor impact to the trim centre, not the 65% fraction.
-                poseImpactMs = Math.round((poseWindow.startMs + poseWindow.endMs) / 2);
-              }
-            } catch { /* full-clip fallback — no regression */ }
-          }
-          // 2026-07-07 (biomech audit #9) — pass the KNOWN camera angle (was null,
-          // so a DTL-tagged upload got un-gated face-on turn/weight numbers the
-          // live SmartMotion path would have nulled).
-          // 2026-07-24 (full-app audit, root D) — also thread handedness so a lefty's
-          // weight-shift sign isn't inverted (default 'right' read it backwards).
-          // 2026-10-04 — the TAGGED golfer's hand (sessionSwinger), not whoever is active on the phone.
-          const swingerHand = (require('./swing/sessionSwinger') as typeof import('./swing/sessionSwinger')).swingerForSession(session).handedness;
-          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, poseImpactMs, swingerHand);
-          liveSessionStore(signal).setSessionBiomechanics(sessionId, biomech);
-          uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
-
-          // 2026-08-06 (Tim — "I can't get clean analysis the first time; it always takes going to the swing
-          // library and trying ~3 times") — on-device verdict fallback for UPLOADS, parity with live capture.
-          // If the cloud vision read didn't land a verdict (a cold Lambda fail = exactly the "re-analyze from
-          // the library" case), commit the MEASURED pose read so the upload shows a clean first-try result
-          // instead of an empty/failed one. UPGRADE-ONLY: never overwrites a cloud verdict that already
-          // resolved 'ok' (cloud enrichment still wins when it lands).
-          if (biomech) {
-            try {
-              const store = liveSessionStore(signal);
-              const sess = store.sessionHistory.find((s) => s.id === sessionId);
-              if (sess && sess.analysis_status !== 'ok') {
-                const { buildPoseSwingRead } = await import('./swing/poseSwingRead');
-                const { poseReadToPrimaryIssue } = await import('./swing/poseReadVerdict');
-                // 2026-08-09 (verification wave C3) — tempoFromBiomechanics computed the ratio from the
-                // SYNTHETIC anchor timestamps, which is a constant of the offset table: every windowed
-                // upload returned exactly the same "tempo" regardless of the swing — a fabricated metric.
-                // tempoFromPoseFrames reads the REAL wrist-Y series from the dense frames, anchored on the
-                // vision-located impact, and returns NO_TEMPO (no fault, no number) when it can't read one.
-                const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, poseMod.tempoFromPoseFrames(biomech.frames, poseImpactMs, 'video')));
-                if (pi) {
-                  store.setSessionAnalysis(sessionId, pi, null);
-                  store.setSessionAnalysisStatus(sessionId, 'ok');
-                  uploadLog('pose-verdict-committed', { issue: pi.issue_id }, sessionId);
-                }
-              }
-            } catch { /* non-fatal — cloud path still owns the verdict */ }
-          }
-
-          // 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open"): detect
-          // the clubhead arc HERE, in the analysis pass, and PERSIST it. Old design re-extracted
-          // frames at VIEW time, which raced the autoplaying ExoPlayer → guarded with abort-while-
-          // playing → so on an autoplaying clip the arc never computed. During analysis nothing is
-          // playing, so it's safe (shouldAbort:false) AND the stored points draw immediately on open
-          // (even while the clip plays — no view-time retriever). Only when there's a real swing
-          // window. Empty [] = analyzed, clubhead not trackable (honest — the view draws nothing).
-          if (poseWindow && (biomech?.frames?.length ?? 0) >= 2) {
-            const pw = poseWindow; // capture: poseWindow is `let` (may be located above), so pin it for the nested map()
-            try {
-              const { detectClubPath } = await import('./swing/clubPath');
-              /**
-               * 2026-09-20 — THE UPLOAD PATH CROPS TOO, and this is the one a shared video takes.
-               *
-               * Tim's Sentry read `detected: 2` of fourteen sampled frames. The 2026-08-10 ROI crop
-               * exists to stop exactly that (~6px clubhead → ~40px) and was wired at ONE of five
-               * detectClubPath call sites. `biomech.frames` is already required two lines above for
-               * this block to run at all, so the bounds were sitting right here the whole time.
-               * [[sweep-the-missing-half-not-the-unused-export]]
-               */
-              const { bodyBoundsFromPose } = await import('./swing/bodyBounds');
-              const { clubArcAnchor } = await import('./swing/clubPathWindow');
-              // 2026-10-04 (orchestrator phase 3) — this runner passed NO anchor, so the dense samples
-              // spread over the whole window; the swing screen's runner anchored on the impact. One rule.
-              const { anchorMs: arcAnchorMs, toleranceMs: arcToleranceMs } = clubArcAnchor({
-                detectionMethod: firstClipSwing.detectionMethod,
-                detectionOffsetSeconds: firstClipSwing.detectionOffsetSeconds,
-                frames: biomech?.frames ?? null,
-                rawStartMs: pw.startMs,
-                rawEndMs: pw.endMs,
-              });
-              const arc = await detectClubPath({
-                videoUri: firstClipSwing.clipUri!,
-                startMs: pw.startMs,
-                endMs: pw.endMs,
-                impactMs: arcAnchorMs,
-                toleranceMs: arcToleranceMs,
-                shouldAbort: () => false,
-                bodyBounds: bodyBoundsFromPose(biomech?.frames ?? null),
-                poseFrames: biomech?.frames ?? null,
-                // 2026-09-29 — the clip's own capture rate (null for an upload = unknown, the 30fps floor).
-                sourceFps: (await import('./capture/clipFps')).sessionCapturedFps(
-                  liveSessionStore(signal).sessionHistory.find((s) => s.id === sessionId) ?? null,
-                ),
-              });
-              if (arc && arc.points.length >= 3) {
-                // rebase window-relative tMs → absolute clip ms (parity with the view overlay)
-                liveSessionStore(signal).setSessionClubArc(
-                  sessionId,
-                  arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + pw.startMs })),
-                  { w: arc.frameW ?? null, h: arc.frameH ?? null },
-                  arc.source,
-                );
-              } else {
-                liveSessionStore(signal).setSessionClubArc(sessionId, [], null, arc?.source);
-              }
-              /**
-               * 2026-09-09 — this line was the exact ambiguity `f44f06d` set out to kill, still
-               * standing in the analysis pass: `points: 0` for all four reasons (nothing came back /
-               * the model saw 1-2 / the points clustered / they zig-zagged), which send you to
-               * opposite fixes — the camera, or the prompt.
-               *
-               * It matters MOST here. This pass runs with nothing playing (`shouldAbort: false`, see
-               * the 07-30 note above), so it is the one arc read that cannot be blamed on ExoPlayer
-               * holding the file. A sparse arc HERE is the model or the gates, and that is precisely
-               * the question the close-out left open.
-               */
-              uploadLog('club-arc', {
-                points: arc?.points.length ?? 0,
-                rejected: arc?.rejected?.reason ?? null,
-                detected: arc?.rejected?.detected ?? null,
-                gate: arc?.rejected?.gate ?? null,
-                framesSampled: arc?.framesSampled ?? null,
-              }, sessionId);
-            } catch (arcErr) {
-              console.log('[club-arc] analysis-pass detection failed', arcErr);
-            }
-          }
-        } catch (poseErr) {
-          // Non-fatal — Phase K result already shown. Pose API is opt-in.
-          console.log('[pose] background analysis failed', poseErr);
-        }
-      })();
-    }
-  return true;
 }

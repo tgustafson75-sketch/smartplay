@@ -28,11 +28,15 @@ import path from 'path';
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '../..', p), 'utf8');
 const sm = read('app/swinglab/smartmotion.tsx');
 const ov = read('components/swinglab/SwingBodyOverlay.tsx');
+// 2026-10-05 — the arc is computed by ONE runner (the orchestrator's shot run); screens draw what it stored.
+const runner = read('services/swing/orchestrator/shotDetail.ts');
 
 describe('the arc computes without the Motion toggle', () => {
   it('the detector runs on the clip, not on a UI flag', () => {
     expect(sm).not.toContain('if (!showSkeleton || !clipUri) { setClubArcPoints(null); return; }');
-    expect(sm).toContain('if (!clipUri) { setClubArcPoints(null); return; }');
+    // SmartMotion draws the run's arc for the selected swing — no toggle in the way.
+    expect(sm).toContain('if (!cageSession || !sh) { setClubArcPoints(null); return; }');
+    expect(runner).not.toMatch(/showSkeleton|showTrace/);
   });
 
   it('the effect no longer depends on showSkeleton', () => {
@@ -46,23 +50,25 @@ describe('the arc computes without the Motion toggle', () => {
      */
     const deps = /\n\s*\}, \[([^\]]*)\]\);/g;
     const arrays = [...sm.matchAll(deps)].map((m) => m[1]);
-    const arcDeps = arrays.find((a) => a.includes('poseAttemptKey') && a.includes('clipUri'));
+    // 2026-10-05 — the effect draws the stored arc; it re-runs when the session (the run's write) or the
+    // selected swing changes.
+    const arcIdx = sm.indexOf('if (!cageSession || !sh) { setClubArcPoints(null); return; }');
+    const arcDeps = arrays.find((a) => sm.indexOf(`}, [${a}]);`, arcIdx) === sm.indexOf('}, [', arcIdx));
     expect(arcDeps).toBeDefined();
     expect(arcDeps).not.toMatch(/\bshowSkeleton\b/);
-    // 2026-09-09 — poseAttemptKey must stay: the effect has to re-run when the pose stage SETTLES,
-    // because that is what releases it (see "the club stage waits for pose" below).
-    for (const d of ['clipUri', 'segments', 'selectedSwing', 'poseFrames', 'poseAttemptKey']) {
+    for (const d of ['cageSession', 'selectedSwing']) {
       expect(arcDeps).toContain(d);
     }
   });
 
   it('still keeps the ROI zoom that makes a distant clubhead detectable', () => {
     // On a clip shot from well back this is the difference between a clubhead and a 6-pixel smudge.
-    expect(sm).toContain('bodyBounds: bodyBoundsFromPose(poseFrames)');
+    expect(runner).toContain('bodyBounds: bodyBoundsFromPose(frames)');
   });
 
   it('still refuses to draw a guess — a validated arc or nothing', () => {
-    expect(sm).toContain('r && r.points.length >= 3 ? r.points.map');
+    expect(runner).toContain('arc.points.length >= 3 ? arc.points.map');
+    expect(sm).toContain('setClubArcPoints(pts && pts.length >= 3 ?');
   });
 });
 

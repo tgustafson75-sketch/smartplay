@@ -35,7 +35,10 @@ describe('the duration is known before any branch decides what to do', () => {
   });
 
   it('the body read is still gated on the duration — this fix is what satisfies the gate', () => {
-    expect(sm).toMatch(/if \(!clipUri \|\| videoDurationMs == null \|\| phase !== 'review'\) return;/);
+    // 2026-10-05 — the body read is the orchestrator's: the analysis run reads swing 1's body after the
+    // read, and the review asks for the selected swing's on its own — no tap, no duration gate (the
+    // runner probes the clip itself).
+    expect(sm).toMatch(/if \(phase !== 'review' \|\| !sessionId\) return;[\s\S]{0,200}return requestShotDetail\(sessionId, sh\.id\);/);
   });
 
   it('the per-branch seeds remain — they are harmless and cover the re-entry paths', () => {

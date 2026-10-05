@@ -34,58 +34,53 @@ describe('the club stage waits for pose', () => {
     expect(STAGE_DEPS.club).toContain('pose');
   });
 
-  it('the club effect refuses to run until the pose stage has settled for this clip + swing', () => {
-    expect(sm).toContain('if (poseAttemptKey !== `${clipUri}|${selectedSwing}`)');
+  /**
+   * 2026-10-05 — the club stage is no longer an effect that has to remember to wait: it is the 'arc'
+   * stage of the orchestrator's shot run (services/swing/orchestrator/shotDetail), ORDERED after the
+   * 'pose' stage by the engine and refused unless the body read produced frames to aim with. Every
+   * screen draws what that one runner stored.
+   */
+  const runner = read('services/swing/orchestrator/shotDetail.ts');
+
+  it('the club stage runs after pose — by the engine — and only with pose frames to aim with', () => {
+    expect(runner).toMatch(/id: 'arc',\s*after: \['pose'\],/);
+    expect(runner).toMatch(/return !!bio\?\.frames\?\.length;/);
+    expect(runner).toMatch(/bodyBounds: bodyBoundsFromPose\(frames\),\s*poseFrames: frames,/);
   });
 
-  it('CLEARS the arc while it waits — a bare return kept drawing the previous swing’s clubhead', () => {
-    // 2026-09-09 triple-check: the first version of this gate bailed without clearing, so selecting
-    // swing 3 with no cached answer drew swing 1's arc over it until pose settled.
-    expect(sm).toContain('if (poseAttemptKey !== `${clipUri}|${selectedSwing}`) { setClubArcPoints(null); return; }');
+  it('a FAILED pose does not strand the arc: `after` (any outcome), not `deps` (success only)', () => {
+    const arc = runner.slice(runner.indexOf("id: 'arc',"), runner.indexOf("id: 'arc',") + 120);
+    expect(arc).not.toMatch(/deps:/);
   });
 
-  it('pose releases it from a `finally`, so a FAILED pose does not strand the arc forever', () => {
-    // The release must not sit in the success branch: no skeleton must not silently become no arc.
-    expect(sm).toContain('if (!cancelled) setPoseAttemptKey(`${clipUri}|${selectedSwing}`);');
-    const poseTail = sm.slice(sm.indexOf("console.log('[smartmotion] pose/biomech failed"));
-    expect(poseTail.slice(0, 900)).toContain('} finally {');
+  it('switching swing never draws the previous swing’s clubhead', () => {
+    // SmartMotion draws the SELECTED shot's stored arc, or nothing.
+    expect(sm).toContain('const sh = cageSession?.shots[selectedSwing];');
+    expect(sm).toContain('if (!cageSession || !sh) { setClubArcPoints(null); return; }');
+    expect(sm).toContain('setClubArcPoints(pts && pts.length >= 3 ?');
   });
 
-  it('the arc cache names every input that changes the answer, not just the swing index', () => {
-    // Record<number> served index 0 of a re-segmented clip — or a different clipUri — from the old run.
-    expect(sm).not.toContain('useRef<Record<number, { x: number; y: number; tMs: number }[] | null>>({})');
-    expect(sm).toContain('const clubCacheKey = `${clipUri}|${selectedSwing}|${Math.round(seg.startMs)}|${Math.round(seg.endMs)}`;');
-    expect(sm).toContain('clubPathCacheRef.current[clubCacheKey] = pts;');
+  it('the answer is remembered per clip + window, never a bare swing index', () => {
+    expect(runner).toMatch(/`\$\{s\.id\}\|\$\{shot\.id\}\|\$\{shot\.clipUri\}\|\$\{shot\.clipStartSeconds \?\? ''\}\|\$\{shot\.clipEndSeconds \?\? ''\}`/);
   });
 
-  it('SmartMotion reports to the stage observer — it was wired everywhere except here', () => {
-    expect(sm).toContain("checkOrder(stageKey, 'club')");
-    expect(sm).toContain("noteStage(stageKey, 'club'");
-    // `metrics` had no reporter anywhere in the app before this.
-    expect(sm).toContain("'metrics'");
-  });
-
-  it('the run key comes from the SAME helper the pose read uses, so the keys cannot drift', () => {
-    // A stage observer that mis-keys does not go quiet; it reports a violation on every sound run.
-    expect(sm).toContain('const pipeWindow = poseExtractInputsFor(segments, selectedSwing).poseWindow;');
-    expect(sm).toContain('runKeyFor(clipUri, pipeWindow?.startMs ?? 0, pipeWindow?.endMs ?? 0)');
-    // Mirrors poseAnalysisApi's own key exactly.
-    expect(read('services/poseAnalysisApi.ts'))
-      .toContain('runKeyFor(videoUri, window?.startMs ?? 0, window?.endMs ?? 0)');
+  it('the arc reports its anchor and result into the run\'s trace', () => {
+    expect(runner).toMatch(/traceStep\('arc anchor'/);
+    expect(runner).toMatch(/addAppEvent\('club_arc'/);
   });
 });
 
-describe('the pose warm keys on the file the review will actually ask for', () => {
-  it('awaits the durable copy rather than reading a `let` mid-flight', () => {
-    // `uri` becomes the durable copy partway through runAnalysis. Keying the warm on whatever it
-    // happened to be meant the warm decoded 5-8 frames into a key nothing looks up — and lost the
-    // race exactly on the long clips whose decodes cost most.
-    expect(sm).toContain('const warmUri = await durableUriP;');
-    expect(sm).toContain('clipUri: await durableUriP,');
-    expect(sm).toContain('extractPoseFramesFromVideo(warmUri, durMs, true, poseWindow, acousticImpactMs)');
+/**
+ * 2026-10-05 — the pose WARM is gone with the second pose pass it fed. The decode it raced for is now
+ * simply ordered: the shot run's pose stage waits for the swing's read to finish decoding.
+ */
+describe('no pose decode races the read', () => {
+  const runner = read('services/swing/orchestrator/shotDetail.ts');
+  it('the body read waits for the read', () => {
+    expect(runner).toMatch(/await whenStageSettled\(swingRunKey\(input\.sessionId\), 'read', signal\);/);
   });
-
-  it('is released on BOTH persist paths, so a failed copy cannot stall the warm forever', () => {
-    expect(sm).toContain('markDurable(uri);');
+  it('SmartMotion has no pose extraction of its own any more', () => {
+    expect(sm).not.toMatch(/extractPoseFramesFromVideo\(/);
+    expect(sm).not.toMatch(/durableUriP/);
   });
 });

@@ -108,14 +108,15 @@ describe('only an honest impact may move the window', () => {
   });
 });
 
-describe('the screen actually applies it', () => {
+// 2026-10-05 — the ONE club-arc runner (the orchestrator's shot run) is where the rule is applied now.
+describe('the runner actually applies it', () => {
   const src = fs.readFileSync(
-    path.join(__dirname, '..', '..', 'app/swinglab/swing/[swing_id].tsx'),
+    path.join(__dirname, '..', '..', 'services/swing/orchestrator/shotDetail.ts'),
     'utf8',
   );
 
   it('calls the shared rule instead of keeping its own arithmetic', () => {
-    expect(src).toMatch(/from '\.\.\/\.\.\/\.\.\/services\/swing\/clubPathWindow'/);
+    expect(src).toMatch(/require\('\.\.\/clubPathWindow'\)/);
     expect(src).toMatch(/const \{ startMs, endMs \} = narrowClubPathWindow\(rawStartMs, rawEndMs, anchorMs\)/);
     // No second copy of the numbers may reappear in the screen.
     expect(src).not.toMatch(/MAX_SWING_WINDOW_MS = 6000/);
@@ -124,11 +125,9 @@ describe('the screen actually applies it', () => {
     expect(src).not.toMatch(/const endMs = \(shot\.clipEndSeconds \?\? duration \?\? 0\) \* 1000;/);
   });
 
-  it('feeds it the pose impact frame it derives on screen', () => {
-    // 2026-10-04 — derived by the shared rule (clubPathWindow.poseImpactFromFrames).
-    expect(src).toMatch(/poseImpactFromFrames\(poseFrames\)/);
-    expect(src).toMatch(/poseImpactMs,/);
-    // and re-runs when any input to the anchor changes
-    expect(src).toMatch(/shot\?\.detectionMethod, shot\?\.detectionOffsetSeconds, poseImpactMs,/);
+  it('feeds it the heard strike, else the pose impact frame — through the shared rule', () => {
+    expect(src).toMatch(/clubArcAnchor\(\{\s*detectionMethod: shot\.detectionMethod,\s*detectionOffsetSeconds: shot\.detectionOffsetSeconds,\s*frames,/);
+    const win = fs.readFileSync(path.join(__dirname, '..', '..', 'services/swing/clubPathWindow.ts'), 'utf8');
+    expect(win).toMatch(/poseImpactMs: poseImpactFromFrames\(input\.frames\)/);
   });
 });
