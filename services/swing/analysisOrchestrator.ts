@@ -41,7 +41,8 @@ export type UploadSwingWindow = {
 const SHORT_CLIP_NO_LOCATE_SEC = 8;
 
 type PoseReader = (clipUri: string, tMs: number) => Promise<{ handsHigh: boolean } | null>;
-const PICK_BUDGET_MS = 4_000;
+// 2026-10-04 — 4s ran out on Tim's 3870 clip (6 bursts) and the window fell to the WRONG burst.
+const PICK_BUDGET_MS = 8_000;
 
 /**
  * Hands above the shoulders in one frame — the top of a backswing or a finish. Walking, setting up and
@@ -178,9 +179,18 @@ async function findUploadSwingWindowRaw(
             via: 'motion',
           };
         }
-        if (m.window && m.window.endMs > m.window.startMs) {
+        /**
+         * 2026-10-04 (Tim, 3870.mp4 on his phone: "That did not work") — with SEVERAL bursts and no pose
+         * confirmation, the motion window is the web SmartMotion's LAST burst: on this clip that is him
+         * turning to watch the ball (9.2-11.8s), and the read said "no swing motion detected". The web
+         * version fails this clip for the same reason. Only a single burst is trusted on motion alone;
+         * several unconfirmed go to the on-device pose locate below, which finds this swing (impact
+         * 6.84-7.04s against the 7.0s strike).
+         */
+        if (bursts.length <= 1 && m.window && m.window.endMs > m.window.startMs) {
           return { startSec: m.window.startMs / 1000, endSec: Math.min(mdur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
         }
+        if (bursts.length > 1) console.log('[window] several bursts, none confirmed by pose — locating with pose instead of guessing the last one');
       } finally { shared.release(); }
     }
   } catch (e) { console.log('[window] motion pass failed', e instanceof Error ? e.message : String(e)); }

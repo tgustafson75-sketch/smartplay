@@ -12,6 +12,7 @@ jest.mock('react-native', () => ({ Platform: mockPlatform }));
 const mockMotion = jest.fn();
 jest.mock('../../services/frameEngine', () => ({ ensureFrameEngine: async () => true, findMotionWindow: (...a: unknown[]) => mockMotion(...a) }));
 jest.mock('../../services/swing/sharedClipCopy', () => ({ acquireClipCopy: async (u: string) => ({ uri: u, release: () => undefined }) }));
+jest.mock('../../utils/videoThumbnail', () => ({ getThumbnailAsync: async () => { throw new Error('no frame'); } }));
 const mockOnDevice = jest.fn();
 jest.mock('../../services/swing/onDeviceLocate', () => ({ locateSwingWindowOnDevice: (...a: unknown[]) => mockOnDevice(...a) }));
 const mockNetwork = jest.fn();
@@ -119,3 +120,22 @@ describe('the window is clamped to the clip the motion pass MEASURED (re-review 
     expect(w).toEqual(expect.objectContaining({ via: 'motion', startSec: 6, endSec: 9 }));
   });
 });
+
+describe("Tim's 3870 clip: several bursts, none confirmed (2026-10-04, 'That did not work')", () => {
+  it('never guesses the LAST burst (the turn to watch) — it locates with pose', async () => {
+    mockMotion.mockResolvedValue({
+      durationMs: 14496,
+      window: { startMs: 9205, endMs: 11814, peakMs: 10872 },          // the turn to watch the ball
+      bursts: [
+        { startMs: 6161, endMs: 7248, peakMs: 7248, peak: 25 },
+        { startMs: 9785, endMs: 10872, peakMs: 10872, peak: 27.5 },
+      ],
+    });
+    mockOnDevice.mockResolvedValue({ startSec: 5.6, endSec: 8.4, swingTimeSec: 6.95 });
+    const w = await findUploadSwingWindow('file:///c.mp4', 14.496);
+    expect(w.via).toBe('on_device');
+    expect(w.impactSec).toBeCloseTo(6.95);
+    expect(w.startSec).toBeLessThan(7);
+  });
+});
+

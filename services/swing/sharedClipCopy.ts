@@ -81,13 +81,15 @@ export async function acquireClipCopy(
         await FileSystem.copyAsync({ from: videoUri, to: dest });
         const info = await FileSystem.getInfoAsync(dest);
         if (!info.exists || (info.size ?? 0) <= 0) {
+          console.log('[clipCopy] private copy empty', String(videoUri).slice(-60));
           // zero-byte copy: never adopt it (S5 class) — and don't leave it on disk.
           await FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => undefined);
           return null;
         }
         entry.copyUri = dest;
         return dest;
-      } catch {
+      } catch (err) {
+        console.log('[clipCopy] private copy failed', String(videoUri).slice(-60), err instanceof Error ? err.message : String(err));
         // S5 class (ported from the old inline clubPath copy): copyAsync may have landed the file (or
         // a partial one) before getInfoAsync threw — a multi-hundred-MB orphan nothing references.
         // Best-effort delete so repeated failures can't accumulate.
