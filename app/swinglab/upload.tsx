@@ -241,7 +241,11 @@ export default function UploadSwing() {
         // trust=1 (Quiet). The user JUST tapped Upload — this is the
         // moment that most warrants the audible "got your video"
         // ack. Without the flag, isVoiceAllowed silenced it at L1.
-        await speak("Got your video — it's saved. Tap Analyze when you're ready.", voiceGender, language, apiUrl, { userInitiated: true });
+        // 2026-10-04 (Tim's screenshot) — a short clip starts reading on its own, so "tap Analyze" contradicted
+        // the screen; a long one goes to the trim screen, where the player does choose.
+        await speak(isLongClip
+          ? "Got your video — it's saved. Show me where the swing is and I'll read it."
+          : "Got your video — reading your swing now.", voiceGender, language, apiUrl, { userInitiated: true });
       })().catch(() => undefined);
     }
     // Routing: long → trim screen; short → detail with watch param;

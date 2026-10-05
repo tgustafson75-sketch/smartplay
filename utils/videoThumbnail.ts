@@ -306,11 +306,13 @@ export async function sweepOrphanFrameFiles(bootAt: number = MODULE_LOADED_AT): 
     const names = await FileSystem.readDirectoryAsync(dir);
     for (const name of names) {
       if (!/^(exact_|shared-clip-)/.test(name)) continue;
-      // Only what a PREVIOUS launch left (re-review 10-04): an analysis started in this launch's
-      // first seconds may already be using a fresh copy or frame.
-      const info = await FileSystem.getInfoAsync(`${dir}${name}`).catch(() => null);
-      const mtimeMs = info && info.exists && typeof info.modificationTime === 'number' ? info.modificationTime * 1000 : null;
-      if (mtimeMs == null || mtimeMs >= bootAt) continue;
+      // Only what a PREVIOUS launch left: an analysis started in this launch's first seconds may already
+      // be using a fresh copy or frame. Judged by the CREATION time both names carry
+      // (shared-clip-<ms>-…, exact_<ms>_…), NOT the file's mtime — Android's copy keeps the SOURCE's
+      // date, so a copy made a second ago of yesterday's clip looked a day old and was deleted mid-read
+      // (Tim, 10-04: "tentative analysis, low confidence").
+      const born = Number((name.match(/^(?:shared-clip-|exact_)(\d{12,})/) ?? [])[1]);
+      if (!Number.isFinite(born) || born >= bootAt) continue;
       await FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(() => undefined);
       n++;
     }

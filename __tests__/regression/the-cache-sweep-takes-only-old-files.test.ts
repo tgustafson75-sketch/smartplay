@@ -18,14 +18,18 @@ import { sweepOrphanFrameFiles } from '../../utils/videoThumbnail';
 
 it('deletes only exact_/shared-clip- files older than this launch', async () => {
   const boot = 1_000_000_000_000;
+  // mtime is deliberately OLD on every file: Android's copy keeps the SOURCE clip's date, so the sweep
+  // must go by the creation time in the NAME (10-04: a fresh copy was deleted mid-read).
+  const old = (boot - 86_400_000) / 1000;
   Object.assign(files, {
-    'exact_1_1.jpg': (boot - 60_000) / 1000,          // last launch → swept
-    'shared-clip-9-ab.mp4': (boot - 60_000) / 1000,   // last launch → swept
-    'exact_2_2.jpg': (boot + 5_000) / 1000,           // this launch, in use → kept
-    'VideoThumbnails': (boot - 60_000) / 1000,        // not ours → kept
-    'swing-thumb-x.jpg': (boot - 60_000) / 1000,      // not ours → kept
+    [`exact_${boot - 60_000}_1.jpg`]: old,                // last launch → swept
+    [`shared-clip-${boot - 60_000}-ab.mp4`]: old,         // last launch → swept
+    [`exact_${boot + 5_000}_2.jpg`]: old,                 // this launch, in use → kept
+    [`shared-clip-${boot + 2_000}-cd.mp4`]: old,          // this launch, a copy of yesterday's clip → KEPT
+    'VideoThumbnails': old,                               // not ours → kept
+    'swing-thumb-x.jpg': old,                             // not ours → kept
   });
   const n = await sweepOrphanFrameFiles(boot);
-  expect(deleted.sort()).toEqual(['exact_1_1.jpg', 'shared-clip-9-ab.mp4']);
+  expect(deleted.sort()).toEqual([`exact_${boot - 60_000}_1.jpg`, `shared-clip-${boot - 60_000}-ab.mp4`].sort());
   expect(n).toBe(2);
 });

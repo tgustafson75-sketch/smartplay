@@ -510,10 +510,10 @@ export default function SwingDetail() {
     if (!v) return;
     try {
       const st = await v.getStatusAsync();
-      if (analysisRunningRef.current && !(st.isLoaded && st.isPlaying)) {
-        useToastStore.getState().show('Reading your swing — it plays the moment the read is done.');
-        return;
-      }
+      // 2026-10-04 (Tim: "you cannot play the video when it is supposedly analyzing") — Play is never
+      // refused. Every analysis reader works on its own PRIVATE COPY (services/swing/sharedClipCopy),
+      // never the file this player holds, so watching and reading do not collide. What stays off is
+      // AUTO-play on open — the real cause of "it plays and analyzes at the same time" on 10-03.
       if (st.isLoaded && st.isPlaying) {
         isPlayingRef.current = false;
         await v.pauseAsync();
@@ -1016,10 +1016,7 @@ export default function SwingDetail() {
   useRestSuppress(analysisRunning);
   useEffect(() => {
     analysisRunningRef.current = analysisRunning;
-    if (!analysisRunning) return;
-    // Started while the clip was playing (a tap that landed first, a re-analyze mid-play): stop it.
-    isPlayingRef.current = false;
-    void videoRef.current?.pauseAsync().catch(() => undefined);
+    // 2026-10-04 — no longer pauses the player when a read starts: the read never touches its file.
   }, [analysisRunning]);
 
   // Phase BQ — emit [upload:ui-render] on every analysis_status transition
