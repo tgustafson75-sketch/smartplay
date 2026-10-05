@@ -603,6 +603,12 @@ interface SwingSessionState {
   }) => string;
   /** Phase BW — store the per-shot Phase K analysis result so the review
    *  UI can render per-swing cards for multi-swing sessions. */
+  /**
+   * 2026-10-05 (Tim: "it said no read and then later has a read … disjointed") — forget every swing row's
+   * previous read when a NEW read starts, without touching the status. A failed new read used to leave
+   * the last run's "Couldn't read this one" under this run's headline.
+   */
+  clearShotAnalyses: (sessionId: string) => void;
   setShotAnalysis: (
     sessionId: string,
     shotId: string,
@@ -1369,6 +1375,16 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             sessionHistory: s.sessionHistory.map(apply),
           };
         }),
+
+      clearShotAnalyses: (sessionId) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot => (shot.perShotAnalysis === undefined ? shot : { ...shot, perShotAnalysis: undefined })),
+            },
+          ),
+        })),
 
       setShotAnalysis: (sessionId, shotId, analysis) =>
         set(s => ({

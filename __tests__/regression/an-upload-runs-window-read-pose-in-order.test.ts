@@ -12,12 +12,13 @@ const mockOrder: string[] = [];
 let mockPoseRelease: (() => void) | null = null;
 const mockPoseSignals: (AbortSignal | undefined)[] = [];
 let mockKind = 'full_swing';
+let mockReadResult: Record<string, unknown> = { primary_issue: { issue_id: 'over_the_top' }, drill_recommendation: null };
 jest.mock('../../services/swingLibrary', () => ({ getAnalyzerKind: () => mockKind }));
 jest.mock('../../services/swing/analysisOrchestrator', () => ({
   findUploadSwingWindow: async () => { mockOrder.push('window'); return { startSec: 5.3, endSec: 7.9, impactSec: null, via: 'motion' }; },
 }));
 jest.mock('../../services/videoUpload', () => ({
-  _runPhaseKRead: async () => { mockOrder.push('read'); return { primary_issue: { issue_id: 'over_the_top' }, drill_recommendation: null }; },
+  _runPhaseKRead: async () => { mockOrder.push('read'); return mockReadResult; },
   runUploadPosePass: (_id: string, signal?: AbortSignal) => new Promise((r) => {
     mockOrder.push('pose'); mockPoseSignals.push(signal); mockPoseRelease = () => r(true);
   }),
@@ -30,7 +31,10 @@ const seed = (dur: number) => useSwingSessionStore.setState({
     shots: [{ id: 'sh1', clipUri: 'file:///c.mp4' }] }] as never,
 });
 
-beforeEach(() => { mockOrder.length = 0; mockPoseRelease = null; mockPoseSignals.length = 0; mockKind = 'full_swing'; _clearRunsForTest(); });
+beforeEach(() => {
+  mockOrder.length = 0; mockPoseRelease = null; mockPoseSignals.length = 0; mockKind = 'full_swing'; _clearRunsForTest();
+  mockReadResult = { primary_issue: { issue_id: 'over_the_top' }, drill_recommendation: null };
+});
 
 describe('an upload runs window → read → pose, once', () => {
   it('a single-swing upload finds its window first, then reads; the caller gets the read before pose ends', async () => {
@@ -83,4 +87,50 @@ describe('an upload runs window → read → pose, once', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(mockOrder).toEqual(['read']);
   });
+
+  /**
+   * 2026-10-05 (Tim's phone: the read hung, "failed" showed, then a body-read headline appeared lower
+   * down a minute later). A read that could not be done hands over to the body read, and the RUN settles
+   * the status once — never "failed" and then a verdict.
+   */
+  it('read failed + a body verdict: the screen never shows failed — the body read stands', async () => {
+    seed(6);
+    mockReadResult = { primary_issue: null, drill_recommendation: null, readFailed: 'The analyzer hit a snag.' };
+    const { getOrStartRun } = await import('../../services/swing/orchestrator/engine');
+    void getOrStartRun;
+    await runUploadAnalysis('s1');
+    await new Promise((r) => setTimeout(r, 0));
+    useSwingSessionStore.setState((st) => ({ sessionHistory: st.sessionHistory.map((x) => ({ ...x, analysis_status: 'ok' })) }) as never);
+    mockPoseRelease?.();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(useSwingSessionStore.getState().sessionHistory[0].analysis_status).toBe('ok');
+  });
+
+  it('read failed + no body verdict: it fails ONCE, at the end, with the read\'s reason', async () => {
+    seed(6);
+    mockReadResult = { primary_issue: null, drill_recommendation: null, readFailed: 'The analyzer hit a snag.' };
+    await runUploadAnalysis('s1');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useSwingSessionStore.getState().sessionHistory[0].analysis_status).not.toBe('failed');   // still analyzing
+    mockPoseRelease?.();
+    await new Promise((r) => setTimeout(r, 10));
+    const s1 = useSwingSessionStore.getState().sessionHistory[0];
+    expect(s1.analysis_status).toBe('failed');
+    expect(s1.analysis_error).toBe('The analyzer hit a snag.');
+  });
 });
+
+describe('a new read clears the old swing rows, and checks the connection before it sends', () => {
+  it('source', () => {
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const up = fs.readFileSync(path.join(__dirname, '..', '..', 'services/videoUpload.ts'), 'utf8');
+    expect(up).toMatch(/liveSessionStore\(signal\)\.clearShotAnalyses\(sessionId\);\s*V6\('STAGE 0 — session loaded'/);
+    expect(up).toMatch(/liveSessionStore\(signal\)\.setSessionAnalysisStatus\(sessionId, 'analyzing_pose'\);\s*return \{ primary_issue: null, drill_recommendation: null, readFailed: message \};/);
+    const pd = fs.readFileSync(path.join(__dirname, '..', '..', 'services/poseDetection.ts'), 'utf8');
+    expect(pd).toMatch(/await clearDeadConnection\(apiUrl\);\s*let res = await tryFetch\(1\);/);
+    expect(pd).toMatch(/await clearDeadConnection\(apiUrl\);\s*V6\('TENTATIVE STAGE 3/);
+    expect(pd).toMatch(/\/api\/health\?lite=1`, \{ method: 'GET', signal: AbortSignal\.timeout\(5_000\) \}/);
+  });
+});
+

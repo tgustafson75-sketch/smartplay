@@ -343,6 +343,8 @@ export function _runPhaseKRead(sessionId: string, signal?: AbortSignal): ReturnT
 async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): Promise<{
   primary_issue: PrimaryIssue | null;
   drill_recommendation: DrillRecommendation | null;
+  /** The read could not be done — the run settles with this if the body read finds nothing either. */
+  readFailed?: string;
 }> {
   uploadLog('phase-k-enter', { session_id: sessionId }, sessionId);
   V6('STAGE 0 — runPhaseKOnSession enter', { sessionId });
@@ -578,6 +580,8 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
     }
   }
 
+  // A new read: the swing rows' previous reads must not sit under this run's result.
+  liveSessionStore(signal).clearShotAnalyses(sessionId);
   V6('STAGE 0 — session loaded', {
     source: session.source ?? 'live_capture',
     club: session.club,
@@ -1080,8 +1084,15 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal): 
           swings: swings.length,
         });
       } catch { /* best-effort */ }
-      liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'failed', message);
-      return { primary_issue: null, drill_recommendation: null };
+      /**
+       * 2026-10-05 (Tim: "I get the updates of status, they go away and it still says analyzing … then
+       * seems to fail only to have a read lower down the screen") — the body read (the orchestrator's pose
+       * stage) still runs after this, and its verdict is a real read. Flipping to 'failed' here and then
+       * to a headline a minute later was the disjointed screen. Keep ANALYZING; the run settles it: the
+       * body verdict, or this message if that finds nothing (services/swing/orchestrator/uploadRun).
+       */
+      liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'analyzing_pose');
+      return { primary_issue: null, drill_recommendation: null, readFailed: message };
     }
 
     liveSessionStore(signal).setSessionAnalysisStatus(sessionId, 'analyzing_pattern');

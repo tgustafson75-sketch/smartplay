@@ -213,6 +213,30 @@ export type SwingAnalysisResult =
 // (With the swing localizer the real analysis now runs on a tight window and
 // rarely approaches this ceiling anyway — this is the failure-mode safety net.)
 const REQUEST_TIMEOUT_MS = 63_000;
+
+/**
+ * 2026-10-05 (Tim's phone, 5:01 AM: the read POST hung 63s and was aborted, then the one-frame fallback
+ * hung 55s — while the server answered the same 9 frames from the Mac in 9.5s). A request that gets NO
+ * response at all, twice in a row, with the server healthy, is a DEAD POOLED CONNECTION: Android keeps
+ * idle sockets to the API open, Wi-Fi sleeps overnight, and a request written into a dead socket waits
+ * for its whole timeout. A cheap reachability call first (?lite=1 — no provider probes) with a short
+ * limit finds that out in seconds instead of a minute, and aborting it closes the dead socket, so the
+ * real read goes out on a fresh one. Two tries; it never blocks the read — a failure is only logged.
+ */
+async function clearDeadConnection(apiUrl: string): Promise<void> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const t0 = Date.now();
+    try {
+      const r = await fetch(`${apiUrl}/api/health?lite=1`, { method: 'GET', signal: AbortSignal.timeout(5_000) });
+      V6('read 3 — API reachable', { attempt, status: r.status, ms: Date.now() - t0 });
+      return;
+    } catch (e) {
+      V6('read 3 — API did not answer (dead connection?) — retrying on a fresh one', {
+        attempt, ms: Date.now() - t0, error: e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80),
+      });
+    }
+  }
+}
 // 2026-05-26 — Fix CO: tentative bumped 15s → 30s. Tim's swing
 // library upload was timing out the FALLBACK path too (primary 55s
 // + tentative 15s = 70s total; server vision chain under load can
@@ -1545,6 +1569,7 @@ export async function analyzeSwing(
         throw err;
       }
     };
+    await clearDeadConnection(apiUrl);
     let res = await tryFetch(1);
     let elapsedMs = Date.now() - t0;
     requestMs = elapsedMs;
@@ -1858,6 +1883,7 @@ export async function analyzeSwingTentative(
 
   const apiUrl = getApiBaseUrl();
   try {
+    await clearDeadConnection(apiUrl);
     V6('TENTATIVE STAGE 3 — POST /api/swing-analysis (tentative mode)', {
       total_payload_kb: Math.round(frame.b64.length / 1024),
     });

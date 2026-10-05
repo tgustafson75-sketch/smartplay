@@ -88,6 +88,27 @@ function stages(): StageDef<In>[] {
       },
     },
     {
+      // 2026-10-05 — the run SETTLES the status: a read that could not be done hands over to the body
+      // read, and only if that finds nothing either does the swing show the read's failure. One answer,
+      // at the end, instead of "failed" then a verdict a minute later.
+      id: 'settle',
+      after: ['pose'],
+      budgetMs: 5_000,
+      run: async ({ input, outputs }) => {
+        const failed = (outputs.read as { readFailed?: string } | undefined)?.readFailed;
+        if (!failed) return null;
+        const st = session(input.sessionId)?.analysis_status;
+        const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
+        if (st === 'ok') {
+          traceStep('read failed → the body read stands as the verdict', { reason: failed.slice(0, 80) });
+          return 'body_read';
+        }
+        useSwingSessionStore.getState().setSessionAnalysisStatus(input.sessionId, 'failed', failed);
+        traceStep('read failed and the body read found nothing → failed', { reason: failed.slice(0, 80) });
+        return 'failed';
+      },
+    },
+    {
       id: 'pose',
       deps: ['read'],
       budgetMs: 90_000,
