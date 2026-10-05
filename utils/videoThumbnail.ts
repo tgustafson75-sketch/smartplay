@@ -174,8 +174,9 @@ let engineFailures = 0;
 /** 2026-10-04 (sweep) — three failures switch exact frames off for a while, not for the whole session. */
 let engineOffUntil = 0;
 const ENGINE_OFF_MS = 5 * 60_000;
-function noteEngineFailure(): void {
+function noteEngineFailure(why = 'unknown'): void {
   engineFailures++;
+  (require('../services/analysisTrace') as typeof import('../services/analysisTrace')).traceStep('exact frame failed → native', { why, in_a_row: engineFailures });
   if (engineFailures >= 3) { engineOffUntil = Date.now() + ENGINE_OFF_MS; engineFailures = 0; }
 }
 let exactSeq = 0;
@@ -199,6 +200,7 @@ function noteEngineMs(ms: number): void {
     engineSlowUntil = Date.now() + 3 * 60_000;
     engineSamples = 0;
     console.log('[frames] browser engine slow on this device (' + Math.round(engineAvgMs) + 'ms/frame) — native for now');
+    (require('../services/analysisTrace') as typeof import('../services/analysisTrace')).traceStep('exact frames too slow → native for 3 min', { ms_per_frame: Math.round(engineAvgMs) });
   }
 }
 async function exactOrNative(
@@ -235,13 +237,13 @@ async function exactOrNative(
       }
       // Never came up in 6s: that IS an engine failure (a page whose script died never posts 'ready',
       // and every frame would otherwise wait 6s inside the serialized media chain).
-      noteEngineFailure();
+      noteEngineFailure('engine not ready in 6s');
     }
   } catch (e) {
     // "past end" is the CALLER's question (duration probing), and "queue timeout" is load, not a broken
     // engine — neither counts.
     const msg = e instanceof Error ? e.message : String(e);
-    if (!/past end|queue timeout/.test(msg)) noteEngineFailure();
+    if (!/past end|queue timeout/.test(msg)) noteEngineFailure(msg);
   }
   return VideoThumbnails.getThumbnailAsync(sourceFilename, options);
 }
