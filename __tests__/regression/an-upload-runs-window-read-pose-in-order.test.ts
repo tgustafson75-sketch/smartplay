@@ -19,6 +19,7 @@ let mockKind = 'full_swing';
 let mockReadResult: Record<string, unknown> = { primary_issue: { issue_id: 'over_the_top' }, drill_recommendation: null, analyses: {} };
 let mockReadThrows = false;
 let mockPoseVerdict: unknown = null;
+let mockReadHold: Promise<void> | null = null;
 jest.mock('../../services/swingLibrary', () => ({ getAnalyzerKind: () => mockKind }));
 jest.mock('../../services/swing/analysisOrchestrator', () => ({
   findUploadSwingWindow: async () => { mockOrder.push('window'); return { startSec: 5.3, endSec: 7.9, impactSec: null, via: 'motion' }; },
@@ -26,6 +27,7 @@ jest.mock('../../services/swing/analysisOrchestrator', () => ({
 jest.mock('../../services/videoUpload', () => ({
   _runPhaseKRead: async () => {
     mockOrder.push('read');
+    if (mockReadHold) await mockReadHold;
     if (mockReadThrows) throw new Error('boom');
     return mockReadResult;
   },
@@ -59,7 +61,7 @@ const seed = (dur: number, source = 'uploaded_video') => useSwingSessionStore.se
 });
 
 beforeEach(() => {
-  mockOrder.length = 0; mockPoseRelease = []; mockKind = 'full_swing'; mockReadThrows = false; mockPoseVerdict = null;
+  mockOrder.length = 0; mockPoseRelease = []; mockKind = 'full_swing'; mockReadThrows = false; mockPoseVerdict = null; mockReadHold = null;
   _clearRunsForTest();
   mockReadResult = { primary_issue: { issue_id: 'over_the_top' }, drill_recommendation: null, analyses: {} };
 });
@@ -115,6 +117,31 @@ describe('a swing runs window → read → body → arc, once', () => {
     mockPoseRelease[0]({ ...BIO, angle: 'STALE' });   // the superseded decode finishes late
     await tick(10);
     expect((s1().biomechanics as { angle?: string } | undefined)?.angle).not.toBe('STALE');
+  });
+
+  it('a trim saved WHILE the read is going starts a new read of the new window — never joins the old one (final review)', async () => {
+    seed(42);
+    let release!: () => void;
+    mockReadHold = new Promise<void>((r) => { release = r; });
+    const first = runUploadAnalysis('s1');
+    await tick();
+    useSwingSessionStore.getState().setShotClipBoundaries('s1', 'sh1', 10, 13, null, 'user');
+    const second = runUploadAnalysis('s1');
+    release();
+    await Promise.all([first, second]);
+    expect(mockOrder.filter((x) => x === 'read')).toHaveLength(2);
+  });
+
+  it('the run\'s OWN window (the finder) is not a new request — a second trigger still joins', async () => {
+    seed(6);
+    let release!: () => void;
+    mockReadHold = new Promise<void>((r) => { release = r; });
+    const first = runUploadAnalysis('s1');
+    await tick(5);                        // window stage has written its boundaries
+    const second = runUploadAnalysis('s1');
+    release();
+    await Promise.all([first, second]);
+    expect(mockOrder.filter((x) => x === 'read')).toHaveLength(1);
   });
 
   it('a putt runs the read only — no swing window, no body read, no arc', async () => {
@@ -235,6 +262,14 @@ describe('a new read clears the old swing rows, and checks the connection before
     // and no second network read after one that could not reach the server or hung
     expect(up).toMatch(/const unreachable = perSwingOutcomes\.every\(o => o\.kind === 'no_network' \|\| \/took too long\/i\.test\(o\.detail \?\? ''\)\);/);
     expect(up).toMatch(/if \(!unreachable && firstSwingWithClip\?\.clipUri\) \{/);
+    // a replaced / over-budget read stops: no more batches, no paid tentative, no memory side effects
+    expect(up).toMatch(/await Promise\.allSettled\(batch\.map\(runOne\)\);\s*if \(signal\?\.aborted\) break;/);
+    expect(up).toMatch(/if \(signal\?\.aborted\) return \{ primary_issue: null, drill_recommendation: null, analyses, readFailed: 'cancelled' \};\s*if \(faultCandidates\.length > 0\)/);
+    // a shot's body read is asked only once the swing's read has settled (its budget is not spent waiting),
+    // and a cancelled one stops DECODING
+    const sd = fs.readFileSync(path.join(__dirname, '..', '..', 'services/swing/orchestrator/shotDetail.ts'), 'utf8');
+    expect(sd).toMatch(/if \(live && \(readSt === 'pending' \|\| readSt === 'running'\)\) \{\s*void whenStageSettled\(swingRunKey\(sessionId\), 'read'\)/);
+    expect(sd).toMatch(/0, \(\) => signal\.aborted,/);
     // a read that THREW hands over to the body read like every other failure — never 'failed' then 'ok'
     expect(up).toMatch(/liveSessionStore\(signal\)\.setSessionAnalysisStatus\(sessionId, 'analyzing_pose'\);\s*return \{ primary_issue: null, drill_recommendation: null, analyses, readFailed: "I had trouble watching this one/);
     expect(pd).toMatch(/\/api\/health\?lite=1`, \{ method: 'GET', signal: AbortSignal\.timeout\(5_000\) \}/);

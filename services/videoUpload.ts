@@ -1002,6 +1002,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           total_work: work.length,
         });
         await Promise.allSettled(batch.map(runOne));
+        if (signal?.aborted) break;   // a replaced / over-budget read posts no more batches
       }
     } else {
       // Sequential path — preserved for the feature-flag-off case
@@ -1015,6 +1016,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     // prefer the lowest-index swing that produced a real display frame; fall back
     // to the lowest-index swing with any fault index. Stable regardless of the
     // parallel completion order.
+    // Replaced or over budget: nothing below may run — no paid tentative, no memory notes, no club stats.
+    if (signal?.aborted) return { primary_issue: null, drill_recommendation: null, analyses, readFailed: 'cancelled' };
+
     if (faultCandidates.length > 0) {
       const byIndex = [...faultCandidates].sort((a, b) => a.index - b.index);
       const chosen = byIndex.find(c => c.uri) ?? byIndex[0];

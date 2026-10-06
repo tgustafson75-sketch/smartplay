@@ -1055,9 +1055,11 @@ export async function analyzeSwingFromVideo(
   handedness?: 'right' | 'left' | null,
   /** How wrong `impactMs` could be — see clubPathWindow.anchorToleranceMs. 0 = treat it as exact. */
   impactToleranceMs = 0,
+  /** 2026-10-05 — stop decoding once the caller's run is cancelled (a superseded body read must not keep the decoder). */
+  shouldAbort?: () => boolean,
 ): Promise<SwingBiomechanics | null> {
   const frames = await extractPoseFramesFromVideo(
-    videoUri, durationMs, trustDuration, window, impactMs, undefined, impactToleranceMs,
+    videoUri, durationMs, trustDuration, window, impactMs, shouldAbort, impactToleranceMs,
   );
   if (!frames) return null;
   return computeBiomechanics(frames, angle, handedness);

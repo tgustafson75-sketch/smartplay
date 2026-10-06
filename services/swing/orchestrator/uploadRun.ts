@@ -79,6 +79,7 @@ function stages(): StageDef<In>[] {
         // Overran its budget or the run was replaced: the read has moved on without this window.
         if (signal.aborted) return null;
         useSwingSessionStore.getState().setShotClipBoundaries(input.sessionId, shot.id, w.startSec, w.endSec, w.impactSec, 'auto');
+        runWindow.set(input.sessionId, windowKey(input.sessionId));   // the run's OWN window move is not a new request
         try {
           (require('../../../store/toastStore') as typeof import('../../../store/toastStore')).useToastStore.getState()
             .show(w.via === 'middle' ? 'Analyzing your swing… scrub + re-analyze to fine-tune.' : 'Found your swing — analyzing…');
@@ -128,6 +129,11 @@ function stages(): StageDef<In>[] {
         if (st === 'ok') {
           traceStep('read failed → the body read stands as the verdict', { reason: failed.slice(0, 80) });
           return 'body_read';
+        }
+        // A ball the camera saw never leave stands as the answer even if the body read itself failed.
+        if (session(input.sessionId)?.primary_issue?.issue_id === 'no_launch') {
+          useSwingSessionStore.getState().setSessionAnalysisStatus(input.sessionId, 'ok');
+          return 'no_launch';
         }
         useSwingSessionStore.getState().setSessionAnalysisStatus(input.sessionId, 'failed', failed);
         traceStep('read failed and the body read found nothing → failed', { reason: failed.slice(0, 80) });
@@ -220,6 +226,13 @@ function stages(): StageDef<In>[] {
   ];
 }
 
+/** The window each session's live run is reading (see runSwingAnalysis's restart rule). */
+const runWindow = new Map<string, string>();
+function windowKey(sessionId: string): string {
+  const sh = session(sessionId)?.shots.find((x) => x.clipUri);
+  return `${sh?.clipStartSeconds ?? ''}|${sh?.clipEndSeconds ?? ''}`;
+}
+
 function report(key: string, stage: string, error: string): void {
   try {
     // A read that never finished is settled by the settle stage (after the body read has had its turn) —
@@ -241,11 +254,15 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
    * just its pose tail, and a new request (Analyze this moment after a scrub, the angle chip, a trim)
    * wants a NEW read; joining handed back the old result and the new window was never analysed.
    */
+  const windowOf = () => windowKey(sessionId);
   const readSettled = (snap: { stages: Record<string, { status: string }> }) => {
     const st = snap.stages.read?.status;
-    return st != null && st !== 'pending' && st !== 'running';
+    // 2026-10-05 — also a NEW request when the swing's window moved since the live run began (a trim saved
+    // mid-read): joining would read the old window and never the one the player chose.
+    return (st != null && st !== 'pending' && st !== 'running') || runWindow.get(sessionId) !== windowOf();
   };
   const run = getOrStartRun<In>(swingRunKey(sessionId), () => {
+    runWindow.set(sessionId, windowOf());
     // A new analysis may have moved the window: the swing's shot runs (body + arc) start over.
     cancelRunsWithPrefix(`shot:${sessionId}:`);
     // 2026-10-04 — one issue-log trace per run (services/analysisTrace; Owner Tools → Analysis).

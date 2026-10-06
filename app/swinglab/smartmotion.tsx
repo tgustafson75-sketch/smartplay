@@ -2394,6 +2394,8 @@ export default function SmartMotion() {
        */
       // eslint-disable-next-line react-hooks/exhaustive-deps
       pipelineRunRef.current++; // invalidate any in-flight pipeline run
+      // 2026-10-05 — and THE run's results for this screen (a putt read spoken after we left).
+      sessionRunRef.current += 1;
       void stopSpeaking('screen:swinglab-smartmotion').catch(() => undefined);
       setSmartMotionRecording(false); // never leave the mic flagged-reserved after we leave
     };
@@ -2444,8 +2446,9 @@ export default function SmartMotion() {
       setAnalysis(null);
       setLocateDegraded(null);
       setAnalysisError(null);
-      setPoseFrames(null);
-      setBiomech(null);
+      // (pose frames / biomech are NOT cleared here: the selected swing's body read is drawn from the store
+      // by the selectedShotBio effect, which clears them itself when that swing has none — clearing here
+      // left a re-analyzed swing 2+ blank, since its stored read never changes identity.)
       setVideoDurationMs(null);
       // NOTE: ball speed/departure are intentionally NOT cleared here (the live CAGE path measures the
       // acoustic ball speed BEFORE calling this). reset()/startRecording clear them.
@@ -2551,6 +2554,14 @@ export default function SmartMotion() {
       const shotIndexOf = (shotId: string) => useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sid)?.shots.findIndex((x) => x.id === shotId) ?? -1;
       const { getCaddieName } = require('../../lib/persona') as typeof import('../../lib/persona');
       const { runSwingAnalysis } = require('../../services/swing/orchestrator/uploadRun') as typeof import('../../services/swing/orchestrator/uploadRun');
+      // A re-analyze is a NEW request (maybe a new view or window): never join the read still going.
+      if (reuse) {
+        try {
+          const { liveRun } = require('../../services/swing/orchestrator/engine') as typeof import('../../services/swing/orchestrator/engine');
+          const { swingRunKey } = require('../../services/swing/orchestrator/shotDetail') as typeof import('../../services/swing/orchestrator/shotDetail');
+          liveRun(swingRunKey(sid))?.cancel();
+        } catch { /* no live run */ }
+      }
       const readP = runSwingAnalysis(sid, {
         caddie_name: getCaddieName(analysisCaddieRef.current),
         ...(angle === 'face_on' || angle === 'down_the_line' ? { angle } : {}),
@@ -2558,7 +2569,8 @@ export default function SmartMotion() {
         ...(isDrill && typeof drillName === 'string' && drillName.trim() ? { drill_name: drillName.trim() } : {}),
         // Tempo / body / launch are measured in REVIEW — on a new capture these refs still hold the PREVIOUS
         // swing's numbers, so only a re-analyze (this swing, measured) sends them. The heard strike is this one's.
-        measured: reuse ? {
+        // ...and only for swing 1, which is the swing the read attaches them to.
+        measured: reuse && selectedSwingRef.current === 0 ? {
           tempo_ratio: tempoRef.current?.ratio ?? null,
           backswing_ms: tempoRef.current?.backswingMs ?? null,
           downswing_ms: tempoRef.current?.downswingMs ?? null,
@@ -2695,9 +2707,17 @@ export default function SmartMotion() {
           } catch { /* non-fatal */ }
         }
       } else {
-        // No cloud read for this swing: the run hands over to the body read and settles the status once
-        // (the effect below shows a failure only when the run says so).
+        /**
+         * No cloud read for this swing: the run hands over to the body read and settles the status ONCE.
+         * Stay on "Analyzing…" until it has — going to review now showed "NO READ — RECORD AGAIN" for up
+         * to two minutes and then flipped to the measured verdict (the failed-then-a-read flash, here).
+         */
         setAnalysisError(null);
+        try {
+          const { whenStageSettled } = require('../../services/swing/orchestrator/engine') as typeof import('../../services/swing/orchestrator/engine');
+          const { swingRunKey } = require('../../services/swing/orchestrator/shotDetail') as typeof import('../../services/swing/orchestrator/shotDetail');
+          await whenStageSettled(swingRunKey(sid), 'settle');
+        } catch { /* the run is gone — review shows what the store holds */ }
       }
       } finally {
         if (sessionRunRef.current === myRun) setPhase('review');

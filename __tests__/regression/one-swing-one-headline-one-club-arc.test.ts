@@ -140,3 +140,23 @@ describe('the review loop and the third headline writer', () => {
     expect(h.slice(0, h.indexOf("'positionMillis' in s"))).not.toMatch(/!loopSeekGuardRef\.current/);
   });
 });
+
+/** 2026-10-05 — final review of the one-path SmartMotion screen. */
+describe('SmartMotion waits for the run, and re-analyze is a new request', () => {
+  const ra = sm.slice(sm.indexOf('const runAnalysis = useCallback('), sm.indexOf("if (phase !== 'review' || analysis || puttAnalysis) return;"));
+  it('no cloud read: stays on Analyzing until the run SETTLES (no "no read" flash, then a verdict)', () => {
+    expect(ra).toMatch(/setAnalysisError\(null\);\s*try \{[\s\S]{0,400}await whenStageSettled\(swingRunKey\(sid\), 'settle'\);/);
+  });
+  it('re-analyze does not blank the body read it cannot recompute (the store-drawn effect owns it)', () => {
+    expect(ra).not.toMatch(/setPoseFrames\(null\);\s*setBiomech\(null\);/);
+  });
+  it('measurements travel only for swing 1, the swing the read attaches them to', () => {
+    expect(ra).toMatch(/measured: reuse && selectedSwingRef\.current === 0 \? \{/);
+  });
+  it('re-analyze never joins the read still going (its new view/window would be dropped)', () => {
+    expect(ra).toMatch(/if \(reuse\) \{\s*try \{[\s\S]{0,500}liveRun\(swingRunKey\(sid\)\)\?\.cancel\(\);/);
+  });
+  it('leaving the screen drops the run\'s results for it (no putt read spoken on the next screen)', () => {
+    expect(sm).toMatch(/pipelineRunRef\.current\+\+;[^\n]*\n[\s\S]{0,200}sessionRunRef\.current \+= 1;/);
+  });
+});

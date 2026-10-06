@@ -118,6 +118,7 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
   const poseMod = await import('../../poseAnalysisApi');
   const biomech = await poseMod.analyzeSwingFromVideo(
     uri, durMs, s.upload?.angleOverride ?? null, probed > 0, window, impactMs, swingerForSession(s).handedness,
+    0, () => signal.aborted,   // a superseded / cancelled body read stops decoding, not just writing
   );
   const store = liveSessionStore(signal);
   store.setShotBiomechanics(input.sessionId, input.shotId, biomech);
@@ -299,6 +300,13 @@ export function requestShotDetail(sessionId: string, shotId: string, opts: { arc
     return () => { off = true; };
   }
   let off = false;
+  // While the swing's read is still going, ask only once it has settled: the shot run's budget would
+  // otherwise be spent waiting (a 6-swing read outlasts it) and the body read fail without decoding.
+  const readSt = live?.snapshot().stages.read?.status;
+  if (live && (readSt === 'pending' || readSt === 'running')) {
+    void whenStageSettled(swingRunKey(sessionId), 'read').then(() => { if (!off) requestShotDetail(sessionId, shotId, opts); });
+    return () => { off = true; };
+  }
   const run = runShotDetail(sessionId, shotId, opts);
   // Cancelled by a NEW analysis of the swing (its window may have moved): the screen still shows this
   // shot, so ask again once that analysis lets it (requestShotDetail waits for its read).
