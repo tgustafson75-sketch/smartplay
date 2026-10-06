@@ -966,6 +966,8 @@ export default function PlayTab() {
   // Google Places golf courses), so ANY course near you auto-surfaces in the search section — not just the
   // bundled catalog. Each resolves through the same selectSummary → golfcourseapi path when tapped.
   const [nearbyApiCourses, setNearbyApiCourses] = useState<CourseSummary[]>([]);
+  // Bumped by the refresh button: re-ask "what is near me" even when the position did not move.
+  const [discoveryNonce, setDiscoveryNonce] = useState(0);
   // 2026-08-09 — arrival auto-download dedupe (per app session).
   const autoDownloadFiredRef = useRef<Set<string>>(new Set());
   const downloadToastFiredRef = useRef<Set<string>>(new Set());
@@ -1011,16 +1013,25 @@ export default function PlayTab() {
    * 3. IT RETRIES. A one-shot at mount is exactly wrong for a player who opens the app under tree
    *    cover and walks to the first tee thirty seconds later.
    */
-  const refreshLocation = useCallback(async (opts?: { retries?: number }) => {
+  /**
+   * 2026-10-05 (Tim, Eastvale: "still says Menifee Lakes is the closest course and will not update. The
+   * course/gps refresh icon is not working") — a MANUAL refresh (`manual: true`) is a player saying "I
+   * have moved": it skips the up-to-30-minute-old cached fix (a fix from before the drive is exactly the
+   * wrong answer), re-runs discovery even if the position did not change, and SAYS what it found.
+   * Returns the position it settled on (null = none).
+   */
+  const refreshLocation = useCallback(async (opts?: { retries?: number; manual?: boolean }): Promise<{ lat: number; lng: number } | null> => {
     const maxAttempts = opts?.retries ?? 3;
     setLocating(true);
+    let got: { lat: number; lng: number } | null = null;
     try {
       const { granted } = await Location.requestForegroundPermissionsAsync();
-      if (!granted) return;
+      if (!granted) return null;
 
-      // 1. Cached fix first — instant, and good enough to unblock discovery immediately.
+      // 1. Cached fix first — instant, and good enough to unblock discovery immediately. Not on a manual
+      //    refresh: there it can only hand back where the player WAS.
       let haveAny = false;
-      try {
+      if (!opts?.manual) try {
         const last = await Location.getLastKnownPositionAsync({ maxAge: 30 * 60 * 1000 });
         /**
          * 2026-09-10 — COORD-GUARD BOTH READS. This is the last place in the app taking a raw
@@ -1037,7 +1048,8 @@ export default function PlayTab() {
          */
         if (last && isValidGolfCoord(last.coords.latitude, last.coords.longitude)) {
           haveAny = true;
-          setUserPosition({ lat: last.coords.latitude, lng: last.coords.longitude });
+          got = { lat: last.coords.latitude, lng: last.coords.longitude };
+          setUserPosition(got);
         }
       } catch { /* cached fix is a bonus, never a requirement */ }
 
@@ -1054,16 +1066,29 @@ export default function PlayTab() {
             console.log(`[play] rejected invalid position lat=${pos.coords.latitude} lng=${pos.coords.longitude}`);
             throw new Error('invalid_coord');
           }
-          setUserPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          return;
+          got = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUserPosition(got);
+          return got;
         } catch (e) {
           console.log('[play] location attempt', attempt, 'of', maxAttempts, 'failed:', e);
           if (attempt < maxAttempts) await new Promise(r => setTimeout(r, attempt * 4000));
         }
       }
       if (!haveAny) console.log('[play] no position after', maxAttempts, 'attempts — discovery stays catalog-only');
+      // A manual refresh whose fresh fix failed still falls back to the OS's cached one.
+      if (opts?.manual && !got) {
+        try {
+          const last = await Location.getLastKnownPositionAsync({ maxAge: 30 * 60 * 1000 });
+          if (last && isValidGolfCoord(last.coords.latitude, last.coords.longitude)) {
+            got = { lat: last.coords.latitude, lng: last.coords.longitude };
+            setUserPosition(got);
+          }
+        } catch { /* nothing cached either */ }
+      }
+      return got;
     } catch (e) {
       console.log('[play] manual location refresh failed:', e);
+      return got;
     } finally {
       setLocating(false);
     }
@@ -1314,7 +1339,7 @@ export default function PlayTab() {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [userPosition, customSummaries]);
+  }, [userPosition, customSummaries, discoveryNonce]);
 
   const closestLocal: CourseSummary[] = useMemo(() => {
     // Only courses that are HIS — services/yourCourses owns the rule.
@@ -1405,8 +1430,27 @@ export default function PlayTab() {
   // satellite thumbnail, rating/slope, and the player's OWN record at that course pulled from
   // roundHistory (rounds played, best/last score, best vs-par). Matched by courseId first, then a
   // normalized name compare (imports/local rounds may lack the API id). Null when GPS/round aren't ready.
+  /**
+   * 2026-10-05 (Tim, in Eastvale: "NEAREST · 32 mi — Menifee Lakes … will not update") — NEAREST means
+   * nearest, not nearest of the courses you have saved. The card took closestLocal[0], which is HIS
+   * list only, so away from home it named his home club 32 miles off while the courses down the road
+   * (found by discovery) sat further down the tab. It now takes the nearest of both, by real distance.
+   */
+  const nearestOverall: CourseSummary | null = useMemo(() => {
+    if (!userPosition) return null;
+    const seen = new Set<string>();
+    let best: { c: CourseSummary; yds: number } | null = null;
+    for (const c of [...closestLocal, ...nearbyApiCourses]) {
+      const key = c.club_name.toLowerCase();
+      if (seen.has(key) || c.lat == null || c.lng == null) continue;
+      seen.add(key);
+      const yds = haversineYards(userPosition, { lat: c.lat, lng: c.lng });
+      if (!best || yds < best.yds) best = { c, yds };
+    }
+    return best?.c ?? closestLocal[0] ?? null;
+  }, [closestLocal, nearbyApiCourses, userPosition]);
   const heroCourse: CourseSummary | null = (!isRoundActive && userPosition && !atCourse?.sibling)
-    ? (closestLocal[0] ?? null)
+    ? nearestOverall
     : null;
   const heroStats: {
     rounds: number; bestScore: number | null; lastScore: number | null;
@@ -2032,7 +2076,21 @@ export default function PlayTab() {
   // action is "go" — not select → scroll → Start Round → briefing. Start directly with
   // that course id (the same id the banner already resolves via selectSummary→getCourse,
   // and which the Caddie tab's runStartRound resolves), carrying current setup defaults.
-  const startRoundAtCourse = (s: CourseSummary) => {
+  const startRoundAtCourse = async (s: CourseSummary) => {
+    /**
+     * 2026-10-05 — a course found by discovery carries a synthetic id (place:<google id> / near:<name>)
+     * that the round's start cannot load; the caddie tab fell back to its setup card. Resolve it by
+     * name first (the same lookup selectSummary does), and start with the real id.
+     */
+    if (String(s.id).startsWith('place:') || String(s.id).startsWith('near:')) {
+      const found = await searchCourses(s.club_name ?? '').catch(() => []);
+      const real = found.find(r => !r._error && r.id);
+      if (!real) {
+        void selectSummary(s);   // shows the honest "couldn't find" on the card
+        return;
+      }
+      s = { ...s, id: real.id };
+    }
     prewarmBriefing(getApiBaseUrl());
     prewarmVoice();
     void selectSummary(s); // keep the Play-tab UI in sync (fire-and-forget)
@@ -2143,7 +2201,10 @@ export default function PlayTab() {
           // 2026-08-10 — was an inline private fallback; now the shared resolver, so the hero and
           // the rows below it can never disagree about a course's thumbnail.
           const thumb = thumbFor(heroCourse);
-          const dist = distanceLabelById[heroCourse.id];
+          const dist = distanceLabelById[heroCourse.id]
+            ?? (userPosition && heroCourse.lat != null && heroCourse.lng != null
+              ? formatTravelDistance(haversineYards(userPosition, { lat: heroCourse.lat, lng: heroCourse.lng }), distanceUnit) ?? null
+              : null);
           const vsPar = (n: number | null) => n == null ? null : n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`;
           const info: string[] = [];
           if (heroCourse.rating != null) info.push(`${heroCourse.rating.toFixed(1)}${heroCourse.slope != null ? `/${heroCourse.slope}` : ''}`);
@@ -2160,7 +2221,7 @@ export default function PlayTab() {
             <TouchableOpacity
               style={styles.heroCard}
               activeOpacity={0.9}
-              onPress={() => startRoundAtCourse(heroCourse)}
+              onPress={() => void startRoundAtCourse(heroCourse)}
               accessibilityRole="button"
               accessibilityLabel={`Start a round at ${heroCourse.club_name}`}
             >
@@ -2273,7 +2334,14 @@ export default function PlayTab() {
              * it dead and spinning for ~48 seconds. The cached-fix fallback already gives this tap an
              * instant position, so the long ladder buys nothing a user is watching for.
              */
-            onPress={() => void refreshLocation({ retries: 1 })}
+            onPress={() => {
+              void (async () => {
+                const pos = await refreshLocation({ retries: 1, manual: true });
+                setDiscoveryNonce((n) => n + 1);   // re-ask what is near, even if we did not move
+                const toast = (require('../../store/toastStore') as typeof import('../../store/toastStore')).useToastStore.getState();
+                toast.show(pos ? 'Location updated — finding courses near you…' : "Couldn't get a GPS fix — check Location is on and try again.");
+              })();
+            }}
             disabled={locating}
             accessibilityRole="button"
             accessibilityLabel={t('play.accessibility_label.refresh_nearby_courses_from_your')}
