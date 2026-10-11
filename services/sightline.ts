@@ -14,9 +14,17 @@
  * No new endpoint, no on-device model, no banner or toast. Errors go to the dev log and the issue log,
  * each with its own code.
  */
-import { metaWearables, type MetaWearablesNative } from '../glasses-modules/meta-wearables';
 import { isGlassesSurfaceEnabled } from './glassesGate';
 import { devLog } from './devLog';
+
+type MetaWearablesNative = import('../glasses-modules/meta-wearables').MetaWearablesNative;
+
+/** The glasses module is loaded here, on first use, never at the top of a file a store build bundles. */
+function metaWearables(): MetaWearablesNative | null {
+  try {
+    return (require('../glasses-modules/meta-wearables') as typeof import('../glasses-modules/meta-wearables')).metaWearables();
+  } catch { return null; }
+}
 
 let started = false;
 let sessionActive = false;
