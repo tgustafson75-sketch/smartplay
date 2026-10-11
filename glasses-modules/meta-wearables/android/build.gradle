@@ -1,0 +1,37 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.metawearables'
+version = '0.1.0'
+
+// Meta Wearables Device Access Toolkit — Maven Central (no GitHub Packages token). All three artifacts on
+// the SAME version. 1.0.x needs Meta AI app V290+ and glasses firmware V128+ (Meta's dependency table).
+def MWDAT_VERSION = '1.0.1'
+
+expoModule {
+  canBePublished false
+}
+
+android {
+  namespace "expo.modules.metawearables"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+  }
+}
+
+dependencies {
+  implementation "com.meta.wearable:mwdat-core:${MWDAT_VERSION}"
+  implementation "com.meta.wearable:mwdat-camera:${MWDAT_VERSION}"
+  implementation "androidx.activity:activity-ktx:1.10.1"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+  // Mock Device Kit — tests only, never in the APK's main classpath.
+  androidTestImplementation "com.meta.wearable:mwdat-mockdevice:${MWDAT_VERSION}"
+  androidTestImplementation "androidx.test.ext:junit:1.2.1"
+  androidTestImplementation "androidx.test:runner:1.6.2"
+  androidTestImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "meta-wearables",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "description": "Sightline: Meta Wearables DAT (Android) for the SmartPlay Caddie glasses dev variant only. Linked by plugins/withMetaWearables.js (APP_VARIANT=glasses); never autolinked into a store build."
+}

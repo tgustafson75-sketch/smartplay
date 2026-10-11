@@ -48,4 +48,32 @@ describe('the glasses build variant', () => {
     const gate = fs.readFileSync(path.join(root, 'services/glassesGate.ts'), 'utf8');
     expect(gate).toMatch(/return isGlassesVariant\(\) && isFlagEnabled\('glasses_enabled'\);/);
   });
+
+  it('the DAT module can only be linked by the glasses plugin — never by default autolinking', () => {
+    // Not under modules/ (the default local-module dir), not a package.json dependency, not in node_modules.
+    expect(fs.existsSync(path.join(root, 'glasses-modules/meta-wearables/expo-module.config.json'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'modules/meta-wearables'))).toBe(false);
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    expect({ ...pkg.dependencies, ...pkg.devDependencies }['meta-wearables']).toBeUndefined();
+    expect(pkg.expo?.autolinking?.searchPaths ?? []).not.toContain('./glasses-modules');
+    // ...and the glasses plugin is what adds the search path, and the Developer Mode meta-data
+    const plugin = fs.readFileSync(path.join(root, 'plugins/withMetaWearables.js'), 'utf8');
+    expect(plugin).toMatch(/expoAutolinking\.searchPaths = \["\$\{dir\}"\]/);
+    expect(plugin).toMatch(/'com\.meta\.wearable\.mwdat\.APPLICATION_ID', '0'/);
+    expect(plugin).toMatch(/'com\.meta\.wearable\.mwdat\.CLIENT_TOKEN', '0'/);
+    // pinned SDK, Maven Central, all three on one version; mockdevice is test-only
+    const gradle = fs.readFileSync(path.join(root, 'glasses-modules/meta-wearables/android/build.gradle'), 'utf8');
+    expect(gradle).toMatch(/def MWDAT_VERSION = '1\.0\.1'/);
+    expect(gradle).toMatch(/androidTestImplementation "com\.meta\.wearable:mwdat-mockdevice:\$\{MWDAT_VERSION\}"/);
+    expect(gradle).not.toMatch(/^\s*implementation "com\.meta\.wearable:mwdat-mockdevice/m);
+    expect(gradle).not.toMatch(/maven\.pkg\.github\.com/);
+  });
+
+  it('handleIntent runs in BOTH onCreate and onNewIntent; initialize once per process', () => {
+    const k = fs.readFileSync(path.join(root, 'glasses-modules/meta-wearables/android/src/main/java/expo/modules/metawearables/MetaWearablesPackage.kt'), 'utf8');
+    expect(k).toMatch(/override fun onCreate\(activity: Activity[\s\S]{0,200}Sightline\.handleIntent\(activity, activity\.intent\)/);
+    expect(k).toMatch(/override fun onNewIntent\(intent: Intent\): Boolean \{[\s\S]{0,120}Sightline\.handleIntent\(it, intent\)/);
+    const s = fs.readFileSync(path.join(root, 'glasses-modules/meta-wearables/android/src/main/java/expo/modules/metawearables/Sightline.kt'), 'utf8');
+    expect(s).toMatch(/if \(!initialized\.compareAndSet\(false, true\)\) return/);
+  });
 });

@@ -71,6 +71,9 @@ jobs:
           echo "$CHANGED" | grep -qE '^targets/' && HITS="${HITS}native targets (watch app)"$'\n' || true
           echo "$CHANGED" | grep -qE '^wear-os-app/' && HITS="${HITS}Wear OS app (separate native binary)"$'\n' || true
           echo "$CHANGED" | grep -qE '^patches/' && HITS="${HITS}patch-package patches (can patch native code)"$'\n' || true
+          # 2026-10-10 — glasses-modules/ holds the Sightline DAT module (Kotlin), linked only into the
+          # glasses dev variant by plugins/withMetaWearables.js. Still native source: flag it.
+          echo "$CHANGED" | grep -qE '^glasses-modules/' && HITS="${HITS}glasses native module (Sightline, glasses variant)"$'\n' || true
 
           # app.json / app.config.* — plugins, permissions, entitlements, bundle ids.
           echo "$CHANGED" | grep -qE '^app\.(json|config\.(js|ts|cjs|mjs))$' && HITS="${HITS}app config (plugins / permissions / entitlements / bundle id)"$'\n' || true
