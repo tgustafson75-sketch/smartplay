@@ -23,6 +23,7 @@
     "ios:build:production": "node scripts/ota-owner-guard.mjs && eas build --profile production --platform ios",
     "ios:submit": "eas submit --profile production --platform ios --latest",
     "ios:ship": "node scripts/ota-owner-guard.mjs && eas build --profile production --platform ios --auto-submit-with-profile production",
+    "course:check": "node scripts/course-integrity.mjs",
     "ota:baseline": "node scripts/ota-preflight.mjs --write",
     "ota:preview": "node scripts/ota-preflight.mjs && eas update --branch preview",
     "ota:production": "node scripts/ota-preflight.mjs && node scripts/ota-owner-guard.mjs && eas update --branch production",

@@ -783,6 +783,54 @@ export default function CaddieTab() {
     // paceTick: the elapsed clock has to move even when nothing else does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPaceOfPlay, isRoundActive, roundStartTime, holeStartedAt, currentHole, paceTick]);
+  /**
+   * 2026-10-10 (Tim: "surface showing last shot distance with particular emphasis on drives and shots
+   * where user is getting better than their baseline") — services/round/lastShotHighlight decides; the
+   * strip shows it (highlighted for a drive or a beat-your-usual shot) and the caddie says the ones worth
+   * interrupting for, once, on the shared unprompted-voice clock.
+   */
+  const roundShots = useRoundStore((s) => s.shots);
+  const [lastShotTick, setLastShotTick] = useState(0);
+  useEffect(() => {
+    if (!isRoundActive) return;
+    const id = setInterval(() => setLastShotTick((n) => n + 1), 60_000);   // ages the line out
+    return () => clearInterval(id);
+  }, [isRoundActive]);
+  const lastShot = useMemo(() => {
+    if (!isRoundActive) return null;
+    const { lastShotHighlight } = require('../../services/round/lastShotHighlight') as typeof import('../../services/round/lastShotHighlight');
+    const { useClubStatsStore } = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
+    const cs = useClubStatsStore.getState();
+    // A usual only from a REAL number for that club (measured shots or his own stated distance).
+    return lastShotHighlight(roundShots, (club) => ({
+      totalYards: cs.hasSamples(club) || cs.hasManual(club) ? cs.totalFor(club) : null,
+    }), Date.now());
+    // lastShotTick: the line has to age out even when no shot changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRoundActive, roundShots, lastShotTick]);
+  const lastShotText = useMemo(() => {
+    if (!lastShot) return null;
+    const { lastShotLine } = require('../../services/round/lastShotHighlight') as typeof import('../../services/round/lastShotHighlight');
+    return lastShotLine(lastShot, (c) => c);
+  }, [lastShot]);
+  const spokenLastShotRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lastShot || !lastShot.shotId || spokenLastShotRef.current === lastShot.shotId) return;
+    spokenLastShotRef.current = lastShot.shotId;   // one chance per shot — a skipped line is not re-tried later
+    if (!_proactive_kevin_enabled || localMode || !mayInterject(trustLevel)) return;
+    if (Date.now() - lastShot.knownAt > 2 * 60 * 1000) return;   // only as it happens, never on reopening the app
+    const { lastShotSpokenLine, clubSpokenName } = require('../../services/round/lastShotHighlight') as typeof import('../../services/round/lastShotHighlight');
+    const line = lastShotSpokenLine(lastShot, clubSpokenName);
+    if (!line) return;
+    if (isSpeaking() || voiceStateRef.current !== 'idle' || voiceChannelBusy()) return;
+    const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
+    if (!ve || lang !== 'en') return;   // a templated English line — other languages get it on the strip
+    noteInterjection();
+    setCaddieResponse(line);
+    setVoiceState('proactive');
+    speak(line, vg, lang, apiUrl).catch(() => {}).finally(() => setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastShot?.shotId]);
   /** Measured height of the plan card, so the full-size SmartVision map keeps its live marker clear. */
   const [planCardHeight, setPlanCardHeight] = useState(0);
   const yardageReadout = useMemo(() => ({
@@ -4217,6 +4265,8 @@ export default function CaddieTab() {
              [[two-owners-is-the-root-cause]] */
           yardageSource={yardageReadout.source}
           paceLine={paceLineText}
+          lastShotLine={lastShotText}
+          lastShotEmphasis={!!lastShot && (lastShot.isDrive || lastShot.beatUsual)}
           // 2026-09-29 (Tim: "Scoring is very hard with a small screen") — the scoring row. Same
           // logScore / logPutts seam as the scorecard and the shot sheet (logScore also moves the
           // ghost). The strip hands over ONE settled entry, stamped with the hole it was tapped on;

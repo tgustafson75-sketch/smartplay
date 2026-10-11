@@ -1,5 +1,12 @@
 # OTA runbook
 
+## Every Sunday, before the release slot
+
+1. `npm run course:check` — the course engine health report (read-only; writes `docs/course-health/<date>.md`
+   with the change since last week). Fix what it lists before the OTA, or note why not.
+2. Free vs Pro — adjust `api/app-config.ts` if needed and push (live in minutes; no OTA needed).
+3. The OTA itself: `npm run ota:production` (Sunday → Monday 12:00 a.m. Central only).
+
 ## Something is broken in production. What do I do?
 
 **1. Kill the feature. Seconds, no pipeline.**

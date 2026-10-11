@@ -1,0 +1,11 @@
+{
+  "courses": 18,
+  "holes": 324,
+  "badCoords": 1,
+  "cardMismatch": 8,
+  "parBand": 1,
+  "frontBack": 0,
+  "holeGaps": 0,
+  "preCutoverAi": 14,
+  "lowConfAi": 0
+}

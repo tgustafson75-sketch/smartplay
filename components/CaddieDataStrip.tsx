@@ -57,6 +57,12 @@ export interface CaddieDataStripProps {
   yardageSource?: 'live' | 'static' | 'building' | null;
   /** 2026-09-29 — the optional pace-of-play line (services/paceOfPlay.paceLine), led in the stripe. */
   paceLine?: string | null;
+  /**
+   * 2026-10-10 — the last shot's distance (services/round/lastShotHighlight.lastShotLine), led in the
+   * stripe while it is fresh; `lastShotEmphasis` lights it for a drive or a shot past the player's usual.
+   */
+  lastShotLine?: string | null;
+  lastShotEmphasis?: boolean;
   // 2026-05-19 — Running round totals. When at least one hole has been
   // scored, the strip swaps the STROKE cell for SCORE (e.g. "12 +1")
   // so the user sees the round total without leaving the Caddie tab.
@@ -121,6 +127,8 @@ export default function CaddieDataStrip({
   stripLayout = 'horizontal',
   yardageSource = null,
   paceLine = null,
+  lastShotLine = null,
+  lastShotEmphasis = false,
   // 2026-05-19 — totalScore/scoreVsPar accepted as props for forward
   // compat but NOT rendered in the strip per Tim's "don't show the
   // score the whole time, mentals matter" call. Scoring lives in the
@@ -657,7 +665,19 @@ export default function CaddieDataStrip({
             (positioned absolute above the data row) so the strip's height
             stays at 84 in the layout sense. Tap routes the same as the
             rest of the strip (expand cockpit). */}
-        {paceLine ? (
+        {lastShotLine ? (
+          <View style={[styles.ghostStripe, twoRow && { bottom: STRIP_SCORING_ROW_HEIGHT + 1 }]}>
+            <Ionicons name={lastShotEmphasis ? 'trending-up' : 'golf-outline'} size={9} color={lastShotEmphasis ? '#88F700' : '#a78bfa'} />
+            <Text
+              style={[styles.ghostStripeText, lastShotEmphasis && { color: '#88F700', fontWeight: '800' }]}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.1}
+              accessibilityLabel={`Last shot: ${lastShotLine}`}
+            >
+              {[lastShotLine, paceLine, ghostLine].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+        ) : paceLine ? (
           <View style={[styles.ghostStripe, twoRow && { bottom: STRIP_SCORING_ROW_HEIGHT + 1 }]}>
             <Ionicons name="timer-outline" size={9} color="#a78bfa" />
             <Text style={styles.ghostStripeText} numberOfLines={1} maxFontSizeMultiplier={1.1}>
