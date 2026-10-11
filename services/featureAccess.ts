@@ -156,9 +156,23 @@ export function editionFor(status: SubscriptionStatus): Edition {
  * While SUBSCRIPTIONS_ENABLED is false this returns true unconditionally — the
  * ~12 call sites across the app behave exactly as they do today.
  */
+/**
+ * 2026-10-10 — the edition a feature needs RIGHT NOW: the server's table (api/app-config, adjusted
+ * weekly without an app update — services/remoteAppConfig) over the built-in FEATURE_EDITION above.
+ * Starting a round is free whatever the server says: the front door is never walled.
+ */
+export function effectiveEdition(feature: FeatureKey): Edition {
+  if (feature === 'round_start') return 'lite';
+  try {
+    const remote = (require('./remoteAppConfig') as typeof import('./remoteAppConfig')).remoteEditionFor(feature);
+    if (remote === 'lite' || remote === 'pro') return remote;
+  } catch { /* the built-in table */ }
+  return FEATURE_EDITION[feature];
+}
+
 export function canAccess(feature: FeatureKey, status: SubscriptionStatus): boolean {
   if (!SUBSCRIPTIONS_ENABLED) return true;
-  const required = FEATURE_EDITION[feature];
+  const required = effectiveEdition(feature);
   return required === 'lite' || editionFor(status) === 'pro';
 }
 
@@ -196,7 +210,7 @@ export function trialDaysLeft(trial_started_at: number | null): number | null {
 /** Features in an edition — for the marketing/comparison surface, not gating. */
 export function featuresIn(edition: Edition): FeatureKey[] {
   return (Object.keys(FEATURE_EDITION) as FeatureKey[])
-    .filter(f => FEATURE_EDITION[f] === 'lite' || edition === 'pro');
+    .filter(f => effectiveEdition(f) === 'lite' || edition === 'pro');
 }
 
 /**
