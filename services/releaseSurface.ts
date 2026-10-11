@@ -184,5 +184,11 @@ const SHELVED_FEATURES: ReadonlySet<ShelvedFeature> = new Set<ShelvedFeature>([
  * Same rule as routes: hidden from players, still reachable for the owner so it can be tested.
  */
 export function isFeatureShelved(feature: ShelvedFeature): boolean {
+  // 2026-10-10 (Sightline) — the glasses surface is the glasses build variant's, behind its kill switch
+  // (services/glassesGate) — not an owner perk in a store build that has no DAT SDK in it.
+  if (feature === 'meta_glasses') {
+    const { isGlassesSurfaceEnabled } = require('./glassesGate') as typeof import('./glassesGate');
+    return !isGlassesSurfaceEnabled();
+  }
   return SHELVED_FEATURES.has(feature) && !isOwnerBuild();
 }

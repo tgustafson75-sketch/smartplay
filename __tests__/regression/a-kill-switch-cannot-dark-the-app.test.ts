@@ -41,7 +41,11 @@ describe('the store fails open, on every failure a network can produce', () => {
   it('starts every feature ON before any network call happens', () => {
     const { useFlagStore, DEFAULT_FLAGS } = freshStore();
     expect(useFlagStore.getState().flags).toEqual(DEFAULT_FLAGS);
-    expect(Object.values(DEFAULT_FLAGS).every(Boolean)).toBe(true);
+    // Every SHIPPED feature is on. The one exception is glasses_enabled (2026-10-10): it turns ON a
+    // dev-only surface in the glasses build variant, so failing open must leave it OFF.
+    const { glasses_enabled, ...shipped } = DEFAULT_FLAGS;
+    expect(Object.values(shipped).every(Boolean)).toBe(true);
+    expect(glasses_enabled).toBe(false);
   });
 
   const FAILURES: [string, () => Promise<unknown>][] = [

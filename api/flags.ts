@@ -37,6 +37,9 @@ const DEFAULTS = {
     kevin_tool_routing: true,
     lie_analysis: true,
     swing_analysis: true,
+    // 2026-10-10 — Sightline (Meta glasses), the one flag that ships OFF. Only the `glasses` build
+    // variant reads it (services/glassesGate); turn it on in Edge Config `flags.glasses_enabled`.
+    glasses_enabled: false,
   },
   course_geometry: { disabled_course_ids: [] as string[] },
   min_supported_build: 0,

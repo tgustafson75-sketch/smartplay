@@ -25,6 +25,7 @@
  * `npm run ota:baseline` re-records the fingerprint. Run it when a STORE BUILD ships, because that
  * is the moment the installed shell catches up with the source.
  */
+import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -71,7 +72,37 @@ const isExcludedFromBuild = (relPath) =>
  * how Health Connect's native half was taken out of the Android build). Editing it changes the
  * shell exactly like editing a plugin, so it moves the fingerprint.
  */
-const NATIVE_FILES = ['app.json', 'app.config.js', 'app.config.ts', 'react-native.config.js'];
+const NATIVE_FILES = ['app.json', 'react-native.config.js'];
+
+/**
+ * 2026-10-10 (Sightline) — app.config.js is hashed by its OUTPUT FOR A PRODUCTION BUILD, not its bytes.
+ * It exists to add the `glasses` dev variant (APP_VARIANT=glasses) and returns app.json unchanged for
+ * everything else; what reaches the store shell is the production output. Without app.config.js the
+ * output is app.json itself, so adding the file is a no-op here exactly when it is a no-op for the shell.
+ * Plugins referenced ONLY by a non-production variant cannot reach the shell either, and are skipped.
+ */
+const requireCjs = createRequire(import.meta.url);
+function resolvedConfig(variant) {
+  const base = JSON.parse(readFileSync(join(root, 'app.json'), 'utf8')).expo ?? {};
+  const file = join(root, 'app.config.js');
+  if (!existsSync(file)) return base;
+  const prev = process.env.APP_VARIANT;
+  if (variant == null) delete process.env.APP_VARIANT; else process.env.APP_VARIANT = variant;
+  try {
+    delete requireCjs.cache[requireCjs.resolve(file)];
+    const fn = requireCjs(file);
+    return typeof fn === 'function' ? fn({ config: JSON.parse(JSON.stringify(base)) }) : (fn.expo ?? fn);
+  } finally {
+    if (prev == null) delete process.env.APP_VARIANT; else process.env.APP_VARIANT = prev;
+  }
+}
+const pluginPath = (p) => (Array.isArray(p) ? p[0] : p);
+const productionPlugins = new Set((resolvedConfig(undefined).plugins ?? []).map(pluginPath));
+const variantOnlyPluginFiles = new Set(
+  (resolvedConfig('glasses').plugins ?? []).map(pluginPath)
+    .filter((p) => typeof p === 'string' && p.startsWith('./') && !productionPlugins.has(p))
+    .map((p) => p.replace(/^\.\//, '')),
+);
 
 /**
  * 2026-09-13 — eas.json is hashed with its `EXPO_PUBLIC_*` env values REMOVED, for the same reason
@@ -100,6 +131,14 @@ function easJsonNativeSurface() {
   try {
     const raw = readFileSync(join(root, 'eas.json'), 'utf8');
     const parsed = JSON.parse(raw);
+    /**
+     * 2026-10-10 (Sightline) — ONLY the profiles that build a binary on the `production` channel: those
+     * are the shells a production OTA lands on. A dev-only profile on its own channel (the `glasses`
+     * variant, runtime "glasses-dev-1") can never receive a production update, so its env moving is not
+     * a change to the shell in the store — and hashing it refused a pure-JS OTA for that reason.
+     */
+    parsed.build = Object.fromEntries(Object.entries(parsed.build ?? {})
+      .filter(([, profile]) => profile && typeof profile === 'object' && profile.channel === 'production'));
     for (const profile of Object.values(parsed.build ?? {})) {
       if (profile && typeof profile === 'object' && profile.env && typeof profile.env === 'object') {
         for (const key of Object.keys(profile.env)) {
@@ -149,6 +188,7 @@ function fingerprint() {
   const listed = [];
   for (const f of files.sort()) {
     const rel = relative(root, f).split(sep).join('/');
+    if (variantOnlyPluginFiles.has(rel)) continue;   // reaches only a non-production variant
     let buf;
     try { buf = readFileSync(f); } catch { continue; }
     h.update(rel); h.update(buf);
@@ -156,6 +196,8 @@ function fingerprint() {
   }
   h.update('eas.json');
   h.update(easJsonNativeSurface());
+  h.update('production-config');
+  h.update(JSON.stringify(resolvedConfig(undefined)));
   try {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
     const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };

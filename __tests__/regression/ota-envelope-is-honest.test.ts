@@ -66,15 +66,22 @@ describe('the EXPO_PUBLIC narrowing is safe', () => {
     expect(pf).toMatch(/h\.update\(easJsonNativeSurface\(\)\)/);
     // and eas.json must no longer be hashed as raw bytes, or the narrowing does nothing
     // 2026-09-29 — react-native.config.js joined the list: it controls autolinking.
-    expect(pf).toMatch(/const NATIVE_FILES = \['app\.json', 'app\.config\.js', 'app\.config\.ts', 'react-native\.config\.js'\];/);
+    expect(pf).toMatch(/const NATIVE_FILES = \['app\.json', 'react-native\.config\.js'\];/);
+    // 2026-10-10 — app.config.js counts by its PRODUCTION output (it only adds the glasses dev variant);
+    // a plugin that only a non-production variant references is skipped; only production-channel
+    // profiles of eas.json are hashed (those are the shells a production OTA lands on).
+    expect(pf).toMatch(/h\.update\(JSON\.stringify\(resolvedConfig\(undefined\)\)\);/);
+    expect(pf).toMatch(/if \(variantOnlyPluginFiles\.has\(rel\)\) continue;/);
+    expect(pf).toMatch(/profile\.channel === 'production'/);
   });
 
   it('a non-EXPO_PUBLIC env change still moves the fingerprint', () => {
-    // MWDAT_* is the proof case: it changes Info.plist and Gradle through a plugin.
-    const eas = JSON.parse(read('eas.json')) as { build: Record<string, { env?: Record<string, string> }> };
-    const glassesEnv = eas.build.glasses?.env ?? {};
-    const nativeToggles = Object.keys(glassesEnv).filter((k) => !k.startsWith('EXPO_PUBLIC_'));
-    expect(nativeToggles).toContain('MWDAT_IOS_ENABLED');
+    // 2026-10-10 — the glasses variant is selected by APP_VARIANT on its OWN channel and runtime, so it
+    // is (correctly) outside the production fingerprint; a native toggle on a PRODUCTION-channel profile
+    // is still hashed — the narrowing deletes only EXPO_PUBLIC_ keys.
+    const eas = JSON.parse(read('eas.json')) as { build: Record<string, { env?: Record<string, string>; channel?: string }> };
+    expect(eas.build.glasses?.channel).toBe('glasses');
+    expect(Object.keys(eas.build.glasses?.env ?? {})).toContain('APP_VARIANT');
     // the narrowing keeps them: only EXPO_PUBLIC_ is deleted before hashing
     const pf = read('scripts/ota-preflight.mjs');
     expect(pf).not.toMatch(/delete profile\.env\[key\];\s*\n\s*\}\s*\n\s*\}\s*\n\s*\}\s*\n\s*return JSON\.stringify\(\{\}\)/);

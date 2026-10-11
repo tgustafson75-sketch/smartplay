@@ -55,7 +55,10 @@ export type FlagKey =
   | 'voice_caddie'
   | 'kevin_tool_routing'
   | 'lie_analysis'
-  | 'swing_analysis';
+  | 'swing_analysis'
+  /** 2026-10-10 — Sightline (Meta glasses). The ONE flag that ships OFF: it turns a dev-only surface on
+   *  inside the `glasses` build variant, never in a store build (services/glassesGate). */
+  | 'glasses_enabled';
 
 export type Flags = Record<FlagKey, boolean>;
 
@@ -74,6 +77,7 @@ export const DEFAULT_FLAGS: Flags = {
   kevin_tool_routing: true,
   lie_analysis: true,
   swing_analysis: true,
+  glasses_enabled: false,
 };
 
 /** Minimum gap between fetches. Not a tuned threshold — it is the spec's own 60s, and it exists so
