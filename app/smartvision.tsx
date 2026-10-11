@@ -56,7 +56,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { safeBack } from '../services/safeBack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import GlassesStatusBadge from '../components/GlassesStatusBadge';
 import { HoleBrandBadge } from '../components/caddie/HoleBrandBadge';
 import SmartVisionLiveStrategy from '../components/SmartVisionLiveStrategy';
 // 2026-05-26 — Fix CD: theme the image-canvas fallback bg so light
@@ -2257,11 +2256,6 @@ export default function SmartVisionScreen() {
                 return par != null && yardage != null ? `PAR ${par} · ${yardage}y` : '—';
               })()}
             </Text>
-            {/* 2026-05-23 — Glasses badge under the hole/par chip.
-                Surfaces when DAT is connected so the player sees that
-                SmartVision will get multimodal grounding from the
-                glasses POV. Renders nothing on non-DAT builds. */}
-            <GlassesStatusBadge />
             {/* 2026-07-14 (Tim — "cheat the paid geometry DB") — when this hole's green/tee were
                 DERIVED by AI vision from satellite (no curated/API geometry existed), say so.
                 Honesty tenet: the player must know these coords are AI-estimated, not surveyed. */}

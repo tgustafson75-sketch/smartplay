@@ -285,9 +285,8 @@ export async function collectDiagnosticSnapshot(): Promise<DiagnosticSnapshot> {
          * nativeModuleHealth records WHY an absence is expected on this platform, and
          * dumpNativeModuleHealth prints "— not in this build" precisely so a deliberate build
          * decision is not reported in the same voice as a broken dependency. Mapping id+reason
-         * only meant every Android build cut without GITHUB_TOKEN mailed
-         * `MetaWearablesFrame (NativeModules.MetaWearablesFrame is null …)` with no hint the
-         * absence was by design — the exact chase that field was added to stop.
+         * only meant every production build mailed the old glasses bridge as
+         * `<module> (NativeModules.<module> is null …)` with no hint the absence was by design — the exact chase that field was added to stop.
          *
          * An expected absence needs no reason string at all: the reason explains a fault, and this
          * is not one. [[a-log-field-can-be-an-artefact]]

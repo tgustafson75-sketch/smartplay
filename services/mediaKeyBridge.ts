@@ -50,9 +50,9 @@ function currentTapDevice(): TapDevice {
   let glassesConnected = false;
   let route: 'phone_speaker' | 'wired' | 'bluetooth' | 'unknown' | undefined;
   try {
-    const meta = require('./metaWearablesBridge') as typeof import('./metaWearablesBridge');
-    glassesConnected = meta.getGlassesStatusSync?.()?.connected === true;
-  } catch { /* no glasses module on this build */ }
+    // The glasses session (services/sightline) — false outside the glasses dev variant.
+    glassesConnected = (require('./sightline') as typeof import('./sightline')).glassesSessionActive();
+  } catch { /* no glasses on this build */ }
   try {
     const audio = require('./audioRoutingService') as typeof import('./audioRoutingService');
     route = audio.getCurrentRoute?.();

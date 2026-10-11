@@ -30,10 +30,10 @@ yet. Deliberately not done blind — it changes behaviour on a screen under the 
 
 ## 2. Meta glasses · **needs a secret, not code**
 
-- iOS: works via the `glasses` EAS profile (`MWDAT_IOS_ENABLED=1`), public SPM repo, no token.
-- Android: the DAT SDK is in GitHub Packages, so the build needs **`GITHUB_TOKEN`** (a GitHub PAT
-  with `read:packages`) in EAS env. Without it `withMetaWearablesDAT` skips the Android wiring and
-  says so at build time.
+- **2026-10-10 — superseded by Sightline.** The old glasses bridge and its DAT plugin were removed.
+  Android: the `glasses` EAS profile (`APP_VARIANT=glasses`) links `glasses-modules/meta-wearables`
+  (DAT 1.0.1 from Maven Central, no token) via `plugins/withMetaWearables.js`; runtime is gated by
+  `services/glassesGate` (variant AND `flags.glasses_enabled`). iOS: a 2.0 slice, not built.
 - **Action: none for 1.x.** Adding `GITHUB_TOKEN` to EAS is a 2.0 task, since only the `glasses`
   profile sets the MWDAT flags. Tim or Cowork adds it when glasses ship; Claude Code must not hold it.
 

@@ -2,7 +2,8 @@
  * 2026-05-23 — Native fallback banner.
  *
  * 2026-08-31 (Tim — "we need to remove the glasses related banner from the top") — GLASSES ARE NOT
- * IN THIS RELEASE, so `MetaWearablesFrame` is missing for EVERY player on EVERY launch. This banner
+ * IN THIS RELEASE, so the old glasses bridge was missing for EVERY player on EVERY launch (that bridge
+ * was removed 2026-10-10; Sightline's module is not probed here). This banner
  * therefore rendered at the top of the app, always, telling every user that a feature they have
  * never heard of and cannot use is "unavailable on this build".
  *
@@ -14,8 +15,7 @@
  * player really is on the slower cloud path and deserves to know. Glasses are filtered out of the
  * decision entirely, so with only glasses missing the banner does not render at all.
  *
- * When any critical native bridge fails to load (Meta Wearables DAT,
- * MediaPipe Pose), render a single persistent banner so the player
+ * When any critical native bridge fails to load (MediaPipe Pose), render a single persistent banner so the player
  * understands which features are unavailable + that the app has
  * fallen back to cloud paths. The brain still works (cloud pose +
  * cloud lie analysis); glasses streaming + on-device pose don't.
@@ -65,15 +65,8 @@ export default function NativeFallbackBanner() {
   // Don't render until at least one probe has reported — otherwise
   // we'd flash the banner during cold boot before the bridges run.
   if (records.length === 0) return null;
-  /**
-   * Modules that are deliberately NOT in this release. Their absence is the expected state, so it
-   * is never reported as a fallback. Filtered here rather than in nativeModuleHealth so the owner
-   * debug screen can still see the real probe result.
-   */
-  const NOT_IN_THIS_RELEASE = new Set(['MetaWearablesFrame']);
-
-  // Only show when at least one bridge the player SHOULD have is missing.
-  const missing = records.filter((r) => !r.loaded && !NOT_IN_THIS_RELEASE.has(r.id));
+  // Only show when a bridge the player SHOULD have is missing.
+  const missing = records.filter((r) => !r.loaded);
   if (missing.length === 0) return null;
 
   const missingLabels = missing.map((m) =>

@@ -65,7 +65,7 @@ This is the part that generates real per-platform behaviour differences. A featu
 | Wear OS watch bridge | `plugins/withWearSwingBridge.js`, `services/watchSwingBridge.ts` | ❌ **absent** | ✅ | Hard-gated `Platform.OS === 'android'`. There is **no Apple Watch equivalent**. |
 | Watch caddie bridge | `services/watchCaddieBridge.ts` | ❌ **absent** | ✅ | Same gate. |
 | Health data (steps, HR, distance, calories) | `react-native-health-connect` via `services/healthData.ts` | ⚠️ **stub** | ✅ | iOS returns empty/zero from every export by design. HealthKit was deferred ("don't send ios build yet") and that deferral has outlived its reason. **Consumers affected: walking detector, shot-detection enhancement, round-summary enrichment.** |
-| Meta glasses (DAT) | `plugins/withMetaWearablesDAT.js` | ✅ | ✅ | Was `Platform.OS === 'android' && loaded`, which hard-disabled iOS; corrected. Needs the `glasses` EAS profile (`MWDAT_IOS_ENABLED=1`). |
+| Meta glasses (DAT) | `plugins/withMetaWearables.js` (glasses variant only) | ✅ | — | Sightline slice 1, Android only, `APP_VARIANT=glasses` + `flags.glasses_enabled`. iOS is a 2.0 slice. |
 | On-device speech recognition | `expo-speech-recognition` | ✅ | ✅ | Android pins `com.google.android.googlequicksearchbox`; iOS uses `iosTaskHint: 'dictation'`. Different engines → **different transcription characteristics**; do not assume voice accuracy transfers between platforms. |
 | Crash reporting | `@sentry/react-native` | ✅ | ✅ | `uploadSourceMaps: false` — stack traces arrive minified. |
 

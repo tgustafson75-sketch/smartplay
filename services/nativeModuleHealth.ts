@@ -26,7 +26,7 @@
 import { NativeModules, Platform } from 'react-native';
 import { devLog } from './devLog';
 
-export type NativeModuleId = 'MetaWearablesFrame' | 'MediaPipePose';
+export type NativeModuleId = 'MediaPipePose';
 
 export interface NativeModuleHealth {
   id: NativeModuleId;
@@ -42,9 +42,9 @@ export interface NativeModuleHealth {
    * 2026-09-19 — why an absence is EXPECTED on this platform, when it is.
    *
    * Tim read the Owner Tools card and asked about it, which is the right response to a red cross
-   * and the wrong use of his evening: MetaWearablesFrame is absent from every Android build cut
-   * without GITHUB_TOKEN, BY DESIGN, and the card gave no hint of that. A diagnostic that reports a
-   * deliberate build decision in the same voice as a broken dependency makes the reader chase it.
+   * and the wrong use of his evening: a module absent BY DESIGN (the old glasses bridge, removed
+   * 2026-10-10) gave no hint of that. A diagnostic that reports a deliberate build decision in the
+   * same voice as a broken dependency makes the reader chase it.
    */
   expected?: string;
 }
@@ -55,18 +55,9 @@ export interface NativeModuleHealth {
  * Kept beside the probe rather than in the screen, so every consumer — the card, the Sentry
  * breadcrumb, the pasted dump — tells the same story. [[two-owners-is-the-root-cause]]
  */
-function expectedAbsence(id: NativeModuleId, platform: 'ios' | 'android' | 'web'): string | undefined {
-  if (id === 'MetaWearablesFrame') {
-    if (platform === 'android') {
-      // 2026-09-28 — no leading "expected": the snapshot prints "(expected: …)" itself, so the header read
-      // "expected: expected unless…". And it named the token but not the profile that actually decides it.
-      return 'by design in production builds — only the `glasses` EAS profile compiles the Meta DAT SDK (MWDAT_ANDROID_ENABLED=1, plus a GITHUB_TOKEN for its GitHub Packages download; see docs/NEEDS-A-NATIVE-BUILD.md). Glasses features degrade to the phone; nothing else is affected';
-    }
-    if (platform === 'ios') {
-      return 'by design in production builds — only the `glasses` EAS profile compiles the Meta DAT SDK (MWDAT_IOS_ENABLED=1). Glasses features degrade to the phone; nothing else is affected';
-    }
-  }
-  // MediaPipePose ships in the standard plugin set, so its absence is NOT expected anywhere.
+function expectedAbsence(_id: NativeModuleId, _platform: 'ios' | 'android' | 'web'): string | undefined {
+  // MediaPipePose ships in the standard plugin set, so its absence is NOT expected anywhere. A module
+  // that is deliberately left out of some builds declares that here.
   return undefined;
 }
 
@@ -96,7 +87,7 @@ function probe(id: NativeModuleId): NativeModuleHealth {
      * 2026-09-19 — `typeof mod` WAS THE WHOLE REASON STRING, AND IT LIED IN THE ONE CASE THAT
      * ACTUALLY HAPPENS. Tim's Owner Tools card read:
      *
-     *     MetaWearablesFrame: ✗ MISSING (android, NativeModules.MetaWearablesFrame resolved to object)
+     *     <module>: ✗ MISSING (android, NativeModules.<module> resolved to object)
      *
      * which says the module was found AND missing. `typeof null === 'object'` in JavaScript, so a
      * bridge that registered nothing under this name — `null`, the normal shape of an absent module
@@ -112,8 +103,7 @@ function probe(id: NativeModuleId): NativeModuleHealth {
 
 /**
  * Probe and record. Call once per module at JS bridge initialization
- * (services/metaWearablesBridge.ts + services/mediaPipePoseService.ts
- * both call this on their respective module imports). Returns the
+ * (services/mediaPipePoseService.ts calls this on its module import). Returns the
  * health record so the caller can branch on it.
  */
 export function recordNativeModuleHealth(id: NativeModuleId): NativeModuleHealth {

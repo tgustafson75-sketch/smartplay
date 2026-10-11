@@ -438,8 +438,9 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     + 'and worth keeping readable.',
   'services/glassesVisionInput.ts :: registerGlassesTransport':
     'PARKED — Meta glasses profile needs a native build.',
-  'services/metaWearablesBridge.ts :: getMetaWearablesStatus':
-    'PARKED — Meta glasses profile needs a native build.',
+  'services/glassesVisionInput.ts :: submitVisionFrame':
+    'PARKED — its only caller was the old glasses bridge (removed 2026-10-10). Next caller: Sightline, '
+    + 'feeding the glasses still into the vision context so a follow-up question sees it (glasses variant).',
   'services/activeSurfaceRegistry.ts :: subscribeActiveSurface':
     'SURFACE — the subscription half of a registry read via its getter.',
   'services/cloudSync/snapshot.ts :: unionSnapshots':

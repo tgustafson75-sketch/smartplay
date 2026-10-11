@@ -21,7 +21,6 @@
  */
 
 import React from 'react';
-import GlassesStatusBadge from '../GlassesStatusBadge';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { PuttingAnalysis } from '../../services/puttingAnalysisService';
@@ -47,10 +46,6 @@ export default function PuttingAnalysisCard({ analysis, clipUri, clipDurationSec
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.label, { color: colors.accent }]}>{t('swinglab_putting_analysis_card.putting_analysis_card.putting')}</Text>
-        {/* 2026-05-23 — Glasses badge: surfaces when this putting
-            analysis was (or could be) enriched with Ray-Ban Meta POV
-            frames. Renders nothing on non-DAT builds. */}
-        <GlassesStatusBadge />
         <View style={[styles.scoreBadge, { borderColor: tier.color }]}>
           <Text style={[styles.scoreValue, { color: tier.color }]}>{analysis.overallScore}</Text>
           <Text style={[styles.scoreLabel, { color: tier.color }]}>{t('scorecard.score')}</Text>

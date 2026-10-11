@@ -1401,21 +1401,6 @@ check('Swing entries are editable after the fact: golfer AND orientation (angle 
   })(),
   'swing detail lets you re-tag the golfer AND fix the camera orientation (which re-analyzes with the right metrics)');
 
-// 2026-08-07 (Tim — raw "NO_ELIGIBLE_DEVICE / DAT_SESSION_FAILED" glasses toast). North star: no robotic
-// error codes. The connect-failure now shows a HUMAN, actionable line via describeGlassesError, while the
-// raw code still lands in the issue log for diagnosis.
-check('Glasses connect errors show a human message (not a raw DAT_ code), raw code still logged',
-  (() => {
-    const b = read('services/metaWearablesBridge.ts');
-    const s = read('app/settings.tsx');
-    return (
-      /export function describeGlassesError/.test(b) &&
-      /NO_ELIGIBLE_DEVICE|ELIGIBLE/.test(b) && /DAT_SESSION_FAILED|SESSION/.test(b) &&
-      /show\(describeGlassesError\(code, msg\)\)/.test(s) &&        // human toast
-      /addAppEvent\('glasses_connect_failed', \{ code, message: msg \}/.test(s) // raw code still logged
-    );
-  })(),
-  'a glasses connect failure reads like a person (actionable guidance), raw DAT code kept in the issue log');
 
 // 2026-08-07 (Tim — Berlin CC had bundled geometry but the round loaded no yardage/wind/tee-brief).
 // ROOT: bundled holes (real coords) were only used when courseId === 'local:<slug>'. Any other entry
@@ -13246,38 +13231,6 @@ check('LOCK: the review read is four fixed cards, not a scrolling stack',
   })(),
   'the review shows four fixed cards in a 2x2 grid with tap-to-expand; an unmeasured card shows a dash instead of disappearing, and the open card resets per swing');
 
-check('LOCK: the glasses consent round trip can actually come home',
-  (() => {
-    const bridge = read('services/metaWearablesBridge.ts');
-    const swift = read('ios-native/MetaWearablesFrameModule.swift');
-    const objc = read('ios-native/MetaWearablesFrame.m');
-    const plugin = read('plugins/withMetaWearablesDAT.js');
-    const layout = read('app/_layout.tsx');
-    // 2026-08-19 (Tim — "make sure my glasses are gonna connect the next time"). DAT pairing is a ROUND
-    // TRIP: we deeplink to the Meta AI app, the wearer consents, and it calls BACK with a URL that must
-    // reach the SDK. Nothing forwarded it, so registration could never leave `.registering` — which is
-    // exactly what "I consented and they still don't connect" looks like. Three independent holes, all
-    // on the return leg, each of which alone is fatal.
-    const swiftHandles = /func handleAppLink\(/.test(swift) && /Wearables\.shared\.handleUrl\(parsed\)/.test(swift);
-    const objcExports = /RCT_EXTERN_METHOD\(handleAppLink:/.test(objc);
-    const jsForwards = /export async function handleGlassesAppLink/.test(bridge)
-      && /export function startGlassesLinkListener/.test(bridge)
-      && /Linking\.getInitialURL\(\)/.test(bridge)   // cold start: consent happens in ANOTHER app
-      && /Linking\.addEventListener\('url'/.test(bridge);
-    const mountedAtRoot = /startGlassesLinkListener\(\)/.test(layout);
-    // iOS was hard-disabled at the bridge (`Platform.OS === 'android'`), so the Swift module could
-    // never be reached on the platform the glasses build targets.
-    const iosReachable = /\(Platform\.OS === 'android' \|\| Platform\.OS === 'ios'\) && _mwHealth\.loaded/.test(bridge);
-    // And iOS only routes a universal link into an app that CLAIMS the domain — we served the AASA
-    // for a callback iOS would have handed to Safari.
-    const claimsDomain = /applinks:api\.smartplaycaddie\.com/.test(plugin)
-      && /com\.apple\.developer\.associated-domains/.test(plugin);
-    // The custom scheme stays alongside it: replacing a working leg with an unproven one turns one
-    // broken flow into two.
-    const keepsScheme = /AppLinkURLScheme: 'smartplay'/.test(plugin);
-    return swiftHandles && objcExports && jsForwards && mountedAtRoot && iosReachable && claimsDomain && keepsScheme;
-  })(),
-  'the DAT callback URL reaches the SDK on both cold start and warm launch, iOS can resolve the module at all, and the app claims the universal-link domain Meta is registered against');
 
 check('LOCK: BOTH audio paths are cold-aware and neither can fail silently',
   (() => {
@@ -15824,7 +15777,7 @@ check(
    * The Ray-Ban row's description was a dated engineering changelog that QUOTED TIM back to the
    * player — '2026-09-01 (Tim: "temple tap on meta glasses is working")... this row said BLOCKED
    * because Meta exposed no SDK. Wrong on both halves.' — and then named internal modules
-   * (MetaWearablesFrameModule, metaWearablesBridge). A player-facing string should never carry a
+   * (native module and bridge class names). A player-facing string should never carry a
    * changelog date, a quoted decision, or a symbol name.
    */
   const enText = JSON.parse(locales[0].text) as Record<string, unknown>;

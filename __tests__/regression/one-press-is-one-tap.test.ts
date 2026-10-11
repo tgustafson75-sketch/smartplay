@@ -97,7 +97,7 @@ describe('the bridge actually applies it', () => {
   it('the device is resolved at press time, not cached at boot', () => {
     // A player puts earbuds in mid-round; the answer has to change with them.
     expect(src).toMatch(/const device = currentTapDevice\(\);/);
-    expect(src).toMatch(/getGlassesStatusSync/);
+    expect(src).toMatch(/glassesSessionActive\(\)/);   // the glasses session (services/sightline)
     expect(src).toMatch(/getCurrentRoute/);
   });
 });

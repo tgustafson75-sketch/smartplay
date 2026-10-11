@@ -1,5 +1,5 @@
 // 2026-05-23 — RCT bridge header for MediaPipePoseModule.swift. Same
-// pattern as ios-native/MetaWearablesFrame.m — exposes the Swift
+// pattern as ios-native/BluetoothMediaButton.m — exposes the Swift
 // @objc methods to React Native's NativeModules surface.
 
 #import <React/RCTBridgeModule.h>

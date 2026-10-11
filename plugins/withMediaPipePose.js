@@ -15,7 +15,7 @@
  *      android tree at the correct package path.
  *   3. Android — uses withMainApplication to add
  *      packages.add(MediaPipePosePackage()) to MainApplication.kt's
- *      getPackages() — same pattern as withMetaWearablesDAT.
+ *      getPackages() — same pattern as withBluetoothMediaButton.
  *   4. Android — copies the bundled pose model
  *      assets/mediapipe/pose_landmarker_full.task into
  *      android/app/src/main/assets/. The model file is sourced from
@@ -294,7 +294,7 @@ function withAndroidSourceCopyAndPackageReg(config) {
 
   // (c) inject packages.add(MediaPipePosePackage()) into MainApplication.kt
   //
-  // 2026-05-23 CRITICAL FIX: same root cause as withMetaWearablesDAT —
+  // 2026-05-23 CRITICAL FIX: same root cause as the (removed 2026-10-10) glasses DAT plugin —
   // the old regex matched a `val packages = ...` template that no
   // longer exists in Expo SDK 54+. The current template uses an inline
   // `PackageList(this).packages.apply { ... }` block. New code matches

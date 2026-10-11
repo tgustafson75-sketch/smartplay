@@ -43,7 +43,6 @@ export default function NativeModulesDebug() {
   const refresh = () => {
     // Re-probe each known native module so lazy loaders that landed
     // after the initial import are picked up.
-    recordNativeModuleHealth('MetaWearablesFrame');
     recordNativeModuleHealth('MediaPipePose');
     setBump((n) => n + 1);
   };
@@ -133,8 +132,8 @@ function HealthCard({ record, colors }: {
   /**
    * 2026-09-19 — THREE STATES, NOT TWO. A module that is absent BY BUILD DECISION is not a fault,
    * and painting it the same red as a broken dependency is what sent Tim to ask about
-   * MetaWearablesFrame: the glasses SDK is skipped on every Android build cut without GITHUB_TOKEN,
-   * on purpose. Amber and "NOT IN THIS BUILD" say that; red stays for the ones that mean something
+   * the old glasses bridge, skipped on every production build on purpose
+   * (removed 2026-10-10). Amber and "NOT IN THIS BUILD" say that; red stays for the ones that mean something
    * is wrong. [[illustration-data-points]]
    */
   const expected = !ok && !!record.expected;

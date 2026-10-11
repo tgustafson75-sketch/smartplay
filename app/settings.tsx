@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  isMetaWearablesAvailable,
-  startMetaWearablesStreaming,
-  stopMetaWearablesStreaming,
-  describeGlassesError,
-  onGlassesStatusChange,
-  getGlassesStatusSync,
-  type GlassesStatus,
-} from '../services/metaWearablesBridge';
-import {
   View,
   Text,
   ScrollView,
@@ -312,47 +303,6 @@ export default function Settings() {
    * chosen text verbatim, so the store never holds a magic string.
    */
 
-  // 2026-07-11 — Ray-Ban Meta glasses live stream (DAT v0.8). Subscribe to the
-  // bridge status; the toggle starts/stops the POV camera stream into the caddie.
-  const [glasses, setGlasses] = useState<GlassesStatus>(getGlassesStatusSync());
-  useEffect(() => onGlassesStatusChange(setGlasses), []);
-  const onToggleGlasses = useCallback((v: boolean) => {
-    if (v) {
-      startMetaWearablesStreaming('medium', 24).catch((e: unknown) => {
-        // 2026-07-30 (Tim — "our toggle is blocking, glasses ARE connected in the Meta app"). The old
-        // catch swallowed the REAL DAT error and always said "pair in the Meta app first" — misleading
-        // once the glasses are actually paired. Surface the actual native failure code + message (e.g.
-        // DAT_SESSION_FAILED / "missing application id") so the true cause is visible WITHOUT a rebuild,
-        // and record it to the issue log (which now auto-sends) so we capture it off-device.
-        const err = e as { code?: unknown; message?: unknown } | null;
-        const code = typeof err?.code === 'string' ? err.code : '';
-        const msg = typeof err?.message === 'string' ? err.message : String(e ?? 'unknown error');
-        // 2026-08-07 (Tim — raw "NO_ELIGIBLE_DEVICE" toast). Show a HUMAN, actionable line (north star:
-        // no robotic error codes); the raw code + message still go to the issue log below for diagnosis.
-        // 2026-08-08 — signing SHA verified EXACT against Meta's registration (parsed from the shipped
-        // APK), so an eligibility failure is the Meta-side chain: Developer Mode + owner account. GUIDE
-        // it (Alert with the two steps + an Open-Meta-AI button) instead of a transient toast.
-        if ((code || msg).toUpperCase().includes('ELIGIBLE') || (code || '').toUpperCase().includes('SESSION')) {
-          Alert.alert(
-            t('settings.alert.glasses_not_authorized_yet'),
-            t('settings.alert.the_app_registration_check_out'),
-            [
-              { text: 'Open Meta AI', onPress: () => { Linking.openURL('fb-mwa://').catch(() => Linking.openURL('https://www.meta.com/smart-glasses/app/').catch(() => {})); } },
-              { text: 'OK', style: 'cancel' },
-            ],
-          );
-        } else {
-          useToastStore.getState().show(describeGlassesError(code, msg));
-        }
-        try {
-          (require('../store/issueLogStore') as typeof import('../store/issueLogStore'))
-            .useIssueLogStore.getState().addAppEvent('glasses_connect_failed', { code, message: msg }, 'app_error');
-        } catch { /* non-fatal */ }
-      });
-    } else {
-      stopMetaWearablesStreaming().catch(() => {});
-    }
-  }, [t]);
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
 
   /**
@@ -1317,29 +1267,6 @@ export default function Settings() {
               </Text>
             </View>
           </View>
-          {/* 2026-07-11 — Ray-Ban Meta glasses LIVE stream (DAT v0.8). Pair the glasses in the Meta AI
-              app, then toggle on to stream your POV into the caddie brain (SmartVision / green reads /
-              multimodal).
-              2026-08-19 — dropped the `Platform.OS === 'android' &&` half of this gate. It dated from
-              when the DAT SDK was wired on Android only; the iOS module has since been finished and the
-              JS bridge un-gated the same day, so this line was the last thing keeping the control
-              hidden on the platform a glasses build actually targets — the bridge would have worked and
-              nothing would have offered the toggle.
-              isMetaWearablesAvailable() is the correct and sufficient test on its own: it is true only
-              when the native module is really present in this binary, which a normal TestFlight/APK
-              build (DAT plugin no-op'd) never is. So this stays hidden exactly where it always was. */}
-          {isMetaWearablesAvailable() ? (
-            <ToggleRow
-              label={t('settings.label.connect_ray_ban_glasses')}
-              sub={
-                glasses.streaming
-                  ? `Streaming from ${glasses.device || 'your glasses'} — ${caddieName} sees your point of view.`
-                  : 'Pair your Ray-Ban Meta glasses in the Meta AI app, then turn this on to stream your point of view to the caddie for swing and green reads.'
-              }
-              value={glasses.streaming}
-              onValueChange={onToggleGlasses}
-            />
-          ) : null}
           {/* 2026-06-16 — v1 entry point for the Meta glasses voice-log
               ingest (services/metaGlassesIngest.ts). Picks an exported
               Meta View JSON, attributes each in-window exchange to a hole

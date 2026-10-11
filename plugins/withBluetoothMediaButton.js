@@ -18,9 +18,8 @@
  *   Android: only android.media.session.MediaSession (API 21+, SDK).
  *   iOS:     only MediaPlayer + AVFoundation (system frameworks).
  *   → No Maven repo, no Podfile entries, no manifest permission adds.
- *     (Bluetooth perms already added by withMetaWearablesDAT.js.)
  *
- * Mirrors the structure of withMetaWearablesDAT.js for consistency —
+ * Mirrors the structure of the other android-native plugins for consistency —
  * Tim's note in that plugin is the canonical pattern for native
  * modules in this repo.
  */

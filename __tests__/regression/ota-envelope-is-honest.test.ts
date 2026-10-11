@@ -11,8 +11,8 @@
  * it cannot be the hazard the script exists to catch.
  *
  * THE NARROWING IS ONLY SAFE BECAUSE OF WHAT THIS TEST CHECKS. Config plugins in this repo really do
- * read env at build time and really do change native output: `plugins/withMetaWearablesDAT.js` gates
- * Info.plist entries and Gradle edits on `MWDAT_IOS_ENABLED` / `MWDAT_ANDROID_ENABLED`. Excluding env
+ * read env at build time and really do change native output: app.config.js adds the glasses plugin on
+ * `APP_VARIANT`. Excluding env
  * wholesale would have defeated the guard for that live case. The exclusion holds only while no plugin
  * reads an `EXPO_PUBLIC_` key, which is a fact about this repo that can change — so it is asserted
  * here rather than assumed in a comment.
@@ -34,7 +34,9 @@ const code = (rel: string) =>
 const PLUGIN_SOURCES = fs
   .readdirSync(path.join(root, 'plugins'))
   .filter((f) => f.endsWith('.js') || f.endsWith('.ts'))
-  .map((f) => ({ file: `plugins/${f}`, src: read(`plugins/${f}`) }));
+  .map((f) => ({ file: `plugins/${f}`, src: read(`plugins/${f}`) }))
+  // app.config.js composes the plugin list from env (APP_VARIANT), so it is a plugin source too.
+  .concat([{ file: 'app.config.js', src: read('app.config.js') }]);
 
 /** Every env key any config plugin reads — these can reach native output. */
 const ENV_KEYS_PLUGINS_READ = (() => {
@@ -51,7 +53,7 @@ describe('the EXPO_PUBLIC narrowing is safe', () => {
     expect(PLUGIN_SOURCES.length).toBeGreaterThan(5);
     expect(ENV_KEYS_PLUGINS_READ.size).toBeGreaterThan(0);
     // the known native toggles, so this test proves it is looking at the real thing
-    expect(ENV_KEYS_PLUGINS_READ).toContain('MWDAT_IOS_ENABLED');
+    expect(ENV_KEYS_PLUGINS_READ).toContain('APP_VARIANT');
   });
 
   it('NO config plugin reads an EXPO_PUBLIC_ key — this is what makes the exclusion valid', () => {

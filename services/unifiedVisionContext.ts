@@ -235,12 +235,6 @@ export async function getUnifiedVisionContext(): Promise<UnifiedVisionContext> {
         streaming: false,
       };
     }
-    // DAT streaming status — additive when the bridge is loaded.
-    try {
-      const bridgeMod = await import('./metaWearablesBridge');
-      const status = bridgeMod.getGlassesStatusSync();
-      vision = { ...vision, streaming: status.streaming };
-    } catch { /* non-fatal */ }
   } catch (e) {
     devLog('[unifiedVision] vision read failed (non-fatal): ' + String(e));
   }

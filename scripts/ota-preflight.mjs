@@ -115,12 +115,10 @@ const variantOnlyPluginFiles = new Set(
  * value ship together.
  *
  * EVERY OTHER KEY IN eas.json STAYS HASHED, and that is not caution for its own sake — plugins in this
- * repo really do read env at build time. `plugins/withMetaWearablesDAT.js` gates Info.plist entries and
- * Gradle changes on `MWDAT_IOS_ENABLED` / `MWDAT_ANDROID_ENABLED`, so the `glasses` profile's env
- * genuinely changes native output. Excluding env wholesale would have defeated the guard for a live
+ * repo really do read env at build time. app.config.js adds the glasses plugin on `APP_VARIANT`, so the
+ * `glasses` profile's env genuinely changes native output. Excluding env wholesale would have defeated the guard for a live
  * case. Checked rather than assumed: no config plugin reads an `EXPO_PUBLIC_` key — the full set they
- * read is EXPO_GITHUB_TOKEN, GITHUB_TOKEN, META_WEARABLE_APP_ID, META_WEARABLE_CLIENT_TOKEN and the two
- * MWDAT flags — and `__tests__/regression/ota-envelope-is-honest.test.ts` fails if that stops being
+ * read is APP_VARIANT (since the old glasses DAT plugin was removed 2026-10-10) — and `__tests__/regression/ota-envelope-is-honest.test.ts` fails if that stops being
  * true, which is what keeps this narrowing safe rather than merely convenient.
  *
  * What prompted it: adding EXPO_PUBLIC_OWNER_EMAIL to the development and preview profiles — so owner

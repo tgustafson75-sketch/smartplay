@@ -55,7 +55,7 @@ jobs:
           # CODE IN, which the original list missed entirely.
           #
           # `ios/` and `android/` are prebuild OUTPUT. The authored native source lives in
-          # android-native/ (WearSwingBridgeModule.kt, MetaWearablesFrameModule.kt),
+          # android-native/ (WearSwingBridgeModule.kt, MediaPipePoseModule.kt),
           # ios-native/ (.swift/.m), plugins/ (Expo config plugins that INJECT that code at prebuild),
           # targets/ (the Apple Watch target) and wear-os-app/ (the Wear OS app). Every one of those
           # is a native change, and every one of them would have sailed through this gate.

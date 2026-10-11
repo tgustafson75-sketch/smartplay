@@ -255,7 +255,7 @@ describe('the build line does not overstate what it knows', () => {
   /** A deliberate build decision must not be reported in the same voice as a broken dependency. */
   it('an EXPECTED native-module absence is labelled as expected', async () => {
     const snap = await collectDiagnosticSnapshot();
-    const body = formatSnapshotForEmail({ ...snap, nativeModulesMissing: ['MetaWearablesFrame (expected: not in this build)'] });
+    const body = formatSnapshotForEmail({ ...snap, nativeModulesMissing: ['MediaPipePose (expected: not in this build)'] });
     expect(body).toMatch(/expected:/);
   });
 
