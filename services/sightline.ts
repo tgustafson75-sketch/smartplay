@@ -46,7 +46,11 @@ export function glassesSessionActive(): boolean {
 
 async function ensureSession(mw: MetaWearablesNative): Promise<void> {
   if (sessionActive) return;
-  if (mw.getRegistrationState() !== 'REGISTERED') { mw.register(); return; }   // Meta AI app hands back via the scheme
+  const reg = mw.getRegistrationState();
+  // REGISTERING = a hand-off to the Meta AI app is already in flight (the SDK reverts it after 30 s).
+  // Registering again from here is what bounced the player between the two apps.
+  if (reg === 'REGISTERING') return;
+  if (reg !== 'REGISTERED') { mw.register(); return; }   // Meta AI app hands back through the SDK's intent
   try {
     await mw.startSession();
     if (!started) { mw.stopSession(); return; }   // the switch went off while the session was starting

@@ -32,6 +32,26 @@ function withGlassesModuleSearchPath(config) {
   });
 }
 
+/**
+ * 2026-10-10 — release channel ("SmartPlay Caddie" in Meta Dev Center). With "0"/"0" (Developer Mode)
+ * the Meta AI app cannot match the app once Developer Mode is off: it hands back, the app re-registers,
+ * forever. The real ID and token come from EAS env (secrets in the `development` environment, which the
+ * `glasses` profile uses), never from the repo. On EAS a missing or "0" value FAILS the build, so a
+ * build that cannot register never ships; a local prebuild falls back to Developer Mode and says so.
+ */
+function metaCredentials() {
+  const appId = (process.env.META_WEARABLE_APP_ID || '').trim();
+  const clientToken = (process.env.META_WEARABLE_CLIENT_TOKEN || '').trim();
+  const ok = (v) => v !== '' && v !== '0';
+  if (ok(appId) && ok(clientToken)) return { appId, clientToken };
+  const missing = [!ok(appId) && 'META_WEARABLE_APP_ID', !ok(clientToken) && 'META_WEARABLE_CLIENT_TOKEN'].filter(Boolean).join(' + ');
+  if (process.env.EAS_BUILD === 'true') {
+    throw new Error(`[withMetaWearables] ${missing} not set in this EAS environment — the glasses build could not register with Meta AI (release channel).`);
+  }
+  console.warn(`[withMetaWearables] ${missing} not set — local prebuild uses Developer Mode (0/0).`);
+  return { appId: '0', clientToken: '0' };
+}
+
 function withGlassesManifest(config) {
   return withAndroidManifest(config, (cfg) => {
     const manifest = cfg.modResults.manifest;
@@ -42,10 +62,9 @@ function withGlassesManifest(config) {
       }
     }
     const app = AndroidConfig.Manifest.getMainApplicationOrThrow(cfg.modResults);
-    // Developer Mode: both 0. A Dev Center release channel build would carry the real ID and an EAS-env
-    // token here — never a token committed to the repo.
-    AndroidConfig.Manifest.addMetaDataItemToMainApplication(app, 'com.meta.wearable.mwdat.APPLICATION_ID', '0');
-    AndroidConfig.Manifest.addMetaDataItemToMainApplication(app, 'com.meta.wearable.mwdat.CLIENT_TOKEN', '0');
+    const { appId, clientToken } = metaCredentials();
+    AndroidConfig.Manifest.addMetaDataItemToMainApplication(app, 'com.meta.wearable.mwdat.APPLICATION_ID', appId);
+    AndroidConfig.Manifest.addMetaDataItemToMainApplication(app, 'com.meta.wearable.mwdat.CLIENT_TOKEN', clientToken);
 
     // The app's EXISTING scheme must reach MainActivity (Meta AI hands registration back through it).
     const scheme = Array.isArray(cfg.scheme) ? cfg.scheme[0] : cfg.scheme;
@@ -66,3 +85,4 @@ function withGlassesManifest(config) {
 module.exports = function withMetaWearables(config) {
   return withGlassesManifest(withGlassesModuleSearchPath(config));
 };
+module.exports.metaCredentials = metaCredentials;

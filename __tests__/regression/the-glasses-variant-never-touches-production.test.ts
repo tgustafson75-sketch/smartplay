@@ -59,8 +59,9 @@ describe('the glasses build variant', () => {
     // ...and the glasses plugin is what adds the search path, and the Developer Mode meta-data
     const plugin = fs.readFileSync(path.join(root, 'plugins/withMetaWearables.js'), 'utf8');
     expect(plugin).toMatch(/expoAutolinking\.searchPaths = \["\$\{dir\}"\]/);
-    expect(plugin).toMatch(/'com\.meta\.wearable\.mwdat\.APPLICATION_ID', '0'/);
-    expect(plugin).toMatch(/'com\.meta\.wearable\.mwdat\.CLIENT_TOKEN', '0'/);
+    // The ID and token come from EAS env — never committed.
+    expect(plugin).not.toMatch(/AR\|\d+\|[0-9a-f]{16,}/);
+    expect(plugin).not.toMatch(/2111052109463421/);
     // pinned SDK, Maven Central, all three on one version; mockdevice is test-only
     const gradle = fs.readFileSync(path.join(root, 'glasses-modules/meta-wearables/android/build.gradle'), 'utf8');
     expect(gradle).toMatch(/def MWDAT_VERSION = '1\.0\.1'/);
@@ -75,5 +76,45 @@ describe('the glasses build variant', () => {
     expect(k).toMatch(/override fun onNewIntent\(intent: Intent\): Boolean \{[\s\S]{0,120}Sightline\.handleIntent\(it, intent\)/);
     const s = fs.readFileSync(path.join(root, 'glasses-modules/meta-wearables/android/src/main/java/expo/modules/metawearables/Sightline.kt'), 'utf8');
     expect(s).toMatch(/if \(!initialized\.compareAndSet\(false, true\)\) return/);
+  });
+});
+
+/**
+ * 2026-10-10 — the registration loop. With APPLICATION_ID/CLIENT_TOKEN "0" (Developer Mode) the Meta AI
+ * app cannot match the release-channel app, hands back, and the app re-registers forever.
+ */
+describe('the glasses build registers on the release channel', () => {
+  const { metaCredentials } = require('../../plugins/withMetaWearables.js') as {
+    metaCredentials: () => { appId: string; clientToken: string };
+  };
+  const saved = { ...process.env };
+  afterEach(() => { process.env = { ...saved }; });
+
+  it('the manifest carries the EAS env values', () => {
+    process.env.META_WEARABLE_APP_ID = '2111052109463421';
+    process.env.META_WEARABLE_CLIENT_TOKEN = 'AR|x|y';
+    expect(metaCredentials()).toEqual({ appId: '2111052109463421', clientToken: 'AR|x|y' });
+  });
+
+  it('on EAS, a missing or "0" value FAILS the build instead of shipping one that loops', () => {
+    process.env.EAS_BUILD = 'true';
+    delete process.env.META_WEARABLE_CLIENT_TOKEN;
+    process.env.META_WEARABLE_APP_ID = '2111052109463421';
+    expect(() => metaCredentials()).toThrow(/META_WEARABLE_CLIENT_TOKEN/);
+    process.env.META_WEARABLE_CLIENT_TOKEN = '0';
+    expect(() => metaCredentials()).toThrow(/META_WEARABLE_CLIENT_TOKEN/);
+  });
+
+  it('a local prebuild without them falls back to Developer Mode', () => {
+    delete process.env.EAS_BUILD;
+    delete process.env.META_WEARABLE_APP_ID;
+    delete process.env.META_WEARABLE_CLIENT_TOKEN;
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(metaCredentials()).toEqual({ appId: '0', clientToken: '0' });
+  });
+
+  it('the glasses profile reads the environment that holds the secrets', () => {
+    const eas = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../../eas.json'), 'utf8'));
+    expect(eas.build.glasses.environment).toBe('development');
   });
 });

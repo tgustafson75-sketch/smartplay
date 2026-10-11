@@ -71,6 +71,17 @@ describe('Sightline reuses Kevin', () => {
     expect(await sl.readThroughGlasses()).toBe(false);
   });
 
+  it('a registration already in flight is not started again (the app ⇄ Meta AI loop)', async () => {
+    jest.isolateModules(() => {
+      const sl = require('../../services/sightline') as typeof import('../../services/sightline');
+      mw.getRegistrationState.mockReturnValue('REGISTERING');
+      mw.register.mockClear();
+      sl.startSightline();
+      expect(mw.register).not.toHaveBeenCalled();
+      mw.getRegistrationState.mockReturnValue('REGISTERED');
+    });
+  });
+
   it('no new endpoint and no on-device model: only the existing lie-analysis path', () => {
     const fs = require('fs') as typeof import('fs');
     const path = require('path') as typeof import('path');
