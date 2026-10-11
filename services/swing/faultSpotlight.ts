@@ -106,7 +106,9 @@ export function faultMomentFor(args: {
   const { faultId, readTimestampsSec, anchors, windowStartSec, windowEndSec } = args;
   if (!isSpotlightFault(faultId)) return null;
   const lo = windowStartSec - 0.05;
-  const hi = windowEndSec + 0.05;
+  // The replay loops back at the window's end, so a moment in its last few frames could never be
+  // stopped on: everything is held at least 60ms inside it.
+  const hi = windowEndSec - 0.06;
   const read = readTimestampsSec.find((t) => Number.isFinite(t) && t >= lo && t <= hi);
   if (read !== undefined) return { sec: read, source: 'read' };
   if (!anchors) return null;
@@ -119,8 +121,8 @@ export function faultMomentFor(args: {
     : phase === 'impact' ? impactMs
     : phase === 'through' ? impactMs + Math.max(0, endMs - impactMs) * 0.3
     : endMs;
-  const sec = ms / 1000;
-  return sec >= lo && sec <= hi ? { sec, source: 'phase' } : null;
+  const sec = Math.min(ms / 1000, hi);
+  return sec >= lo ? { sec, source: 'phase' } : null;
 }
 
 /**

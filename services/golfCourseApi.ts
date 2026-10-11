@@ -656,6 +656,34 @@ async function getCourseInner(course_id: string): Promise<Course | null> {
 const cleanYardage = (v: unknown): number =>
   typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 900 ? Math.round(v) : 0;
 
+/**
+ * 2026-10-10 (bug sweep P1) — A COURSE FOUND BY DISCOVERY → THE DATABASE COURSE THAT IS THAT COURSE.
+ *
+ * Discovery (Google place / nearby name) gives a name and coordinates; the course database is searched by
+ * NAME only, and loosens the query when nothing matches. Both callers took the first hit, so a shared name
+ * ("Oak Creek", "Riverside GC") could start the round on a course in another state — wrong pars, wrong
+ * yardages, wrong recap. Now each candidate's own location is checked against where the course was found
+ * and the nearest within 5 miles wins; none close enough → null (the card says it couldn't find it).
+ * Only when NO candidate carries a location does the first match stand, as before.
+ */
+export async function resolveDiscoveredCourseId(name: string, near: { lat: number; lng: number } | null): Promise<string | null> {
+  const found = (await searchCourses(name).catch(() => [])).filter((r) => !r._error && r.id);
+  if (found.length === 0) return null;
+  if (!near || !Number.isFinite(near.lat) || !Number.isFinite(near.lng)) return String(found[0].id);
+  const { haversineYards } = require('../utils/geoDistance') as typeof import('../utils/geoDistance');
+  let best: { id: string; yds: number } | null = null;
+  for (const r of found.slice(0, 4)) {
+    const c = await getCourse(String(r.id)).catch(() => null);
+    const lat = c?.location?.latitude;
+    const lng = c?.location?.longitude;
+    if (typeof lat !== 'number' || typeof lng !== 'number') continue;
+    const yds = haversineYards({ lat, lng }, near);
+    if (!best || yds < best.yds) best = { id: String(r.id), yds };
+  }
+  if (best) return best.yds <= 8800 ? best.id : null;
+  return String(found[0].id);
+}
+
 export function courseToHoles(course: Course, teeName?: string): CourseHole[] {
   /**
    * 2026-08-19 — asking for a tee that ISN'T THERE no longer silently returns a different one.

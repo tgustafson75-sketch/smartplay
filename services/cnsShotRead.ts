@@ -518,7 +518,9 @@ export function composeShotRead(input: {
         : `${b.along_wind_mph} downwind`);
     }
     if (b.cross_wind_mph != null && Math.abs(b.cross_wind_mph) >= 5) {
-      why.push(`${Math.abs(b.cross_wind_mph)} cross ${b.cross_wind_mph > 0 ? 'off the right' : 'off the left'}`);
+      // 2026-10-10 (course audit) — positive cross is wind FROM THE LEFT (utils/windMath, pinned by
+      // wind-has-one-owner); this said "off the right" for it.
+      why.push(`${Math.abs(b.cross_wind_mph)} cross off the ${b.cross_wind_mph > 0 ? 'left' : 'right'}`);
     }
   } else if (elevationDeltaFeet !== 0) {
     playsLikeYards = Math.round(rawYards + elevationDeltaFeet / 3);

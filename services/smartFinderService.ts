@@ -1,5 +1,6 @@
 import { useRoundStore, type ShotLocation } from '../store/roundStore';
 import { haversineYards } from '../utils/geoDistance';
+import { edgesAlongLine } from '../utils/greenDepth';
 import { isImplausibleYardage } from '../utils/yardagePlausibility';
 import {
   getOneShotFix,
@@ -726,6 +727,29 @@ function estimatedFromTee(
   return { front: null, middle: remaining, back: null, hole_number: hole, reason: 'estimated' };
 }
 
+/**
+ * 2026-10-10 (course audit P1) — FRONT AND BACK AS THE PLAYER SEES THEM, for both the async and the sync
+ * engine. Stored front/back are the outline points nearest/farthest from the TEE: from a dogleg they are
+ * the green's sides, from behind the green front reads longer than back (and the declared pin then
+ * declines as "no edge"). With an outline, use where the player's line to the middle enters and leaves
+ * it (utils/greenDepth); without one, at least never show a front beyond the back.
+ */
+function playerEdges<T extends { front: number | null; middle: number | null; back: number | null }>(
+  hole: number,
+  player: ShotLocation,
+  middle: ShotLocation | null | undefined,
+  y: T,
+): T {
+  try {
+    const courseId = resolveSmartFinderCourseId(useRoundStore.getState());
+    const outline = middle && courseId ? getHoleGeometry(courseId, hole)?.green_polygon : null;
+    const fb = middle && outline && outline.length >= 3 ? edgesAlongLine(player, middle, outline) : null;
+    if (fb && y.middle != null && fb.front <= y.middle && y.middle <= fb.back) return { ...y, front: fb.front, back: fb.back };
+  } catch { /* the stored edges stand */ }
+  if (y.front != null && y.back != null && y.front > y.back) return { ...y, front: y.back, back: y.front };
+  return y;
+}
+
 export async function getGreenYardages(holeNumber?: number): Promise<GreenYardages> {
   const round = useRoundStore.getState();
   const hole = holeNumber ?? round.currentHole;
@@ -754,13 +778,13 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
     return staticYardages(hData, hole);
   }
 
-  const yards = {
+  const yards = playerEdges(hole, fix.location, middle, {
     front: front ? Math.round(haversineYards(fix.location, front)) : null,
     middle: middle ? Math.round(haversineYards(fix.location, middle)) : null,
     back: back ? Math.round(haversineYards(fix.location, back)) : null,
     hole_number: hole,
     reason: 'ok' as const,
-  };
+  });
   // 2026-06-01 — Fix GF.2: log the raw computed yardage BEFORE the
   // sanity clamp checks it. This entry captures the bad >800y value
   // that the clamp would otherwise discard — exactly the case where
@@ -842,13 +866,13 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
     return staticYardages(hData, hole);
   }
   traceReason('ok', { source });
-  const yards = {
+  const yards = playerEdges(hole, syncFix.location, middle, {
     front: front ? Math.round(haversineYards(syncFix.location, front)) : null,
     middle: middle ? Math.round(haversineYards(syncFix.location, middle)) : null,
     back: back ? Math.round(haversineYards(syncFix.location, back)) : null,
     hole_number: hole,
     reason: 'ok' as const,
-  };
+  });
   logYardageCalc(hole, syncFix, { front, middle, back }, yards, source);
   // 2026-07-08 — same hole-yardage-bounded clamp as the async path above (+100 slack). See note.
   const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 100 : 600;

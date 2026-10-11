@@ -18,6 +18,7 @@
  * SmartFinder screen for zoom and locking.
  */
 
+import { toDisplayDistance } from '../../../services/distanceUnits';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,9 +57,11 @@ export function DistanceCard({
   const { t } = useTranslation();
   const { colors } = useTheme();
 
-  const middle = fmb?.middle ?? baseYardage ?? null;
-  const front = fmb?.front ?? null;
-  const back = fmb?.back ?? null;
+  // 2026-10-10 (course audit P0) — the resolver's numbers are YARDS; a metres player was shown them
+  // raw under "METERS TO PIN" (150 yd displayed as "150 m", about a club long). Convert for display.
+  const middle = toDisplayDistance(fmb?.middle ?? baseYardage ?? null, unit);
+  const front = toDisplayDistance(fmb?.front ?? null, unit);
+  const back = toDisplayDistance(fmb?.back ?? null, unit);
   const unitLabel = unit === 'meters' ? 'METERS TO PIN' : 'YARDS TO PIN';
   // 2026-05-21 — Consolidation 5: honest fallback labeling. When
   // SmartFinder fell back to the scorecard tee→green total (no

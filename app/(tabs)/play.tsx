@@ -52,7 +52,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // tournamentStore.courseName before navigating so the user lands on
 // /tournament with the course pre-filled (saves the free-text typing).
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
-import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
+import { searchCourses, getCourse, aiSearchCourse, resolveDiscoveredCourseId, type AiCourseResult } from '../../services/golfCourseApi';
 import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { composeYourCourses, decideAutoPick } from '../../services/yourCourses';
@@ -1887,15 +1887,15 @@ export default function PlayTab() {
       // pattern the (i) button uses), then load the real API id.
       let resolveId = s.id;
       if (String(s.id).startsWith('place:') || String(s.id).startsWith('near:')) {
-        const found = await searchCourses(s.club_name ?? '');
+        // The database course nearest where this one was found — never just the first name match.
+        const realId = await resolveDiscoveredCourseId(s.club_name ?? '', s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null);
         if (!isCurrent()) return;
-        const real = found.find(r => !r._error && r.id);
-        if (!real) {
+        if (!realId) {
           setSelectError(`Couldn't find "${s.club_name}" in the course database — try the search box.`);
           setSelectedLoading(false);
           return;
         }
-        resolveId = real.id;
+        resolveId = realId;
       } else if (String(s.id).startsWith('local:')) {
         // A local id with no surveyed card (the marquee rows): its pinned database record.
         const apiId = await resolveLocalCourseId(String(s.id).slice('local:'.length)).catch(() => null);
@@ -2076,20 +2076,30 @@ export default function PlayTab() {
   // action is "go" — not select → scroll → Start Round → briefing. Start directly with
   // that course id (the same id the banner already resolves via selectSummary→getCourse,
   // and which the Caddie tab's runStartRound resolves), carrying current setup defaults.
+  const startingRoundRef = useRef(false);
   const startRoundAtCourse = async (s: CourseSummary) => {
+    // One start at a time: a double tap must not run two lookups and push the caddie twice.
+    if (startingRoundRef.current) return;
+    startingRoundRef.current = true;
+    try {
+      await startRoundAtCourseOnce(s);
+    } finally {
+      startingRoundRef.current = false;
+    }
+  };
+  const startRoundAtCourseOnce = async (s: CourseSummary) => {
     /**
      * 2026-10-05 — a course found by discovery carries a synthetic id (place:<google id> / near:<name>)
      * that the round's start cannot load; the caddie tab fell back to its setup card. Resolve it by
      * name first (the same lookup selectSummary does), and start with the real id.
      */
     if (String(s.id).startsWith('place:') || String(s.id).startsWith('near:')) {
-      const found = await searchCourses(s.club_name ?? '').catch(() => []);
-      const real = found.find(r => !r._error && r.id);
-      if (!real) {
+      const realId = await resolveDiscoveredCourseId(s.club_name ?? '', s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null);
+      if (!realId) {
         void selectSummary(s);   // shows the honest "couldn't find" on the card
         return;
       }
-      s = { ...s, id: real.id };
+      s = { ...s, id: realId };
     }
     prewarmBriefing(getApiBaseUrl());
     prewarmVoice();

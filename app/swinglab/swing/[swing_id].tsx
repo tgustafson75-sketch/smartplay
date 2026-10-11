@@ -505,6 +505,8 @@ export default function SwingDetail() {
   pauseOnIssueRef.current = pauseOnIssue;
   const issuePausedRef = useRef(false);
   const lastRawPosRef = useRef(-1);
+  /** While our OWN seek back to the fault lands, its position report must not clear the latch. */
+  const selfSeekUntilRef = useRef(0);
   const [atIssue, setAtIssue] = useState(false);
   // 2026-08-08 (Tim — "if it tries to do too much — mechanics, shot trace AND playback together — it
   // crashes. Addressed 50 times"). ROOT: with the overlay ON, position emits at 25×/s and EACH setPosition
@@ -742,8 +744,10 @@ export default function SwingDetail() {
     setClubArcPoints(arc && arc.length >= 3 ? arc.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
   }, [session, shot]);
   useEffect(() => { traceTouchedRef.current = false; }, [swing_id]);
+  // Untouched, the trace follows the swing on screen: on where there is a stored arc, off where there is
+  // none (so a paged swing without one never shows an ON toggle drawing nothing).
   useEffect(() => {
-    if (clubArcPoints && clubArcPoints.length >= 3 && !traceTouchedRef.current) setShowTrace(true);
+    if (!traceTouchedRef.current) setShowTrace(!!(clubArcPoints && clubArcPoints.length >= 3));
   }, [clubArcPoints]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
@@ -1077,19 +1081,27 @@ export default function SwingDetail() {
       const posSec = s.positionMillis / 1000;
       const f = faultSecRef.current;
       if (f != null) {
-        if (posSec < f - 0.25) {
+        if (posSec < f - 0.25 && Date.now() > selfSeekUntilRef.current) {
           issuePausedRef.current = false;
         } else if (s.isPlaying === true && pauseOnIssueRef.current && !issuePausedRef.current
-            && lastRawPosRef.current >= 0 && lastRawPosRef.current < f && posSec >= f - 0.02) {
+            && lastRawPosRef.current >= 0 && lastRawPosRef.current < f && posSec >= f - 0.02
+            // a real crossing in playback, not a seek that jumped over the fault
+            && posSec - lastRawPosRef.current < 0.45) {
           // Ticks land every 40-250ms, so the player has already passed the frame: stop, then seek
-          // back to exactly it. A bare pause/seek pair — no setState storm from this callback.
+          // back to exactly it (zero tolerance — iOS otherwise snaps to a keyframe up to a second away).
           issuePausedRef.current = true;
+          selfSeekUntilRef.current = Date.now() + 800;
           void (async () => {
             try {
               await videoRef.current?.pauseAsync();
-              await videoRef.current?.setPositionAsync(Math.round(f * 1000));
+              await videoRef.current?.setPositionAsync(Math.round(f * 1000), { toleranceMillisBefore: 0, toleranceMillisAfter: 0 });
             } catch { /* the player was released */ }
           })();
+          // The position the overlay draws at is the fault frame, not the overshoot tick (the throttle
+          // below would otherwise drop the paused seek's report and leave the ring on a later frame).
+          playbackEmitRef.current.pos = f;
+          playbackEmitRef.current.lastPosAt = Date.now();
+          setPosition(f);
           setAtIssue(true);
         }
       }
@@ -1173,7 +1185,9 @@ export default function SwingDetail() {
     // 2026-06-15 (Tim) — seek + HOLD the frame (don't force play). Scrubbing to
     // a position on a swing is a "show me this frame" action; auto-playing from
     // there fights the static-by-default behavior. Tap the frame to play.
-    await videoRef.current?.setPositionAsync(sec * 1000);
+    // 2026-10-10 — zero tolerance: a stage chip or the fault mark must land ON its frame (iOS defaults
+    // to the nearest keyframe, up to a second off).
+    await videoRef.current?.setPositionAsync(sec * 1000, { toleranceMillisBefore: 0, toleranceMillisAfter: 0 });
     await videoRef.current?.pauseAsync();
   };
 
@@ -1209,15 +1223,19 @@ export default function SwingDetail() {
    */
   const faultMoment = useMemo(() => {
     const ts = shot?.detected_issue_timestamps_sec ?? [];
+    // The stored frame is where THIS SHOT's read saw ITS fault. It times the displayed fault only when
+    // they are the same fault (shot 0 displays the session headline, which can be another swing's).
+    const shotFault = shot?.perShotAnalysis?.primary_fault ?? shot?.perShotAnalysis?.detected_issue ?? null;
+    const readMatches = !!displayFault && shotFault === displayFault;
     return faultMomentFor({
       faultId: displayFault,
       // Legacy sessions stored every sample time here; >2 entries is that fabricated array (see below).
-      readTimestampsSec: ts.length <= 2 ? ts : [],
+      readTimestampsSec: readMatches && ts.length <= 2 ? ts : [],
       anchors: motionAnchors,
       windowStartSec: winStartSec,
       windowEndSec: winEndSec,
     });
-  }, [shot?.detected_issue_timestamps_sec, displayFault, motionAnchors, winStartSec, winEndSec]);
+  }, [shot?.detected_issue_timestamps_sec, shot?.perShotAnalysis, displayFault, motionAnchors, winStartSec, winEndSec]);
   useEffect(() => {
     faultSecRef.current = faultMoment?.sec ?? null;
     issuePausedRef.current = false;
@@ -1230,7 +1248,11 @@ export default function SwingDetail() {
     const f = faultSecRef.current;
     if (f == null) return;
     issuePausedRef.current = true;
+    selfSeekUntilRef.current = Date.now() + 800;
     setAtIssue(true);
+    playbackEmitRef.current.pos = f;
+    playbackEmitRef.current.lastPosAt = Date.now();
+    setPosition(f);
     void scrubTo(f);
   }, []);
   // Held on the fault: stopped there by the replay, or paused within a frame or two of it.
@@ -2431,7 +2453,8 @@ export default function SwingDetail() {
                   // diagnosed fault's body region orange/red on the skeleton.
                   faultJoints={overlayFaultJoints}
                   faultSevere={overlayFaultSevere}
-                  clubArc={clubArcPoints}
+                  // Trace off hides the club too (the blue shaft draws from this arc).
+                  clubArc={showTrace ? clubArcPoints : null}
                   videoW={videoNatural?.w ?? null}
                   videoH={videoNatural?.h ?? null}
                   spotlight={spotlightOn}
@@ -4230,8 +4253,9 @@ const styles = StyleSheet.create({
   label: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   // 2026-10-10 — the fault callout, markers and chip (see faultMoment above).
   issueCallout: { position: 'absolute', left: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  // Clear of the slow-mo badge (top-left 8+44) / the seek bar and watermark (bottom).
-  issueCalloutHigh: { top: 58 },
+  // Below the slow-mo badge and the SmartCapture toolbar (VideoAnnotationOverlay, top 60, ~52 tall);
+  // clear of the seek bar and watermark at the bottom.
+  issueCalloutHigh: { top: 122 },
   issueCalloutLow: { bottom: 34, right: 52 },
   issueCalloutBody: { flex: 1, backgroundColor: 'rgba(8,12,10,0.88)', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
   issueCalloutTag: { color: '#FFB199', fontSize: 10, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },

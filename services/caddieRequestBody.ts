@@ -1614,12 +1614,17 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       // This hole's pin (said on the hole) wins over the round's; null when neither was declared.
       const declared = pinForHole(r, currentHole);
       if (!declared) return null;
+      // Whether the yardages in this payload really are to the flag: the resolver applies a depth pin
+      // only with real edges (2026-10-10 — the brain was told they were even when it declined).
+      const { resolveYardage } = require('./yardageResolver') as typeof import('./yardageResolver');
+      const inYardages = declared.pin.depth === 'middle' || resolveYardage(currentHole ?? undefined).pin_applied === true;
       return {
         depth: declared.pin.depth,
         side: declared.pin.side,
         said: describePin(declared.pin),
         aim: aimNoteForPin(declared.pin),
         scope: declared.scope,
+        inYardages,
       };
     }, null),
     /**

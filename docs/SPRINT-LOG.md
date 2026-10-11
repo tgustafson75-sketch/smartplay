@@ -5330,3 +5330,35 @@ orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-po
   57 points, gate-accepted (53s on the emulator's software decoder; phone hardware decode is far faster).
   Stored arcs carry their source; only tracked arcs are reused. iOS keeps the vision fallback (no engine there).
   Open: impact frames not always kept on wide windows; late-finish points near the body.
+
+## Day 139 — 2026-10-10/11 — swing review stops on the fault; course engine audit
+
+**Shipped today** (branch swing-review-2026-10-10 → main)
+- Swing review (library + SmartMotion): the replay stops on the fault frame, rings the fault's body area
+  and captions it (services/swing/faultSpotlight). Toggles "Pause on issue" / "Highlight" (persisted).
+  Issue chip + scrubber marks. Skeleton stays opt-in (Tim: gate it behind the player asking).
+- Swing arc: silent pass = free on-device tracker only (analysis run, SmartMotion, paged swings); iOS asks
+  nothing; only the player's Swing Trace toggle may call the paid vision model. Library trace turns on by
+  itself for a STORED arc (no analysis work on open).
+- Review fixes from the adversarial pass: zero-tolerance seeks (iOS keyframe snap + re-pause loop), a seek
+  over the fault is not a crossing, overlay drawn at the fault frame, read frame used only for the SAME
+  fault, estimated P-labels not anchors, trace off hides the club, arc level never lowered on join.
+- Course engine audit: metres shown as metres (cockpit card + strip PLAYS); crosswind label + shot-shape
+  direction were inverted; crosswind distance term cut 0.5%→0.1%/mph (quartering headwind ≤ straight);
+  hazards behind the player excluded; voice "how far"/"plays like" use the one resolver; brain told the
+  pin is in the yardages only when it is (pin_applied); front/back of the green from the PLAYER's line
+  (utils/greenDepth); "off for the heat".
+- App sweep: discovered course resolves to the DB course nearest where it was found (≤5 mi), one start
+  at a time; strip score never overwrites a newer entry; /api/kevin survives null list fields; body-read
+  verdicts reach the relationship engine.
+- Gates: tsc clean; jest 546/546 (6374); sim 1077/1077. New guards: the-replay-stops-on-the-fault-and-
+  points-at-it, the-course-numbers-are-right, front-and-back-are-the-players; every one break-tested.
+
+**Verified on device:** emulator only (see SPRINT-RESUME). Not yet on Tim's Fold.
+
+**Open / carried**
+- Course audit P2s not done: par `?? 4` fabrication (golfCourseApi:172), surveyed-truth tier drops F/B,
+  pin in `middle` labelled CENTER, pinByHole not twice-around keyed, no altitude term.
+- Sweep: Sightline stream-state reset + capture timeout (dev variant).
+- es/zh strings for the five new swing-review keys (fall back to English).
+- SmartBay AI (separate repo ~/smartbay-ai, smartbay-ai.vercel.app): live camera + real swing reads shipped.

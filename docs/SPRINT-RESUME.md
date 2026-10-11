@@ -8,6 +8,11 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### 2026-10-11 — Swing review stops on the fault + course-engine audit fixes, shipped to main + OTA (Tim said go).
+> Detail: SPRINT-LOG Day 139. Device check on the Fold: open a swing with a fault → it stops on the frame,
+> rings the area, caption + Continue; Swing Trace shows by itself where an arc is stored; metres mode shows
+> metres; crosswind reads from the correct side. Next: course audit P2s (see Day 139 Open).
+
 > ### 2026-10-01 — Wear 1031 REJECTED ("Missing scrollbar"). Fixed as **1032** (ae05fbe8): scrollbars on, checked
 > on the small-round emulator. Upload to `wear:production` is **Tim's / Cowork's** (instructions given; auto mode
 > blocks Claude from production uploads). **Updates now ship only Sun→Mon 12:00 a.m. Central.** Queued for

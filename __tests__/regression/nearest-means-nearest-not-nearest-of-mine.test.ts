@@ -21,7 +21,10 @@ describe('NEAREST means nearest', () => {
   });
 
   it('a discovered course starts with its REAL id, never the synthetic place: id', () => {
-    expect(src).toMatch(/const startRoundAtCourse = async \(s: CourseSummary\) => \{\s*if \(String\(s\.id\)\.startsWith\('place:'\) \|\| String\(s\.id\)\.startsWith\('near:'\)\) \{\s*const found = await searchCourses/);
+    // 2026-10-10 — resolved to the database course NEAREST where it was found (never the first name match),
+    // one start at a time.
+    expect(src).toMatch(/const startRoundAtCourseOnce = async \(s: CourseSummary\) => \{\s*if \(String\(s\.id\)\.startsWith\('place:'\) \|\| String\(s\.id\)\.startsWith\('near:'\)\) \{\s*const realId = await resolveDiscoveredCourseId/);
+    expect(src).toMatch(/if \(startingRoundRef\.current\) return;/);
   });
 
   it('the refresh button takes a FRESH fix, re-runs discovery, and says what happened', () => {

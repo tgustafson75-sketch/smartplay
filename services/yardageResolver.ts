@@ -56,6 +56,9 @@ export interface ResolvedYardage {
   front: number | null;
   back: number | null;
   source: YardageSource;
+  /** True only when a declared pin actually moved `value` (applyDeclaredPin). 2026-10-10 — the caddie
+   *  was told "already plays to that flag" even when the pin was declined (no edge / estimate). */
+  pin_applied?: boolean;
   confidence: YardageConfidence;
   /** Human-readable hint Kevin can echo. Always populated. */
   reason: string;
@@ -127,6 +130,7 @@ function applyDeclaredPin(
   return {
     ...r,
     value: adj.yards,
+    pin_applied: true,
     // front/back are the GREEN's edges and do not move because the flag did.
     reason: `${r.reason} Pin ${describePin(pin)}: playing ${adj.yards} (${adj.delta > 0 ? '+' : ''}${adj.delta} on the middle).`,
   };

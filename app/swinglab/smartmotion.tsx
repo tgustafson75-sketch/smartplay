@@ -4692,13 +4692,16 @@ export default function SmartMotion() {
   const reviewFaultMoment = useMemo(() => {
     const seg = segments[selectedSwing];
     const sh = cageSession?.shots[selectedSwing];
-    const at = (pos: string) => poseFrames?.find((f) => f.position === pos)?.timestampMs;
+    // A label the sampler PLACED ('estimated') is not a measurement (the library's 10-04 rule) — no anchor.
+    const at = (pos: string) => poseFrames?.find((f) => f.position === pos && f.positionSource !== 'estimated')?.timestampMs;
     const top = at('P4_top'), impact = at('P6_impact'), end = at('P10_finish');
     const anchors = top != null && impact != null && end != null ? { startMs: at('P1_address') ?? top, topMs: top, impactMs: impact, endMs: end } : null;
     const ts = sh?.detected_issue_timestamps_sec ?? [];
+    // The stored frame times the fault only when it is the same fault this swing's read named.
+    const shotFault = sh?.perShotAnalysis?.primary_fault ?? sh?.perShotAnalysis?.detected_issue ?? null;
     return faultMomentFor({
       faultId: reviewFaultId,
-      readTimestampsSec: ts.length <= 2 ? ts : [],
+      readTimestampsSec: !!reviewFaultId && shotFault === reviewFaultId && ts.length <= 2 ? ts : [],
       anchors,
       windowStartSec: seg && seg.endMs > seg.startMs ? seg.startMs / 1000 : 0,
       windowEndSec: seg && seg.endMs > seg.startMs ? seg.endMs / 1000 : Number.MAX_SAFE_INTEGER,
@@ -4707,6 +4710,7 @@ export default function SmartMotion() {
   const reviewFaultSecRef = useRef<number | null>(null);
   const reviewIssuePausedRef = useRef(false);
   const reviewLastPosRef = useRef(-1);
+  const reviewSelfSeekUntilRef = useRef(0);
   const pauseOnIssueRef = useRef(pauseOnIssue);
   pauseOnIssueRef.current = pauseOnIssue;
   const [reviewAtIssue, setReviewAtIssue] = useState(false);
@@ -4720,10 +4724,11 @@ export default function SmartMotion() {
     const f = reviewFaultSecRef.current;
     if (f == null) return;
     reviewIssuePausedRef.current = true;
+    reviewSelfSeekUntilRef.current = Date.now() + 800;
     setVideoPaused(true);
     setReviewAtIssue(true);
     try { await videoRef.current?.pauseAsync(); } catch { /* released */ }
-    try { await videoRef.current?.setPositionAsync(Math.round(f * 1000)); } catch { /* released */ }
+    try { await videoRef.current?.setPositionAsync(Math.round(f * 1000), { toleranceMillisBefore: 0, toleranceMillisAfter: 0 }); } catch { /* released */ }
     setPlaybackMs(Math.round(f * 1000));
   }, []);
   const onReviewVideoLoad = useCallback(async (s: AVPlaybackStatus) => {
@@ -4755,18 +4760,20 @@ export default function SmartMotion() {
       const posSec = s.positionMillis / 1000;
       const f = reviewFaultSecRef.current;
       if (f != null) {
-        if (posSec < f - 0.25) {
+        if (posSec < f - 0.25 && Date.now() > reviewSelfSeekUntilRef.current) {
           reviewIssuePausedRef.current = false;
         } else if (!videoPaused && 'isPlaying' in s && s.isPlaying && pauseOnIssueRef.current && !reviewIssuePausedRef.current
-            && reviewLastPosRef.current >= 0 && reviewLastPosRef.current < f && posSec >= f - 0.02) {
+            && reviewLastPosRef.current >= 0 && reviewLastPosRef.current < f && posSec >= f - 0.02
+            && posSec - reviewLastPosRef.current < 0.45) {
           // Past the frame already (ticks are 40-250ms apart): stop, then seek back to exactly it.
           reviewIssuePausedRef.current = true;
+          reviewSelfSeekUntilRef.current = Date.now() + 800;
           setVideoPaused(true);
           setReviewAtIssue(true);
           void (async () => {
             try {
               await videoRef.current?.pauseAsync();
-              await videoRef.current?.setPositionAsync(Math.round(f * 1000));
+              await videoRef.current?.setPositionAsync(Math.round(f * 1000), { toleranceMillisBefore: 0, toleranceMillisAfter: 0 });
             } catch { /* the player was released */ }
           })();
         }

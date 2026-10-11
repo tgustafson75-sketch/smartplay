@@ -1,3 +1,4 @@
+import { isImplausibleYardage } from '../../utils/yardagePlausibility';
 import { resolveYardage, resolvedToFmb } from '../yardageResolver';
 import { holePar, resolveGreenCoords } from '../smartFinderService';
 import { girFrom, puttStatsFrom, nineSplitFrom, scoredRoundFromRecord, longestDriveFrom, type ScoredRound } from '../round/scoredRoundStats';
@@ -835,7 +836,14 @@ export const queryStatusHandler: IntentHandler = {
         const param = intent.parameters.target_yards;
         let actual: number | null = typeof param === 'number' && param > 0 ? param : null;
         if (actual == null) {
-          if (here && green) actual = Math.round(haversineYards(here, green));
+          // The resolver's live number (pin + stated yardage), as the screen and the caddie use; the raw
+          // read only when it has none, and never an absurd one (2026-10-10, course audit).
+          const r = resolveYardage(context.current_hole ?? round.currentHole);
+          if (r.value != null && (r.source === 'gps_live' || r.source === 'user_stated')) actual = Math.round(r.value);
+          else if (here && green) {
+            const raw = Math.round(haversineYards(here, green));
+            if (!isImplausibleYardage(raw, 700)) actual = raw;
+          }
         }
         if (actual == null) {
           return {
@@ -1035,7 +1043,17 @@ export const queryStatusHandler: IntentHandler = {
           };
         }
         const here: ShotLocation = { lat: fix.lat, lng: fix.lng };
-        const yds = Math.round(haversineYards(here, green));
+        // 2026-10-10 (course audit) — the spoken number is THE number: the resolver's live read carries
+        // the declared pin and a stated rangefinder number, exactly what the screen and the caddie use.
+        // The raw read stands in only when the resolver has no live answer, and never an absurd one.
+        const resolvedY = resolveYardage(greenHole);
+        const rawY = Math.round(haversineYards(here, green));
+        const yds = resolvedY.value != null && (resolvedY.source === 'gps_live' || resolvedY.source === 'user_stated')
+          ? Math.round(resolvedY.value)
+          : rawY;
+        if (isImplausibleYardage(yds, 700)) {
+          return { success: true, voice_response: t.noGps, side_effects: ['query:distance_to_green:implausible', `lang:${lang}`], follow_up_needed: false };
+        }
         return {
           success: true,
           voice_response: t.distance(yds),

@@ -281,7 +281,8 @@ export function runShotDetail(sessionId: string, shotId: string, opts: { force?:
     void live.done.then(() => { runShotDetail(sessionId, shotId, opts); });
     return live as AnalysisRun<In>;
   }
-  liveArcLevel.set(key, level);
+  // Joining a live run never lowers what it was asked for; a fresh run records its own level.
+  liveArcLevel.set(key, live && !force ? Math.max(liveArcLevel.get(key) ?? 0, level) : level);
   return getOrStartRun<In>(key, () => ({
     stages: stages(),
     input: { sessionId, shotId, force, arc: level > 0, trackerOnly: level === 1 },

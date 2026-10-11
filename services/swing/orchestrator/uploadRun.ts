@@ -183,6 +183,14 @@ function stages(): StageDef<In>[] {
               liveSessionStore(signal).setSessionAnalysisStatus(input.sessionId, 'ok');
               const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
               traceStep('body read named the verdict', { issue: pi.issue_id });
+              // 2026-10-10 (bug sweep) — the caddie learns it too, exactly as from a full read (videoUpload
+              // feeds the relationship engine there). It was shown on every screen and unknown to him.
+              if (!signal.aborted) {
+                try {
+                  const { processSwingAnalysis } = require('../../relationshipEngine') as typeof import('../../relationshipEngine');
+                  processSwingAnalysis({ club: s.club, primary_issue: pi });
+                } catch { /* memory is best-effort; the verdict stands */ }
+              }
             } else {
               /**
                * The body read MEASURED the swing and nothing stood out — that is an answer, not a failure

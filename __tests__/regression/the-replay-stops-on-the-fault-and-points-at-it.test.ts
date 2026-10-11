@@ -58,6 +58,10 @@ describe('when the replay stops', () => {
     expect(faultMomentFor({ faultId: 'chicken_wing', readTimestampsSec: [], anchors: ANCHORS, ...win })?.sec).toBeCloseTo(6.7, 5);  // through
     expect(faultMomentFor({ faultId: 'poor_finish', readTimestampsSec: [], anchors: ANCHORS, ...win })?.sec).toBe(7.4);   // finish
   });
+  it('a moment in the window\'s last frames (where the replay loops back) is held just inside it', () => {
+    expect(faultMomentFor({ faultId: 'early_extension', readTimestampsSec: [7.58], anchors: null, ...win })).toBeNull();
+    expect(faultMomentFor({ faultId: 'poor_finish', readTimestampsSec: [], anchors: { ...ANCHORS, endMs: 7600 }, ...win })?.sec).toBeCloseTo(7.54, 5);
+  });
   it('no real fault, or nothing to time it by → no stop', () => {
     for (const f of [null, undefined, 'none', 'no_clear_fault', 'no_launch', 'inconclusive']) {
       expect(faultMomentFor({ faultId: f, readTimestampsSec: [6.2], anchors: ANCHORS, ...win })).toBeNull();
@@ -110,11 +114,21 @@ describe('the swing screen stops, rings and names it — the skeleton stays opt-
   const sd = code('app/swinglab/swing/[swing_id].tsx');
   it('the playback callback stops on the fault and seeks back to exactly it, only when the setting is on', () => {
     expect(sd).toMatch(/pauseOnIssueRef\.current && !issuePausedRef\.current/);
-    expect(sd).toMatch(/await videoRef\.current\?\.pauseAsync\(\);\s*await videoRef\.current\?\.setPositionAsync\(Math\.round\(f \* 1000\)\);/);
+    // zero tolerance: iOS otherwise snaps to a keyframe up to a second off the fault
+    expect(sd).toMatch(/await videoRef\.current\?\.pauseAsync\(\);\s*await videoRef\.current\?\.setPositionAsync\(Math\.round\(f \* 1000\), \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\);/);
+    // a seek that jumps over the fault is not a crossing; our own seek back never clears the latch
+    expect(sd).toMatch(/posSec - lastRawPosRef\.current < 0\.45/);
+    expect(sd).toMatch(/if \(posSec < f - 0\.25 && Date\.now\(\) > selfSeekUntilRef\.current\)/);
+    // the overlay draws at the fault frame, not the overshoot tick
+    expect(sd).toMatch(/playbackEmitRef\.current\.pos = f;\s*playbackEmitRef\.current\.lastPosAt = Date\.now\(\);\s*setPosition\(f\);\s*setAtIssue\(true\);/);
+    // every scrub lands on its frame
+    expect(sd).toMatch(/await videoRef\.current\?\.setPositionAsync\(sec \* 1000, \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\);/);
     expect(sd).toMatch(/faultSecRef\.current = faultMoment\?\.sec \?\? null;/);
   });
-  it('the moment is the SELECTED swing\'s fault, from the one module', () => {
+  it('the moment is the SELECTED swing\'s fault, from the one module — and its read frame only when it is that fault', () => {
     expect(sd).toMatch(/faultMomentFor\(\{\s*faultId: displayFault,/);
+    expect(sd).toMatch(/const readMatches = !!displayFault && shotFault === displayFault;/);
+    expect(sd).toMatch(/readTimestampsSec: readMatches && ts\.length <= 2 \? ts : \[\],/);
   });
   it('the ring needs the highlight setting and the overlay mounts for it without the skeleton', () => {
     expect(sd).toMatch(/const spotlightOn = onIssueFrame && highlightIssue && hasPose && overlayFaultJoints\.length > 0;/);
@@ -139,7 +153,13 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
   });
   it('the status handler stops on it (declarative pause too) only with the setting on', () => {
     expect(sm).toMatch(/pauseOnIssueRef\.current && !reviewIssuePausedRef\.current/);
-    expect(sm).toMatch(/reviewIssuePausedRef\.current = true;\s*setVideoPaused\(true\);/);
+    expect(sm).toMatch(/reviewIssuePausedRef\.current = true;\s*reviewSelfSeekUntilRef\.current = Date\.now\(\) \+ 800;\s*setVideoPaused\(true\);/);
+    expect(sm).toMatch(/posSec - reviewLastPosRef\.current < 0\.45/);
+    expect(sm).toMatch(/setPositionAsync\(Math\.round\(f \* 1000\), \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\)/);
+  });
+  it('a placed (estimated) pose label is not a timing anchor; the read frame only for the same fault', () => {
+    expect(sm).toMatch(/f\.position === pos && f\.positionSource !== 'estimated'/);
+    expect(sm).toMatch(/!!reviewFaultId && shotFault === reviewFaultId && ts\.length <= 2 \? ts : \[\]/);
   });
   it('the ring mounts the overlay without the skeleton, and needs the highlight setting', () => {
     expect(sm).toMatch(/const reviewSpotlightOn = reviewOnIssueFrame && highlightIssue && poseReady && reviewFaultJoints\.length > 0;/);
@@ -159,8 +179,9 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
 
 describe('the arc shows by itself; only the player can pay for one', () => {
   const sd = code('app/swinglab/swing/[swing_id].tsx');
-  it('the trace turns on once the shot has a real arc, unless the player turned it off', () => {
-    expect(sd).toMatch(/if \(clubArcPoints && clubArcPoints\.length >= 3 && !traceTouchedRef\.current\) setShowTrace\(true\);/);
+  it('the trace follows the swing on screen (on with a stored arc, off without) until the player touches it; off hides the club', () => {
+    expect(sd).toMatch(/if \(!traceTouchedRef\.current\) setShowTrace\(!!\(clubArcPoints && clubArcPoints\.length >= 3\)\);/);
+    expect(sd).toMatch(/clubArc=\{showTrace \? clubArcPoints : null\}/);
     // the stored arc is read whether or not the trace is on (it used to be nulled while off)
     expect(sd).not.toMatch(/if \(!showTrace \|\| !session \|\| !shot\) \{ setClubArcPoints\(null\)/);
   });

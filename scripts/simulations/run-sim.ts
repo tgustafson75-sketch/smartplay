@@ -8771,7 +8771,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // delta "(+3)" (uphill/into-wind) / "(−2)" (downhill/downwind) so the user SEES it's adjusted —
     // and nothing when there's genuinely no adjustment (honest, never a fake plays-like).
     /playsLikeDelta\?: number \| null/.test(read('components/CaddieDataStrip.tsx')) &&
-      /playsLike != null && playsLikeDelta \?/.test(read('components/CaddieDataStrip.tsx')) &&
+      // 2026-10-10 — shown in the player's unit (playsShown / playsDeltaShown are the converted values)
+      /playsShown != null && playsDeltaShown \?/.test(read('components/CaddieDataStrip.tsx')) &&
       /playsLikeDelta=\{playsLikeYardage != null && displayYardage != null \? playsLikeYardage - displayYardage : null\}/.test(read('app/(tabs)/caddie.tsx')),
     'the live data strip shows the plays-like adjustment delta beside PLAYS, so the number reads as an ADJUSTED "plays like" (wind + slope), not the raw distance — and shows no delta when there is no real adjustment');
 
@@ -17977,7 +17978,8 @@ check(
 
   // Tapping A then B: A's slower load overwrote B, and A's Start Round stayed live while B loaded.
   const sel = play.slice(play.indexOf('const selectSummary = useCallback'), play.indexOf('const onTapInfo'));
-  const awaitsGated = (sel.match(/await (searchCourses|getCourse|fetchCourseGeometry)\(/g) ?? []).length;
+  // 2026-10-10 — a discovered course now resolves through resolveDiscoveredCourseId (nearest by location).
+  const awaitsGated = (sel.match(/await (searchCourses|getCourse|fetchCourseGeometry|resolveDiscoveredCourseId)\(/g) ?? []).length;
   const gates = (sel.match(/if \(!isCurrent\(\)\) return;/g) ?? []).length;
   check('COURSE PICK: only the newest pick may write the card, and Start Round waits for it',
     /const mySeq = \+\+selectSeqRef\.current;/.test(sel) && awaitsGated >= 3 && gates >= awaitsGated &&

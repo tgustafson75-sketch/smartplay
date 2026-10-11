@@ -315,6 +315,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (body.message.length > 8000) {
       return res.status(413).json({ error: 'message too long' });
     }
+    // 2026-10-10 (bug sweep) — a destructuring default covers `undefined`, not `null`, and the client's
+    // payload builder sends `null` when a getter fails; `.length` / `.map` on null 500'd the whole turn.
+    for (const k of ['topObservations', 'recentHeroMoments', 'recentBreakthroughs', 'recentCageSessions'] as const) {
+      if (body[k] != null && !Array.isArray(body[k])) body[k] = [];
+      if (body[k] === null) delete body[k];
+    }
 
     const {
       message,
@@ -1289,7 +1295,7 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
         if (pl && Math.abs(pl.deltaYds) >= 3) {
           const why = [
             pl.fromWind ? `${Math.abs(pl.fromWind)} from the wind` : null,
-            pl.fromTemp ? `${Math.abs(pl.fromTemp)} from the cold` : null,
+            pl.fromTemp ? `${Math.abs(pl.fromTemp)} ${pl.fromTemp > 0 ? "from the cold" : "off for the heat"}` : null,
             pl.fromWet ? `${Math.abs(pl.fromWet)} from the wet` : null,
             // Downhill is the one that embarrasses a caddie in front of his player: quoting the
             // card number on a shot that is falling away flies it through the green.
@@ -1357,11 +1363,14 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
       if (pg && (pg.feet != null || pg.slopePct != null || pg.note)) {
         lines.push(`- You have read this green with them before: ${[pg.feet != null ? `${pg.feet} feet` : null, pg.slopePct != null ? `${pg.slopePct}% slope` : null, pg.note || null].filter(Boolean).join(', ')}. That is a real prior read — recall it as memory, not as a guess.`);
       }
-      const pin = pinPosition as { depth: string; side: string; said: string; aim: string | null; scope?: 'hole' | 'round' } | null;
+      const pin = pinPosition as { depth: string; side: string; said: string; aim: string | null; scope?: 'hole' | 'round'; inYardages?: boolean } | null;
       if (pin) {
         lines.push(
-          `- ${pin.scope === 'hole' ? "THIS HOLE'S PIN (the player told you)" : "TODAY'S PIN"} is ${pin.said}. The yardages you have been given ALREADY play to that flag, not`
-          + ` to the middle — do not add or subtract for it again.`
+          `- ${pin.scope === 'hole' ? "THIS HOLE'S PIN (the player told you)" : "TODAY'S PIN"} is ${pin.said}. `
+          + (pin.inYardages === false
+            // The resolver declined it (no real edge for this green, or the yardage is an estimate).
+            ? `The yardages you have been given are to the MIDDLE of the green, not the flag — allow for it yourself: a back pin plays longer, a front pin shorter.`
+            : `The yardages you have been given ALREADY play to that flag, not to the middle — do not add or subtract for it again.`)
           + (pin.aim ? ` ${pin.aim}` : '')
           + ` Say where the pin is when it changes the play; do not recite it every shot.`,
         );

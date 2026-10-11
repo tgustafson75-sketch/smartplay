@@ -153,19 +153,27 @@ export default function CaddieDataStrip({
   // ── Scoring row: pending entry, stamped with its hole, committed once ──
   const [pendingScore, setPendingScore] = useState<number | null>(null);
   const [pendingPutts, setPendingPutts] = useState<number | null>(null);
-  const pendingRef = useRef<{ hole: number | null; score: number | null; putts: number | null }>({ hole: null, score: null, putts: null });
+  /**
+   * `baseScore`/`basePutts`: what the store held for the hole when this entry started. 2026-10-10 (bug sweep,
+   * PATH 6) — a score entered on ANOTHER surface inside the 2.5s settle was overwritten when the strip's
+   * timer fired. If the store moved since the entry started, someone newer wrote it: theirs stands.
+   */
+  const pendingRef = useRef<{ hole: number | null; score: number | null; putts: number | null; baseScore?: number | null; basePutts?: number | null }>({ hole: null, score: null, putts: null });
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitRef = useRef<() => void>(() => undefined);
   commitRef.current = () => {
     if (settleTimerRef.current) { clearTimeout(settleTimerRef.current); settleTimerRef.current = null; }
-    const { hole: h, score: sc, putts: pt } = pendingRef.current;
+    const { hole: h, score: sc, putts: pt, baseScore, basePutts } = pendingRef.current;
     pendingRef.current = { hole: null, score: null, putts: null };
     setPendingScore(null);
     setPendingPutts(null);
     if (h == null) return;
+    const st = useRoundStore.getState();
+    const scoreMoved = (st.scores?.[h] ?? null) !== (baseScore ?? null);
+    const puttsMoved = (st.putts?.[h] ?? null) !== (basePutts ?? null);
     // Putts first: logPutts never moves the round; logScore's first score may advance it.
-    if (pt != null) onPuttsStep?.(pt, h);
-    if (sc != null) onScoreStep?.(sc, h);
+    if (pt != null && !puttsMoved) onPuttsStep?.(pt, h);
+    if (sc != null && !scoreMoved) onScoreStep?.(sc, h);
   };
   // The hole changed (arrows, voice, GPS) with an entry pending → it lands on the hole it was tapped on.
   const currentHoleNum = hole.current;
@@ -216,7 +224,10 @@ export default function CaddieDataStrip({
   // live-vs-static.
   const isOffCourse = useOffCourseStore(s => s.isOffCourse);
   const yardsToNearestHole = useOffCourseStore(s => s.yardsToNearestHole);
-  const { fmtCompact } = useDistanceFormat();
+  const { fmtCompact, toDisplay } = useDistanceFormat();
+  // 2026-10-10 (course audit) — PLAYS and its delta arrive in YARDS; a metres player saw them raw.
+  const playsShown = toDisplay(playsLike);
+  const playsDeltaShown = playsLikeDelta ? toDisplay(playsLikeDelta) : null;
   // Phase 405 wave 3 — movement mode pill (cart vs walking). Renders
   // a small icon-chip next to the source pill so the user can see the
   // app is reading their movement correctly. Hidden when 'unknown'
@@ -400,9 +411,9 @@ export default function CaddieDataStrip({
             <View style={styles.gridCell}>
               <Text style={styles.cellLabel}>{t('caddie_data_strip.text.plays')}</Text>
               <Text style={[styles.cellValue, { fontSize: 22 }]}>
-                {playsLike != null ? String(playsLike) : '—'}
-                {playsLike != null && playsLikeDelta ? (
-                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#88F700' }}> ({playsLikeDelta > 0 ? '+' : ''}{playsLikeDelta})</Text>
+                {playsShown != null ? String(playsShown) : '—'}
+                {playsShown != null && playsDeltaShown ? (
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#88F700' }}> ({playsDeltaShown > 0 ? '+' : ''}{playsDeltaShown})</Text>
                 ) : null}
               </Text>
             </View>
@@ -456,11 +467,11 @@ export default function CaddieDataStrip({
   const cells: { label: string; value: string; delta: number | null; fontSize: number }[] = twoRow
     ? [
         { label: 'PAR',    value: par != null ? String(par) : '—',              delta: null, fontSize: 20 },
-        { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', delta: playsLike != null && playsLikeDelta ? playsLikeDelta : null, fontSize: 20 },
+        { label: 'PLAYS',  value: playsShown != null ? String(playsShown) : '—', delta: playsShown != null && playsDeltaShown ? playsDeltaShown : null, fontSize: 20 },
         { label: 'TARGET', value: targetDirection,                             delta: null, fontSize: 14 },
       ]
     : [
-        { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', delta: playsLike != null && playsLikeDelta ? playsLikeDelta : null, fontSize: 20 },
+        { label: 'PLAYS',  value: playsShown != null ? String(playsShown) : '—', delta: playsShown != null && playsDeltaShown ? playsDeltaShown : null, fontSize: 20 },
         { label: 'TARGET', value: targetDirection,                             delta: null, fontSize: 14 },
         { label: lastCellLabel, value: lastCellValue,                          delta: null, fontSize: 20 },
       ];
@@ -507,6 +518,11 @@ export default function CaddieDataStrip({
     const p = pendingRef.current;
     if (p.hole != null && p.hole !== hole.current) commitRef.current();
     const cur = pendingRef.current;
+    if (cur.hole == null) {
+      const st = useRoundStore.getState();
+      cur.baseScore = st.scores?.[hole.current] ?? null;
+      cur.basePutts = st.putts?.[hole.current] ?? null;
+    }
     cur.hole = hole.current;
     if (which === 'score') {
       cur.score = stepHoleScore(cur.score ?? holeScore, dir, par);

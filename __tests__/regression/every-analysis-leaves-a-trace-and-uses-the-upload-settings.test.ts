@@ -127,7 +127,7 @@ describe('a saved swing: settled, its windows, and what opening it does', () => 
     expect((d.match(/setShowSkeleton\(/g) ?? []).length).toBe(1);   // the player's toggle only
     // exactly two writers of the trace: the player's toggle, and the stored-arc auto-on
     expect((d.match(/setShowTrace\(/g) ?? []).length).toBe(2);
-    expect(d).toMatch(/if \(clubArcPoints && clubArcPoints\.length >= 3 && !traceTouchedRef\.current\) setShowTrace\(true\);/);
+    expect(d).toMatch(/if \(!traceTouchedRef\.current\) setShowTrace\(!!\(clubArcPoints && clubArcPoints\.length >= 3\)\);/);
     // the auto-on trace starts no run: only a trace the player turned on asks for the shot's detail
     expect(d).toMatch(/const traceAsked = showTrace && traceTouchedRef\.current;\s*if \(!\(selectedShotIdx > 0 \|\| showSkeleton \|\| traceAsked\)\) return;/);
   });

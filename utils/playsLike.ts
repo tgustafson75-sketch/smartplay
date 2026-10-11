@@ -37,7 +37,7 @@ export type PlaysLikeBreakdown = {
   elevation_component_yards: number;
   /** Wind component along shot direction (positive = tailwind, negative = headwind). null when bearing unknown. */
   along_wind_mph: number | null;
-  /** Crosswind component (positive = right cross, negative = left cross). null when bearing unknown. */
+  /** Crosswind component (positive = wind FROM THE LEFT, blowing left-to-right; negative = from the right). null when bearing unknown. */
   cross_wind_mph: number | null;
 };
 
@@ -89,8 +89,11 @@ export function playsLikeDistance(
     } else {
       windYards -= along * actualYards * 0.005;
     }
-    // Crosswind: half-effect on distance (slight extension from extra time of flight)
-    windYards += Math.abs(cross) * actualYards * 0.005;
+    // Crosswind: a SMALL extension (a little extra time in the air). 2026-10-10 (course audit) — this was
+    // half the headwind rate with no cap, so a 15 mph quartering headwind played LONGER (174 on 150) than
+    // the same wind straight into the face (172), and a pure 20 mph crosswind added 15 yards. A tenth of
+    // that keeps the direction of the effect without letting it out-weigh the headwind it rides on.
+    windYards += Math.abs(cross) * actualYards * 0.001;
   }
 
   // Temperature component — colder adds yards, warmer subtracts

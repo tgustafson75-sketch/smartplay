@@ -51,6 +51,8 @@ jest.mock('../../services/swing/clubPath', () => ({
 }));
 // The arc's silent pass runs only where the on-device tracker can (Android); pinned per test.
 const mockRN = require('react-native') as { Platform: { OS: string } };
+const mockLearned: unknown[] = [];
+jest.mock('../../services/relationshipEngine', () => ({ processSwingAnalysis: (a: unknown) => { mockLearned.push(a); } }));
 jest.mock('../../store/toastStore', () => ({ useToastStore: { getState: () => ({ show: () => undefined }) } }));
 
 const BIO = { frames: [{ timestampMs: 5400, keypoints: [] }, { timestampMs: 7000, keypoints: [] }], angle: 'down_the_line' };
@@ -64,6 +66,7 @@ const seed = (dur: number, source = 'uploaded_video') => useSwingSessionStore.se
 });
 
 beforeEach(() => {
+  mockLearned.length = 0;
   mockRN.Platform.OS = 'android';
   mockArcArgs.length = 0;
   mockOrder.length = 0; mockPoseRelease = []; mockKind = 'full_swing'; mockReadThrows = false; mockPoseVerdict = null; mockReadHold = null;
@@ -186,6 +189,8 @@ describe('a swing runs window → read → body → arc, once', () => {
     await tick(10);
     expect(s1().analysis_status).toBe('ok');
     expect(s1().primary_issue?.issue_id).toBe('early_extension');
+    // 2026-10-10 — and the caddie learns it, as from a full read
+    expect(mockLearned).toEqual([expect.objectContaining({ primary_issue: expect.objectContaining({ issue_id: 'early_extension' }) })]);
   });
 
   it('read failed + no body verdict: it fails ONCE, at the end, with the read\'s reason', async () => {

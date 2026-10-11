@@ -304,7 +304,7 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
 interface WindFactor {
   /** Effective along-shot wind. Positive = tailwind, negative = headwind. */
   along_mph: number;
-  /** Crosswind component. Positive = right-to-left, negative = left-to-right. */
+  /** Crosswind component. Positive = wind from the LEFT (blowing left-to-right), negative = from the right. */
   cross_mph: number;
   /** Absolute total wind speed mph. */
   total_mph: number;
@@ -379,9 +379,11 @@ function recommendShape(
   // Low punch when out of trees / very strong headwind / under branches.
   if (lieHint?.toLowerCase().includes('tree') || lieHint?.toLowerCase().includes('punch')) return 'low_punch';
   if (wind && Math.abs(wind.along_mph) >= 12 && wind.along_mph < 0) return 'low_punch';
-  // Fade INTO a crosswind from right-to-left; draw INTO left-to-right.
+  // Hold the ball against the wind: a draw into a left-to-right wind, a fade into right-to-left.
+  // 2026-10-10 (course audit) — positive cross is left-to-right; this returned 'fade' for it, riding the
+  // wind instead of holding against it.
   if (wind && Math.abs(wind.cross_mph) >= 8) {
-    return wind.cross_mph > 0 ? 'fade' : 'draw';
+    return wind.cross_mph > 0 ? 'draw' : 'fade';
   }
   // Play the natural shape when miss-type indicates a curve preference.
   if (missType === 'slice' || dominantMiss === 'right') return 'fade';

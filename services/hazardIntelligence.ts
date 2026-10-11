@@ -116,9 +116,22 @@ export function computeHazardIntelligence(
       return rel < 0 ? 'left' as const : 'right' as const;
     })();
     const side = c.sideHint ?? sideFromBearing ?? 'center';
-    return { c, front, back, center, side };
-  }).sort((a, b) => a.center - b.center);
+    /**
+     * 2026-10-10 (course audit) — only hazards AHEAD count. This took the nearest hazard in any
+     * direction, so a fairway bunker already passed 20 yards BEHIND the player became "Bunker 20y",
+     * "carry 36" — while the greenside water at 140 was never named. Anything more than 75° off the
+     * shot line is not in play for this shot. Unknown bearing or centroid keeps the old behaviour.
+     */
+    const ahead = (() => {
+      if (shotBearingDeg == null || !Number.isFinite(shotBearingDeg) || !c.centroid) return true;
+      let rel = ((bearingDegrees(player, c.centroid) - shotBearingDeg) % 360 + 360) % 360;
+      if (rel > 180) rel -= 360;
+      return Math.abs(rel) <= 75;
+    })();
+    return { c, front, back, center, side, ahead };
+  }).filter((x) => x.ahead).sort((a, b) => a.center - b.center);
 
+  if (scored.length === 0) return null;
   const best = scored[0];
   const carryToClear = best.back + 1;
   const runoutDistance = landingTotal != null ? Math.max(0, landingTotal - carryToClear) : 0;
