@@ -45,9 +45,12 @@ jest.mock('../../services/poseAnalysisApi', () => ({
 }));
 jest.mock('../../services/swing/poseSwingRead', () => ({ buildPoseSwingRead: () => ({}) }));
 jest.mock('../../services/swing/poseReadVerdict', () => ({ poseReadToPrimaryIssue: () => mockPoseVerdict }));
+const mockArcArgs: Record<string, unknown>[] = [];
 jest.mock('../../services/swing/clubPath', () => ({
-  detectClubPath: async () => { mockOrder.push('arc'); return { points: [], source: 'tracker', rejected: { reason: 'too_few', detected: 0, gate: 'client' } }; },
+  detectClubPath: async (args: Record<string, unknown>) => { mockOrder.push('arc'); mockArcArgs.push(args); return { points: [], source: 'tracker', rejected: { reason: 'too_few', detected: 0, gate: 'client' } }; },
 }));
+// The arc's silent pass runs only where the on-device tracker can (Android); pinned per test.
+const mockRN = require('react-native') as { Platform: { OS: string } };
 jest.mock('../../store/toastStore', () => ({ useToastStore: { getState: () => ({ show: () => undefined }) } }));
 
 const BIO = { frames: [{ timestampMs: 5400, keypoints: [] }, { timestampMs: 7000, keypoints: [] }], angle: 'down_the_line' };
@@ -61,6 +64,8 @@ const seed = (dur: number, source = 'uploaded_video') => useSwingSessionStore.se
 });
 
 beforeEach(() => {
+  mockRN.Platform.OS = 'android';
+  mockArcArgs.length = 0;
   mockOrder.length = 0; mockPoseRelease = []; mockKind = 'full_swing'; mockReadThrows = false; mockPoseVerdict = null; mockReadHold = null;
   _clearRunsForTest();
   mockReadResult = { primary_issue: { issue_id: 'over_the_top' }, drill_recommendation: null, analyses: {} };
@@ -81,6 +86,19 @@ describe('a swing runs window → read → body → arc, once', () => {
     expect(s1().shots[0].biomechanics).toEqual(BIO);
     expect(mockOrder).toContain('arc');           // and the arc came after it, from its frames
     expect(mockOrder.indexOf('arc')).toBeGreaterThan(mockOrder.indexOf('pose'));
+    // 2026-10-10 — the analysis run's arc is the SILENT pass: the free tracker only, never the paid model.
+    expect(mockArcArgs[0]?.trackerOnly).toBe(true);
+  });
+
+  it('2026-10-10 — where there is no tracker (iOS) the analysis run asks for no arc at all: it never pays for one', async () => {
+    mockRN.Platform.OS = 'ios';
+    seed(6);
+    await runUploadAnalysis('s1');
+    await tick();
+    mockPoseRelease[0]?.(BIO);
+    await tick(10);
+    expect(s1().shots[0].biomechanics).toEqual(BIO);   // the body read still happens
+    expect(mockOrder).not.toContain('arc');
   });
 
   it('a 15s+ upload skips the window — the read splits a range session into its swings', async () => {

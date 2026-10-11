@@ -67,6 +67,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
+import { calloutAtBottom, faultCaption, faultMomentFor } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { buildPoseSwingRead } from '../../../services/swing/poseSwingRead';
@@ -144,6 +145,10 @@ export default function SwingDetail() {
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   // 2026-05-28 — Fix FI: caddie persona for presence brain calls.
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const pauseOnIssue = useSettingsStore(s => s.swingReviewPauseOnIssue);
+  const highlightIssue = useSettingsStore(s => s.swingReviewHighlight);
+  const setPauseOnIssue = useSettingsStore(s => s.setSwingReviewPauseOnIssue);
+  const setHighlightIssue = useSettingsStore(s => s.setSwingReviewHighlight);
   const apiUrl = getApiBaseUrl();
 
   // Phase V — subscribe via the store selector so the surface re-renders
@@ -489,6 +494,18 @@ export default function SwingDetail() {
   // Synchronous "last emitted" tracker so onPlaybackStatusUpdate commits only REAL changes (kills the
   // 25×/s redundant-setState cascade behind the "Maximum update depth" white screen). See the callback.
   const playbackEmitRef = useRef<{ pos: number; dur: number; playing: boolean | null; lastPosAt: number }>({ pos: -1, dur: -1, playing: null, lastPosAt: 0 });
+  /**
+   * 2026-10-10 (Tim — "playback with a pause on the displayed issue and/or highlight of the area").
+   * The status callback is created once, so it reads the fault moment and the setting through refs.
+   * `issuePausedRef` is the one-stop-per-pass latch: set when the replay stops on the fault (or the
+   * player jumps to it), cleared when playback goes back before it — the tail loop, a restart, a scrub.
+   */
+  const faultSecRef = useRef<number | null>(null);
+  const pauseOnIssueRef = useRef(pauseOnIssue);
+  pauseOnIssueRef.current = pauseOnIssue;
+  const issuePausedRef = useRef(false);
+  const lastRawPosRef = useRef(-1);
+  const [atIssue, setAtIssue] = useState(false);
   // 2026-08-08 (Tim — "if it tries to do too much — mechanics, shot trace AND playback together — it
   // crashes. Addressed 50 times"). ROOT: with the overlay ON, position emits at 25×/s and EACH setPosition
   // re-renders the whole heavy screen + the SVG skeleton/trace; a render that can't finish inside the tick
@@ -569,11 +586,15 @@ export default function SwingDetail() {
   // shows the clean video; the user taps "Motion" to add the skeleton. (It was defaulting ON, which — with
   // the old auto-play — opened straight into the 25×/s overlay path that triggered the crash.)
   const [showSkeleton, setShowSkeleton] = useState(false);
-  // 2026-07-27 (Tim) — trace default is applied once analysis resolves (see the auto-default effect
-  // below: ON whenever the swing has pose). Starts OFF so a mid-analysis swing shows nothing yet.
-  // The trace is clubhead-OR-NOTHING, so defaulting it on never fabricates anything. The old
-  // `shotConfirmed` gate was removed — it silently killed the trace on uploaded/unconfirmed swings.
+  /**
+   * 2026-10-10 (Tim: the swing arc "needs to be a real working option … so useful and clean if we get it
+   * right"). The trace turns ON BY ITSELF once the shot has a real arc (the auto-on effect below). The
+   * comment that stood here since 07-27 promised exactly that, but no code ever set it — the arc was
+   * computed by the analysis run and then hidden until the player found the toggle. Clubhead-or-nothing,
+   * so turning it on never draws anything fabricated. Once the player turns it off, it stays off.
+   */
   const [showTrace, setShowTrace] = useState(false);
+  const traceTouchedRef = useRef(false);
   // 2026-08-05 (Tim — "ball box and direction line still show on replay, should not — default off/hidden").
   // The cage targeting overlay (ball area + aim/direction line) is a CAPTURE-time framing aid; on replay
   // it's clutter over the swing. Default HIDDEN; a "Targets" toggle re-enables it for anyone who wants it.
@@ -715,11 +736,15 @@ export default function SwingDetail() {
    * read and arc are asked for in the effect below.
    */
   useEffect(() => {
-    if (!showTrace || !session || !shot) { setClubArcPoints(null); return; }
+    if (!session || !shot) { setClubArcPoints(null); return; }
     const first = session.shots.find((x) => x.clipUri)?.id === shot.id;
     const arc = shot.club_arc ?? (first ? session.club_arc : null) ?? null;
     setClubArcPoints(arc && arc.length >= 3 ? arc.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
-  }, [showTrace, session, shot]);
+  }, [session, shot]);
+  useEffect(() => { traceTouchedRef.current = false; }, [swing_id]);
+  useEffect(() => {
+    if (clubArcPoints && clubArcPoints.length >= 3 && !traceTouchedRef.current) setShowTrace(true);
+  }, [clubArcPoints]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -867,9 +892,13 @@ export default function SwingDetail() {
     if (!swing_id) return;
     const selShot = session?.shots[selectedShotIdx];
     if (!selShot?.clipUri) return;
-    if (!(selectedShotIdx > 0 || showSkeleton || showTrace)) return;
-    // The arc only feeds the Swing Trace, which the player turns on — never a paid call for a tap on a row.
-    return requestShotDetail(swing_id, selShot.id, { arc: showTrace });
+    // An auto-on trace (traceTouchedRef false) is drawing an arc already STORED: it asks the run for
+    // nothing, so opening a settled swing still does no analysis work.
+    const traceAsked = showTrace && traceTouchedRef.current;
+    if (!(selectedShotIdx > 0 || showSkeleton || traceAsked)) return;
+    // 2026-10-10 — the arc for a swing the player pages to comes from the SILENT pass (the free on-device
+    // tracker); only the Swing Trace toggle, turned on by the player, may ask the paid vision model.
+    return requestShotDetail(swing_id, selShot.id, { arc: traceAsked ? true : 'tracker' });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the shot's identity, not every store write to the session
   }, [swing_id, selectedShotIdx, session?.shots[selectedShotIdx]?.id, session?.shots[selectedShotIdx]?.clipUri, showSkeleton, showTrace]);
 
@@ -1045,6 +1074,28 @@ export default function SwingDetail() {
     // smoothly (20ms threshold) for the pose overlay; duration commits once (±50ms); isPlaying only flips
     // on a real transition. Nothing downstream sees a redundant change, so the cascade can't spin up.
     if (s.positionMillis != null) {
+      const posSec = s.positionMillis / 1000;
+      const f = faultSecRef.current;
+      if (f != null) {
+        if (posSec < f - 0.25) {
+          issuePausedRef.current = false;
+        } else if (s.isPlaying === true && pauseOnIssueRef.current && !issuePausedRef.current
+            && lastRawPosRef.current >= 0 && lastRawPosRef.current < f && posSec >= f - 0.02) {
+          // Ticks land every 40-250ms, so the player has already passed the frame: stop, then seek
+          // back to exactly it. A bare pause/seek pair — no setState storm from this callback.
+          issuePausedRef.current = true;
+          void (async () => {
+            try {
+              await videoRef.current?.pauseAsync();
+              await videoRef.current?.setPositionAsync(Math.round(f * 1000));
+            } catch { /* the player was released */ }
+          })();
+          setAtIssue(true);
+        }
+      }
+      lastRawPosRef.current = posSec;
+    }
+    if (s.positionMillis != null) {
       const p = s.positionMillis / 1000;
       // 2026-08-08 (Tim — crash from mechanics + trace + playback together). WALL-CLOCK throttle on top of
       // the value guard: while the heavy overlay is mounted, commit position at most ~every 90ms (≈11×/s) so
@@ -1150,6 +1201,41 @@ export default function SwingDetail() {
   useEffect(() => { winStartRef.current = winStartSec; winEndRef.current = winEndSec; winSpanRef.current = winSpanSec; }, [winStartSec, winEndSec, winSpanSec]);
   // One-shot guard so the tail-crop loop fires a single seek per crossing (never a setState storm).
   const tailLoopRef = useRef(false);
+
+  /**
+   * 2026-10-10 — THE FAULT MOMENT of the swing on screen (services/swing/faultSpotlight): the frame its
+   * read was made from, else the fault's swing phase on the measured motion anchors. Same fault the
+   * region heat paints (displayFault, per selected swing). Null when the swing has no real fault.
+   */
+  const faultMoment = useMemo(() => {
+    const ts = shot?.detected_issue_timestamps_sec ?? [];
+    return faultMomentFor({
+      faultId: displayFault,
+      // Legacy sessions stored every sample time here; >2 entries is that fabricated array (see below).
+      readTimestampsSec: ts.length <= 2 ? ts : [],
+      anchors: motionAnchors,
+      windowStartSec: winStartSec,
+      windowEndSec: winEndSec,
+    });
+  }, [shot?.detected_issue_timestamps_sec, displayFault, motionAnchors, winStartSec, winEndSec]);
+  useEffect(() => {
+    faultSecRef.current = faultMoment?.sec ?? null;
+    issuePausedRef.current = false;
+    setAtIssue(false);
+  }, [faultMoment?.sec, shot?.id]);
+  useEffect(() => { if (isPlaying) setAtIssue(false); }, [isPlaying]);
+  const issueCaption = useMemo(() => (faultMoment && displayFault ? faultCaption(displayFault) : null), [faultMoment, displayFault]);
+  /** Seek to the fault and hold it, exactly as if the replay had stopped there. */
+  const jumpToIssue = useCallback(() => {
+    const f = faultSecRef.current;
+    if (f == null) return;
+    issuePausedRef.current = true;
+    setAtIssue(true);
+    void scrubTo(f);
+  }, []);
+  // Held on the fault: stopped there by the replay, or paused within a frame or two of it.
+  const onIssueFrame = !!faultMoment && (atIssue || (!isPlaying && Math.abs(position - faultMoment.sec) < 0.08));
+  const spotlightOn = onIssueFrame && highlightIssue && hasPose && overlayFaultJoints.length > 0;
 
   // 2026-07-10 (Tim — "missing play rewind and forward and slider controls in swing
   // library") — a real transport deck below the frame: jog ±2s, single-frame step
@@ -2279,7 +2365,9 @@ export default function SwingDetail() {
                 // 25x/s only while the pose overlay actually renders (same gate as the
                 // SwingBodyOverlay mount below). Overlay off → 4x/s, plenty for the
                 // seek bar, so playback doesn't re-render the screen 25x/s for nothing.
-                progressUpdateIntervalMillis={hasPose && (showSkeleton || showTrace || motionOnly) ? 40 : 250}
+                // 2026-10-10 — 100ms while the replay has a fault to stop on, so the stop lands within a
+                // frame or two of it before the seek back (250ms overshot by a quarter of a swing).
+                progressUpdateIntervalMillis={hasPose && (showSkeleton || showTrace || motionOnly) ? 40 : (faultMoment && pauseOnIssue ? 100 : 250)}
                 // 2026-06-11 — native controls OFF: tap-anywhere toggles play/pause
                 // (via ZoomableView) and a thin tap-to-seek bar replaces the native
                 // scrubber, so there's no native tap-handling competing with the
@@ -2316,7 +2404,7 @@ export default function SwingDetail() {
               {motionOnly && (
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0B1220' }]} pointerEvents="none" />
               )}
-              {hasPose && (showSkeleton || showTrace || motionOnly) && (() => {
+              {hasPose && (showSkeleton || showTrace || motionOnly || spotlightOn) && (() => {
                 // 2026-07-26 (Tim — "the mechanics is playing BEFORE the swing; locate the swing then
                 // only apply to the swing") — the clip includes pre-swing setup/waggle, and the skeleton
                 // was drawn across the WHOLE clip. Gate the overlay to the located swing window
@@ -2346,6 +2434,7 @@ export default function SwingDetail() {
                   clubArc={clubArcPoints}
                   videoW={videoNatural?.w ?? null}
                   videoH={videoNatural?.h ?? null}
+                  spotlight={spotlightOn}
                 />
                 );
               })()}
@@ -2384,6 +2473,24 @@ export default function SwingDetail() {
                   strokes don't persist across mount in v1. */}
               <VideoAnnotationOverlay />
               <VideoWatermark position="bottomRight" size={36} />
+              {onIssueFrame && issueCaption && (
+                <View style={[styles.issueCallout, displayFault && calloutAtBottom(displayFault) ? styles.issueCalloutLow : styles.issueCalloutHigh]} pointerEvents="box-none">
+                  <View style={[styles.issueCalloutBody, { borderColor: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }]}>
+                    <Text style={styles.issueCalloutTag}>{t('swinglab_swing.swing_detail.paused_on_issue')}</Text>
+                    <Text style={styles.issueCalloutName} numberOfLines={1}>{issueCaption.name}</Text>
+                    {issueCaption.look ? <Text style={styles.issueCalloutLook} numberOfLines={2}>{issueCaption.look}</Text> : null}
+                  </View>
+                  <TouchableOpacity
+                    onPress={togglePlayPause}
+                    style={styles.issueCalloutBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('swinglab_swing.swing_detail.continue_play')}
+                  >
+                    <Ionicons name="play" size={14} color="#0B1220" />
+                    <Text style={styles.issueCalloutBtnText}>{t('swinglab_swing.swing_detail.continue_play')}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               {/* 2026-06-16 (Tim) — fade-on-pause wrapper for the on-frame controls
                   (slow-mo badge, center play badge, seek bar) so a paused frame
                   screenshots clean. box-none lets frame taps reach the player while
@@ -2412,6 +2519,9 @@ export default function SwingDetail() {
                   live state (pause while playing, play while paused) and is itself
                   tappable, so there's an obvious control even during auto-play.
                   Semi-transparent while playing so it doesn't bury the swing. */}
+              {/* Held on the fault, the callout's Continue is the play control — a disc here would sit on
+                  the ringed body part. */}
+              {!onIssueFrame && (
               <Animated.View
                 style={{ position: 'absolute', alignSelf: 'center', top: '50%', marginTop: -32, opacity: playBtnOpacity }}
                 pointerEvents={playBtnVisible ? 'auto' : 'none'}
@@ -2425,6 +2535,7 @@ export default function SwingDetail() {
                   <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color="#ffffff" />
                 </TouchableOpacity>
               </Animated.View>
+              )}
               {/* Tap-to-seek bar — replaces the native scrubber. Tap anywhere on it
                   to jump to that fraction of the clip. Thin, bottom edge, clear of
                   the watermark; doesn't interfere with the tap-to-pause on the frame. */}
@@ -2441,6 +2552,9 @@ export default function SwingDetail() {
               >
                 <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.25)' }}>
                   <View style={{ height: 4, width: `${duration && duration > 0 ? winFrac(position) * 100 : 0}%`, backgroundColor: '#88F700' }} />
+                  {faultMoment && (
+                    <View pointerEvents="none" style={[styles.issueMarkThin, { left: `${winFrac(faultMoment.sec) * 100}%` }]} />
+                  )}
                 </View>
               </Pressable>
               </Animated.View>
@@ -2464,6 +2578,9 @@ export default function SwingDetail() {
                       return (
                         <>
                           <View style={{ height: 5, borderRadius: 3, width: `${frac * 100}%`, backgroundColor: '#88F700' }} />
+                          {faultMoment && (
+                            <View pointerEvents="none" style={[styles.issueMark, { left: `${winFrac(faultMoment.sec) * 100}%`, backgroundColor: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }]} />
+                          )}
                           <View
                             style={{
                               position: 'absolute', top: -5, left: `${frac * 100}%`, marginLeft: -8,
@@ -2479,9 +2596,20 @@ export default function SwingDetail() {
                 </View>
                 {/* 2026-07-21 (Tim) — jump-to-stage chips: seek straight to address / top / impact /
                     finish (the pose-labeled key positions), reusing scrubTo (pauses + holds the frame). */}
-                {hasPose && swingStageChips.length > 0 ? (
+                {(hasPose && swingStageChips.length > 0) || faultMoment ? (
                   <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                    {swingStageChips.map((c) => (
+                    {faultMoment && (
+                      <TouchableOpacity
+                        onPress={jumpToIssue}
+                        style={[styles.issueChip, { borderColor: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }]}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('swinglab_swing.swing_detail.jump_to_issue')}
+                      >
+                        <Ionicons name="alert-circle" size={13} color={overlayFaultSevere ? '#EF4444' : '#FF6B2C'} />
+                        <Text style={[styles.issueChipText, { color: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
+                      </TouchableOpacity>
+                    )}
+                    {hasPose && swingStageChips.map((c) => (
                       <TouchableOpacity
                         key={c.label}
                         onPress={() => void scrubTo(c.ms / 1000)}
@@ -2532,6 +2660,32 @@ export default function SwingDetail() {
                 </View>
               </View>
             )}
+            {faultMoment && (
+              <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, { flexDirection: 'row' }, pauseOnIssue && { backgroundColor: colors.accent }]}
+                  onPress={() => setPauseOnIssue(!pauseOnIssue)}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: pauseOnIssue }}
+                  accessibilityLabel={t('swinglab_swing.swing_detail.pause_on_issue')}
+                >
+                  <Ionicons name="pause-circle-outline" size={14} color={pauseOnIssue ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
+                  <Text style={[styles.toggleText, pauseOnIssue && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.pause_on_issue')}</Text>
+                </TouchableOpacity>
+                {hasPose && overlayFaultJoints.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, { flexDirection: 'row' }, highlightIssue && { backgroundColor: colors.accent }]}
+                    onPress={() => setHighlightIssue(!highlightIssue)}
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: highlightIssue }}
+                    accessibilityLabel={t('swinglab_swing.swing_detail.highlight_issue')}
+                  >
+                    <Ionicons name="scan-circle-outline" size={14} color={highlightIssue ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
+                    <Text style={[styles.toggleText, highlightIssue && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.highlight_issue')}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             {hasPose && (
               <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                 <TouchableOpacity
@@ -2545,7 +2699,7 @@ export default function SwingDetail() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, showTrace && { backgroundColor: colors.accent }]}
-                  onPress={() => setShowTrace(v => !v)}
+                  onPress={() => { traceTouchedRef.current = true; setShowTrace(v => !v); }}
                   accessibilityRole="button"
                   accessibilityLabel={t('swinglab_swing.accessibility_label.toggle_swing_trace')}
                 >
@@ -2588,7 +2742,7 @@ export default function SwingDetail() {
               {issueTimestamps.map((ts, i) => (
                 <TouchableOpacity
                   key={i}
-                  onPress={() => void scrubTo(ts)}
+                  onPress={() => (faultMoment && Math.abs(ts - faultMoment.sec) < 0.01 ? jumpToIssue() : void scrubTo(ts))}
                   style={[styles.tsPill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}
                 >
                   <Text style={[styles.tsText, { color: colors.accent }]}>{Math.floor(ts / 60)}:{Math.floor(ts % 60).toString().padStart(2, '0')}</Text>
@@ -4074,6 +4228,21 @@ const styles = StyleSheet.create({
     borderRadius: 14, borderWidth: 1,
   },
   label: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  // 2026-10-10 — the fault callout, markers and chip (see faultMoment above).
+  issueCallout: { position: 'absolute', left: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Clear of the slow-mo badge (top-left 8+44) / the seek bar and watermark (bottom).
+  issueCalloutHigh: { top: 58 },
+  issueCalloutLow: { bottom: 34, right: 52 },
+  issueCalloutBody: { flex: 1, backgroundColor: 'rgba(8,12,10,0.88)', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  issueCalloutTag: { color: '#FFB199', fontSize: 10, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
+  issueCalloutName: { color: '#ffffff', fontSize: 15, fontWeight: '800', marginTop: 2 },
+  issueCalloutLook: { color: '#E5E7EB', fontSize: 12.5, marginTop: 2 },
+  issueCalloutBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#88F700', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9 },
+  issueCalloutBtnText: { color: '#0B1220', fontSize: 12, fontWeight: '900' },
+  issueMark: { position: 'absolute', top: -4, width: 13, height: 13, marginLeft: -6.5, borderRadius: 7, borderWidth: 2, borderColor: '#0B1220' },
+  issueMarkThin: { position: 'absolute', top: -3, width: 10, height: 10, marginLeft: -5, borderRadius: 5, backgroundColor: '#FF6B2C' },
+  issueChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, backgroundColor: 'rgba(255,107,44,0.12)' },
+  issueChipText: { fontSize: 12, fontWeight: '800' },
   tsPill: {
     paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, marginRight: 8,
   },

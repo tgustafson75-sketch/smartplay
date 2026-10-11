@@ -6006,7 +6006,8 @@ check('Library: a multi-swing reel is reviewable SWING-BY-SWING (own skeleton + 
       /const shot = session\?\.shots\[selectedShotIdx\]/.test(detail) &&
       /const activeBiomech =/.test(detail) &&
       /if \(idx >= 0\) setSelectedShotIdx\(idx\)/.test(detail) &&
-      /return requestShotDetail\(swing_id, selShot\.id, \{ arc: showTrace \}\);/.test(detail) &&
+      // 2026-10-10 — the arc level: the silent tracker pass unless the player turned the trace on
+      /return requestShotDetail\(swing_id, selShot\.id, \{ arc: traceAsked \? true : 'tracker' \}\);/.test(detail) &&
       /startMs: shot\.clipStartSeconds \* 1000, endMs: shot\.clipEndSeconds \* 1000/.test(read('services/swing/orchestrator/shotDetail.ts'))
     );
   })(),
@@ -10402,7 +10403,9 @@ check('Fault engine: arm/finish/sway faults wired, fabricated over-the-top remov
     const read2 = read('services/swing/poseSwingRead.ts');
     const verdict = read('services/swing/poseReadVerdict.ts');
     const drills = read('data/drillCatalog.ts');
-    const overlay = read('components/swinglab/SwingBodyOverlay.tsx');
+    // 2026-10-10 — the fault → joints map moved to services/swing/faultSpotlight (one owner with the
+    // fault's timing and caption); the overlay re-exports it.
+    const overlay = read('services/swing/faultSpotlight.ts');
     return (
       /leadArmTopDeg\b/.test(api) && /leadArmImpactDeg\b/.test(api) && /swayNorm\b/.test(api) && /finishWeightPct\b/.test(api) &&
       /jointAngleDeg\(/.test(api) &&                                                    // real 3-point arm angle

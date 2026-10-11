@@ -113,13 +113,23 @@ describe('a saved swing: settled, its windows, and what opening it does', () => 
     expect(isAnalysisSettled({ analysis_status: 'failed', primary_issue: null })).toBe(false);
   });
 
-  it('opening a settled swing does no analysis work; body and trace start OFF and nothing switches them on', () => {
+  /**
+   * 2026-10-10 (Tim: the swing arc "needs to be a real working option … maybe silently on a pass after
+   * analysis is done") — the trace now turns on BY ITSELF when the shot already has a STORED arc. What this
+   * test protects is unchanged: opening a settled swing does no analysis work. An auto-on trace only draws
+   * what is stored and asks the run for nothing; the body (skeleton) stays the player's toggle only.
+   */
+  it('opening a settled swing does no analysis work; the body starts OFF; the trace turns on only for a STORED arc', () => {
     const d = code('app/swinglab/swing/[swing_id].tsx');
     expect(d).toMatch(/settledOnOpenRef\.current = isAnalysisSettled\(st\);\s*if \(settledOnOpenRef\.current\) return;/);
     expect(d).toMatch(/const \[showTrace, setShowTrace\] = useState\(false\);/);
     expect(d).toMatch(/const \[showSkeleton, setShowSkeleton\] = useState\(false\);/);
-    expect((d.match(/setShowTrace\(/g) ?? []).length).toBe(1);        // the player's toggle only
-    expect((d.match(/setShowSkeleton\(/g) ?? []).length).toBe(1);
+    expect((d.match(/setShowSkeleton\(/g) ?? []).length).toBe(1);   // the player's toggle only
+    // exactly two writers of the trace: the player's toggle, and the stored-arc auto-on
+    expect((d.match(/setShowTrace\(/g) ?? []).length).toBe(2);
+    expect(d).toMatch(/if \(clubArcPoints && clubArcPoints\.length >= 3 && !traceTouchedRef\.current\) setShowTrace\(true\);/);
+    // the auto-on trace starts no run: only a trace the player turned on asks for the shot's detail
+    expect(d).toMatch(/const traceAsked = showTrace && traceTouchedRef\.current;\s*if \(!\(selectedShotIdx > 0 \|\| showSkeleton \|\| traceAsked\)\) return;/);
   });
 
   it('only a window the PLAYER chose survives a re-analyze; the finder\'s own answer is re-found', () => {

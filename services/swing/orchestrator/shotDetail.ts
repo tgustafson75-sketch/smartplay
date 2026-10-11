@@ -25,10 +25,23 @@ import { liveSessionStore } from './liveSessionStore';
 import { useSwingSessionStore, type SwingSession, type SwingShot } from '../../../store/swingSessionStore';
 import type { PoseFrame, SwingBiomechanics } from '../../poseAnalysisApi';
 
-type In = { sessionId: string; shotId: string; force: boolean; arc: boolean };
+type In = { sessionId: string; shotId: string; force: boolean; arc: boolean; trackerOnly: boolean };
 
-/** Whether the live shot run for a key was asked for the arc (a trace-off request skips it). */
-const liveWantsArc = new Map<string, boolean>();
+/**
+ * 2026-10-10 (Tim: the swing arc "can be so useful and clean if we get it right … maybe silently on a
+ * pass after analysis is done") — HOW MUCH ARC a request wants:
+ *   false      none (a trace-off view of a shot that only needs its body read);
+ *   'tracker'  the silent pass: the on-device tracker only. Free, and it never reaches for the paid vision
+ *              model — on iOS (no tracker) it is skipped outright. The analysis run and every swing a
+ *              player pages to ask for this, so an arc appears without anyone paying for one.
+ *   true       the player asked (the Swing Trace toggle): the tracker, then the vision model where the
+ *              tracker cannot run. The only path that spends money on an arc.
+ */
+export type ArcRequest = boolean | 'tracker';
+const arcLevel = (a: ArcRequest): number => (a === true ? 2 : a === 'tracker' ? 1 : 0);
+
+/** How much arc the live shot run for a key was asked for (a weaker run does not answer a stronger ask). */
+const liveArcLevel = new Map<string, number>();
 
 export const swingRunKey = (sessionId: string) => `swing:${sessionId}`;
 export const shotRunKey = (sessionId: string, shotId: string) => `shot:${sessionId}:${shotId}`;
@@ -171,9 +184,9 @@ async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomec
     bodyBounds: bodyBoundsFromPose(frames),
     poseFrames: frames,
     sourceFps: sessionCapturedFps(s),
-    // A vision answer is already stored (Android, tracker could not run last time): try the free tracker
-    // again, never the paid model again.
-    trackerOnly: !input.force && (shot.club_arc_source ?? (first ? s.club_arc_source : undefined)) === 'vision',
+    // The silent pass never pays. And a vision answer already stored (Android, the tracker could not run
+    // last time): try the free tracker again, never the paid model again.
+    trackerOnly: input.trackerOnly || (!input.force && (shot.club_arc_source ?? (first ? s.club_arc_source : undefined)) === 'vision'),
   });
   if (signal.aborted) return null;
   try {
@@ -241,6 +254,8 @@ function stages(): StageDef<In>[] {
       when: ({ input, outputs }) => {
         const hit = lookup(input.sessionId, input.shotId);
         if (!hit || !input.arc) return false;
+        // The silent pass where there is no tracker (iOS): nothing free to run, and it must not pay.
+        if (input.trackerOnly && trackerUnavailable()) return false;
         if (!input.force && hasFinalArc(hit.s, hit.shot, hit.first)) return false;
         const bio = input.force ? (outputs.pose as SwingBiomechanics | undefined) : storedShotBiomech(hit.s, hit.shot, hit.first);
         return !!bio?.frames?.length;   // the arc is found FROM the body read; without one there is nothing to aim at
@@ -254,20 +269,22 @@ function stages(): StageDef<In>[] {
  * Start (or join) the body + arc run for one shot. `force` (a new analysis of the swing) restarts a live
  * run and recomputes what is stored.
  */
-export function runShotDetail(sessionId: string, shotId: string, opts: { force?: boolean; arc?: boolean } = {}): AnalysisRun<In> {
+export function runShotDetail(sessionId: string, shotId: string, opts: { force?: boolean; arc?: ArcRequest } = {}): AnalysisRun<In> {
   const force = !!opts.force;
-  const arc = opts.arc !== false;
+  const want: ArcRequest = opts.arc === undefined ? true : opts.arc;
+  const level = arcLevel(want);
   const key = shotRunKey(sessionId, shotId);
-  // A live run that was asked WITHOUT the arc does not answer a request that wants it: run again after it.
+  // A live run asked for LESS arc (none, or the silent tracker pass) does not answer a request that wants
+  // more: run again after it.
   const live = liveRun(key);
-  if (live && arc && !force && liveWantsArc.get(key) === false) {
+  if (live && !force && level > (liveArcLevel.get(key) ?? 2)) {
     void live.done.then(() => { runShotDetail(sessionId, shotId, opts); });
     return live as AnalysisRun<In>;
   }
-  liveWantsArc.set(key, arc);
+  liveArcLevel.set(key, level);
   return getOrStartRun<In>(key, () => ({
     stages: stages(),
-    input: { sessionId, shotId, force, arc },
+    input: { sessionId, shotId, force, arc: level > 0, trackerOnly: level === 1 },
     hooks: {
       onStageFailed: (key, stage, error) => {
         try {
@@ -290,7 +307,7 @@ export function runShotDetail(sessionId: string, shotId: string, opts: { force?:
  * The first swing belongs to the swing's analysis run while that run is live (it starts the shot run with
  * `force` after the read) — asking for it here too would decode the same window twice. Returns a cleanup.
  */
-export function requestShotDetail(sessionId: string, shotId: string, opts: { arc?: boolean } = {}): () => void {
+export function requestShotDetail(sessionId: string, shotId: string, opts: { arc?: ArcRequest } = {}): () => void {
   const hit = lookup(sessionId, shotId);
   if (!hit) return () => {};
   const live = liveRun(swingRunKey(sessionId));

@@ -177,7 +177,8 @@ describe('a tracked arc replaces an old vision-model arc; a vision arc never rep
     // a stored VISION answer (arc or honest "no arc") is final where the tracker can't run; where it can,
     // only the free tracker is tried again — never the paid model about the same frames
     expect(d).toMatch(/return src === 'vision' && trackerUnavailable\(\);/);
-    expect(d).toMatch(/trackerOnly: !input\.force && \(shot\.club_arc_source \?\? \(first \? s\.club_arc_source : undefined\)\) === 'vision',/);
+    // 2026-10-10 — and the silent pass (input.trackerOnly) never pays either.
+    expect(d).toMatch(/trackerOnly: input\.trackerOnly \|\| \(!input\.force && \(shot\.club_arc_source \?\? \(first \? s\.club_arc_source : undefined\)\) === 'vision'\),/);
     const cp = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'services/swing/clubPath.ts'), 'utf8') as string;
     expect(cp).toMatch(/if \(args\.trackerOnly\) \{ sharedCopy\?\.release\(\); return null; \}/);
     // the one arc writer passes the result's source through

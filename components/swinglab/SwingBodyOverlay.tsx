@@ -35,6 +35,7 @@ import { strokeForSubject } from '../../services/swing/overlayScale';
 // imports react-native-svg, which the logic suite cannot load). See poseInterpolate for the fix
 // that stops an address skeleton being drawn over a player who hasn't walked into frame yet.
 import { interpolateFrame } from '../../services/swing/poseInterpolate';
+import { FAULT_REGION_JOINTS, spotlightRing } from '../../services/swing/faultSpotlight';
 
 const SKELETON_EDGES: [string, string][] = [
   ['left_shoulder', 'right_shoulder'],
@@ -53,32 +54,9 @@ const SKELETON_EDGES: [string, string][] = [
 
 const MIN_KP_SCORE = 0.2;
 
-// 2026-07-06 (Tim: "if the turn is wrong or the hips don't move, it needs to
-// go orange or red, kinda like GolfFix, so you see the AREA of error") —
-// map each diagnosable fault to the joints whose skeleton region renders hot.
-// Derived from the fault's biomechanical home, not fabricated per-frame error
-// detection: the ANALYSIS names the fault; this paints WHERE that fault lives.
-export const FAULT_REGION_JOINTS: Record<string, string[]> = {
-  over_the_top:          ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
-  swing_path_outside_in: ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
-  swing_path_inside_out: ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
-  plane_too_flat:        ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
-  plane_too_steep:       ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
-  attack_angle_steep:    ['left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
-  attack_angle_shallow:  ['left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
-  casting:               ['left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
-  club_face_open:        ['left_wrist', 'right_wrist'],
-  club_face_closed:      ['left_wrist', 'right_wrist'],
-  chicken_wing:          ['left_elbow', 'left_wrist', 'right_elbow', 'right_wrist'],
-  early_extension:       ['left_hip', 'right_hip', 'left_knee', 'right_knee'],
-  sway:                  ['left_hip', 'right_hip', 'left_knee', 'right_knee'],
-  reverse_pivot:         ['left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'],
-  spine_angle_loss:      ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'],
-  head_movement:         ['nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear'],
-  // 2026-08-09 (elite fault engine) — arm + finish faults.
-  lead_arm_bent:         ['left_shoulder', 'left_elbow', 'left_wrist', 'right_shoulder', 'right_elbow', 'right_wrist'],
-  poor_finish:           ['left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'],
-};
+// The fault → joints map lives with the rest of the fault geometry in services/swing/faultSpotlight
+// (pure, so it can be tested and timed alongside); re-exported here for the overlay's existing callers.
+export { FAULT_REGION_JOINTS };
 
 /** Joints to paint hot for a fault id (primary_fault or canonical issue_id).
  *  Empty array = no highlight (unknown/none/inconclusive). */
@@ -116,6 +94,10 @@ type Props = {
    *  Only used when pose coords are normalized (both skeleton + club then share this full-frame space). */
   videoW?: number | null;
   videoH?: number | null;
+  /** 2026-10-10 (Tim — "pointing out and highlighting of issues") — ring the fault's joints at the
+   *  current frame, WITHOUT the skeleton. The skeleton stays opt-in; the ring is how the default review
+   *  shows WHERE the fault is when the replay stops on it (services/swing/faultSpotlight). */
+  spotlight?: boolean;
 };
 
 /** Minimum detected clubhead points before we draw the club arc (vs the wrist proxy). */
@@ -188,6 +170,7 @@ export default function SwingBodyOverlay({
   clubArc,
   videoW,
   videoH,
+  spotlight = false,
 }: Props) {
   const hotSet = useMemo(() => new Set(faultJoints ?? []), [faultJoints]);
   const hotColor = faultSevere ? FAULT_HOT_SEVERE : FAULT_HOT_COLOR;
@@ -420,6 +403,8 @@ export default function SwingBodyOverlay({
   const grip = gripKps.length
     ? { x: (gripKps.reduce((s, k) => s + k.x, 0) / gripKps.length) * sx, y: (gripKps.reduce((s, k) => s + k.y, 0) / gripKps.length) * sy }
     : null;
+  const ring = spotlight && live && hotSet.size > 0 ? spotlightRing(live, [...hotSet], sx, sy, MIN_KP_SCORE) : null;
+
   const showClub = useClub && !!clubTip && !!grip
     && Number.isFinite(grip.x) && Number.isFinite(grip.y)
     && Number.isFinite(clubTip.x) && Number.isFinite(clubTip.y)
@@ -498,6 +483,13 @@ export default function SwingBodyOverlay({
               strokeLinecap="round"
             />
             <Circle cx={clubTip.x} cy={clubTip.y} r={dotR * 1.7} fill={CLUB_BLUE} fillOpacity={0.95} stroke="#ffffff" strokeWidth={sw * 0.4} />
+          </G>
+        )}
+        {/* The fault spotlight — a dark halo under a hot ring, so it reads on grass, sky or a net. */}
+        {ring && (
+          <G>
+            <Circle cx={ring.cx} cy={ring.cy} r={ring.r} fill="none" stroke="#000000" strokeOpacity={0.45} strokeWidth={sw * 2.2} />
+            <Circle cx={ring.cx} cy={ring.cy} r={ring.r} fill={hotColor} fillOpacity={0.12} stroke={hotColor} strokeWidth={sw * 1.1} />
           </G>
         )}
       </Svg>

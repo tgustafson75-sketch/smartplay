@@ -50,6 +50,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
+import { calloutAtBottom, faultCaption, faultMomentFor } from '../../services/swing/faultSpotlight';
 import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
 import ReviewScrubber, { ScrubMoment } from '../../components/swinglab/ReviewScrubber';
@@ -596,6 +597,11 @@ export default function SmartMotion() {
       ? activeMemberHandedness
       : profile.handedness ?? 'right';
   const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
+  // 2026-10-10 — the review stops on the fault and rings it (same settings as the swing library).
+  const pauseOnIssue = useSettingsStore((s) => s.swingReviewPauseOnIssue);
+  const highlightIssue = useSettingsStore((s) => s.swingReviewHighlight);
+  const setPauseOnIssue = useSettingsStore((s) => s.setSwingReviewPauseOnIssue);
+  const setHighlightIssue = useSettingsStore((s) => s.setSwingReviewHighlight);
   // 2026-08-10 (logic-universality fix #3) — swing analysis narration + feel must speak as the ACTIVE
   // per-pillar caddie (cage pillar), NOT the raw global pick — otherwise the SAME swing narrated live vs
   // uploaded (videoUpload already uses getActiveCaddie) is a different caddie, and a Tank-disabled global
@@ -2752,7 +2758,9 @@ export default function SmartMotion() {
     if (phase !== 'review' || !sessionId) return;
     const sh = useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId)?.shots[selectedSwing];
     if (!sh) return;
-    return requestShotDetail(sessionId, sh.id);
+    // The arc on this screen comes from the silent pass (free on-device tracker); never a paid call
+    // for paging to a swing.
+    return requestShotDetail(sessionId, sh.id, { arc: 'tracker' });
   }, [phase, sessionId, selectedSwing]);
   useEffect(() => {
     if (selectedShotBio === undefined) {
@@ -4674,6 +4682,50 @@ export default function SmartMotion() {
   // skipped. Permission resolves → full body renders → 3 MORE hooks → React fatals. Hooks must be
   // unconditional: they now live ABOVE the gate. (ESLint react-hooks/rules-of-hooks flagged exactly
   // these three; a repo-wide sweep now runs in the sim gate so this class can't ship again.)
+  /**
+   * 2026-10-10 (Tim — "playback with a pause on the displayed issue and/or highlight of the area") — the
+   * same stop the swing library makes (services/swing/faultSpotlight): THIS swing's fault (`analysis` is the
+   * selected swing's read), timed by the frame its read was made from, else its phase on the pose positions.
+   * Hooks, so above the permission gate (see the 08-09 note above).
+   */
+  const reviewFaultId = analysis?.primary_fault ?? analysis?.detected_issue ?? null;
+  const reviewFaultMoment = useMemo(() => {
+    const seg = segments[selectedSwing];
+    const sh = cageSession?.shots[selectedSwing];
+    const at = (pos: string) => poseFrames?.find((f) => f.position === pos)?.timestampMs;
+    const top = at('P4_top'), impact = at('P6_impact'), end = at('P10_finish');
+    const anchors = top != null && impact != null && end != null ? { startMs: at('P1_address') ?? top, topMs: top, impactMs: impact, endMs: end } : null;
+    const ts = sh?.detected_issue_timestamps_sec ?? [];
+    return faultMomentFor({
+      faultId: reviewFaultId,
+      readTimestampsSec: ts.length <= 2 ? ts : [],
+      anchors,
+      windowStartSec: seg && seg.endMs > seg.startMs ? seg.startMs / 1000 : 0,
+      windowEndSec: seg && seg.endMs > seg.startMs ? seg.endMs / 1000 : Number.MAX_SAFE_INTEGER,
+    });
+  }, [segments, selectedSwing, cageSession?.shots, poseFrames, reviewFaultId]);
+  const reviewFaultSecRef = useRef<number | null>(null);
+  const reviewIssuePausedRef = useRef(false);
+  const reviewLastPosRef = useRef(-1);
+  const pauseOnIssueRef = useRef(pauseOnIssue);
+  pauseOnIssueRef.current = pauseOnIssue;
+  const [reviewAtIssue, setReviewAtIssue] = useState(false);
+  useEffect(() => {
+    reviewFaultSecRef.current = reviewFaultMoment?.sec ?? null;
+    reviewIssuePausedRef.current = false;
+    setReviewAtIssue(false);
+  }, [reviewFaultMoment?.sec, selectedSwing]);
+  useEffect(() => { if (!videoPaused) setReviewAtIssue(false); }, [videoPaused]);
+  const jumpToReviewIssue = useCallback(async () => {
+    const f = reviewFaultSecRef.current;
+    if (f == null) return;
+    reviewIssuePausedRef.current = true;
+    setVideoPaused(true);
+    setReviewAtIssue(true);
+    try { await videoRef.current?.pauseAsync(); } catch { /* released */ }
+    try { await videoRef.current?.setPositionAsync(Math.round(f * 1000)); } catch { /* released */ }
+    setPlaybackMs(Math.round(f * 1000));
+  }, []);
   const onReviewVideoLoad = useCallback(async (s: AVPlaybackStatus) => {
     if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis);
     const v = videoRef.current;
@@ -4698,6 +4750,28 @@ export default function SmartMotion() {
         .catch(() => undefined)
         .finally(() => { loopSeekGuardRef.current = false; });
       return;
+    }
+    if ('positionMillis' in s && typeof s.positionMillis === 'number') {
+      const posSec = s.positionMillis / 1000;
+      const f = reviewFaultSecRef.current;
+      if (f != null) {
+        if (posSec < f - 0.25) {
+          reviewIssuePausedRef.current = false;
+        } else if (!videoPaused && 'isPlaying' in s && s.isPlaying && pauseOnIssueRef.current && !reviewIssuePausedRef.current
+            && reviewLastPosRef.current >= 0 && reviewLastPosRef.current < f && posSec >= f - 0.02) {
+          // Past the frame already (ticks are 40-250ms apart): stop, then seek back to exactly it.
+          reviewIssuePausedRef.current = true;
+          setVideoPaused(true);
+          setReviewAtIssue(true);
+          void (async () => {
+            try {
+              await videoRef.current?.pauseAsync();
+              await videoRef.current?.setPositionAsync(Math.round(f * 1000));
+            } catch { /* the player was released */ }
+          })();
+        }
+      }
+      reviewLastPosRef.current = posSec;
     }
     if ('positionMillis' in s && typeof s.positionMillis === 'number'
         && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
@@ -4855,14 +4929,24 @@ export default function SmartMotion() {
   // Position scrub chips only appear once frames are computed.
   const poseReady = !!poseFrames && poseFrames.length > 0;
   // Detected swing phases as scrubber ticks (so you can scrub BY time point).
-  const scrubMoments: ScrubMoment[] = poseReady
-    ? P_SCRUB
-        .map((p) => {
-          const f = poseFrames?.find((x) => x.position === p.key);
-          return f ? { ms: f.timestampMs, label: p.label } : null;
-        })
-        .filter((m): m is ScrubMoment => m != null)
-    : [];
+  const scrubMoments: ScrubMoment[] = [
+    ...(poseReady
+      ? P_SCRUB
+          .map((p) => {
+            const f = poseFrames?.find((x) => x.position === p.key);
+            return f ? { ms: f.timestampMs, label: p.label } : null;
+          })
+          .filter((m): m is ScrubMoment => m != null)
+      : []),
+    // 2026-10-10 — the fault, as a tick on the same scrubber.
+    ...(reviewFaultMoment ? [{ ms: Math.round(reviewFaultMoment.sec * 1000), label: t('swinglab_swing.swing_detail.jump_to_issue') }] : []),
+  ];
+  // Held on the fault: stopped there by the replay, or paused within a frame or two of it.
+  const reviewOnIssueFrame = isReview && !!reviewFaultMoment
+    && (reviewAtIssue || (videoPaused && Math.abs(playbackMs / 1000 - reviewFaultMoment.sec) < 0.08));
+  const reviewFaultJoints = faultJointsFor(reviewFaultId);
+  const reviewSpotlightOn = reviewOnIssueFrame && highlightIssue && poseReady && reviewFaultJoints.length > 0;
+  const reviewCaption = reviewOnIssueFrame && reviewFaultId ? faultCaption(reviewFaultId) : null;
   const skeletonRow =
     isReview ? (
       <View style={styles.skelRow}>
@@ -4880,6 +4964,29 @@ export default function SmartMotion() {
             <Text style={styles.scrubChipText}>{p.label}</Text>
           </TactilePressable>
         )) : null}
+        {reviewFaultMoment ? (
+          <>
+            <TactilePressable onPress={() => void jumpToReviewIssue()} style={[styles.scrubChip, { borderColor: '#FF6B2C', borderWidth: 1 }]}>
+              <Text style={[styles.scrubChipText, { color: '#FF6B2C' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
+            </TactilePressable>
+            <TactilePressable
+              onPress={() => setPauseOnIssue(!pauseOnIssue)}
+              style={[styles.skelToggle, { borderColor: pauseOnIssue ? colors.accent : 'rgba(255,255,255,0.3)', backgroundColor: pauseOnIssue ? colors.accent_muted : 'rgba(0,0,0,0.4)' }]}
+            >
+              <Ionicons name="pause-circle-outline" size={13} color={pauseOnIssue ? colors.accent : '#fff'} />
+              <Text style={[styles.skelToggleText, { color: pauseOnIssue ? colors.accent : '#fff' }]}>{t('swinglab_swing.swing_detail.pause_on_issue')}</Text>
+            </TactilePressable>
+            {poseReady && reviewFaultJoints.length > 0 ? (
+              <TactilePressable
+                onPress={() => setHighlightIssue(!highlightIssue)}
+                style={[styles.skelToggle, { borderColor: highlightIssue ? colors.accent : 'rgba(255,255,255,0.3)', backgroundColor: highlightIssue ? colors.accent_muted : 'rgba(0,0,0,0.4)' }]}
+              >
+                <Ionicons name="scan-circle-outline" size={13} color={highlightIssue ? colors.accent : '#fff'} />
+                <Text style={[styles.skelToggleText, { color: highlightIssue ? colors.accent : '#fff' }]}>{t('swinglab_swing.swing_detail.highlight_issue')}</Text>
+              </TactilePressable>
+            ) : null}
+          </>
+        ) : null}
       </View>
     ) : null;
 
@@ -5143,7 +5250,8 @@ export default function SmartMotion() {
             [[smartmotion-clubhead-trace-root-cause]] — clubhead-or-NOTHING; never a wrist fallback. */}
         {isReview && showResults && (
           (showSkeleton && poseFrames && poseFrames.length > 0) ||
-          (clubArcPoints != null && clubArcPoints.length >= 3)
+          (clubArcPoints != null && clubArcPoints.length >= 3) ||
+          reviewSpotlightOn
         ) ? (
           <View style={[StyleSheet.absoluteFill, zoomStyle]} pointerEvents="none">
             <SwingBodyOverlay
@@ -5162,7 +5270,26 @@ export default function SmartMotion() {
               clubArc={clubArcPoints}
               videoW={reviewVideoNatural?.w ?? null}
               videoH={reviewVideoNatural?.h ?? null}
+              spotlight={reviewSpotlightOn}
             />
+          </View>
+        ) : null}
+
+        {/* 2026-10-10 — held on the fault: its name and the one thing to look at, clear of what it rings. */}
+        {reviewCaption && reviewFaultId ? (
+          <View
+            pointerEvents="box-none"
+            style={[styles.issueCallout, calloutAtBottom(reviewFaultId) ? { bottom: 96 } : { top: 96 }]}
+          >
+            <View style={[styles.issueCalloutBody, { borderColor: analysis?.severity === 'significant' ? '#EF4444' : '#FF6B2C' }]}>
+              <Text style={styles.issueCalloutTag}>{t('swinglab_swing.swing_detail.paused_on_issue')}</Text>
+              <Text style={styles.issueCalloutName} numberOfLines={1}>{reviewCaption.name}</Text>
+              {reviewCaption.look ? <Text style={styles.issueCalloutLook} numberOfLines={2}>{reviewCaption.look}</Text> : null}
+            </View>
+            <TactilePressable onPress={() => void togglePlay()} style={styles.issueCalloutBtn}>
+              <Ionicons name="play" size={14} color="#0B1220" />
+              <Text style={styles.issueCalloutBtnText}>{t('swinglab_swing.swing_detail.continue_play')}</Text>
+            </TactilePressable>
           </View>
         ) : null}
 
@@ -6480,6 +6607,14 @@ export default function SmartMotion() {
 }
 
 const styles = StyleSheet.create({
+  // 2026-10-10 — the fault callout (same look as the swing library's).
+  issueCallout: { position: 'absolute', left: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 8, zIndex: 20 },
+  issueCalloutBody: { flex: 1, backgroundColor: 'rgba(8,12,10,0.88)', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  issueCalloutTag: { color: '#FFB199', fontSize: 10, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
+  issueCalloutName: { color: '#ffffff', fontSize: 15, fontWeight: '800', marginTop: 2 },
+  issueCalloutLook: { color: '#E5E7EB', fontSize: 12.5, marginTop: 2 },
+  issueCalloutBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#88F700', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9 },
+  issueCalloutBtnText: { color: '#0B1220', fontSize: 12, fontWeight: '900' },
   // 2026-09-21 — watch-tap countdown. Sized to be readable from where the player is standing,
   // not from where the phone is.
   countdownOverlay: {

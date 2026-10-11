@@ -2626,7 +2626,12 @@
       "pick_a_swing_below_to": "Pick a swing below to compare with swing {{pad_start}}.",
       "analyze_the_swing_at_0": "Analyze the swing at 0:{{pad_start}}",
       "duration_s_position_s": "Duration: {{duration}}s · Position: {{position}}s",
-      "couldn_t_analyze_this_clip": "Couldn't analyze this one"
+      "couldn_t_analyze_this_clip": "Couldn't analyze this one",
+      "pause_on_issue": "Pause on issue",
+      "highlight_issue": "Highlight",
+      "jump_to_issue": "Issue",
+      "continue_play": "Continue",
+      "paused_on_issue": "Paused on the issue"
     },
     "accessibility_label": {
       "export_swing_report_pdf": "Export swing report PDF",

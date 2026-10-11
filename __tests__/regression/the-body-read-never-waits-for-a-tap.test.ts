@@ -38,7 +38,8 @@ describe('the duration is known before any branch decides what to do', () => {
     // 2026-10-05 — the body read is the orchestrator's: the analysis run reads swing 1's body after the
     // read, and the review asks for the selected swing's on its own — no tap, no duration gate (the
     // runner probes the clip itself).
-    expect(sm).toMatch(/if \(phase !== 'review' \|\| !sessionId\) return;[\s\S]{0,200}return requestShotDetail\(sessionId, sh\.id\);/);
+    // 2026-10-10 — with the arc from the silent pass (free tracker only).
+    expect(sm).toMatch(/if \(phase !== 'review' \|\| !sessionId\) return;[\s\S]{0,400}return requestShotDetail\(sessionId, sh\.id, \{ arc: 'tracker' \}\);/);
   });
 
   it('the per-branch seeds remain — they are harmless and cover the re-entry paths', () => {

@@ -151,7 +151,9 @@ function stages(): StageDef<In>[] {
       run: async ({ input, signal }) => {
         const shot0 = session(input.sessionId)?.shots.find((x) => x.clipUri);
         if (!shot0) return null;
-        const shotRun = runShotDetail(input.sessionId, shot0.id, { force: true });
+        // The arc comes from the silent pass: the free on-device tracker, never the paid vision model
+        // (2026-10-10). The player's Swing Trace toggle is what asks for more.
+        const shotRun = runShotDetail(input.sessionId, shot0.id, { force: true, arc: 'tracker' });
         signal.addEventListener('abort', () => shotRun.cancel(), { once: true });
         await whenStageSettled(shotRunKey(input.sessionId, shot0.id), 'pose', signal);
         if (signal.aborted) return null;

@@ -73,6 +73,10 @@ interface SettingsState {
    *  Defaults to false — opt-in toggle. */
   localMode: boolean;
   voiceEnabled: boolean;
+  /** 2026-10-10 (Tim) — swing review: the replay stops on the frame the fault shows in. */
+  swingReviewPauseOnIssue: boolean;
+  /** 2026-10-10 (Tim) — swing review: ring and name the fault's body area at that frame. */
+  swingReviewHighlight: boolean;
   /** 2026-06-04 — Coach Mode toggle. When false, hides the "Coach X"
    *  pill on the Caddie tab and the Coach Mode CTA + shared-group card
    *  on the Dashboard. Default true so existing users with rosters keep
@@ -391,6 +395,8 @@ interface SettingsState {
   // ─── ACTIONS ────────────────────────────
 
   setVoiceEnabled: (v: boolean) => void;
+  setSwingReviewPauseOnIssue: (v: boolean) => void;
+  setSwingReviewHighlight: (v: boolean) => void;
   /** 2026-06-04 — Coach Mode toggle (see field above). */
   setCoachModeEnabled: (v: boolean) => void;
   /** 2026-05-30 — Fix FY: Local Mode toggle. */
@@ -476,6 +482,8 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       voiceEnabled: true,
+      swingReviewPauseOnIssue: true,
+      swingReviewHighlight: true,
       // 2026-05-26 — Fix BE: default OFF. Opt-in only.
       cecilyMode: false,
       // 2026-05-26 — Fix AP Phase 2: default OFF. Opt-in only — safety
@@ -606,6 +614,8 @@ export const useSettingsStore = create<SettingsState>()(
       analyticsOptIn: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
+      setSwingReviewPauseOnIssue: (v) => set({ swingReviewPauseOnIssue: v }),
+      setSwingReviewHighlight: (v) => set({ swingReviewHighlight: v }),
       // 2026-06-04 — Coach Mode toggle setter.
       setCoachModeEnabled: (v) => set({ coachModeEnabled: v }),
       // 2026-05-30 — Fix FY: Local Mode setter.
@@ -1214,6 +1224,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       partialize: (s) => ({
         voiceEnabled: s.voiceEnabled,
+        swingReviewPauseOnIssue: s.swingReviewPauseOnIssue,
+        swingReviewHighlight: s.swingReviewHighlight,
         // 2026-06-04 — persist Coach Mode toggle.
         coachModeEnabled: s.coachModeEnabled,
         // 2026-05-30 — Fix FY: persist the Local Mode user choice.
