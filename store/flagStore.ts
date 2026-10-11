@@ -92,6 +92,11 @@ interface FlagState {
   minSupportedBuild: number;
   /** Server's own stamp on the document. Diagnostic only — nothing branches on it. */
   updatedAt: string | null;
+  /**
+   * 2026-10-10 — what needs Pro, per feature, from the server (api/flags `feature_edition`). Empty =
+   * the app's built-in table (services/featureAccess FEATURE_EDITION). Read via effectiveEdition.
+   */
+  featureEdition: Partial<Record<string, 'lite' | 'pro'>>;
   /** Wall-clock of the last SUCCESSFUL apply. Drives the 60s gate. */
   lastFetchedAt: number;
   /** Internal: set while a fetch is in flight so two foregrounds cannot race. */
@@ -120,6 +125,14 @@ function mergeFlags(current: Flags, raw: unknown): Flags {
   return out;
 }
 
+/** Only 'lite' | 'pro' values survive; a missing or malformed document keeps what we have. */
+function parseFeatureEdition(current: Partial<Record<string, 'lite' | 'pro'>>, raw: unknown): Partial<Record<string, 'lite' | 'pro'>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return current;
+  const out: Partial<Record<string, 'lite' | 'pro'>> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (v === 'lite' || v === 'pro') out[k] = v;
+  return out;
+}
+
 /** Course ids are opaque strings. A non-array, or entries that are not strings, are dropped rather
  *  than coerced — a coerced id would disable a course nobody named. */
 function parseDisabledCourseIds(current: string[], raw: unknown): string[] {
@@ -136,6 +149,7 @@ export const useFlagStore = create<FlagState & FlagActions>()(
       disabledCourseIds: [],
       minSupportedBuild: 0,
       updatedAt: null,
+      featureEdition: {},
       lastFetchedAt: 0,
       fetching: false,
 
@@ -163,6 +177,7 @@ export const useFlagStore = create<FlagState & FlagActions>()(
             minSupportedBuild:
               typeof minBuild === 'number' && Number.isFinite(minBuild) ? minBuild : cur.minSupportedBuild,
             updatedAt: typeof stamp === 'string' ? stamp : cur.updatedAt,
+            featureEdition: parseFeatureEdition(cur.featureEdition, doc.feature_edition),
             lastFetchedAt: Date.now(),
           });
         } catch {
@@ -185,6 +200,7 @@ export const useFlagStore = create<FlagState & FlagActions>()(
         disabledCourseIds: s.disabledCourseIds,
         minSupportedBuild: s.minSupportedBuild,
         updatedAt: s.updatedAt,
+        featureEdition: s.featureEdition,
         lastFetchedAt: s.lastFetchedAt,
       }),
     },

@@ -157,14 +157,14 @@ export function editionFor(status: SubscriptionStatus): Edition {
  * ~12 call sites across the app behave exactly as they do today.
  */
 /**
- * 2026-10-10 — the edition a feature needs RIGHT NOW: the server's table (api/app-config, adjusted
- * weekly without an app update — services/remoteAppConfig) over the built-in FEATURE_EDITION above.
- * Starting a round is free whatever the server says: the front door is never walled.
+ * 2026-10-10 — the edition a feature needs RIGHT NOW: the server's table (api/flags `feature_edition`,
+ * the same remote switchboard as the kill switches — edited in Vercel Edge Config, no app update) over
+ * the built-in FEATURE_EDITION above. Starting a round is free whatever the server says.
  */
 export function effectiveEdition(feature: FeatureKey): Edition {
   if (feature === 'round_start') return 'lite';
   try {
-    const remote = (require('./remoteAppConfig') as typeof import('./remoteAppConfig')).remoteEditionFor(feature);
+    const remote = (require('../store/flagStore') as typeof import('../store/flagStore')).useFlagStore.getState().featureEdition?.[feature];
     if (remote === 'lite' || remote === 'pro') return remote;
   } catch { /* the built-in table */ }
   return FEATURE_EDITION[feature];

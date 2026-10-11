@@ -41,7 +41,33 @@ const DEFAULTS = {
   course_geometry: { disabled_course_ids: [] as string[] },
   min_supported_build: 0,
   updated_at: '2026-09-06T00:00:00Z',
+  /**
+   * 2026-10-10 (Tim: "We are not changing prices. We are just adjusting what's behind it to encourage
+   * more play usage, feedback and improvement... relatively liberal") — WHAT NEEDS PRO. 'lite' = free,
+   * 'pro' = subscription. Override any key from the Vercel dashboard (Edge Config item
+   * `feature_edition`, e.g. {"voice_advanced":"pro"}) — no push, no OTA, no review. These defaults are
+   * what is served when Edge Config has no `feature_edition`: opened for the first ~30 players.
+   * round_start is always free in the app whatever this says. Set real gates before a store submission —
+   * a subscription that unlocks nothing new is a review question.
+   */
+  feature_edition: {
+    voice_advanced: 'lite',
+    smartvision: 'lite',
+    smartfinder: 'lite',
+    cage_mode: 'lite',
+  } as Record<string, 'lite' | 'pro'>,
 };
+
+/** Known features × the two editions only, merged over the defaults; anything else is ignored. */
+function mergeFeatureEdition(raw: unknown): Record<string, 'lite' | 'pro'> {
+  const out = { ...DEFAULTS.feature_edition };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const key of Object.keys(DEFAULTS.feature_edition)) {
+    const v = (raw as Record<string, unknown>)[key];
+    if (v === 'lite' || v === 'pro') out[key] = v;
+  }
+  return out;
+}
 
 /**
  * The single upstream read, bounded. 3s is not a tuned threshold — it is shorter than Vercel's own
@@ -129,6 +155,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     course_geometry: { disabled_course_ids: mergeDisabledCourses(items.course_geometry) },
     min_supported_build: typeof minBuild === 'number' && Number.isFinite(minBuild) ? minBuild : DEFAULTS.min_supported_build,
     updated_at: typeof updatedAt === 'string' ? updatedAt : DEFAULTS.updated_at,
+    feature_edition: mergeFeatureEdition(items.feature_edition),
     source: 'edge_config',
   });
 }

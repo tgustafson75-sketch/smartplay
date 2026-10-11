@@ -440,10 +440,6 @@
       "dest": "/api/health.ts"
     },
     {
-      "src": "/api/app-config",
-      "dest": "/api/app-config.ts"
-    },
-    {
       "src": "/api/course-geometry",
       "dest": "/api/course-geometry.ts"
     },

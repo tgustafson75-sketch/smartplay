@@ -1297,13 +1297,6 @@ function AppNavigator() {
   // clips + fault frames leak and storage grows unbounded. Mark-and-sweep once
   // per boot, but ONLY after both referencing stores (cage + relationship)
   // finish hydrating — a sweep against pre-hydration empty state would delete
-  // 2026-10-10 — the free/Pro table from the server (api/app-config): fetched now and on every return to
-  // the foreground, so what needs Pro can be adjusted weekly without an app update.
-  useEffect(() => {
-    try { (require('../services/remoteAppConfig') as typeof import('../services/remoteAppConfig')).startAppConfigSync(); }
-    catch { /* the built-in table stands */ }
-  }, []);
-
   // live clips (the gate is also enforced inside gcOrphanClips). Wrapped in
   // try/catch + dynamic import so it can never crash boot.
   useEffect(() => {
