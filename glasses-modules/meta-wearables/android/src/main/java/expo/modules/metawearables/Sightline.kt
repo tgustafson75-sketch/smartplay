@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Sightline slice 1 — the process-wide state of the glasses link (one per process, like the SDK itself).
@@ -48,6 +49,9 @@ object Sightline {
       if (value != null && pendingLaunch.getAndSet(false)) value("onVoiceInvocation", mapOf("action" to "LaunchApp"))
     }
   private val pendingLaunch = AtomicBoolean(false)
+
+  /** How many LaunchApp invocations were answered (sendSuccess) — the Mock Device Kit test asserts exactly once. */
+  internal val answeredInvocations = AtomicInteger(0)
 
   private val initialized = AtomicBoolean(false)
   private var appContext: Context? = null
@@ -86,7 +90,7 @@ object Sightline {
       vs.invocations.collect { inv ->
         if (inv is LaunchApp) {
           // Answer EXACTLY once per invocation, then hand the launch to JS (Caddie screen + push-to-talk).
-          scope.launch { try { inv.responseHandle.sendSuccess(null) } catch (e: Throwable) { Log.w(TAG, "sendSuccess", e) } }
+          scope.launch { try { inv.responseHandle.sendSuccess(null); answeredInvocations.incrementAndGet() } catch (e: Throwable) { Log.w(TAG, "sendSuccess", e) } }
           if (sink != null) emit("onVoiceInvocation", mapOf("action" to "LaunchApp")) else pendingLaunch.set(true)
         }
       }
