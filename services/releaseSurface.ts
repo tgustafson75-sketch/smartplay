@@ -188,7 +188,10 @@ export function isFeatureShelved(feature: ShelvedFeature): boolean {
   // (services/glassesGate) — not an owner perk in a store build that has no DAT SDK in it.
   if (feature === 'meta_glasses') {
     const { isGlassesSurfaceEnabled } = require('./glassesGate') as typeof import('./glassesGate');
-    return !isGlassesSurfaceEnabled();
+    // These rows drive the iOS glasses bridge (services/metaWearablesBridge). Android's slice 1 is
+    // hands-free (services/sightline) and adds no surface.
+    const { Platform } = require('react-native') as typeof import('react-native');
+    return !(isGlassesSurfaceEnabled() && Platform.OS === 'ios');
   }
   return SHELVED_FEATURES.has(feature) && !isOwnerBuild();
 }

@@ -1297,6 +1297,12 @@ function AppNavigator() {
   // clips + fault frames leak and storage grows unbounded. Mark-and-sweep once
   // per boot, but ONLY after both referencing stores (cage + relationship)
   // finish hydrating — a sweep against pre-hydration empty state would delete
+  // 2026-10-10 — Sightline (Meta glasses): a no-op outside the glasses dev variant / with its switch off.
+  useEffect(() => {
+    try { return (require('../services/sightline') as typeof import('../services/sightline')).watchSightline(); }
+    catch { /* never blocks boot */ }
+  }, []);
+
   // live clips (the gate is also enforced inside gcOrphanClips). Wrapped in
   // try/catch + dynamic import so it can never crash boot.
   useEffect(() => {

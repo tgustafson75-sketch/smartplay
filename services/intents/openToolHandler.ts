@@ -540,6 +540,21 @@ export const openToolHandler: IntentHandler = {
       } catch { /* fall through to the camera scene read */ }
     }
 
+    /**
+     * 2026-10-10 (Sightline, glasses dev variant) — with a Meta glasses session up, "what do you see" /
+     * "read my lie" is answered from ONE still off the glasses through the same TightLie vision path,
+     * instead of opening the phone camera. Falls through to the phone when there is no session or the
+     * glasses read could not be done. A no-op in every store build (no glasses session can exist there).
+     */
+    if (['lie_analysis', 'tightlie', 'scene_read', 'look', 'what_you_see'].includes(toolName)) {
+      try {
+        const sl = require('../sightline') as typeof import('../sightline');
+        if (sl.glassesSessionActive() && (await sl.readThroughGlasses())) {
+          return { success: true, voice_response: '', side_effects: ['glasses_read:' + toolName], follow_up_needed: false };
+        }
+      } catch { /* the phone camera below */ }
+    }
+
     let action = TOOL_NAME_TO_ACTION[toolName];
 
     /**
