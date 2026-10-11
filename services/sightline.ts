@@ -29,6 +29,7 @@ function metaWearables(): MetaWearablesNative | null {
 let started = false;
 let sessionActive = false;
 let lastStreamState = 'STOPPED';
+const subscriptions: { remove(): void }[] = [];
 
 function logError(kind: string, code: unknown): void {
   devLog(`[sightline] ${kind}: ${String(code)}`);
@@ -46,16 +47,37 @@ export function glassesSessionActive(): boolean {
 async function ensureSession(mw: MetaWearablesNative): Promise<void> {
   if (sessionActive) return;
   if (mw.getRegistrationState() !== 'REGISTERED') { mw.register(); return; }   // Meta AI app hands back via the scheme
-  try { await mw.startSession(); sessionActive = true; } catch (e) { logError('session', (e as { code?: string })?.code ?? e); }
+  try {
+    await mw.startSession();
+    if (!started) { mw.stopSession(); return; }   // the switch went off while the session was starting
+    sessionActive = true;
+  } catch (e) { logError('session', (e as { code?: string })?.code ?? e); }
 }
 
-/** Boot hook (app/_layout): start now if allowed, and again whenever the remote switch turns on. */
+/**
+ * Boot hook (app/_layout): start now if allowed, start when the remote switch turns on, and STOP a
+ * running session when it turns off — the kill switch kills, it does not just stop new starts.
+ */
 export function watchSightline(): () => void {
-  startSightline();
+  const sync = () => { if (isGlassesSurfaceEnabled()) startSightline(); else stopSightline(); };
+  sync();
   try {
     const { useFlagStore } = require('../store/flagStore') as typeof import('../store/flagStore');
-    return useFlagStore.subscribe(() => startSightline());
+    return useFlagStore.subscribe(sync);
   } catch { return () => {}; }
+}
+
+/** Tear down: listeners off, the session (and with it the stream) stopped. A no-op when not started. */
+export function stopSightline(): void {
+  if (!started) return;
+  started = false;
+  for (const sub of subscriptions.splice(0)) { try { sub.remove(); } catch { /* already gone */ } }
+  const mw = metaWearables();
+  if (mw && sessionActive) {
+    try { mw.stopSession(); } catch (e) { logError('stop_session', e); }   // native stopSession stops the stream too
+  }
+  sessionActive = false;
+  lastStreamState = 'STOPPED';
 }
 
 /** A no-op outside the glasses variant or with the switch off. */
@@ -64,8 +86,9 @@ export function startSightline(): void {
   const mw = metaWearables();
   if (!mw) return;
   started = true;
+  const on = (m: MetaWearablesNative, ev: string, cb: (p: Record<string, unknown>) => void) => { subscriptions.push(m.addListener(ev, cb)); };
 
-  mw.addListener('onVoiceInvocation', () => {
+  on(mw, 'onVoiceInvocation', () => {
     void (async () => {
       try {
         (require('./safeBack') as typeof import('./safeBack')).goToTab('caddie');
@@ -74,14 +97,14 @@ export function startSightline(): void {
       } catch (e) { logError('voice_invocation', e); }
     })();
   });
-  mw.addListener('onVoiceInvocationError', (p) => logError('voice_invocation_error', p.code));
-  mw.addListener('onSessionError', (p) => {
+  on(mw, 'onVoiceInvocationError', (p) => logError('voice_invocation_error', p.code));
+  on(mw, 'onSessionError', (p) => {
     logError('session_error', p.code);
     if (['SESSION_ENDED_BY_DEVICE', 'DEVICE_DISCONNECTED', 'SESSION_ALREADY_STOPPED'].includes(String(p.code))) sessionActive = false;
   });
-  mw.addListener('onStreamState', (p) => { lastStreamState = String(p.state ?? lastStreamState); });
-  mw.addListener('onStreamError', (p) => logError('stream_error', p.code));
-  mw.addListener('onRegistrationState', (p) => { if (p.state === 'REGISTERED') void ensureSession(mw); });
+  on(mw, 'onStreamState', (p) => { lastStreamState = String(p.state ?? lastStreamState); });
+  on(mw, 'onStreamError', (p) => logError('stream_error', p.code));
+  on(mw, 'onRegistrationState', (p) => { if (p.state === 'REGISTERED') void ensureSession(mw); });
   void ensureSession(mw);
 }
 
