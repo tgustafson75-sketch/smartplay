@@ -1541,7 +1541,7 @@ export const useVoiceCaddie = ({
 
   // ── PROCESS AUDIO URI (shared by manual + VAD) ────
 
-  const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad'; meterSilentMs?: number | null }): Promise<void> => {
+  const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad'; meterSilent?: boolean; durationMs?: number | null }): Promise<void> => {
     // 2026-08-10 — stuck-turn watchdog. A legitimate turn is bounded by the cold transcribe budget
     // plus the brain call; 90s is comfortably past any real one. Beyond that the flag is a leak, not
     // a turn in progress, so clear it and serve the user instead of ignoring them forever.
@@ -2172,7 +2172,7 @@ export const useVoiceCaddie = ({
         // own, so a single quiet tap arrived as TWO Sentry issues that both said the same thing.
         logVoiceSilentFail('empty_transcript', {
           source: 'processAudioUri', sourceKind: source,
-          meterSilent: opts?.meterSilentMs !== undefined, durationMs: opts?.meterSilentMs ?? undefined,
+          meterSilent: opts?.meterSilent ?? null, durationMs: opts?.durationMs ?? null,
         });
         /**
          * 2026-08-10 — PERSIST + stay a person about it.
@@ -2205,9 +2205,9 @@ export const useVoiceCaddie = ({
       // THE disagreement the meter breadcrumb exists to measure: the meter heard nothing and Whisper
       // heard words. The meter still decides when to STOP listening, so a device where it lies is a
       // device where endpointing is wrong. Word count only — never the player's words.
-      if (opts?.meterSilentMs !== undefined) {
+      if (opts?.meterSilent === true) {
         logVoiceSilentFail('meter_silent_but_heard_words', {
-          source: 'processAudioUri', durationMs: opts.meterSilentMs, words: transcript.trim().split(/\s+/).length,
+          source: 'processAudioUri', durationMs: opts.durationMs ?? null, words: transcript.trim().split(/\s+/).length,
         });
       }
       // Note: source-based wake-word filtering removed 2026-05-17 after
@@ -3070,7 +3070,7 @@ export const useVoiceCaddie = ({
           console.log('[voice] meter heard nothing in', durationMs, 'ms — transcribing anyway (meter is not the judge)');
           logVoiceDiag('meter_silent_transcribing_anyway', { source: 'handleMicPress', durationMs });
         }
-        await processAudioUri(uri, meterSilent ? { meterSilentMs: durationMs } : undefined);
+        await processAudioUri(uri, { meterSilent, durationMs });
 
       } catch (err) {
         console.log('[voice] stop error:', err);

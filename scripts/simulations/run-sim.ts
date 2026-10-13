@@ -13295,11 +13295,11 @@ check('LOCK: no capture path may discard the player\'s audio on the level meter 
     // The disagreement is still measured — that is how we learn which devices the meter lies on.
     // 2026-10-13: measured AFTER Whisper answers — the pre-transcribe line is a device breadcrumb, and
     // mailing it filed every quiet tap twice. The disagreement itself is what reaches the inbox.
-    const measured = /if \(opts\?\.meterSilentMs !== undefined\) \{\s*logVoiceSilentFail\('meter_silent_but_heard_words'/.test(vc)
+    const measured = /if \(opts\?\.meterSilent === true\) \{\s*logVoiceSilentFail\('meter_silent_but_heard_words'/.test(vc)
       && !/logVoiceSilentFail\('meter_silent_transcribing_anyway'/.test(vc);
     // ...and the audio goes to the transcriber regardless of what the meter concluded.
     const transcribesAnyway = /meter is not the judge/.test(vc)
-      && /await processAudioUri\(uri, meterSilent \? \{ meterSilentMs: durationMs \} : undefined\);/.test(vc);
+      && /await processAudioUri\(uri, \{ meterSilent, durationMs \}\);/.test(vc);
     // The OTHER capture path must stay veto-free too: it may skip only on physical impossibility
     // (too short / too small / too large), never on hasSpoken.
     const sharedPathClean = !/if \(!hasSpoken\)[\s\S]{0,120}?return done\(/.test(vs)

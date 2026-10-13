@@ -118,12 +118,12 @@ describe('a quiet tap files ONE report, and the meter disagreement is reported o
   });
 
   it('the meter verdict rides into processAudioUri and onto both outcomes', () => {
-    expect(vc).toContain('await processAudioUri(uri, meterSilent ? { meterSilentMs: durationMs } : undefined);');
+    expect(vc).toContain('await processAudioUri(uri, { meterSilent, durationMs });');
     const empty = vc.slice(vc.indexOf("logVoiceSilentFail('empty_transcript'"));
-    expect(empty.slice(0, 250)).toContain('meterSilent: opts?.meterSilentMs !== undefined');
+    expect(empty.slice(0, 250)).toContain('meterSilent: opts?.meterSilent ?? null, durationMs: opts?.durationMs ?? null');
     // reported on the HEARD branch only — after the empty-transcript return, gated on the meter
     const heard = vc.indexOf("logVoiceSilentFail('meter_silent_but_heard_words'");
     expect(heard).toBeGreaterThan(vc.indexOf('missStreakRef.current = 0;'));
-    expect(vc.slice(heard - 80, heard)).toContain('if (opts?.meterSilentMs !== undefined) {');
+    expect(vc.slice(heard - 80, heard)).toContain('if (opts?.meterSilent === true) {');
   });
 });

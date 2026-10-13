@@ -244,6 +244,7 @@ export function poseDetectorUnavailable(): boolean {
 }
 
 export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Promise<PoseFrame | null> {
+  cloudPoseUnconfigured = false; // only THIS request's answer counts — a failed read or fetch is not "unconfigured"
   // 2026-06-11 — On-device MediaPipe first. The BlazePose model + native module
   // already ship via the withMediaPipePose config plugin (services/
   // mediaPipePoseService.ts); poseEstimator uses them, but SmartMotion's tempo
@@ -280,7 +281,6 @@ export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Pro
       return null;
     }
   }
-  cloudPoseUnconfigured = false; // only THIS request's answer counts — a network failure is not "unconfigured"
   try {
     const res = await fetch(`${apiUrl()}/api/pose-analysis`, {
       method: 'POST',
