@@ -224,6 +224,25 @@ function normalizeKeypoints(raw: unknown): Keypoint[] {
 
 /** Run pose detection on a single image (file URI from device or http URL).
  *  Returns null on any failure — caller should render fallback. */
+/**
+ * 2026-10-13 (Sentry, the first real field users: one iPhone 13, iOS 1.0.2+31, pose_zero_frames on
+ * every swing with reason 'no_pose_in_frame' and nativePose false).
+ *
+ * No detector LOOKED. iOS has no on-device pose module (plugins/withMediaPipePose.js — the iOS half
+ * was never finished) and the cloud proxy answers { configured: false } while POSE_API_KEY is unset.
+ * A null from that pair is not "the golfer was out of shot" — it is "nothing could have seen him",
+ * and the report must say so or every investigation starts with the player's framing.
+ */
+let cloudPoseUnconfigured = false;
+
+/** True when the last pose request had no detector able to run: no native module, and the cloud refused as unconfigured. */
+export function poseDetectorUnavailable(): boolean {
+  if (!cloudPoseUnconfigured) return false;
+  try {
+    return !(require('./mediaPipePoseService') as typeof import('./mediaPipePoseService')).isMediaPipeAvailable();
+  } catch { return true; }
+}
+
 export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Promise<PoseFrame | null> {
   // 2026-06-11 — On-device MediaPipe first. The BlazePose model + native module
   // already ship via the withMediaPipePose config plugin (services/
@@ -261,6 +280,7 @@ export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Pro
       return null;
     }
   }
+  cloudPoseUnconfigured = false; // only THIS request's answer counts — a network failure is not "unconfigured"
   try {
     const res = await fetch(`${apiUrl()}/api/pose-analysis`, {
       method: 'POST',
@@ -280,6 +300,7 @@ export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Pro
     // { data: null, configured: false } when POSE_API_KEY/HOST aren't
     // set. Collapse to null so the biomechanics card stays hidden —
     // identical UX, just no false 503 alert from Vercel.
+    cloudPoseUnconfigured = data.configured === false;
     if (data.configured === false || data.data == null) return null;
     const keypoints = normalizeKeypoints(data.data);
     if (keypoints.length === 0) return null;
@@ -517,8 +538,8 @@ export async function poseAtTime(
     dropTemp(cropUri);
     dropTemp(uri);
     if (!frame) {
-      // Read the image fine, found no body. Distinct from being unable to read it at all.
-      if (!lastFrameFailure) lastFrameFailure = 'no_pose_in_frame';
+      // Read the image fine, found no body — unless no detector was there to look (iOS today).
+      if (!lastFrameFailure) lastFrameFailure = poseDetectorUnavailable() ? 'no_pose_detector' : 'no_pose_in_frame';
       return null;
     }
     if (cropUri && roi) {
@@ -1560,6 +1581,8 @@ export async function extractPoseFramesFromVideo(
      *   reason 'no_pose_in_frame' with nativePose true → we read the video and found no body:
      *                      framing, distance, or the player out of shot. A coaching problem.
      *   reason 'thumbnail_failed: …' → we could not read the video at all. A platform problem.
+     *   reason 'no_pose_detector' → no native module AND the cloud proxy is unconfigured: nothing
+     *                      looked. Not the player, not the clip — a missing detector (iOS, 10-13).
      * One field separates three fixes that have nothing to do with each other.
      */
     let nativePose: boolean | null = null;
