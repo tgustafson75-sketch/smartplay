@@ -12,6 +12,28 @@
  */
 export const AUTO_APPLY_WINDOW_MS = 20_000;
 
+/**
+ * 2026-10-13 (Sentry SMARTPLAY-CADDIE-MOBILE-J8) — iOS NEVER RELOADS ITS JS.
+ *
+ * On iOS, `Updates.reloadAsync()` runs expo-modules-core's SharedObjectRegistry.clear(), which in SDK 54
+ * (3.0.30) releases JS weak objects on a dispatch-queue thread: EXC_BAD_ACCESS in
+ * -[EXJavaScriptWeakObject .cxx_destruct]. It fired on an iPhone 13, 4s into a cold start, the moment
+ * the auto-apply reloaded into a fresh OTA. Every iOS binary in the field and in review has it.
+ * (Branch native/expo-modules-core-reload-fix backports the upstream fix, expo/expo#43937, for the next
+ * native build. JS cannot tell which binary it is running in, so iOS stays off.)
+ *
+ * Nothing is lost but timing: a downloaded update still applies — expo-updates launches it on the next
+ * cold start by itself. One launch later, instead of a crash now.
+ */
+export function reloadIsSafe(): boolean {
+  try {
+    const { Platform } = require('react-native') as typeof import('react-native');
+    return Platform.OS !== 'ios';
+  } catch {
+    return false;
+  }
+}
+
 export interface AutoApplyInputs {
   ready: boolean;
   inRound: boolean;
@@ -26,6 +48,7 @@ export interface AutoApplyInputs {
 
 export function mayAutoApplyUpdate(i: AutoApplyInputs): boolean {
   if (!i.ready || i.inRound || i.sessionActive || i.audioBusy) return false;
+  if (!reloadIsSafe()) return false;
   if (i.sinceLaunchMs >= AUTO_APPLY_WINDOW_MS) return false;
   // The player has already started talking to us this launch — they are using the app, not waiting
   // on it. The manual banner offers the update instead.

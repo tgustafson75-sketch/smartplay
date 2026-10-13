@@ -12,7 +12,7 @@ import {
 import { useRoundStore } from '../store/roundStore';
 import { useListeningSessionStore } from '../store/listeningSessionStore';
 import { useTranslation } from 'react-i18next';
-import { mayAutoApplyUpdate, AUTO_APPLY_WINDOW_MS } from '../services/updateApplyGate';
+import { mayAutoApplyUpdate, AUTO_APPLY_WINDOW_MS, reloadIsSafe } from '../services/updateApplyGate';
 import { msSinceUserTurn } from '../services/userTurnClock';
 import { isSpeaking, isCapturing, isExternalMicActive } from '../services/voiceService';
 
@@ -118,8 +118,10 @@ export function UpdateAvailableBanner() {
   // keep the manual banner down — it would flash and then vanish under the reload overlay.
   const autoStillPossible = !autoAppliedRef.current && msSinceUserTurn() === null
     && Date.now() - mountedAtRef.current < AUTO_APPLY_WINDOW_MS;
+  // An iOS binary whose reload crashes (updateApplyGate.reloadIsSafe) never offers one: the update
+  // applies by itself on the next launch.
   const visible = status?.ready === true && !dismissed && !inRound && !voiceActive
-    && (!autoAppliedRef.current || autoCancelled) && !autoStillPossible;
+    && (!autoAppliedRef.current || autoCancelled) && !autoStillPossible && reloadIsSafe();
 
   useEffect(() => {
     Animated.spring(slide, {

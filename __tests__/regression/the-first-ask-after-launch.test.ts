@@ -327,6 +327,14 @@ describe('a custom-caddie clip cannot wedge the speak queue', () => {
 describe('the launch-time update reload waits for a quiet app', () => {
   const { mayAutoApplyUpdate } = require('../../services/updateApplyGate') as typeof import('../../services/updateApplyGate');
   const base = { ready: true, inRound: false, sessionActive: false, audioBusy: false, msSinceUserTurn: null, sinceLaunchMs: 3_000 };
+  // Android: the platform whose reload is safe (iOS never reloads — Sentry J8).
+  // Fetched per test: other blocks in this file reset the module registry, and the gate requires
+  // react-native lazily — patch the instance it will actually see.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rn = () => require('react-native') as { Platform: { OS: string } };
+  let os = 'ios';
+  beforeEach(() => { os = rn().Platform.OS; rn().Platform.OS = 'android'; });
+  afterEach(() => { rn().Platform.OS = os; });
 
   it('applies on a quiet launch — the June behaviour Tim asked for survives', () => {
     expect(mayAutoApplyUpdate(base)).toBe(true);

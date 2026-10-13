@@ -73,6 +73,8 @@ export async function checkAndFetchUpdate(): Promise<UpdateStatus> {
 }
 
 export async function applyUpdate(): Promise<void> {
+  // The one owner of the update reload: an iOS 1.0.2 binary crashes inside reloadAsync (Sentry J8).
+  if (!(require('./updateApplyGate') as typeof import('./updateApplyGate')).reloadIsSafe()) return;
   try {
     await Updates.reloadAsync();
   } catch {
