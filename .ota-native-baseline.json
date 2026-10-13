@@ -1,7 +1,7 @@
 {
   "note": "Native fingerprint of the shell currently in the stores. Re-record with `npm run ota:baseline` when a STORE BUILD ships.",
   "runtimeVersion": "1.0.2",
-  "hash": "ddc0ee4cc2f63d9ea04058d79cdb4d0386642ef6ef94a0e69200688578934888",
-  "fileCount": 65,
-  "recordedAt": "2026-10-13T19:08:02.925Z"
+  "hash": "37c74911620264895168eb00e492027938757998050b90bcd246774cfb52a6d5",
+  "fileCount": 66,
+  "recordedAt": "2026-10-13T19:48:48.438Z"
 }
