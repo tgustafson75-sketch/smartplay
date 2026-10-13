@@ -121,7 +121,7 @@ export function isWatchCaddieBridgeAvailable(): boolean {
  * watch face partly because nothing could tell him this beforehand.
  *
  * Three-state, and the third state is the point: `null` means "cannot ask" — an older native shell
- * or iOS, where the method does not exist. A caller must not render that as "not connected", which
+ * where the method does not exist (iOS before 1.0.3), or a session not yet activated. A caller must not render that as "not connected", which
  * would be a confident wrong answer of exactly the kind this sprint keeps finding.
  */
 export async function watchReachable(): Promise<boolean | null> {

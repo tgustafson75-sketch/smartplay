@@ -117,8 +117,8 @@ async function detectRoute() {
       routeWatchStarted = true;
       const started = await mod.startRouteWatch().catch(() => false);
       if (started) {
-        const { DeviceEventEmitter } = require('react-native') as typeof import('react-native');
-        DeviceEventEmitter.addListener('onAudioRouteChanged', (payload: unknown) => {
+        const { onBluetoothMediaEvent } = require('./bluetoothMediaEvents') as typeof import('./bluetoothMediaEvents');
+        onBluetoothMediaEvent('onAudioRouteChanged', (payload: unknown) => {
           applyNativeRoute(payload as { route?: string });
         });
       }

@@ -139,6 +139,12 @@ class MediaPipePoseModule(reactContext: ReactApplicationContext) :
                     return
                 }
             val mpImage: MPImage = BitmapImageBuilder(bitmap).build()
+            // 2026-10-13 — RELEASE THE FRAME. Every call decoded a full-size bitmap (a 4K frame is
+            // ~33 MB of pixels) and never freed it or its MPImage; a swing read runs ~20 of these, so a
+            // range session piled native memory onto the GC's schedule — the leading suspect for the
+            // watchdog kill. The result is copied into JS maps by serializeResult, so nothing reads the
+            // pixels after detect().
+            try {
             val t0 = System.currentTimeMillis()
             // One frame at a time on one landmarker. JS fires frames concurrently; a GPU→CPU rebuild
             // racing an in-flight detect() closed the engine under it ("task graph hasn't been
@@ -166,6 +172,10 @@ class MediaPipePoseModule(reactContext: ReactApplicationContext) :
             }
             lastInferenceMs = System.currentTimeMillis() - t0
             promise.resolve(serializeResult(result, lastInferenceMs))
+            } finally {
+                try { mpImage.close() } catch (_: Throwable) { /* already released */ }
+                bitmap.recycle()
+            }
         } catch (e: Throwable) {
             promise.reject("MP_INFERENCE_FAILED", e.message ?: e.toString())
         }

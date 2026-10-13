@@ -83,9 +83,9 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "SmartPlay Caddie uses the camera to record and analyze your swing and ball flight.",
+          "cameraPermissionText": "SmartPlay Caddie uses the camera to record and analyze your golf swing, to read the lie your ball is sitting in, to scan the clubs in your bag, and to look down the hole so your caddie can talk you through the shot in front of you.",
           "enableMicrophonePermission": true,
-          "microphonePermissionText": "SmartPlay Caddie uses the microphone to detect ball-strike timing during a swing."
+          "microphonePermissionText": "SmartPlay Caddie uses the microphone two ways: to hear your voice so your caddie can answer you hands-free, and to listen to the sound of impact when you record a swing, which is how it grades your strike. Audio is processed for these purposes only."
         }
       ],
       [
@@ -156,7 +156,7 @@
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "SmartPlay Caddie uses the microphone so your caddie can hear you on the course.",
+          "microphonePermission": "SmartPlay Caddie uses the microphone two ways: to hear your voice so your caddie can answer you hands-free, and to listen to the sound of impact when you record a swing, which is how it grades your strike. Audio is processed for these purposes only.",
           "speechRecognitionPermission": "SmartPlay Caddie uses on-device speech recognition so your caddie still understands you when there's no signal.",
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"

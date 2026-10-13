@@ -42,7 +42,8 @@
  * unmounts on app teardown, so deactivate is rarely invoked.
  */
 
-import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
+import { onBluetoothMediaEvent } from './bluetoothMediaEvents';
 import { notifyEarbudTap } from './earbudControl';
 import { devLog } from './devLog';
 
@@ -78,7 +79,8 @@ export function initVoiceTriggers(): () => void {
   //    The native module emits 'onRemoteControl' with { type: 'play' |
   //    'pause' | 'playPause' }. All three resolve to a single "tap"
   //    signal — earbudControl handles pattern classification.
-  const btSub = DeviceEventEmitter.addListener('onRemoteControl', (event: { type?: string; at?: number }) => {
+  const btSub = onBluetoothMediaEvent('onRemoteControl', (payload) => {
+    const event = payload as { type?: string; at?: number } | null;
     const t = String(event?.type ?? '');
     if (t === 'play' || t === 'pause' || t === 'playPause') {
       devLog(`[voiceTriggers] BT button → ${t}`);

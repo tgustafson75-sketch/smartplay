@@ -106,19 +106,31 @@ class WearSwingBridgeModule: RCTEventEmitter {
   }
 
   /**
-   * 2026-08-30 — `override` REQUIRED. RCTEventEmitter already declares both of these, so declaring
-   * them again without the keyword is a compile error, not a redundancy:
-   *   "overriding declaration requires an 'override' keyword"
-   *
-   * Never caught before because this file had never been compiled — withWatchSwingBridgeIOS wrote
-   * it into the tree with a doubled path, so Xcode could not find it to build it. Same root cause
-   * as the missing `import React` one file over.
+   * 2026-10-13 — NO addListener / removeListeners OVERRIDES. RCTEventEmitter already exports both,
+   * and its versions are what count listeners and call startObserving(). The empty overrides that
+   * lived here (added 08-30 to satisfy a compile error) swallowed that: the count stayed 0,
+   * hasListeners never went true, and emit() dropped EVERY event — no watch swing, tap, voice,
+   * command or connection change ever reached JS on iOS. Phone→watch sends were unaffected, which
+   * is why it looked half-working.
    */
-  @objc(addListener:)
-  override func addListener(_ eventName: String) { /* required by NativeEventEmitter */ }
 
-  @objc(removeListeners:)
-  override func removeListeners(_ count: Double) { /* required by NativeEventEmitter */ }
+  /**
+   * Is a watch there to talk to? iOS parity with Android's NodeClient count, so Settings can answer
+   * before a round instead of after a failed push. Paired AND our watch app installed = 1. Reachable
+   * is deliberately NOT required: on watchOS it is only true while the watch app is foregrounded,
+   * so requiring it would report a watch on the wrist as absent. Not activated = reject (unknown),
+   * never 0 — JS reads a rejection as "cannot ask", which is the honest answer.
+   */
+  @objc(getConnectedNodeCount:rejecter:)
+  func getConnectedNodeCount(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    guard WCSession.isSupported() else { resolve(0); return }
+    let s = session ?? WCSession.default
+    guard s.activationState == .activated else {
+      reject("watch_session_inactive", "WCSession not activated yet", nil)
+      return
+    }
+    resolve(s.isPaired && s.isWatchAppInstalled ? 1 : 0)
+  }
 }
 
 // ── WCSessionDelegate ───────────────────────────────────────────────────────

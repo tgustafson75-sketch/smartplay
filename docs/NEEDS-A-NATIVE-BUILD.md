@@ -1,4 +1,11 @@
-# Native-build packet — status 2026-09-10 (was 2026-08-29)
+# Native-build packet — status 2026-10-13 (was 2026-09-10)
+
+> **2026-10-13 batch — iOS 1.0.3 + Android 1.0.3, one build each** (full native audit, six sweeps):
+> iOS MediaPipe pose module in the binary (d04e9e41); iOS watch events reach JS (no empty
+> addListener overrides) + getConnectedNodeCount; earbud events via NativeEventEmitter (JS);
+> full camera/mic purpose strings; Android exact-frame thumbnails + runtime GPU→CPU pose fallback
+> (ad444eee) + bitmap/MPImage released per frame; Expo SDK 54 patch updates. Nothing else in this file
+> is waiting on a binary.
 
 **Parked by Tim 2026-08-21; worked 2026-08-29 while the paid launch waits on an EIN.**
 One build clears the list. Three builds is three review cycles.
@@ -51,7 +58,7 @@ weak hotel Wi-Fi is worse than good 5G and a flag would lie about exactly that c
 
 ---
 
-## 5. Watch command path · **UNBUILT, and the newest item on this list**
+## 5. Watch command path · **BUILT** (phone half in Android 31; watch half in Wear 1031/1032 — verified 2026-10-13)
 
 Added 2026-09-10. Tim, today: *"I thought all Kotlin builds were done."* Reasonably — the STORE
 builds were done and submitted. This landed after them.
