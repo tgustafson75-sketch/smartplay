@@ -132,6 +132,13 @@
       "reactNativeDirectoryCheck": {
         "listUnknownPackages": false
       }
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-video-thumbnails"
+        ]
+      }
     }
   }
 }
