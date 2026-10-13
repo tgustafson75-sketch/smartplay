@@ -61,7 +61,7 @@ import { useConversationLog } from '../store/conversationLogStore';
 import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
 import { generatePatternInsights } from '../services/patternDetection';
-import { logVoiceError, logTranscribeError, logVoiceSilentFail, noteVoiceTurnStarted } from '../services/voiceErrorLog';
+import { logVoiceError, logTranscribeError, logVoiceSilentFail, logVoiceDiag, noteVoiceTurnStarted } from '../services/voiceErrorLog';
 import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWarmed, getConnectionEvidence } from '../services/apiBase';
 import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 
@@ -1541,7 +1541,7 @@ export const useVoiceCaddie = ({
 
   // ── PROCESS AUDIO URI (shared by manual + VAD) ────
 
-  const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad' }): Promise<void> => {
+  const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad'; meterSilentMs?: number | null }): Promise<void> => {
     // 2026-08-10 — stuck-turn watchdog. A legitimate turn is bounded by the cold transcribe budget
     // plus the brain call; 90s is comfortably past any real one. Beyond that the flag is a leak, not
     // a turn in progress, so clear it and serve the user instead of ignoring them forever.
@@ -2168,7 +2168,12 @@ export const useVoiceCaddie = ({
         // 2026-06-16 — breadcrumb: the recording HAD bytes but Whisper returned empty
         // (near-silent capture — the classic cold first-record symptom). Distinguishes
         // "empty recording" from "too-small file" and "transcribe error" in the log.
-        logVoiceSilentFail('empty_transcript', { source: 'processAudioUri', sourceKind: source });
+        // meterSilent rides on this one report: before 10-13 the meter breadcrumb was mailed on its
+        // own, so a single quiet tap arrived as TWO Sentry issues that both said the same thing.
+        logVoiceSilentFail('empty_transcript', {
+          source: 'processAudioUri', sourceKind: source,
+          meterSilent: opts?.meterSilentMs !== undefined, durationMs: opts?.meterSilentMs ?? undefined,
+        });
         /**
          * 2026-08-10 — PERSIST + stay a person about it.
          *
@@ -2197,6 +2202,14 @@ export const useVoiceCaddie = ({
       }
       // 2026-08-10 — heard them: clear the miss streak so the next stumble starts gentle again.
       missStreakRef.current = 0;
+      // THE disagreement the meter breadcrumb exists to measure: the meter heard nothing and Whisper
+      // heard words. The meter still decides when to STOP listening, so a device where it lies is a
+      // device where endpointing is wrong. Word count only — never the player's words.
+      if (opts?.meterSilentMs !== undefined) {
+        logVoiceSilentFail('meter_silent_but_heard_words', {
+          source: 'processAudioUri', durationMs: opts.meterSilentMs, words: transcript.trim().split(/\s+/).length,
+        });
+      }
       // Note: source-based wake-word filtering removed 2026-05-17 after
       // breaking conversational requests like "how are you" that don't
       // include a caddie name. Spectator-noise filtering returns as an
@@ -3048,13 +3061,16 @@ export const useVoiceCaddie = ({
          * auto-opened-and-ignored case still resolves correctly — via Whisper returning empty rather
          * than via a guess made before asking. [[feels-like-a-real-caddie]]
          */
-        if (!micHasSpokenRef.current) {
-          // Kept as a diag breadcrumb: when this fires but the transcript comes back with words, the
-          // meter was wrong — which is the measurement that tells us how badly, on which devices.
+        const meterSilent = !micHasSpokenRef.current;
+        if (meterSilent) {
+          // A device breadcrumb, not a report: whether the meter was WRONG is only known once Whisper
+          // answers, so processAudioUri reports the outcome — 'meter_silent_but_heard_words' when it
+          // was wrong, and meterSilent on 'empty_transcript' when it was right. Mailing this line
+          // too filed every quiet tap in Sentry twice (2026-10-13 alerts).
           console.log('[voice] meter heard nothing in', durationMs, 'ms — transcribing anyway (meter is not the judge)');
-          logVoiceSilentFail('meter_silent_transcribing_anyway', { source: 'handleMicPress', durationMs });
+          logVoiceDiag('meter_silent_transcribing_anyway', { source: 'handleMicPress', durationMs });
         }
-        await processAudioUri(uri);
+        await processAudioUri(uri, meterSilent ? { meterSilentMs: durationMs } : undefined);
 
       } catch (err) {
         console.log('[voice] stop error:', err);

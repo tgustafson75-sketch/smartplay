@@ -200,10 +200,10 @@ describe('a tap that ends a capture which heard nothing means "start listening"'
   it('a capture is transcribed even when the meter heard nothing — the meter is not the judge', () => {
     // The veto is gone: no branch discards the audio before Whisper sees it.
     expect(src).not.toContain("logVoiceSilentFail('tap_ended_silent_capture'");
-    expect(src).toContain('await processAudioUri(uri);');
-    // The disagreement is still MEASURED — when this fires and a transcript comes back with words,
-    // that is the meter being wrong, and we want to know how often and on which devices.
-    expect(src).toContain("logVoiceSilentFail('meter_silent_transcribing_anyway'");
+    expect(src).toContain('await processAudioUri(uri, meterSilent ? { meterSilentMs: durationMs } : undefined);');
+    // The disagreement is still MEASURED — reported once Whisper answers, not before (see
+    // the-issue-inbox-carries-only-real-issues for why the pre-transcribe line is diag only).
+    expect(src).toContain("logVoiceSilentFail('meter_silent_but_heard_words'");
     // And the restart path survives for the case it was really for: a DEAD recording.
     expect(src).toContain('restartFresh = true;');
     expect(src).toContain('if (!restartFresh) return;');

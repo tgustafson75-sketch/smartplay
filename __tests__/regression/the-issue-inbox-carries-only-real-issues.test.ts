@@ -100,3 +100,30 @@ describe('the round trace is sent once, and arrives with its contents', () => {
     expect(rt).toMatch(/sendIssueFeedback\(/);
   });
 });
+
+/**
+ * 2026-10-13 (Sentry, two alerts from one quiet tap: "meter_silent_transcribing_anyway" and
+ * "empty_transcript", turn 3, warm). The meter line was logged BEFORE Whisper answered, so it could
+ * not know whether the meter was wrong — and was mailed anyway. When the meter was right (Whisper
+ * found nothing too) the player got one ask-again and Tim got two issues. When the meter was wrong
+ * (Whisper found words) the report never said so — the one measurement the line existed for.
+ */
+describe('a quiet tap files ONE report, and the meter disagreement is reported only when it happened', () => {
+  const vc = fs.readFileSync(path.join(root, 'hooks', 'useVoiceCaddie.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  it('the pre-transcribe meter line is a device breadcrumb, not a report', () => {
+    expect(vc).toContain("logVoiceDiag('meter_silent_transcribing_anyway'");
+    expect(vc).not.toContain("logVoiceSilentFail('meter_silent_transcribing_anyway'");
+  });
+
+  it('the meter verdict rides into processAudioUri and onto both outcomes', () => {
+    expect(vc).toContain('await processAudioUri(uri, meterSilent ? { meterSilentMs: durationMs } : undefined);');
+    const empty = vc.slice(vc.indexOf("logVoiceSilentFail('empty_transcript'"));
+    expect(empty.slice(0, 250)).toContain('meterSilent: opts?.meterSilentMs !== undefined');
+    // reported on the HEARD branch only — after the empty-transcript return, gated on the meter
+    const heard = vc.indexOf("logVoiceSilentFail('meter_silent_but_heard_words'");
+    expect(heard).toBeGreaterThan(vc.indexOf('missStreakRef.current = 0;'));
+    expect(vc.slice(heard - 80, heard)).toContain('if (opts?.meterSilentMs !== undefined) {');
+  });
+});
