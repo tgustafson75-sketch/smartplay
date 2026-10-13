@@ -8,6 +8,10 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### 2026-10-13 — First field users. iPhones had NO pose detector; fixed natively as 1.0.3 (`d04e9e41`).
+> Telemetry fixes OTA'd (`6559c220`). Next: Tim starts the iOS production build + submits; then
+> `npm run ota:baseline`. Detail: SPRINT-LOG Day 141.
+
 > ### 2026-10-11 — Swing review stops on the fault + course-engine audit fixes, shipped to main + OTA (Tim said go).
 > Detail: SPRINT-LOG Day 139. Device check on the Fold: open a swing with a fault → it stops on the frame,
 > rings the area, caption + Continue; Swing Trace shows by itself where an arc is stored; metres mode shows

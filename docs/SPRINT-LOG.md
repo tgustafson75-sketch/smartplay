@@ -5362,3 +5362,27 @@ orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-po
 - Sweep: Sightline stream-state reset + capture timeout (dev variant).
 - es/zh strings for the five new swing-review keys (fall back to English).
 - SmartBay AI (separate repo ~/smartbay-ai, smartbay-ai.vercel.app): live camera + real swing reads shipped.
+
+## Day 141 — 2026-10-13 — first real field users: Sentry triage
+
+**Shipped today**
+- `c85e1a97` + `6b3d86d5` — voice: one quiet tap files ONE Sentry report. The pre-transcribe meter line is
+  diag; `empty_transcript` carries meterSilent + durationMs; the actual disagreement reports as
+  `meter_silent_but_heard_words` (word count only).
+- `3adeb0fd` — pose_zero_frames names `no_pose_detector` when no native module ran and the cloud said
+  unconfigured (it blamed the player's framing). Confirmed in the field 11:16 CDT, same iPhone.
+- OTA `6559c220` (production, runtime 1.0.2) — the three commits above. Tim: field-user fixes ship now,
+  major changes Sunday.
+- `d04e9e41` — **iOS on-device pose** (1.0.3). Root cause of every iPhone pose_zero_frames: iOS never had a
+  detector (plugin never registered the Swift/model with Xcode; Swift called a close() iOS lacks; cloud
+  POSE_API_KEY unset — verified live). Verified on the iOS 26.5 simulator via CDP through the app's own
+  code: ~40ms/frame, 15/17 keypoints; 3870.mp4 → 20 frames, P1–P10 tagged.
+
+**Verified on device** — simulator only (iPhone 17, iOS 26.5). No real iPhone yet.
+
+**Open / carried**
+- iOS store build 1.0.3 (32) from `d04e9e41` — Tim starts it (auto mode blocks production builds), then
+  submit to Apple. After it starts: `npm run ota:baseline` (preflight refuses OTAs until then).
+- Local Xcode 27 SDK: watch target fails to compile (`CaddieState`/WCSessionDelegate) — EAS's Xcode
+  built it for 31; check the EAS log for the watch target.
+- iOS still has no club tracker (WebView engine is Android-only) — arc falls back to the cloud finder.
