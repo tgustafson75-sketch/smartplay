@@ -1,0 +1,62 @@
+/**
+ * 2026-10-13 — Sentry SMARTPLAY-CADDIE-MOBILE-J8: EXC_BAD_ACCESS in -[EXJavaScriptWeakObject
+ * .cxx_destruct], inside SharedObjectRegistry.clear, 4s into a cold start on an iPhone 13 (1.0.2+31) —
+ * the launch auto-apply reloading into a fresh OTA. expo-modules-core 3.0.30 (SDK 54) clears the
+ * registry on a dispatch queue; expo/expo#43937 fixed it on main only. Two halves:
+ *   native — patches/expo-modules-core+3.0.30.patch backports the lock (iOS 1.0.3+);
+ *   JS     — iOS never reloads (the update applies on the next launch); JS cannot tell a patched binary.
+ */
+import fs from 'fs';
+import path from 'path';
+
+const root = path.join(__dirname, '..', '..');
+
+describe('the registry patch', () => {
+  const patch = fs.readFileSync(path.join(root, 'patches', 'expo-modules-core+3.0.30.patch'), 'utf8');
+  const installed = fs.readFileSync(
+    path.join(root, 'node_modules', 'expo-modules-core', 'ios', 'Core', 'SharedObjects', 'SharedObjectRegistry.swift'), 'utf8',
+  ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
+  it('is pinned to the installed version — a bump would silently drop it', () => {
+    const v = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', 'expo-modules-core', 'package.json'), 'utf8')).version;
+    expect(v).toBe('3.0.30');
+    expect(patch).toContain('-  private static let lockQueue = DispatchQueue');
+  });
+
+  it('is applied: no dispatch queue left, every access goes through the lock on the caller\'s thread', () => {
+    expect(installed).not.toMatch(/lockQueue/);
+    expect(installed).toMatch(/private let lock = NSLock\(\)/);
+    expect(installed).toMatch(/internal func clear\(\) \{\s*locked \{\s*self\.pairs\.removeAll\(\)/);
+    // NSLocking.withLock needs iOS 16; the deployment target is 15.1
+    expect(installed).not.toMatch(/\.withLock\s*\{/);
+  });
+});
+
+describe('iOS never reloads its JS', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const RN = require('react-native') as { Platform: { OS: string }; NativeModules: Record<string, unknown> };
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const gate = require('../../services/updateApplyGate') as typeof import('../../services/updateApplyGate');
+  const os = RN.Platform.OS;
+  afterEach(() => { RN.Platform.OS = os; delete RN.NativeModules.MediaPipePose; });
+  const quiet = { ready: true, inRound: false, sessionActive: false, audioBusy: false, msSinceUserTurn: null, sinceLaunchMs: 3_000 };
+
+  it('iOS: never auto-applies — whatever modules the binary has', () => {
+    RN.Platform.OS = 'ios';
+    expect(gate.reloadIsSafe()).toBe(false);
+    expect(gate.mayAutoApplyUpdate(quiet)).toBe(false);
+    RN.NativeModules.MediaPipePose = {};   // 1.0.3 has the module but not the patch
+    expect(gate.mayAutoApplyUpdate(quiet)).toBe(false);
+  });
+
+  it('Android always may', () => {
+    RN.Platform.OS = 'android';
+    expect(gate.reloadIsSafe()).toBe(true);
+  });
+
+  it('the manual banner and the one reload owner both ask the gate', () => {
+    const strip = (f: string) => fs.readFileSync(path.join(root, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(strip('components/UpdateAvailableBanner.tsx')).toMatch(/&& !autoStillPossible && reloadIsSafe\(\);/);
+    expect(strip('services/autoUpdate.ts')).toMatch(/\.reloadIsSafe\(\)\) return;\s*try \{\s*await Updates\.reloadAsync\(\);/);
+  });
+});
