@@ -5,11 +5,9 @@
  * public surface; the JS bridge (services/mediaPipePoseService.ts)
  * calls into either platform identically.
  *
- * Status: SHIPS now but doesn't build on EAS until Apple Developer
- * Program enrollment lands. Once enrolled + the next EAS iOS build
- * runs, the withMediaPipePose config plugin copies this file into
- * ios/SmartPlayCaddie/MediaPipe/ and the pod 'MediaPipeTasksVision'
- * dependency resolves at pod install time.
+ * Status: IN THE BINARY from the 2026-10-13 build (before that withMediaPipePose copied this file but
+ * never registered it with the Xcode target, so iOS had no on-device pose at all). Verified on the
+ * iOS 26.5 simulator: 15/17 confident keypoints in ~40ms per frame, 20 frames from a 14.5s clip.
  *
  * MediaPipe Tasks Vision iOS uses the same model file format as
  * Android (.task), so the bundled assets/mediapipe/pose_landmarker_full.task
@@ -43,10 +41,9 @@ class MediaPipePose: NSObject {
         case "heavy":  name = "pose_landmarker_heavy"
         default:       name = "pose_landmarker_full"
         }
-        // The withMediaPipePose config plugin copies the model into
-        // SmartPlayCaddie/Resources/mediapipe/<name>.task — Xcode
-        // bundles that directory by default.
-        return Bundle.main.path(forResource: name, ofType: "task", inDirectory: "mediapipe")
+        // withMediaPipePose registers each .task in Copy Bundle Resources, which places it at the
+        // bundle ROOT. (2026-10-13: this looked in a "mediapipe/" subdirectory nothing created.)
+        return Bundle.main.path(forResource: name, ofType: "task")
     }
 
     /** Lazy init. Thread-safe via the queue. */
@@ -69,7 +66,8 @@ class MediaPipePose: NSObject {
         options.minPosePresenceConfidence = 0.4
         options.minTrackingConfidence = 0.4
 
-        landmarker?.close()
+        // iOS PoseLandmarker has no close() (Android's does); dropping the reference frees it.
+        landmarker = nil
         landmarker = try PoseLandmarker(options: options)
         loadedQuality = quality
     }
@@ -146,8 +144,7 @@ class MediaPipePose: NSObject {
 
     @objc(close:rejecter:)
     func close(resolver: @escaping RCTPromiseResolveBlock, rejecter: @escaping RCTPromiseRejectBlock) {
-        landmarker?.close()
-        landmarker = nil
+        queue.async { self.landmarker = nil }
         resolver(nil)
     }
 
@@ -186,9 +183,5 @@ class MediaPipePose: NSObject {
             "worldLandmarks": worldLandmarks,
             "inferenceMs": ms,
         ]
-    }
-
-    deinit {
-        landmarker?.close()
     }
 }

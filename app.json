@@ -2,7 +2,7 @@
   "expo": {
     "name": "SmartPlay Caddie",
     "slug": "smartplay-caddie",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "default",
     "icon": "./assets/images/icon-1024-appstore.png",
     "scheme": "smartplay",

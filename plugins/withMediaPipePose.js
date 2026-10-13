@@ -56,7 +56,9 @@ const {
   withMainApplication,
   withInfoPlist,
   withDangerousMod,
+  withXcodeProject,
   AndroidConfig,
+  IOSConfig,
 } = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
@@ -85,11 +87,11 @@ const path = require('path');
  * The APIs this app uses (PoseLandmarker, PoseLandmarkerResult, BaseOptions, Delegate, RunningMode,
  * BitmapImageBuilder, MPImage) are unchanged across the range.
  *
- * ANDROID ONLY in effect. The iOS mod below writes a `pod 'MediaPipeTasksVision'` line, but that pod
- * is not present in the generated Podfile and the iOS pose path was never finished (its sources are
- * not registered with the Xcode target), so no iOS binary is affected by this number.
+ * Android only. iOS pins its own pod below: the two SDKs version independently, and 0.10.35 is the
+ * version the iOS module was compiled and run against (2026-10-13, simulator, Tim's 3870.mp4).
  */
 const MP_VERSION = '0.10.29';
+const MP_IOS_VERSION = '0.10.35';
 const MP_MODEL_ASSET_RELPATH = 'mediapipe/pose_landmarker_full.task';
 // 2026-05-23 — All variants the JS service may load. The plugin
 // copies every one that's present in assets/mediapipe/. Missing
@@ -372,7 +374,7 @@ function withIOSPodfile(config) {
       if (contents.includes(marker)) return modConfig;
       const insertion = `
   # MediaPipe Pose Landmarker (BlazePose) — on-device pose detection.
-  pod 'MediaPipeTasksVision', '~> ${MP_VERSION}'
+  pod 'MediaPipeTasksVision', '${MP_IOS_VERSION}'
 `;
       if (contents.includes('use_react_native!')) {
         contents = contents.replace('use_react_native!', insertion + '  use_react_native!');
@@ -392,8 +394,8 @@ function withIOSSourceCopyAndModel(config) {
       const projectRoot = modConfig.modRequest.projectRoot;
       const platformRoot = modConfig.modRequest.platformProjectRoot;
       const sourceDir = path.join(projectRoot, 'ios-native');
-      const targetDir = path.join(platformRoot, 'SmartPlayCaddie', 'MediaPipe');
-      const files = ['MediaPipePoseModule.swift', 'MediaPipePose.m'];
+      const targetDir = path.join(platformRoot, modConfig.modRequest.projectName, IOS_GROUP);
+      const files = IOS_SOURCES;
       try {
         if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
         for (const f of files) {
@@ -414,7 +416,7 @@ function withIOSSourceCopyAndModel(config) {
       const projectRoot = modConfig.modRequest.projectRoot;
       const platformRoot = modConfig.modRequest.platformProjectRoot;
       const srcRoot = path.join(projectRoot, 'assets', 'mediapipe');
-      const dstAssetDir = path.join(platformRoot, 'SmartPlayCaddie', 'Resources', 'mediapipe');
+      const dstAssetDir = path.join(platformRoot, modConfig.modRequest.projectName, IOS_GROUP);
       try {
         if (!fs.existsSync(dstAssetDir)) fs.mkdirSync(dstAssetDir, { recursive: true });
         let copied = 0;
@@ -437,6 +439,51 @@ function withIOSSourceCopyAndModel(config) {
   ]);
 }
 
+const IOS_GROUP = 'MediaPipe';
+const IOS_SOURCES = ['MediaPipePoseModule.swift', 'MediaPipePose.m'];
+
+/**
+ * 2026-10-13 — THE MISSING STEP. Copying files into ios/ does not put them in the binary; only the
+ * Xcode project does. Sources go to the app target's Compile Sources, the .task models to its Copy
+ * Bundle Resources (they land at the bundle ROOT — MediaPipePoseModule.swift looks there). Sources
+ * are bare filenames inside a group whose path is <app>/MediaPipe: a doubled path is what failed
+ * build 16 (see withBluetoothMediaButton).
+ *
+ * Unlike the Bluetooth plugin this one THROWS on failure. A silently absent pose module is exactly
+ * the defect being fixed (Sentry 10-13: every iPhone swing read with no detector) — a broken prebuild
+ * is the cheaper way to find out.
+ */
+function withIOSCompileSources(config) {
+  return withXcodeProject(config, (modConfig) => {
+    const proj = modConfig.modResults;
+    const appName = modConfig.modRequest.projectName;
+    const projectRoot = modConfig.modRequest.projectRoot;
+    let groupKey = proj.findPBXGroupKey({ name: IOS_GROUP });
+    if (!groupKey) {
+      groupKey = proj.pbxCreateGroup(IOS_GROUP, `${appName}/${IOS_GROUP}`);
+      const mainKey = proj.findPBXGroupKey({ name: appName }) || proj.getFirstProject().firstProject.mainGroup;
+      proj.addToPbxGroup(groupKey, mainKey);
+    }
+    const targetUuid = proj.getFirstTarget().uuid;
+    const registered = () => JSON.stringify(proj.hash.project.objects.PBXBuildFile || {});
+    for (const f of IOS_SOURCES) {
+      if (registered().includes(f)) continue; // addSourceFile throws on a duplicate; prebuild may re-run
+      proj.addSourceFile(f, { target: targetUuid }, groupKey);
+    }
+    const models = MP_ALL_MODEL_VARIANTS.filter((v) => fs.existsSync(path.join(projectRoot, 'assets', 'mediapipe', v)));
+    if (models.length === 0) throw new Error('[withMediaPipePose] no pose model in assets/mediapipe — iOS pose would ship without one');
+    for (const m of models) {
+      if (registered().includes(m)) continue;
+      // Expo's helper, not xcode's addResourceFile — that one asserts a "Resources" group the
+      // Expo template does not have. Same call Expo uses for GoogleService-Info.plist.
+      IOSConfig.XcodeUtils.addResourceFileToGroup({
+        filepath: `${appName}/${IOS_GROUP}/${m}`, groupName: appName, isBuildFile: true, project: proj, targetUuid,
+      });
+    }
+    return modConfig;
+  });
+}
+
 // ─── Plugin entry point ─────────────────────────────────────────────
 function withMediaPipePose(config) {
   let next = config;
@@ -445,36 +492,14 @@ function withMediaPipePose(config) {
   next = withAndroidCameraPermission(next);
   next = withAndroidSourceCopyAndPackageReg(next);
   /**
-   * iOS — DEFERRED, and the reason is bigger than the original comment said.
-   *
-   * 2026-09-03 (Tim, final build) — Tim chose to attempt enabling this. I enabled it, ran a real
-   * prebuild, and STOPPED on the evidence, because the framing I gave him was wrong. This is not a
-   * working iOS path that was switched off. It is an UNFINISHED one:
-   *
-   *   • withIOSPodfile adds `pod 'MediaPipeTasksVision', '~> 0.10.14'`      ✓ verified in ios/Podfile
-   *   • withIOSSourceCopyAndModel copies the Swift/ObjC and the 9.4 MB
-   *     model into ios/SmartPlayCaddie/{MediaPipe,Resources}               ✓ verified on disk
-   *   • NOTHING registers those sources in the Xcode Sources build phase.  ✗ 0 references in
-   *     project.pbxproj, against 4 for BluetoothMediaButton — this plugin has no
-   *     withIOSCompileSources step at all.
-   *
-   * So uncommenting these three lines adds a CocoaPods dependency and ships a 9.4 MB model that
-   * nothing compiles against. NativeModules.MediaPipePose stays null on iOS exactly as before —
-   * every iOS swing still goes to the cloud — while the build carries new pod-resolution risk and
-   * new binary weight for no behaviour change. All of the risk, none of the benefit.
-   *
-   * That is the same defect withBluetoothMediaButton documents at :184-201: sources copied into the
-   * tree but never added to the target, so "this native module has never been in the binary". It
-   * cost build 16. Finishing this properly means writing the registration step AND proving the pod
-   * resolves — real native work whose only true verification is a completed EAS build, which is the
-   * thing we get one of.
-   *
-   * TO FINISH IT LATER: copy withIOSCompileSources from withBluetoothMediaButton.js (note the
-   * bare-filename requirement — a doubled path is what failed build 16), then re-enable all four.
+   * iOS — ENABLED 2026-10-13. Deferred since 09-03 because nothing registered the sources with the
+   * Xcode target (withIOSCompileSources above is that step). The cost of deferring arrived with the
+   * first field users: an iPhone 13 filed pose_zero_frames on every swing — no on-device module, and
+   * the cloud proxy unconfigured, so no iPhone has ever had a body read.
    */
-  // next = withIOSInfoPlist(next);  // camera perm already set by expo-camera
-  // next = withIOSPodfile(next);
-  // next = withIOSSourceCopyAndModel(next);
+  next = withIOSPodfile(next);
+  next = withIOSSourceCopyAndModel(next);
+  next = withIOSCompileSources(next);
   return next;
 }
 
