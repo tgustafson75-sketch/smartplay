@@ -30,7 +30,9 @@ import type { HoleGeometry } from './courseGeometryService';
 export type HazardIntelligence = {
   label: string;
   kind: 'water' | 'bunker' | 'hazard';
-  side: 'left' | 'right' | 'center';
+  /** 'unknown' (2026-10-13, audit #11): no side hint and no bearing to compute one — said as nothing,
+   *  never as 'center' (which told the caddie "straight ahead" about a hazard it could not place). */
+  side: 'left' | 'right' | 'center' | 'unknown';
   front: number;
   center: number;
   back: number;
@@ -115,7 +117,7 @@ export function computeHazardIntelligence(
       if (Math.abs(rel) <= 12) return 'center' as const;
       return rel < 0 ? 'left' as const : 'right' as const;
     })();
-    const side = c.sideHint ?? sideFromBearing ?? 'center';
+    const side = c.sideHint ?? sideFromBearing ?? ('unknown' as const);
     /**
      * 2026-10-10 (course audit) — only hazards AHEAD count. This took the nearest hazard in any
      * direction, so a fairway bunker already passed 20 yards BEHIND the player became "Bunker 20y",

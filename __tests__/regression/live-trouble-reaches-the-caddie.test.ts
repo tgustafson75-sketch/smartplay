@@ -43,6 +43,11 @@ describe('the caddie knows WHERE the trouble is', () => {
     expect(intel!.carryToClear).toBeGreaterThanOrEqual(intel!.front);
   });
 
+  it('no bearing and no side hint: the side is UNKNOWN, never "center" (audit #11, 2026-10-13)', () => {
+    const intel = computeHazardIntelligence(player, geometry, null, null);
+    expect(intel!.side).toBe('unknown');
+  });
+
   it('returns null rather than guessing when there is no geometry or no fix', () => {
     expect(computeHazardIntelligence(null, geometry, null, 0)).toBeNull();
     expect(computeHazardIntelligence(player, null, null, 0)).toBeNull();

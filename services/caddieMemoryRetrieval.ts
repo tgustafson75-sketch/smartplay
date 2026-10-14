@@ -101,7 +101,8 @@ function liveTroubleLine(courseId: string | null | undefined, hole: number | nul
     const intel = hz.computeHazardIntelligence({ lat: fix.lat, lng: fix.lng }, geometry, null, bearing);
     if (!intel) return null;
 
-    const side = intel.side === 'center' ? 'straight ahead' : `on the ${intel.side}`;
+    // An unplaced hazard gets no side at all — never "straight ahead" (audit #11).
+    const side = intel.side === 'center' ? ' straight ahead' : intel.side === 'unknown' ? '' : ` on the ${intel.side}`;
     // Reach vs CARRY is the whole point: 205 to reach a bunker and 218 to clear it are different
     // clubs, and "watch out for the bunker" is neither.
     const carry = Number.isFinite(intel.carryToClear) && intel.carryToClear > 0
@@ -110,7 +111,7 @@ function liveTroubleLine(courseId: string | null | undefined, hole: number | nul
     const safe = intel.side === 'left' ? ' Safe miss: right-center.'
       : intel.side === 'right' ? ' Safe miss: left-center.'
       : '';
-    return `TROUBLE ON THIS SHOT (measured live from GPS + this hole's mapped geometry — say WHERE it is, never just "watch out for hazards"): ${intel.label} ${side}, ${Math.round(intel.front)}y to reach${carry}.${safe}`;
+    return `TROUBLE ON THIS SHOT (measured live from GPS + this hole's mapped geometry — say WHERE it is, never just "watch out for hazards"): ${intel.label}${side}, ${Math.round(intel.front)}y to reach${carry}.${safe}`;
   } catch {
     return null;
   }
