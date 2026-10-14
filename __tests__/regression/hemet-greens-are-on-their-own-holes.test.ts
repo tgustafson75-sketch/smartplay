@@ -107,3 +107,18 @@ describe('the main database build runs it', () => {
     expect(src).toMatch(/forgetServerHoles\(db, cloudKey \?\? courseId, emptied\)/);
   });
 });
+
+describe('a way is drawn from tee to green (Wachusett hole 11, live 2026-10-13)', () => {
+  it('a tee beside the previous hole\'s green does not turn the hole around', () => {
+    const ring = (c: L) => [0, 1, 2, 3, 4, 5].map((k) => ({ lat: c.lat + 0.00008 * Math.cos(k), lng: c.lng + 0.0001 * Math.sin(k) }));
+    const g10 = { lat: 42.3600, lng: -71.7900 };
+    const g11 = { lat: 42.3640, lng: -71.7900 };                 // ~485 yd north
+    const tee11 = { lat: 42.36009, lng: -71.7900 };              // 10 yd from green 10
+    const end11 = { lat: 42.36375, lng: -71.7900 };              // ~27 yd short of green 11's centre (front edge)
+    const way11: OsmHoleWay = { ref: 11, par: 4, pts: [tee11, end11] };
+    const rings2: OsmPolygon[] = [g10, g11].map((c) => ({ polygon: ring(c), centroid: c, name: null }));
+    const [h11] = holeWaysToHoles([way11], rings2);
+    expect(haversineYards(h11.green, g11)).toBeLessThan(5);
+    expect(haversineYards(h11.tee, tee11)).toBeLessThan(1);
+  });
+});

@@ -383,8 +383,12 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
           rows.push({ ref: w.ref!, par: w.par ?? parFromYards(center), parEstimated: w.par == null, tee, green: g, front: g, back: g, ring: [] });
           continue;
         }
-        const greenEnd = !gB || (gA && gA.d <= gB.d) ? gA! : gB;
-        const tee = greenEnd === gA ? B : A;
+        // 2026-10-13 (Wachusett hole 11) — trust the way's DIRECTION: OSM draws a hole from tee to green,
+        // so the END is the green whenever it is at one. "Whichever end is nearer a green" reversed
+        // hole 11, whose tee sits a few yards from hole 10's green: the tee end won, and the hole got
+        // hole 10's green. The START is the green only when the end is at no green (a reversed way).
+        const greenEnd = gB ?? gA!;
+        const tee = greenEnd === gB ? A : B;
         // Front/back of the green relative to the tee, from the actual polygon.
         let front = greenEnd.poly.centroid; let back = greenEnd.poly.centroid;
         let dF = Infinity; let dB = -Infinity;
