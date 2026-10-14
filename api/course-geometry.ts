@@ -54,7 +54,6 @@ const OVERPASS_MIRRORS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
-const OVERPASS_URL = OVERPASS_MIRRORS[0];
 
 /**
  * POST an Overpass query, walking the mirrors until one answers with elements.
@@ -364,7 +363,7 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
         }
         return best ? { poly: best, d: bd } : null;
       };
-      const rows: Array<{ ref: number; par: number; parEstimated: boolean; tee: Loc; green: Loc; front: Loc; back: Loc; ring: Loc[] }> = [];
+      const rows: { ref: number; par: number; parEstimated: boolean; tee: Loc; green: Loc; front: Loc; back: Loc; ring: Loc[] }[] = [];
       for (const w of refWays.sort((a, b) => (a.ref! - b.ref!))) {
         const A = w.pts[0]; const B = w.pts[w.pts.length - 1];
         // An end is AT a green only within 60 yd of one — the nearest of 19 rings 300 yd away is a
@@ -718,7 +717,7 @@ function pointToSegmentYards(p: Loc, a: Loc, b: Loc): number {
 // Signed lateral offset: positive = right of bearing tee→green, negative = left.
 function lateralYards(p: Loc, tee: Loc, green: Loc): number {
   const cosLat = Math.cos(toRad(tee.lat));
-  const tx = 0, ty = 0;
+  const ty = 0;
   const gx = (green.lng - tee.lng) * cosLat * 111_111;
   const gy = (green.lat - tee.lat) * 111_111;
   const px = (p.lng - tee.lng) * cosLat * 111_111;
@@ -1538,9 +1537,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!h.green && osmGreens.length > 0) {
           // Green: when the tee is already known, the card yardage pins WHICH green belongs to this
           // hole; otherwise fall back to walking the routing (nearest to the previous green).
-          const idx = h.tee
-            ? bestByTargetYards(h.tee, osmGreens, usedGreens, h.yardage)
-            : nearestUnassigned(anchor, osmGreens, usedGreens);
+          /**
+           * 2026-10-13 — NO TEE, NO GREEN. Without a tee, the green was "nearest unassigned to the
+           * previous green" — walking the routing from the clubhouse. Measured against OSM's numbered
+           * holes, that walk put 17 of 18 greens on the wrong hole at BOTH Hemet Golf Club and Green
+           * Hill (Worcester), and it is exactly what runs whenever Overpass fails the numbered-holes
+           * query. A green with nothing to anchor it is left empty: the stored build (if a good one
+           * exists) is served instead, and the device's vision tier fills the hole he is standing on.
+           * With a tee, the card yardage still picks the green — that pairing is anchored.
+           */
+          void anchor;
+          const idx = h.tee ? bestByTargetYards(h.tee, osmGreens, usedGreens, h.yardage) : -1;
           if (idx >= 0) {
             usedGreens.add(idx);
             h.green = osmGreens[idx];
@@ -1552,10 +1559,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // 2026-08-10 — THE orientation fix. Was nearestUnassigned(green, tees), which always
           // grabbed the next hole's tee sitting beside this green (~50y "holes", garbage bearings).
           // Match the card yardage instead: the real tee is ~h.yardage away, the decoy is ~300 off.
-          const teeAnchor = h.green ?? lastAnchor;
-          const idx = h.green
-            ? bestByTargetYards(h.green, osmTees, usedTees, h.yardage)
-            : nearestUnassigned(teeAnchor, osmTees, usedTees);
+          // 2026-10-13 — and no green, no tee: a tee guessed from the routing walk steers hole advance
+          // to the wrong hole as surely as a wrong green steers the yardage.
+          const idx = h.green ? bestByTargetYards(h.green, osmTees, usedTees, h.yardage) : -1;
           if (idx >= 0) {
             usedTees.add(idx);
             h.tee = osmTees[idx];
