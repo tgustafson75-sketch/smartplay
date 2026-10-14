@@ -88,7 +88,7 @@ describe('one yardage, everywhere — voice included', () => {
 
 describe('the caddie is told the truth about the pin', () => {
   it('the resolver marks a pin it applied; the payload says whether the yardages include it', () => {
-    expect(code('services/yardageResolver.ts')).toMatch(/value: adj\.yards,\s*pin_applied: true,/);
+    expect(code('services/yardageResolver.ts')).toMatch(/value: adj\.yards,\s*(center: r\.value,\s*)?pin_applied: true,/);
     expect(code('services/caddieRequestBody.ts')).toMatch(/const inYardages = declared\.pin\.depth === 'middle' \|\| resolveYardage\(currentHole \?\? undefined\)\.pin_applied === true;/);
   });
   it('the brain only hears "already plays to that flag" when it does', () => {

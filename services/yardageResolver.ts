@@ -59,6 +59,10 @@ export interface ResolvedYardage {
   /** True only when a declared pin actually moved `value` (applyDeclaredPin). 2026-10-10 — the caddie
    *  was told "already plays to that flag" even when the pin was declined (no edge / estimate). */
   pin_applied?: boolean;
+  /** 2026-10-13 (course audit #4) — the green's CENTRE when a declared pin moved `value` (to the flag).
+   *  A surface labelled CENTER showed the pin number: back pin, F 140 / CENTER 158 / B 163 with the
+   *  true centre at 146. Absent when no pin moved anything — then `value` IS the centre. */
+  center?: number | null;
   confidence: YardageConfidence;
   /** Human-readable hint Kevin can echo. Always populated. */
   reason: string;
@@ -137,6 +141,7 @@ function applyDeclaredPin(
   return {
     ...r,
     value: adj.yards,
+    center: r.value,
     pin_applied: true,
     // front/back are the GREEN's edges and do not move because the flag did.
     reason: `${r.reason} Pin ${describePin(pin)}: playing ${adj.yards} (${adj.delta > 0 ? '+' : ''}${adj.delta} on the middle).`,
@@ -387,6 +392,8 @@ export type FmbReason = 'ok' | 'no_geometry' | 'no_fix' | 'no_hole' | 'estimated
 
 export function resolvedToFmb(r: ResolvedYardage | null): {
   front: number | null; middle: number | null; back: number | null; reason: FmbReason;
+  /** The green's centre — differs from `middle` (to the flag) only when a declared pin moved it. */
+  center: number | null;
 } | null {
   if (!r) return null;
   if (r.front == null && r.value == null && r.back == null) return null;
@@ -395,5 +402,5 @@ export function resolvedToFmb(r: ResolvedYardage | null): {
     : r.source === 'none' ? 'no_hole'
     : r.is_fallback ? 'estimated'
     : 'ok';
-  return { front: r.front, middle: r.value, back: r.back, reason };
+  return { front: r.front, middle: r.value, back: r.back, reason, center: r.pin_applied ? (r.center ?? r.value) : r.value };
 }

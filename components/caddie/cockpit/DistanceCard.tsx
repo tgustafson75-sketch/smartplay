@@ -27,8 +27,11 @@ import { useTranslation } from 'react-i18next';
 
 export interface FrontMiddleBack {
   front: number | null;
+  /** To the flag (pin-adjusted when a pin was declared) — the hero "TO PIN" number. */
   middle: number | null;
   back: number | null;
+  /** The green's centre — the CENTER cell. Absent → `middle` is the centre. (2026-10-13) */
+  center?: number | null;
   // 2026-05-21 — Consolidation 5: honest fallback source. When
   // `reason === 'no_geometry'` the middle value is the scorecard
   // tee→green TOTAL (not a live GPS read — doesn't decrease as
@@ -62,6 +65,8 @@ export function DistanceCard({
   const middle = toDisplayDistance(fmb?.middle ?? baseYardage ?? null, unit);
   const front = toDisplayDistance(fmb?.front ?? null, unit);
   const back = toDisplayDistance(fmb?.back ?? null, unit);
+  // CENTER is the green's centre, not the flag: with a back pin these differ by a club.
+  const center = toDisplayDistance(fmb?.center ?? fmb?.middle ?? baseYardage ?? null, unit);
   const unitLabel = unit === 'meters' ? 'METERS TO PIN' : 'YARDS TO PIN';
   // 2026-05-21 — Consolidation 5: honest fallback labeling. When
   // SmartFinder fell back to the scorecard tee→green total (no
@@ -127,7 +132,7 @@ export function DistanceCard({
 
       <View style={[styles.fmbRow, { borderTopColor: colors.border }]}>
         <FmbCell label={t('cockpit_distance_card.label.front')} value={front} accent />
-        <FmbCell label={t('cockpit_distance_card.label.center')} value={middle} hero />
+        <FmbCell label={t('cockpit_distance_card.label.center')} value={center} hero />
         <FmbCell label={t('cockpit_distance_card.label.back')} value={back} accent />
       </View>
     </Pressable>
