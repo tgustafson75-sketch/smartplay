@@ -901,6 +901,18 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
       console.log(`[gps] foreground one-shot returned invalid coord lat=${pos.coords.latitude} lng=${pos.coords.longitude}`);
       return;
     }
+    /**
+     * 2026-10-13 (SmartVision/GPS audit #7) — the one-shot skips processFix's jump/speed checks on
+     * purpose (he may really have moved far while the app was away), but it skipped the ACCURACY gate
+     * too: a coarse fix became the stored position, and the 300 m jump check then rejected the good
+     * fixes that followed for up to ~90 s. Same accuracy bar as every live fix, and an OS-cached
+     * position older than 30 s is not where he is now. The restarted watch delivers the real one.
+     */
+    const acc = pos.coords.accuracy ?? null;
+    if (acc == null || acc > OUTLIER_ACCURACY_M || Date.now() - pos.timestamp > 30_000) {
+      console.log(`[gps] foreground one-shot not seeded (accuracy ${acc ?? '?'}m, age ${Date.now() - pos.timestamp}ms) — waiting for the watch`);
+      return;
+    }
     const fresh: GpsFix = {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
