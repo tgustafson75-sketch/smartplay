@@ -204,6 +204,18 @@ export function findOrphanExports(): string[] {
  * you still remember what it was for — which is the entire point of this file.
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
+  // ── 2026-10-14: SmartBay exchange v1 ────────────────────────────────────────
+  'services/bayExchange.ts :: parseBayLesson':
+    'SURFACE. The strict reader half of importBayLessonWithFeedback (Settings → Import SmartBay lesson calls ' +
+    'that); exported so __tests__/logic/bay-exchange.test.ts can hold it to the same example files the bay\'s ' +
+    'own bay-core tests parse.',
+  'services/bayExchange.ts :: importBayLesson':
+    'SURFACE. The store-writing half of importBayLessonWithFeedback, exported for the same test (one record, ' +
+    'dated at the lesson, no plan tick, labelled by the fix).',
+  'services/bayExchange.ts :: parsePlayer':
+    'SURFACE. The bay\'s player-file reader, copied from smartbay-ai bay-core/exchange.ts so this app\'s own ' +
+    'buildPlayerExport is tested against the exact reader the bay applies. PARKED for its in-app caller: ' +
+    'Caddie 2.0 hosts the bay inside SwingLab and reads player files there.',
   // ── 2026-10-05: one analysis path ───────────────────────────────────────────
   'services/swing/analysisPipeline.ts :: checkOrder':
     'DUPE (kept for its tests). The club-before-pose ORDER it checked from two screens is now enforced by ' +

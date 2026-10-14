@@ -232,7 +232,11 @@
       "tee_time_rate_helper": "The rate to ask for when you book. The course checks eligibility at the counter — SmartPlay doesn't verify it.",
       "redeem_code": "Redeem a code",
       "redeem_code_sub_ios": "Founding or promo code, redeemed through the App Store",
-      "redeem_code_sub_android": "Founding or promo code, redeemed through Google Play"
+      "redeem_code_sub_android": "Founding or promo code, redeemed through Google Play",
+      "import_smartbay_lesson": "Import SmartBay lesson",
+      "import_smartbay_lesson_sub": "Pick the lesson file you saved from your SmartBay report. It goes into your practice history with the fix, the drill and your before and after.",
+      "export_player_for_smartbay": "Export player for SmartBay",
+      "export_player_for_smartbay_sub": "Share your handedness, handicap index, miss and most frequent faults as a file for a SmartBay bay."
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -298,7 +302,9 @@
       "open_the_owner_console": "Open the owner console",
       "remove_home_course": "Remove {{course}} from your home courses",
       "view_subscription_plans": "View subscription plans and restore purchases",
-      "redeem_code": "Redeem a promo or founding code"
+      "redeem_code": "Redeem a promo or founding code",
+      "import_smartbay_lesson": "Import SmartBay lesson",
+      "export_player_for_smartbay": "Export player for SmartBay"
     },
     "label": {
       "handedness": "Handedness",

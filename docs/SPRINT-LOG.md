@@ -5451,3 +5451,14 @@ not seed a coarse/cached fix · SmartVision shows the resolver's number when GPS
 - Orphan guard now reads `index.js` (CORPUS_FILES; throws if missing).
 ### Notes
 - OTA source maps NOT uploaded — `~/.config/smartplay/sentry-auth-token` still missing (Cowork ask).
+
+## Day 142 (cont.) — 2026-10-14 — SmartBay ↔ Caddie JSON exchange v1 (not OTA'd)
+### Shipped today
+- `services/bayExchange.ts`: import `smartplay/bay-lesson`, export `smartplay/player`. Spec + authority: smartbay-ai `docs/EXCHANGE.md`.
+- Settings → Devices: "Import SmartBay lesson" / "Export player for SmartBay" (en/es/zh).
+- Import writes ONE practice record (environment `bay`, focus null → no SmartPlan tick, dated at the lesson via new `recordCompletedSession({ at })`), labelled by the fix, never the instructor. The label reaches the brain through practiceFocusBlock.
+- `store/bayLessonStore.ts` (`bay-lessons-v1`): backed up + grow-mostly.
+- Gates: tsc ✓, lint 0 new errors, jest 572/572 suites ✓, sim 1077/1077 ✓. Guard break-tested.
+### Open / carried
+- Not OTA'd. Tim: `npm run ota:production` when ready.
+- No SwingLab card for imported lessons yet (store holds them; practice history + brain already show the fix).

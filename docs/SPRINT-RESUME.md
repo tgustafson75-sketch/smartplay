@@ -8,6 +8,7 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+- **2026-10-14 (afternoon):** SmartBay ↔ Caddie JSON exchange v1 in Settings (import a bay lesson, export the player). Committed, NOT OTA'd. Detail: SPRINT-LOG Day 142 (cont.).
 - **2026-10-14:** OTA 8bb5a645 live — altitude plays-like, BG location task defined at entry (index.js), pocket-tracking-off alert. Source maps unuploaded until the Sentry token file exists. expo-modules-core reload fix still waits on the next native build.
 
 > ### 2026-10-14 (overnight) — course engine fixed at the root: numbered OSM holes; no unanchored greens.

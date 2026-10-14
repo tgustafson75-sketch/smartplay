@@ -54,10 +54,16 @@
     "text": {
       "no_home_courses_yet": "尚未设置 — 请从球场列表中选择。",
       "choose_home_courses": "从球场列表中选择",
-      "set_up_your_profile": "设置你的资料"
+      "set_up_your_profile": "设置你的资料",
+      "import_smartbay_lesson": "导入 SmartBay 课程",
+      "import_smartbay_lesson_sub": "选择你从 SmartBay 报告中保存的课程文件。它会连同纠正要点、练习和前后对比一起加入你的练习记录。",
+      "export_player_for_smartbay": "为 SmartBay 导出球员资料",
+      "export_player_for_smartbay_sub": "将你的惯用手、差点指数、常见失误方向和最常见的动作问题导出为文件，供 SmartBay 使用。"
     },
     "accessibility_label": {
-      "remove_home_course": "将 {{course}} 从常打球场中移除"
+      "remove_home_course": "将 {{course}} 从常打球场中移除",
+      "import_smartbay_lesson": "导入 SmartBay 课程",
+      "export_player_for_smartbay": "为 SmartBay 导出球员资料"
     }
   },
   "scorecard": {

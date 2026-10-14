@@ -411,6 +411,21 @@ export default function Settings() {
     })();
   }, []);
 
+  // 2026-10-14 — SmartBay AI exchange (services/bayExchange): a lesson from the bay comes in, this
+  // player's profile goes out. The whole flow and every message lives in the service.
+  const onImportBayLesson = useCallback(() => {
+    void (async () => {
+      const { importBayLessonWithFeedback } = await import('../services/bayExchange');
+      await importBayLessonWithFeedback();
+    })();
+  }, []);
+  const onExportPlayerForBay = useCallback(() => {
+    void (async () => {
+      const { exportPlayerForBayWithFeedback } = await import('../services/bayExchange');
+      await exportPlayerForBayWithFeedback();
+    })();
+  }, []);
+
   // 2026-06-04 — Personal-best capture for the dashboard Highlights card.
   // longestDrive auto-updates from logShot when a Driver shot beats the
   // current high (see roundStore.logShot); longestPuttFeet is manual — putts are captured as counts
@@ -1304,6 +1319,30 @@ export default function Settings() {
               </Text>
             </View>
             <Ionicons name="barbell-outline" size={20} color={colors.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={onImportBayLesson}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.accessibility_label.import_smartbay_lesson')}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>{t('settings.text.import_smartbay_lesson')}</Text>
+              <Text style={subStyle}>{t('settings.text.import_smartbay_lesson_sub')}</Text>
+            </View>
+            <Ionicons name="golf-outline" size={20} color={colors.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={onExportPlayerForBay}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.accessibility_label.export_player_for_smartbay')}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>{t('settings.text.export_player_for_smartbay')}</Text>
+              <Text style={subStyle}>{t('settings.text.export_player_for_smartbay_sub')}</Text>
+            </View>
+            <Ionicons name="share-outline" size={20} color={colors.accent} />
           </TouchableOpacity>
           {/* 2026-06-10 — Health Data merged into "Devices & Health" (both are
               external integrations). Master toggle for the Health Connect

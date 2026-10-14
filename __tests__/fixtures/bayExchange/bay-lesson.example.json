@@ -1,0 +1,74 @@
+{
+  "format": "smartplay/bay-lesson",
+  "version": 1,
+  "exportedAt": 1792016900000,
+  "source": {
+    "app": "smartbay-ai",
+    "bay": "Bay 1 · 24/7",
+    "coach": "tank"
+  },
+  "player": {
+    "installId": "spc-k3x9q1m2lq8z",
+    "playerId": "account_holder"
+  },
+  "lesson": {
+    "at": 1792016000000,
+    "focus": "Full swing",
+    "swings": 11,
+    "targetFault": "early_extension",
+    "target": {
+      "label": "Early extension",
+      "cue": "Hips moved toward the ball"
+    },
+    "drill": {
+      "id": "choke_down",
+      "name": "Choke down",
+      "how": "Choke down an inch, maybe two. Practice swing: barely brush a few blades of grass. Full backswing. Down and around, let the hips lead.",
+      "reps": 5
+    },
+    "findings": [
+      {
+        "label": "Early extension",
+        "detail": "Hips moved toward the ball — 2 of 3",
+        "status": "fix"
+      }
+    ],
+    "compare": [
+      {
+        "label": "Swings with the fault",
+        "before": 67,
+        "after": 33,
+        "unit": "%",
+        "improved": true
+      }
+    ]
+  },
+  "shots": [
+    {
+      "id": "s1",
+      "swingAt": 1792016010000,
+      "tempo": 2.4,
+      "faults": [
+        {
+          "fault": "early_extension",
+          "severity": "moderate"
+        }
+      ],
+      "sim": {
+        "carry": 148,
+        "ballSpeed": 112,
+        "launch": 17.2,
+        "spin": 6400,
+        "offline": -6,
+        "club": "7 Iron"
+      }
+    },
+    {
+      "id": "s2",
+      "swingAt": 1792016040000,
+      "tempo": 3,
+      "faults": [],
+      "sim": null
+    }
+  ]
+}

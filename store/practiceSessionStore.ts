@@ -80,6 +80,8 @@ interface PracticeSessionState {
     label?: string | null;
     swingCount?: number | null;
     environment?: string | null;
+    /** When the session happened, for one recorded elsewhere (a SmartBay lesson). Default: now. */
+    at?: number;
     // 2026-06-30 (audit M4) — per-swing samples (club/tempo/tier/divergence) so the
     // practice-detail screen shows real striation + tempo trend, not just "Session logged".
     swingSamples?: RangeSwingSample[];
@@ -166,8 +168,8 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
           if (active.focus) tickPlanDay(active.focus);
         }
       },
-      recordCompletedSession: ({ kind, focus, drillId, label, swingCount, environment, swingSamples }) => {
-        const now = Date.now();
+      recordCompletedSession: ({ kind, focus, drillId, label, swingCount, environment, swingSamples, at }) => {
+        const now = at ?? Date.now();
         // 2026-06-30 (audit M4) — stamp the collected per-swing samples so the detail
         // screen renders real per-club striation + tempo trend (was always empty here).
         const swings: PracticeSwing[] = (swingSamples ?? []).map((sample) => ({ ...sample, id: newId('sw'), at: now }));

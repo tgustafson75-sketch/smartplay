@@ -202,7 +202,10 @@ non-negotiable core:
 - Prefer synthetic/programmatic verification over field testing. A field round is the FINAL gate,
   never the first suggestion.
 - Aggressive timeline AND clean product are both non-negotiable. Never accumulate polish debt.
-- **Never ship the "Tank" persona voice in any app. Kevin and Serena only.** [[feedback-no-tank-persona]]
+- **Never ship the "Tank" persona in SmartPlay Caddie. Kevin and Serena only.** [[feedback-no-tank-persona]]
+  Updated 2026-10-14 (Tim): Tank is **bay-only by design**. SmartBay AI coaches in the instructor's own
+  method, with his consent; Caddie coaches without an instructor's bias. Caddie 2.0 surfaces the bay
+  inside SwingLab as the AI Caddie module. Until then the apps exchange JSON (services/bayExchange.ts).
 
 ---
 ---

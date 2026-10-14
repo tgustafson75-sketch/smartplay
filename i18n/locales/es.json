@@ -54,10 +54,16 @@
     "text": {
       "no_home_courses_yet": "Ninguno todavía: elígelos en la lista de campos.",
       "choose_home_courses": "Elegir en la lista de campos",
-      "set_up_your_profile": "Configura tu perfil"
+      "set_up_your_profile": "Configura tu perfil",
+      "import_smartbay_lesson": "Importar lección de SmartBay",
+      "import_smartbay_lesson_sub": "Elige el archivo de la lección que guardaste de tu informe de SmartBay. Se añade a tu historial de práctica con la corrección, el ejercicio y tu antes y después.",
+      "export_player_for_smartbay": "Exportar jugador para SmartBay",
+      "export_player_for_smartbay_sub": "Comparte tu mano dominante, índice de hándicap, tu fallo y tus errores más frecuentes como archivo para un bay de SmartBay."
     },
     "accessibility_label": {
-      "remove_home_course": "Quitar {{course}} de tus campos habituales"
+      "remove_home_course": "Quitar {{course}} de tus campos habituales",
+      "import_smartbay_lesson": "Importar lección de SmartBay",
+      "export_player_for_smartbay": "Exportar jugador para SmartBay"
     }
   },
   "scorecard": {

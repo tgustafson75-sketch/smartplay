@@ -25,7 +25,7 @@ export const GROW_MOSTLY_KEYS: readonly string[] = [
   'caddie-memory-v1', 'club-stats-v1', 'club-bag-v1', 'player-profile-v2',
   // Practice / points / progression
   'practice-points', 'points-store-v1', 'points-baseline', 'workout-store-v1',
-  'practice-session-v1', 'practice-store',
+  'practice-session-v1', 'practice-store', 'bay-lessons-v1',
   // 2026-08-31 (Tim) — the four social/relationship stores were REMOVED from the backup entirely
   // (they hold other people's names and profiles), so there is nothing here to protect from
   // clobbering. This list must remain a SUBSET of snapshot.ts BACKED_UP_STORE_KEYS; leaving them

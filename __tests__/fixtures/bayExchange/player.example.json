@@ -1,0 +1,19 @@
+{
+  "format": "smartplay/player",
+  "version": 1,
+  "exportedAt": 1792015000000,
+  "source": { "app": "smartplay-caddie", "appVersion": "1.0.3" },
+  "player": {
+    "installId": "spc-k3x9q1m2lq8z",
+    "playerId": "account_holder",
+    "firstName": "Sam",
+    "handedness": "right",
+    "handicapIndex": 14.2,
+    "dominantMiss": "right",
+    "goal": "Break 80"
+  },
+  "tendencies": [
+    { "fault": "over_the_top", "count": 23 },
+    { "fault": "early_extension", "count": 9 }
+  ]
+}
