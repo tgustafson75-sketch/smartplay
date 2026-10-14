@@ -1262,7 +1262,7 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
          * is not allowed to be right two times in three. When this line is present it is the number
          * to club to, full stop; there is no judgement left to make.
          */
-        const pl = (wx as { playsLike?: { actualYds: number; playsLikeYds: number; deltaYds: number; fromWind: number; fromTemp: number; fromWet: number; fromElevation: number } | null }).playsLike;
+        const pl = (wx as { playsLike?: { actualYds: number; playsLikeYds: number; deltaYds: number; fromWind: number; fromTemp: number; fromWet: number; fromElevation: number; fromAltitude?: number } | null }).playsLike;
         /**
          * 2026-08-24 — DO THE LOOKUP IN CODE. The model does not get to do this arithmetic.
          *
@@ -1300,6 +1300,8 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
             // Downhill is the one that embarrasses a caddie in front of his player: quoting the
             // card number on a shot that is falling away flies it through the green.
             pl.fromElevation ? `${Math.abs(pl.fromElevation)} ${pl.fromElevation < 0 ? 'DOWNHILL' : 'uphill'}` : null,
+            // 2026-10-13 — thin air at altitude (always shorter): "6 for the altitude".
+            pl.fromAltitude ? `${Math.abs(pl.fromAltitude)} for the altitude` : null,
           ].filter(Boolean).join(', ');
           lines.push(`- IT PLAYS ${pl.playsLikeYds}, NOT ${pl.actualYds}${why ? ` (${why})` : ''}. This is measured, not estimated — CLUB TO ${pl.playsLikeYds}. Read down their carries and take the FIRST club AT OR ABOVE ${pl.playsLikeYds} — never one that carries less than ${pl.playsLikeYds} while a longer club is in the bag. Do not talk about the number: he asked what to hit, so give him the club that covers ${pl.playsLikeYds} and at most three words of why ("six — it's into 16").`);
         }

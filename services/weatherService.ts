@@ -23,6 +23,9 @@ export type WeatherSnapshot = {
   temp_f: number | null;
   humidity: number | null;
   pressure_hpa: number | null;
+  /** Station (ground-level) pressure — carries the course's ALTITUDE (pressure_hpa is sea-level adjusted).
+   *  Optional: older cached snapshots and other providers lack it; plays-like then adds no altitude term. */
+  station_pressure_hpa?: number | null;
   wind_speed_mph: number;          // 0 when calm
   wind_direction_deg: number | null; // meteorological convention: degrees the wind comes FROM
   wind_gust_mph: number | null;
