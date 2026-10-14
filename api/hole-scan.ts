@@ -160,26 +160,34 @@ function safeParse(text: string): Record<string, unknown> | null {
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (applyCors(req, res)) return;
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!allowInference(req, res, 'hole-scan')) return;
-  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'No AI provider configured' });
-  }
-  try {
-    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}) as Record<string, unknown>;
-    const image_b64 = String(body.image_b64 ?? '').trim();
-    const image_media_type = String(body.image_media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp';
-    if (!image_b64) return res.status(400).json({ error: 'image_b64 (base64 satellite tile) required' });
-    if (image_b64.length > 7_000_000) return res.status(413).json({ error: 'Image too large; resize to ~1024px on long edge.' });
+type Pt = { x: number; y: number };
+/** One hole-scan read, normalized image coordinates (x 0..1 left→right, y 0..1 north→south). */
+export type HoleScanResult = {
+  found_green: boolean;
+  green_center: Pt | null;
+  green_front: Pt | null;
+  green_back: Pt | null;
+  green_polygon: Pt[] | null;
+  tee: Pt | null;
+  tee_polygon: Pt[] | null;
+  fairway_centerline: Pt[] | null;
+  hazards: { kind: 'bunker' | 'water'; polygon: Pt[]; carry_side: string }[];
+  confidence: 'high' | 'medium' | 'low';
+  notes: string;
+  provider: string;
+};
 
-    const hole = Number.isFinite(Number(body.hole_number)) ? Number(body.hole_number) : null;
-    const par = Number.isFinite(Number(body.par)) ? Number(body.par) : null;
-    // 2026-08-10 — the tile's real-world span, when the client knows it, is the strongest possible
-    // scale cue: it converts "is this blob a green?" into an arithmetic check the model can do.
-    // A putting green is ~20-40 yards across; anything 3 yards or 120 yards across is not one.
-    const spanYards = Number.isFinite(Number(body.tile_span_yards)) ? Number(body.tile_span_yards) : null;
+/**
+ * 2026-10-13 — the read itself, shared by this route and api/course-verify (the vision cross-check of
+ * every hole the course engine pairs). Extracted unchanged from the handler: one prompt, one schema,
+ * one set of polygon/coordinate guards, whoever asks.
+ */
+export async function scanHoleImage(
+  input: { b64: string; mediaType: 'image/jpeg' | 'image/png' | 'image/webp'; hole: number | null; par: number | null; spanYards: number | null },
+  provider: ReturnType<typeof providerFromHeaderSafe>,
+): Promise<{ ok: true; result: HoleScanResult } | { ok: false; status: number; body: Record<string, unknown> }> {
+  const { b64: image_b64, mediaType: image_media_type, hole, par, spanYards } = input;
+  {
     const userText =
       `Read this north-up satellite tile of a golf hole` +
       (hole ? ` (hole ${hole}${par ? `, par ${par}` : ''})` : '') +
@@ -196,7 +204,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : '') +
       ` Return normalized coordinates per your instructions.`;
 
-    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const text = await completeVision(
       provider,
       'quality',
@@ -210,10 +217,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Same failure mode course-ai-search hit when its description outgrew a 400-token budget.
       { maxTokens: 4_000, temperature: 0.1, forceJSON: true, schema: HOLE_GEOMETRY_SCHEMA },
     );
-    if (!text) return res.status(502).json({ error: 'Empty model response', provider });
+    if (!text) return { ok: false, status: 502, body: { error: 'Empty model response', provider } };
 
     const parsed = safeParse(text);
-    if (!parsed) return res.status(502).json({ error: 'Model returned non-JSON', provider, raw: text.slice(0, 300) });
+    if (!parsed) return { ok: false, status: 502, body: { error: 'Model returned non-JSON', provider, raw: text.slice(0, 300) } };
 
     // Guard every coordinate to a finite [0,1] point or null so the client never converts NaN.
     const pt = (v: unknown): { x: number; y: number } | null => {
@@ -284,7 +291,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // honest ceiling is medium. Keeps the client's AI-ESTIMATE badging proportional to what we know.
     const confidence = !found_green ? 'low' : green_polygon ? rawConf : rawConf === 'high' ? 'medium' : rawConf;
 
-    return res.status(200).json({
+    const result: HoleScanResult = {
       found_green,
       green_center,
       green_front: pt(parsed.green_front),
@@ -297,7 +304,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       confidence,
       notes: typeof parsed.notes === 'string' ? parsed.notes.slice(0, 200) : '',
       provider,
-    });
+    };
+    return { ok: true, result };
+  }
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!allowInference(req, res, 'hole-scan')) return;
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
+  }
+  try {
+    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}) as Record<string, unknown>;
+    const image_b64 = String(body.image_b64 ?? '').trim();
+    const image_media_type = String(body.image_media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp';
+    if (!image_b64) return res.status(400).json({ error: 'image_b64 (base64 satellite tile) required' });
+    if (image_b64.length > 7_000_000) return res.status(413).json({ error: 'Image too large; resize to ~1024px on long edge.' });
+
+    const hole = Number.isFinite(Number(body.hole_number)) ? Number(body.hole_number) : null;
+    const par = Number.isFinite(Number(body.par)) ? Number(body.par) : null;
+    // 2026-08-10 — the tile's real-world span, when the client knows it, is the strongest possible
+    // scale cue: it converts "is this blob a green?" into an arithmetic check the model can do.
+    // A putting green is ~20-40 yards across; anything 3 yards or 120 yards across is not one.
+    const spanYards = Number.isFinite(Number(body.tile_span_yards)) ? Number(body.tile_span_yards) : null;
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
+    const out = await scanHoleImage({ b64: image_b64, mediaType: image_media_type, hole, par, spanYards }, provider);
+    // `in` narrows under both the app tsconfig and the test project's looser one (see searchCourses).
+    if ('result' in out) return res.status(200).json(out.result);
+    return res.status(out.status).json(out.body);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     console.error('[hole-scan] exception:', msg);

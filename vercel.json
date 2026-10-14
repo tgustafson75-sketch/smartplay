@@ -108,6 +108,13 @@
       }
     },
     {
+      "src": "api/course-verify.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 300
+      }
+    },
+    {
       "src": "api/club-recognition.ts",
       "use": "@vercel/node",
       "config": {
@@ -626,6 +633,10 @@
     {
       "src": "/api/course-locate",
       "dest": "/api/course-locate.ts"
+    },
+    {
+      "src": "/api/course-verify",
+      "dest": "/api/course-verify.ts"
     },
     {
       "src": "/.well-known/apple-app-site-association",

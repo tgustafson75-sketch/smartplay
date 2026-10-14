@@ -20,7 +20,7 @@
 import type { ShotResult } from '../store/roundStore';
 import type { HoleGeometry } from './courseGeometryService';
 import { haversineYards } from '../utils/geoDistance';
-import { mapboxMetersPerPixel } from './mapboxImagery';
+import { mapboxMetersPerPixel } from '../utils/mapboxScale';
 
 export type LatLng = { lat: number; lng: number };
 

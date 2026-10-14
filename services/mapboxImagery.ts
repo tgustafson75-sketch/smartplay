@@ -32,14 +32,13 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { haversineMeters, bearingDegrees } from '../utils/geoDistance';
 import { isValidGolfCoord } from '../utils/coordGuard';
+import { MAPBOX_Z0_METERS_PER_PX, mapboxMetersPerPixel, MAPBOX_PUBLIC_FALLBACK } from '../utils/mapboxScale';
 
 // 2026-06-23 — EXPO_PUBLIC_* is inlined at BUILD time, so eas-update OTA bundles
 // built without it get '' and all satellite imagery goes dark (same trap as the
 // API base-URL spine). A Mapbox `pk.` token is a PUBLIC client token — designed to
 // ship in client code — so a hardcoded fallback is safe and makes imagery work over
 // OTA with no native rebuild. Rotate via the Mapbox dashboard if ever needed.
-const MAPBOX_PUBLIC_FALLBACK =
-  'pk.eyJ1Ijoic21hcnRwbGF5Y2FkZGllIiwiYSI6ImNtb28yZm9wNzE2YXYyb3B4aTZpdzVxd2sifQ.-8O0hpwyO5XRNPz5cc541w';
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || MAPBOX_PUBLIC_FALLBACK;
 const MAPBOX_STYLE = 'mapbox/satellite-v9';
 const CACHE_DIR_NAME = 'mapbox_holes';
@@ -90,11 +89,9 @@ function autoZoom(yardage: number, par: number): number {
  * tapped yardage were projected at half their true distance from the centre. AI-found greens were
  * unprojected at twice theirs. ONE constant now, used by every projection in the app.
  */
-export const MAPBOX_Z0_METERS_PER_PX = 78271.51696;
-
-export function mapboxMetersPerPixel(lat: number, zoom: number): number {
-  return (MAPBOX_Z0_METERS_PER_PX * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
-}
+// The constant and its function live in utils/mapboxScale (pure — the server's vision cross-check uses
+// the same projection, and this file pulls in expo-file-system). Re-exported: callers are unchanged.
+export { MAPBOX_Z0_METERS_PER_PX, mapboxMetersPerPixel };
 const MAPBOX_BASE_MPP = MAPBOX_Z0_METERS_PER_PX;
 
 // 2026-05-21 — Consolidation 1: local haversineMeters removed in favor of

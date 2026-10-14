@@ -237,7 +237,8 @@ async function recomputeCanonical(
   if (error || !Array.isArray(data) || data.length === 0) return;
 
   // Best report wins: source rank, then confidence, then recency — among reports still trusted.
-  const best = chooseBestReport(data.filter((r) => !isPreScaleAiRow(r)));
+  // 2026-10-13 — a vision CHECK is a verdict about a pairing, not a geometry source: it never wins.
+  const best = chooseBestReport(data.filter((r) => !isPreScaleAiRow(r) && r.source !== VISION_CHECK_SOURCE));
   if (!best) return;
 
   const canon = {
@@ -342,4 +343,68 @@ export async function readSharedGeometry(db: Db, courseId: string): Promise<Shar
     })
     .filter((h): h is SharedHoleGeometry => h != null);
   return holes.length > 0 ? holes : null;
+}
+
+/**
+ * 2026-10-13 (Tim — "we have computer vision to find a tee's green and its tee box… we can correlate our
+ * own information pretty cheaply") — THE VISION CROSS-CHECK'S VERDICTS, stored once per course.
+ *
+ * One row per hole in the reports table (no migration): contributor `server:vision-check`, source
+ * `vision_check`, the tee/green that were CHECKED in the coordinate columns, and the verdict in
+ * `confidence` (1 verified · 0.5 unconfirmed · 0 suspect). recomputeCanonical ignores this source, so a
+ * verdict can annotate a hole but never move it. A stored verdict is reused only while the checked
+ * points are still the course's points — a rebuilt hole is checked again.
+ */
+export const VISION_CHECK_SOURCE = 'vision_check';
+const VISION_CHECK_CONTRIBUTOR = 'server:vision-check';
+export type VisionVerdict = 'verified' | 'unconfirmed' | 'suspect';
+const VERDICT_CONF: Record<VisionVerdict, number> = { verified: 1, unconfirmed: 0.5, suspect: 0 };
+const confVerdict = (c: number): VisionVerdict => (c >= 0.75 ? 'verified' : c <= 0.25 ? 'suspect' : 'unconfirmed');
+
+export type StoredVisionCheck = {
+  hole: number;
+  verdict: VisionVerdict;
+  tee: { lat: number; lng: number } | null;
+  green: { lat: number; lng: number } | null;
+  checkedAt: string;
+};
+
+export async function readVisionChecks(db: Db, courseId: string): Promise<StoredVisionCheck[]> {
+  const { data, error } = await db
+    .from(REPORTS)
+    .select('hole,tee_lat,tee_lng,green_lat,green_lng,confidence,created_at')
+    .eq('course_id', courseId)
+    .eq('contributor_hash', VISION_CHECK_CONTRIBUTOR);
+  if (error || !Array.isArray(data)) return [];
+  return data.map((r) => ({
+    hole: Number(r.hole),
+    verdict: confVerdict(Number(r.confidence)),
+    tee: isPoint(num(r.tee_lat), num(r.tee_lng)) ? { lat: Number(r.tee_lat), lng: Number(r.tee_lng) } : null,
+    green: isPoint(num(r.green_lat), num(r.green_lng)) ? { lat: Number(r.green_lat), lng: Number(r.green_lng) } : null,
+    checkedAt: String(r.created_at ?? ''),
+  }));
+}
+
+export async function recordVisionChecks(
+  db: Db,
+  courseId: string,
+  checks: { hole: number; verdict: VisionVerdict; tee: { lat: number; lng: number } | null; green: { lat: number; lng: number } }[],
+): Promise<number> {
+  const rows = checks
+    .filter((c) => Number.isInteger(c.hole) && c.hole >= 1 && c.hole <= 36 && isPoint(c.green.lat, c.green.lng))
+    .map((c) => ({
+      course_id: courseId,
+      hole: c.hole,
+      contributor_hash: VISION_CHECK_CONTRIBUTOR,
+      tee_lat: c.tee?.lat ?? null, tee_lng: c.tee?.lng ?? null,
+      green_lat: c.green.lat, green_lng: c.green.lng,
+      source: VISION_CHECK_SOURCE,
+      confidence: VERDICT_CONF[c.verdict],
+      // the verdict's age is what staleness is measured from — refresh it on every write
+      created_at: new Date().toISOString(),
+    }));
+  if (rows.length === 0) return 0;
+  const { error } = await db.from(REPORTS).upsert(rows, { onConflict: 'course_id,hole,contributor_hash' });
+  if (error) { console.warn('[courseCloud] vision check upsert failed', courseId, error.message); return 0; }
+  return rows.length;
 }
