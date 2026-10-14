@@ -1778,6 +1778,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
           fromTemp: b.temp_component_yards,
           fromWet: b.wet_component_yards,
           fromElevation: b.elevation_component_yards,
+          fromAltitude: b.altitude_component_yards,
         };
       }, null);
       return {

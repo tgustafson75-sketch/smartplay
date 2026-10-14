@@ -65,6 +65,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       temp_f: main.temp ?? null,
       humidity: main.humidity ?? null,
       pressure_hpa: main.pressure ?? null,
+      // 2026-10-13 — STATION pressure (main.pressure is adjusted to sea level, so it carries no altitude).
+      // Plays-like turns it into the course's altitude: thin air carries the ball farther.
+      station_pressure_hpa: main.grnd_level ?? null,
       wind_speed_mph: wind.speed ?? 0,
       wind_direction_deg: wind.deg ?? null,
       wind_gust_mph: wind.gust ?? null,

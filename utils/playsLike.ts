@@ -35,6 +35,10 @@ export type PlaysLikeBreakdown = {
   /** Carry lost to rain/wet conditions. Roll loss is a separate consequence, not modelled here. */
   wet_component_yards: number;
   elevation_component_yards: number;
+  /** Thin air at altitude (negative: the ball carries farther). 0 when station pressure is unknown. */
+  altitude_component_yards: number;
+  /** Course altitude derived from station pressure (ft), or null when unknown. */
+  altitude_ft: number | null;
   /** Wind component along shot direction (positive = tailwind, negative = headwind). null when bearing unknown. */
   along_wind_mph: number | null;
   /** Crosswind component (positive = wind FROM THE LEFT, blowing left-to-right; negative = from the right). null when bearing unknown. */
@@ -58,6 +62,15 @@ function decomposeWind(
 ): { along: number; cross: number } {
   const rw = sharedDecomposeWind(windFromDeg, windSpeedMph, shotBearingDeg);
   return rw ? { along: rw.alongMph, cross: rw.crossMph } : { along: 0, cross: 0 };
+}
+
+/** Carry gain per 1,000 ft of altitude (see playsLikeDistance). */
+export const ALTITUDE_CARRY_PER_1000FT = 0.012;
+
+/** Standard-atmosphere altitude (ft) from station pressure (hPa); null when unknown or implausible. */
+export function altitudeFromStationPressure(hpa: number | null): number | null {
+  if (hpa == null || !Number.isFinite(hpa) || hpa < 550 || hpa > 1090) return null;
+  return 145366.45 * (1 - Math.pow(hpa / 1013.25, 0.190284));
 }
 
 export function playsLikeDistance(
@@ -119,7 +132,18 @@ export function playsLikeDistance(
   // Elevation: ~1 yard per 3 feet uphill
   const elevYards = elevationDeltaFeet / 3;
 
-  const playsLike = actualYards + windYards + tempYards + wetYards + elevYards;
+  /**
+   * 2026-10-13 (course-engine audit #5) — ALTITUDE. The model had wind, temperature, rain and the up/down
+   * between player and target, but nothing for the course being a mile high: in Denver a 150 that plays
+   * ~141 was called 150 — a club long on every shot on every mountain course. Altitude comes from the
+   * weather's STATION pressure (barometric formula), so it needs no new lookup, and the carry gain is
+   * 1.2% per 1,000 ft — the conservative middle of published figures (1.1–1.6%; launch-monitor modelling
+   * sits near 1.2%). Unknown pressure, or a course at/below sea level: no term.
+   */
+  const altitudeFt = altitudeFromStationPressure(weather.station_pressure_hpa ?? null);
+  const altitudeYards = altitudeFt != null && altitudeFt > 0 ? -actualYards * ALTITUDE_CARRY_PER_1000FT * (altitudeFt / 1000) : 0;
+
+  const playsLike = actualYards + windYards + tempYards + wetYards + elevYards + altitudeYards;
 
   return {
     actual_yards: actualYards,
@@ -129,6 +153,8 @@ export function playsLikeDistance(
     temp_component_yards: Math.round(tempYards),
     wet_component_yards: Math.round(wetYards),
     elevation_component_yards: Math.round(elevYards),
+    altitude_component_yards: Math.round(altitudeYards),
+    altitude_ft: altitudeFt != null ? Math.round(altitudeFt) : null,
     along_wind_mph: along != null ? Math.round(along) : null,
     cross_wind_mph: cross != null ? Math.round(cross) : null,
   };
@@ -146,5 +172,6 @@ export function playsLikePhrase(b: PlaysLikeBreakdown): string {
     if (b.along_wind_mph < -2) parts.push(`${Math.abs(b.along_wind_mph)} into your face`);
     else if (b.along_wind_mph > 2) parts.push(`${b.along_wind_mph} at your back`);
   }
+  if (b.altitude_component_yards <= -3) parts.push('the thin air');
   return parts.length > 0 ? `${dir} with ${parts.join(' and ')}` : dir;
 }
