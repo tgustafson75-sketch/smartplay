@@ -424,6 +424,9 @@ export function resolveGreenCoords(holeNumber: number): ResolvedGreen {
   return out;
 }
 
+/** A green edge farther than this from the surveyed centre belongs to another green (or a stale map). */
+const TRUTH_EDGE_MAX_YD = 30;
+
 function resolveGreenCoordsInner(holeNumber: number): ResolvedGreen {
   const round = useRoundStore.getState();
   const courseId = resolveSmartFinderCourseId(round);
@@ -450,10 +453,26 @@ function resolveGreenCoordsInner(holeNumber: number): ResolvedGreen {
   if (courseId) {
     const truth = getCourseTruthSync(courseId, personalHole);
     if (truth) {
+      /**
+       * 2026-10-13 (course-engine audit #7) — the surveyed centre is the authority, but it carried no
+       * edges, so on the BEST-mapped courses F and B were dashes and every declared pin was declined
+       * ("I don't have the back edge") while the same hole's geometry held real polygon edges. The
+       * edges are borrowed from the lower tiers only when they describe THIS green: both within
+       * TRUTH_EDGE_MAX_YD of the surveyed centre. Otherwise null, as before.
+       */
+      const middle = { lat: truth.lat, lng: truth.lng };
+      const hd = round.courseHoles.find(h => h.hole === holeNumber);
+      const geo = getHoleGeometry(courseId, holeNumber);
+      const candidates: [ShotLocation | null, ShotLocation | null][] = [
+        [hd ? safeLoc(hd.frontLat, hd.frontLng) : null, hd ? safeLoc(hd.backLat, hd.backLng) : null],
+        [geo?.green_front ?? null, geo?.green_back ?? null],
+      ];
+      const near = (p: ShotLocation | null) => !!p && haversineYards(p, middle) <= TRUTH_EDGE_MAX_YD;
+      const edges = candidates.find(([f, b]) => near(f) && near(b) && haversineYards(f!, b!) >= 4);
       return {
-        front: null,
-        middle: { lat: truth.lat, lng: truth.lng },
-        back: null,
+        front: edges ? edges[0] : null,
+        middle,
+        back: edges ? edges[1] : null,
         source: 'truth',
       };
     }
