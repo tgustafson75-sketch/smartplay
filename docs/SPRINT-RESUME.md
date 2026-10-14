@@ -8,6 +8,8 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+- **2026-10-14:** OTA 8bb5a645 live — altitude plays-like, BG location task defined at entry (index.js), pocket-tracking-off alert. Source maps unuploaded until the Sentry token file exists. expo-modules-core reload fix still waits on the next native build.
+
 > ### 2026-10-14 (overnight) — course engine fixed at the root: numbered OSM holes; no unanchored greens.
 > 7 swept courses 18/18 live (Hemet GC was 1/18). ~15 audit fixes shipped by OTA. Held for Tim: altitude
 > branch, Android bg-task entry, iOS Always-denied copy, iOS club tracker. Detail: SPRINT-LOG Day 142.

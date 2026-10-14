@@ -5442,3 +5442,12 @@ not seed a coarse/cached fix · SmartVision shows the resolver's number when GPS
 **Notes** — `__tests__/logic/connection-class.test.ts` is timing-sensitive: fails under heavy CPU load
 (pre-commit once), passes alone 3/3. `native/expo-modules-core-reload-fix` was committed with
 --no-verify from a temp worktree; gates re-run on the branch 10-14: tsc/jest 6402/sim all green.
+
+## Day 142 (cont.) — 2026-10-14 — altitude, BG task at entry, setting-off message (OTA 8bb5a645)
+### Shipped today
+- Altitude plays-like (station pressure → altitude → carry) merged and shipped.
+- `index.js` entry defines `smartplay-background-location` in global scope before Expo Router (Android can wake it with the app killed). Sim-verified: task defined at launch.
+- `services/featureNeedsSetting`: iOS location below Always / Android notifications denied → one alert per session naming pocket tracking + Open Settings.
+- Orphan guard now reads `index.js` (CORPUS_FILES; throws if missing).
+### Notes
+- OTA source maps NOT uploaded — `~/.config/smartplay/sentry-auth-token` still missing (Cowork ask).
