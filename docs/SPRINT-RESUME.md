@@ -8,6 +8,10 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### 2026-10-14 (overnight) — course engine fixed at the root: numbered OSM holes; no unanchored greens.
+> 7 swept courses 18/18 live (Hemet GC was 1/18). ~15 audit fixes shipped by OTA. Held for Tim: altitude
+> branch, Android bg-task entry, iOS Always-denied copy, iOS club tracker. Detail: SPRINT-LOG Day 142.
+
 > ### 2026-10-13 — First field users. iPhones had NO pose detector; fixed natively as 1.0.3 (`d04e9e41`).
 > Telemetry fixes OTA'd (`6559c220`). Next: Tim starts the iOS production build + submits; then
 > `npm run ota:baseline`. Detail: SPRINT-LOG Day 141.

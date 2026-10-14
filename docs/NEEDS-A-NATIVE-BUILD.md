@@ -6,6 +6,10 @@
 > full camera/mic purpose strings; Android exact-frame thumbnails + runtime GPU→CPU pose fallback
 > (ad444eee) + bitmap/MPImage released per frame; Expo SDK 54 patch updates. Nothing else in this file
 > is waiting on a binary.
+>
+> **Next native build (queued 2026-10-14):** `native/expo-modules-core-reload-fix` — backport of expo/expo#43937
+> (Sentry J8, reload crash). When it ships, revert updateApplyGate.reloadIsSafe's iOS branch in the same change.
+> Also: Android background task defined at the JS entry (custom entry + real relaunch test).
 
 **Parked by Tim 2026-08-21; worked 2026-08-29 while the paid launch waits on an EIN.**
 One build clears the list. Three builds is three review cycles.

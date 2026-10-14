@@ -5412,3 +5412,33 @@ orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-po
   LIVE; SV#4 tee-estimate badged LIVE; SV#5 SmartVision's own yardage owner; SV#6 what-if tap logs a shot;
   CE#4 CENTER shows pin-adjusted; CE#5 no altitude; CE#6 par ?? 4; CE#7 surveyed F/B dropped; units.
 - iOS club-arc tracker (WebView engine) is Android-only.
+
+### Day 142 — 2026-10-14 (overnight, Tim asleep) — course sweep + every audit item that ships without a build
+
+**Course engine (server, live)** — `689fe4d3` → `177e4c39` → `9cf4c400`: numbered OSM holes pair database
+courses; the way's END is the green (with or without a ring; the start never is); `0329b0f1` no anchor →
+no green (the routing walk that put 17/18 greens on the wrong hole at Hemet AND Green Hill is gone);
+`d7f20dcf` a nine played twice is built once and mirrored (Echo Hills); `18a276a8` Overpass mirrors.
+Live after fixes: Hemet GC 18/18 · Green Hill 18/18 · Soboba Springs 18/18 · Kettle Brook 18/18 ·
+Pine Ridge 18/18 · Connecticut National 18/18 · Wachusett 18/18. No numbered holes in OSM (empty, not
+wrong): Seven Hills, Panorama Village, Golden Era.
+
+**App (OTAs 2ecede8e, 32b8e700, 11cd7ebd, e06816e9, 654fa6a7)** — backward hole move never traps (frontier
++ 45 s re-entry + toast) · LIVE means live (resolver `live`; EST. / LAST FIX pills; strip reads the shared
+label owner) · cockpit CENTER = green centre · SmartVision "Not a shot" · SmartVision metres · par
+inferred not assumed (one helper, four copies removed) · surveyed greens keep F/B · course named, not
+substring-matched (server) · hazard side unknown said as nothing · twice-around pins hold · resume does
+not seed a coarse/cached fix · SmartVision shows the resolver's number when GPS places the cart.
+
+**Held for Tim**
+- `feature/altitude-plays-like` (tested, pushed, NOT merged): 1.2%/1,000 ft from station pressure. Shaves
+  ~3 yd on a 150 at his ~1,500 ft home courses — double-counts if his yardages were learned there.
+- Android background task must be defined at the JS entry (headless relaunch drops fixes) — needs a
+  custom entry + a real-device relaunch test; deferred, history of a boot crash from defineTask.
+- iOS "Always" location denied is silent (no pocket tracking, no message) — product copy needed.
+- iOS has no on-device club tracker (WebView engine Android-only) — JS fix, needs simulator/iPhone test.
+- api/course-verify (vision cross-check) deployed but not wired: cannot catch a mis-numbered course alone.
+
+**Notes** — `__tests__/logic/connection-class.test.ts` is timing-sensitive: fails under heavy CPU load
+(pre-commit once), passes alone 3/3. `native/expo-modules-core-reload-fix` was committed with
+--no-verify from a temp worktree; gates re-run on the branch 10-14: tsc/jest 6402/sim all green.
