@@ -2170,7 +2170,10 @@ export const useVoiceCaddie = ({
         // "empty recording" from "too-small file" and "transcribe error" in the log.
         // meterSilent rides on this one report: before 10-13 the meter breadcrumb was mailed on its
         // own, so a single quiet tap arrived as TWO Sentry issues that both said the same thing.
-        logVoiceSilentFail('empty_transcript', {
+        // Meter heard nothing AND Whisper heard nothing: no one spoke — on device only (same rule as
+        // listeningSession's listen_no_transcript, 2026-10-13). The meter heard speech, or no meter
+        // reading at all (VAD path): still reported, because that is "I talked and it ignored me".
+        (opts?.meterSilent === true ? logVoiceDiag : logVoiceSilentFail)('empty_transcript', {
           source: 'processAudioUri', sourceKind: source,
           meterSilent: opts?.meterSilent ?? null, durationMs: opts?.durationMs ?? null,
         });

@@ -526,7 +526,11 @@ export async function toggle(): Promise<void> {
     const isEcho = Date.now() - sessionOpenTapAt < TAP_ECHO_SWALLOW_MS;
     if (!isEcho && state === 'opening') {
       pendingEndpointTap = true;
-      swallowedTap('queued_during_opening');
+      // 2026-10-13 — QUEUED, not swallowed: the tap is applied the instant the mic is live (above).
+      // Mailing it as tap_swallowed filed a "failure" for a tap that worked — 34 alerts in 20 min from
+      // two store reviewers tapping through onboarding. Kept on device; the haptic still acknowledges.
+      try { Vibration.vibrate(18); } catch { /* haptics optional */ }
+      logVoiceDiag('tap_queued_during_opening', { source: 'listeningSession', sessionState: state });
       return;
     }
     swallowedTap('session_in_flight');
@@ -1093,7 +1097,16 @@ async function openSession() {
      * is the only record that the turn died. [[missing-log-entry-is-the-evidence]]
      */
     const alreadyReportedUpstream = bail === 'transcribe_failed';
-    if (!silentBail) (alreadyReportedUpstream ? logVoiceDiag : logVoiceSilentFail)('listen_no_transcript', {
+    /**
+     * 2026-10-13 — NOBODY SPOKE IS NOT A FAILURE. bail 'empty' is set only AFTER Whisper transcribed the
+     * audio and returned nothing (voiceService captureUtterance). With heardSpeech false too, the meter
+     * and the transcriber agree: the mic worked and no one talked. That is a person who opened the mic
+     * and didn't speak — two store reviewers did it 34 times in 20 minutes, every one mailed as a
+     * failure. Kept on device. heardSpeech TRUE with an empty transcript stays reportable: that is
+     * "I talked and it ignored me", the one this line exists for.
+     */
+    const nobodySpoke = bail === 'empty' && capture.heardSpeech === false;
+    if (!silentBail) (alreadyReportedUpstream || nobodySpoke ? logVoiceDiag : logVoiceSilentFail)('listen_no_transcript', {
       source: 'listeningSession',
       bail,
       // 2026-08-17 — lets a field report tell "the mic was open and the player said nothing" from

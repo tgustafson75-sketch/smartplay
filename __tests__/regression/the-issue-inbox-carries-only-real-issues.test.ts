@@ -119,11 +119,43 @@ describe('a quiet tap files ONE report, and the meter disagreement is reported o
 
   it('the meter verdict rides into processAudioUri and onto both outcomes', () => {
     expect(vc).toContain('await processAudioUri(uri, { meterSilent, durationMs });');
-    const empty = vc.slice(vc.indexOf("logVoiceSilentFail('empty_transcript'"));
+    const empty = vc.slice(vc.indexOf("('empty_transcript'"));
     expect(empty.slice(0, 250)).toContain('meterSilent: opts?.meterSilent ?? null, durationMs: opts?.durationMs ?? null');
     // reported on the HEARD branch only — after the empty-transcript return, gated on the meter
     const heard = vc.indexOf("logVoiceSilentFail('meter_silent_but_heard_words'");
     expect(heard).toBeGreaterThan(vc.indexOf('missStreakRef.current = 0;'));
     expect(vc.slice(heard - 80, heard)).toContain('if (opts?.meterSilent === true) {');
+  });
+});
+
+/**
+ * 2026-10-13 — 34 Sentry alerts in 20 minutes from two store reviewers (OnePlus 8 Pro / Android 32,
+ * iPhone 16 Pro Max / iOS 33) tapping the mic through onboarding without speaking. Every one was the app
+ * working: the audio reached Whisper, Whisper heard nothing, and a tap during 'opening' was queued and
+ * applied. Reported only when something actually failed.
+ */
+describe('no one speaking is not mailed as a failure', () => {
+  const ls = fs.readFileSync(path.join(root, 'services', 'listeningSession.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const vc = fs.readFileSync(path.join(root, 'hooks', 'useVoiceCaddie.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  it('listen_no_transcript: Whisper-empty AND meter-silent is diag; meter heard speech still mails', () => {
+    expect(ls).toContain("const nobodySpoke = bail === 'empty' && capture.heardSpeech === false;");
+    expect(ls).toMatch(/\(alreadyReportedUpstream \|\| nobodySpoke \? logVoiceDiag : logVoiceSilentFail\)\('listen_no_transcript'/);
+  });
+
+  it('a tap queued during opening is diag, not tap_swallowed — it was applied', () => {
+    const at = ls.indexOf('pendingEndpointTap = true;');
+    expect(ls.slice(at, at + 300)).toContain("logVoiceDiag('tap_queued_during_opening'");
+    expect(ls.slice(at, at + 300)).not.toContain("swallowedTap('queued_during_opening')");
+    // every genuine swallow still reports
+    for (const g of ['recording_stop_cooldown', 'open_tap_echo', 'session_in_flight', 'close_tap_echo']) {
+      expect(ls).toContain(`swallowedTap('${g}'`);
+    }
+  });
+
+  it('the tap-path empty transcript follows the same rule', () => {
+    expect(vc).toMatch(/\(opts\?\.meterSilent === true \? logVoiceDiag : logVoiceSilentFail\)\('empty_transcript'/);
   });
 });

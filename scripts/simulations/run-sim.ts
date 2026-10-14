@@ -4832,7 +4832,9 @@ check('Voice: first-ask failure exits leave a breadcrumb in the Issue Log (diagn
       /logVoiceSilentFail\('tap_no_uri'/.test(vc) &&
       /logVoiceSilentFail\('tap_capture_too_short'/.test(vc) &&
       /logVoiceSilentFail\('capture_file_too_small'/.test(vc) &&
-      /logVoiceSilentFail\('empty_transcript'/.test(vc)
+      // 2026-10-13 — still logged on every empty transcript; mailed unless meter AND Whisper both
+      // heard nothing (no one spoke). The exit is never silent; only who reads it changed.
+      /\(opts\?\.meterSilent === true \? logVoiceDiag : logVoiceSilentFail\)\('empty_transcript'/.test(vc)
     );
   })(),
   'silent capture-failure exits now log a reason to the owner Issue Log (no more invisible first-ask misses)');
@@ -11928,7 +11930,10 @@ check('LOCK: "Didn\'t catch that" is spoken ONLY when the mic actually heard not
     // goes to 'diag' so the inbox carries one bullet per defect, not two.
     const cascadeNotDoubleMailed =
       /alreadyReportedUpstream = bail === 'transcribe_failed'/.test(ls) &&
-      /alreadyReportedUpstream \? logVoiceDiag : logVoiceSilentFail/.test(ls);
+      /alreadyReportedUpstream \|\| nobodySpoke \? logVoiceDiag : logVoiceSilentFail/.test(ls) &&
+      // 2026-10-13 — and "nobody spoke" is ONLY the case Whisper confirmed (bail 'empty') with the meter
+      // agreeing. heardSpeech true + empty transcript must keep mailing: that is "it ignored me".
+      /const nobodySpoke = bail === 'empty' && capture\.heardSpeech === false;/.test(ls);
     return typed && logged && honest && cancelQuiet && cascadeNotDoubleMailed;
   })(),
   'capture reports WHY it came back empty; mic failures are owned, transcribe failures named, cancels stay silent');
