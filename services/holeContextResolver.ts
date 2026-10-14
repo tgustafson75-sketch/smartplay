@@ -94,18 +94,31 @@ export function getKnownCoursesBlock(): string {
 }
 
 /**
- * Detect a known course reference in free text (case-insensitive
- * substring match against COURSES id + name). Returns the course id
- * (without 'local:' prefix) or null.
+ * Detect a known course named in free text. Returns the course id (no 'local:' prefix) or null.
+ *
+ * 2026-10-13 (course-engine audit #9) — this was a raw SUBSTRING match against every course's id AND
+ * name, and a match injects that course's par and yardage into the caddie as verified data. The ids are
+ * words: "palms" matched "Twentynine Palms hole 4" (Menifee Palms' hole 4 served as fact), "lakes" any
+ * lake, "mines" matched "determines"; and one-word names ("Legacy", "Hermitage") matched ordinary speech.
+ * Now: the full NAME as a whole phrase, never the id; a one-word name only beside a golf word ("Mines
+ * golf course", "playing Legacy"); and the longest name wins.
  */
 export function detectCourseInText(text: string): string | null {
   if (!text || typeof text !== 'string') return null;
-  const lower = text.toLowerCase();
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = ` ${norm(text)} `;
+  const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let best: { id: string; len: number } | null = null;
   for (const c of COURSES) {
-    if (lower.includes(c.id.toLowerCase())) return c.id;
-    if (lower.includes(c.name.toLowerCase())) return c.id;
+    const n = norm(c.name);
+    if (!n) continue;
+    const phrase = esc(n);
+    const hit = n.includes(' ')
+      ? new RegExp(` ${phrase} `).test(t)
+      : new RegExp(` ${phrase} (golf|course|club|country club|cc|gc|links) | (playing|played|play at|at|course) ${phrase} `).test(t);
+    if (hit && (!best || n.length > best.len)) best = { id: c.id, len: n.length };
   }
-  return null;
+  return best?.id ?? null;
 }
 
 /**
