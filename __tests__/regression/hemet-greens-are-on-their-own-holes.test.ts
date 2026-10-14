@@ -121,4 +121,13 @@ describe('a way is drawn from tee to green (Wachusett hole 11, live 2026-10-13)'
     expect(haversineYards(h11.green, g11)).toBeLessThan(5);
     expect(haversineYards(h11.tee, tee11)).toBeLessThan(1);
   });
+  it('the end with NO ring is still the green — never the start beside the last green (live pass 2)', () => {
+    const ring = (c: L) => [0, 1, 2, 3, 4, 5].map((k) => ({ lat: c.lat + 0.00008 * Math.cos(k), lng: c.lng + 0.0001 * Math.sin(k) }));
+    const g10 = { lat: 42.3600, lng: -71.7900 };
+    const tee11 = { lat: 42.36009, lng: -71.7900 };              // beside green 10
+    const end11 = { lat: 42.3640, lng: -71.7900 };               // hole 11's green — NOT outlined in OSM
+    const [h11] = holeWaysToHoles([{ ref: 11, par: 4, pts: [tee11, end11] }], [{ polygon: ring(g10), centroid: g10, name: null }]);
+    expect(haversineYards(h11.green, end11)).toBeLessThan(1);
+    expect(haversineYards(h11.tee, tee11)).toBeLessThan(1);
+  });
 });

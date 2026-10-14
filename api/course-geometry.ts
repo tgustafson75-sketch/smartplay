@@ -369,8 +369,12 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
         // An end is AT a green only within 60 yd of one — the nearest of 19 rings 300 yd away is a
         // neighbouring hole's green, not this one's (2026-10-13).
         const near = (p: Loc) => { const g = nearestGreen(p); return g && g.d <= 60 ? g : null; };
-        const gA = near(A); const gB = near(B);
-        if (!gA && !gB) {
+        const gB = near(B);
+        // 2026-10-13 (Wachusett hole 11, live, second pass) — the END of the way is the green, always.
+        // Falling back to the START when the end had no ring reversed hole 11 again: its own green is
+        // not outlined in OSM, and its tee sits beside hole 10's green. A green with no ring is still
+        // where the way ends; the START is never the green.
+        if (!gB) {
           /**
            * 2026-10-13 — NO GREEN RINGS (Overpass 504'd them on the live Hemet build while the hole
            * ways came back). A golf=hole way is drawn FROM the tee TO the green (OSM convention, and
@@ -378,6 +382,7 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
            * the way alone places both ends. Front/back stay the centre — honest F = M = B — until a
            * build with rings refines them.
            */
+          // (also the no-rings case: Overpass 504'd them on the live Hemet build)
           const tee = A, g = B;
           const center = haversineYards(tee, g);
           rows.push({ ref: w.ref!, par: w.par ?? parFromYards(center), parEstimated: w.par == null, tee, green: g, front: g, back: g, ring: [] });
@@ -387,8 +392,8 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
         // so the END is the green whenever it is at one. "Whichever end is nearer a green" reversed
         // hole 11, whose tee sits a few yards from hole 10's green: the tee end won, and the hole got
         // hole 10's green. The START is the green only when the end is at no green (a reversed way).
-        const greenEnd = gB ?? gA!;
-        const tee = greenEnd === gB ? A : B;
+        const greenEnd = gB;
+        const tee = A;
         // Front/back of the green relative to the tee, from the actual polygon.
         let front = greenEnd.poly.centroid; let back = greenEnd.poly.centroid;
         let dF = Infinity; let dB = -Infinity;
