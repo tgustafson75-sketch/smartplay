@@ -1706,6 +1706,13 @@ export const useRoundStore = create<RoundState>()(
               if (await ensureBackgroundLocationDisclosure()) {
                 await Location.requestBackgroundPermissionsAsync();
               }
+              // 2026-10-14 (Tim) — if location is still below "Always", the features that need it are off:
+              // say which, once (services/featureNeedsSetting). The round plays either way.
+              const bg = await Location.getBackgroundPermissionsAsync().catch(() => null);
+              if (bg && !bg.granted) {
+                const { tellFeatureNeedsSetting } = await import('../services/featureNeedsSetting');
+                tellFeatureNeedsSetting('location_always');
+              }
             } catch (e) {
               console.log('[roundStore] background permission request skipped:', e);
             }

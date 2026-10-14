@@ -116,6 +116,17 @@ async function ensurePostNotificationsPermission(): Promise<boolean> {
  * ingestExternalFix path so the existing outlier + smoothing pipeline
  * handles background fixes identically to foreground.
  */
+/**
+ * 2026-10-14 (GPS audit #10, Tim: "fix it") — defined at the JS ENTRY (index.js), not only when tracking
+ * starts. When Android kills the app in the background and relaunches it to deliver location updates,
+ * nothing renders — only the entry runs — so a task defined lazily from startBackgroundLocation() did
+ * not exist yet and every update was dropped. Same never-throws body as before (ensureTaskDefined is
+ * wrapped end to end), which is what keeps the Phase-411 boot crash from coming back.
+ */
+export function defineBackgroundLocationTaskAtEntry(): boolean {
+  return ensureTaskDefined();
+}
+
 function ensureTaskDefined(): boolean {
   if (taskDefined) return true;
   try {
@@ -218,6 +229,10 @@ export async function startBackgroundLocation(): Promise<void> {
           new Error('POST_NOTIFICATIONS not granted — BG GPS pocket-tracking disabled'),
         );
       } catch { /* sentinel itself must never crash the round */ }
+      // 2026-10-14 (Tim) — and tell him which feature that setting turned off.
+      try {
+        (require('./featureNeedsSetting') as typeof import('./featureNeedsSetting')).tellFeatureNeedsSetting('notifications');
+      } catch { /* never cost the round */ }
       return;
     }
 
