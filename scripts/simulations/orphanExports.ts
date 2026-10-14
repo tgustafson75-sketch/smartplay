@@ -62,6 +62,10 @@ const SCAN_DIRS = ['services', 'lib', 'utils', 'hooks', 'store', 'contexts', 'co
  *  from `constants/`, and looked like it had simply found nothing there. A guard that goes quiet when
  *  you extend it is worse than one that refuses to. */
 const CORPUS_DIRS = ['app', 'components', 'lib', 'services', 'hooks', 'utils', 'store', 'contexts', 'api', 'scripts', 'data', 'constants'];
+/** 2026-10-14 — root files that call into the app. index.js (package.json "main") defines the background
+ *  location task before Expo Router loads; a corpus of directories alone read that call as an orphan.
+ *  Missing → throw, so a renamed entry cannot quietly drop out. */
+const CORPUS_FILES = ['index.js'];
 
 /**
  * THIS FILE MUST NOT BE PART OF ITS OWN CORPUS.
@@ -146,7 +150,10 @@ function walk(dir: string, out: string[] = []): string[] {
 /** Every "path :: symbol" that nothing outside its own file names. Sorted, so diffs are readable. */
 export function findOrphanExports(): string[] {
   const corpus = new Map<string, { src: string; tokens: Set<string> }>();
-  for (const f of CORPUS_DIRS.flatMap((d) => walk(d))) {
+  for (const f of CORPUS_FILES) {
+    if (!fs.existsSync(path.join(ROOT, f))) throw new Error(`orphanExports: corpus file ${f} is missing — update CORPUS_FILES`);
+  }
+  for (const f of [...CORPUS_FILES, ...CORPUS_DIRS.flatMap((d) => walk(d))]) {
     if (f === SELF) continue;
     let src = '';
     try { src = fs.readFileSync(path.join(ROOT, f), 'utf-8'); } catch { continue; }
