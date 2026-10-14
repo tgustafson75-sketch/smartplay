@@ -222,6 +222,20 @@ export async function recordServerBuild(
   return rows.length;
 }
 
+/**
+ * 2026-10-13 — a hole the latest server build left EMPTY on purpose (its old green belonged to another
+ * hole — api/course-geometry mergeHoleWays) must not keep that old server row as its canonical answer.
+ * Deletes only this server's own build rows for those holes, then recomputes from whatever else exists.
+ */
+export async function forgetServerHoles(db: Db, courseId: string, holes: number[]): Promise<void> {
+  const list = holes.filter((h) => Number.isInteger(h) && h >= 1 && h <= 36);
+  if (list.length === 0) return;
+  const { error } = await db.from(REPORTS).delete()
+    .eq('course_id', courseId).eq('contributor_hash', SERVER_CONTRIBUTOR).in('hole', list);
+  if (error) { console.warn('[courseCloud] forget server holes failed', courseId, error.message); return; }
+  await Promise.all(list.map((h) => recomputeCanonical(db, courseId, h, { par: null, yardage: null }).catch(() => undefined)));
+}
+
 /** Recompute the merged canonical row for one hole from all its reports. */
 async function recomputeCanonical(
   db: Db,
@@ -234,12 +248,21 @@ async function recomputeCanonical(
     .select('*')
     .eq('course_id', courseId)
     .eq('hole', hole);
-  if (error || !Array.isArray(data) || data.length === 0) return;
+  if (error || !Array.isArray(data)) return;
 
   // Best report wins: source rank, then confidence, then recency — among reports still trusted.
   // 2026-10-13 — a vision CHECK is a verdict about a pairing, not a geometry source: it never wins.
   const best = chooseBestReport(data.filter((r) => !isPreScaleAiRow(r) && r.source !== VISION_CHECK_SOURCE));
-  if (!best) return;
+  if (!best) {
+    // No report of ANY kind is left for this hole (its only one was withdrawn — forgetServerHoles): the
+    // old canonical row must go too, or it keeps serving the answer that was withdrawn. Reports that
+    // exist but are untrusted keep the earlier behaviour (the read path filters those itself).
+    if (data.length === 0) {
+      const { error: delErr } = await db.from(CANON).delete().eq('course_id', courseId).eq('hole', hole);
+      if (delErr) console.warn('[courseCloud] canonical delete failed', courseId, hole, delErr.message);
+    }
+    return;
+  }
 
   const canon = {
     course_id: courseId,

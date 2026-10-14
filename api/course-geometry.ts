@@ -226,7 +226,7 @@ function isPracticeFeature(tags: Record<string, string> | undefined): boolean {
 // Used to drive the Bluegolf-style hole view (fairway/bunker/water
 // polygon overlays on top of the satellite tile, plus a yardage-book
 // panel listing landmarks with F/B distances).
-type OsmPolygon = { polygon: Loc[]; centroid: Loc; name: string | null };
+export type OsmPolygon = { polygon: Loc[]; centroid: Loc; name: string | null };
 
 async function fetchOsmPolygons(centroid: Loc, feature: string): Promise<OsmPolygon[]> {
   const query = `[out:json][timeout:20];
@@ -282,7 +282,7 @@ out geom;`;
  * instead of the centroid-pairing guesses with fabricated par-4s. Falls back to the pairing path when
  * hole-ways are absent/untagged (the minority of mapped courses).
  */
-type OsmHoleWay = { ref: number | null; par: number | null; pts: Loc[] };
+export type OsmHoleWay = { ref: number | null; par: number | null; pts: Loc[] };
 /**
  * REJECT rather than serve another course's holes — see the note where chooseCoherentHoleWays calls
  * this. Returns the route unchanged when it matches the card (or there is no card to check), [] when
@@ -332,6 +332,131 @@ export function scorecardGate<W extends { ref?: number | null; pts: Loc[] }>(rou
  * being exact rather than greedy matters — one greedy mistake at hole 1 drags the whole route onto
  * the wrong course.
  */
+/** Length of an OSM hole way along its points (yards). */
+export function wayLenYd(w: OsmHoleWay): number {
+  let len = 0;
+  for (let i = 1; i < w.pts.length; i++) len += haversineYards(w.pts[i - 1], w.pts[i]);
+  return len;
+}
+
+/**
+ * OSM golf=hole ways with real hole numbers (ref) → holes: the tee is the way end farther from a green,
+ * the green is the nearest green POLYGON to the other end, front/back from that polygon relative to the
+ * tee. Shared by the OSM-only build and (2026-10-13) the main database build — see mergeHoleWays.
+ */
+export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[]) {
+      const nearestGreen = (p: Loc): { poly: OsmPolygon; d: number } | null => {
+        let best: OsmPolygon | null = null; let bd = Infinity;
+        for (const g of greenPolys) {
+          const d = haversineYards(p, g.centroid);
+          if (d < bd) { bd = d; best = g; }
+        }
+        return best ? { poly: best, d: bd } : null;
+      };
+      const rows: Array<{ ref: number; par: number; parEstimated: boolean; tee: Loc; green: Loc; front: Loc; back: Loc; ring: Loc[] }> = [];
+      for (const w of refWays.sort((a, b) => (a.ref! - b.ref!))) {
+        const A = w.pts[0]; const B = w.pts[w.pts.length - 1];
+        const gA = nearestGreen(A); const gB = nearestGreen(B);
+        if (!gA || !gB) continue;
+        const greenEnd = gA.d <= gB.d ? gA : gB;
+        const tee = gA.d <= gB.d ? B : A;
+        // Front/back of the green relative to the tee, from the actual polygon.
+        let front = greenEnd.poly.centroid; let back = greenEnd.poly.centroid;
+        let dF = Infinity; let dB = -Infinity;
+        for (const p of greenEnd.poly.polygon) {
+          const d = haversineYards(tee, p);
+          if (d < dF) { dF = d; front = p; }
+          if (d > dB) { dB = d; back = p; }
+        }
+        const center = haversineYards(tee, greenEnd.poly.centroid);
+        const par = w.par ?? (center <= 215 ? 3 : center >= 460 ? 5 : 4);
+        rows.push({ ref: w.ref!, par, parEstimated: w.par == null, tee, green: greenEnd.poly.centroid, front, back, ring: greenEnd.poly.polygon });
+      }
+      return rows.map(r => ({
+          hole_number: r.ref,
+          par: r.par,
+          yardage: Math.round(haversineYards(r.tee, r.green)),
+          tee: r.tee,
+          green: r.green,
+          green_front: r.front,
+          green_back: r.back,
+          bearing_deg: bearingDeg(r.tee, r.green),
+          hazards: [],
+          fairway_centerline: [],
+          green_outline: [],
+          /**
+           * 2026-08-13 (audit C3, isolated) — the ring we ALREADY matched, instead of null.
+           *
+           * Four courses built live against the deployed engine came back with green_polygon empty on
+           * every hole, and I could not tell from code whether that was an engine bug or OSM simply
+           * not having the rings. Querying Overpass directly with this file's own query settled it:
+           * Kettle Brook returns 20 green polygons with full 24-point rings in 6s. The data was always
+           * there.
+           *
+           * This path fetched those rings, used them to pick the green and to derive front/back, and
+           * then dropped them on the floor — the polygon augmentation block lives only on the
+           * speculative pairing path below, and this branch returns before it. So the BETTER path
+           * produced the poorer payload.
+           *
+           * green_polygon is the field consumers actually read (smartAnalysisEngine's `polygonsKnown`,
+           * the orchestrator's completeness score). green_outline stays reserved for the vision
+           * derivation path that populates it.
+           */
+          green_polygon: r.ring as Loc[] | null,
+          // 2026-08-09 (course-engine audit C1) — the `estimated` flag drives the "AI ESTIMATE — not
+          // surveyed" badge + the 45% confidence cap, which are about COORDINATE provenance. These coords
+          // are REAL (community-mapped golf=hole ways + polygon-derived greens), so estimated:false even
+          // when PAR was inferred from distance — badging real coords "AI ESTIMATE" because par lacked a
+          // tag was backwards. par_estimated carries the (minor) par uncertainty separately.
+          estimated: false,
+        }));
+}
+
+/**
+ * 2026-10-13 (Tim, Hemet Golf Club) — THE NUMBERED HOLES WIN.
+ *
+ * The main build pairs a database course's tees and greens by proximity and card yardage. Measured
+ * against OpenStreetMap's numbered hole ways (lengths matching the scorecard to a few yards), Hemet
+ * Golf Club came back with 17 of 18 greens belonging to OTHER holes: hole 1's green was hole 9's, hole
+ * 3's was hole 18's. Every live yardage on the course he plays went to the wrong green. Numbered holes
+ * existed the whole time and were used only by the OSM-only build.
+ *
+ * So when the coherent, card-checked hole ways cover most of the course, they replace the pairing for
+ * every hole they number. A hole they do NOT number keeps its database pairing only if its green is not
+ * one of theirs — a green that belongs to a numbered hole cannot also be this hole's, so it is dropped
+ * (an honest gap the client's vision tier can fill) rather than kept as a confident wrong number.
+ */
+export const HOLEWAYS_MIN_COVERAGE = 0.75;
+const SAME_GREEN_YD = 40;
+type MergeHole = {
+  hole_number: number; tee: Loc | null; green: Loc | null; green_front: Loc | null; green_back: Loc | null;
+  bearing_deg: number | null; green_polygon?: Loc[] | null; [k: string]: unknown;
+};
+export function mergeHoleWays<H extends MergeHole>(
+  holes: H[],
+  wayHoles: { hole_number: number; tee: Loc; green: Loc; green_front: Loc; green_back: Loc; bearing_deg: number | null; green_polygon: Loc[] | null }[],
+): { holes: H[]; applied: boolean; replaced: number; cleared: number; disagreed: number } {
+  if (holes.length === 0 || wayHoles.length < Math.ceil(holes.length * HOLEWAYS_MIN_COVERAGE)) {
+    return { holes, applied: false, replaced: 0, cleared: 0, disagreed: 0 };
+  }
+  const byRef = new Map(wayHoles.map((w) => [w.hole_number, w] as const));
+  let replaced = 0, cleared = 0, disagreed = 0;
+  const out = holes.map((h) => {
+    const w = byRef.get(h.hole_number);
+    if (w) {
+      if (h.green && haversineYards(h.green, w.green) > SAME_GREEN_YD) disagreed++;
+      replaced++;
+      return { ...h, tee: w.tee, green: w.green, green_front: w.green_front, green_back: w.green_back, bearing_deg: w.bearing_deg, green_polygon: w.green_polygon };
+    }
+    if (h.green && wayHoles.some((x) => haversineYards(x.green, h.green!) <= SAME_GREEN_YD)) {
+      cleared++;
+      return { ...h, tee: null, green: null, green_front: null, green_back: null, bearing_deg: null };
+    }
+    return h;
+  });
+  return { holes: out, applied: true, replaced, cleared, disagreed };
+}
+
 export function chooseCoherentHoleWays(
   holeWays: OsmHoleWay[],
   centroid: Loc,
@@ -962,81 +1087,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return len;
     };
     const refWays = chooseCoherentHoleWays(holeWays, centroid, holeCount, wayLen, cardYards);
-    if (refWays.length >= 3 && greenPolys.length >= 3) {
-      const nearestGreen = (p: Loc): { poly: OsmPolygon; d: number } | null => {
-        let best: OsmPolygon | null = null; let bd = Infinity;
-        for (const g of greenPolys) {
-          const d = haversineYards(p, g.centroid);
-          if (d < bd) { bd = d; best = g; }
-        }
-        return best ? { poly: best, d: bd } : null;
-      };
-      const rows: Array<{ ref: number; par: number; parEstimated: boolean; tee: Loc; green: Loc; front: Loc; back: Loc; ring: Loc[] }> = [];
-      for (const w of refWays.sort((a, b) => (a.ref! - b.ref!))) {
-        const A = w.pts[0]; const B = w.pts[w.pts.length - 1];
-        const gA = nearestGreen(A); const gB = nearestGreen(B);
-        if (!gA || !gB) continue;
-        const greenEnd = gA.d <= gB.d ? gA : gB;
-        const tee = gA.d <= gB.d ? B : A;
-        // Front/back of the green relative to the tee, from the actual polygon.
-        let front = greenEnd.poly.centroid; let back = greenEnd.poly.centroid;
-        let dF = Infinity; let dB = -Infinity;
-        for (const p of greenEnd.poly.polygon) {
-          const d = haversineYards(tee, p);
-          if (d < dF) { dF = d; front = p; }
-          if (d > dB) { dB = d; back = p; }
-        }
-        const center = haversineYards(tee, greenEnd.poly.centroid);
-        const par = w.par ?? (center <= 215 ? 3 : center >= 460 ? 5 : 4);
-        rows.push({ ref: w.ref!, par, parEstimated: w.par == null, tee, green: greenEnd.poly.centroid, front, back, ring: greenEnd.poly.polygon });
-      }
-      if (rows.length >= 3) {
-        const holes = rows.map(r => ({
-          hole_number: r.ref,
-          par: r.par,
-          yardage: Math.round(haversineYards(r.tee, r.green)),
-          tee: r.tee,
-          green: r.green,
-          green_front: r.front,
-          green_back: r.back,
-          bearing_deg: bearingDeg(r.tee, r.green),
-          hazards: [],
-          fairway_centerline: [],
-          green_outline: [],
-          /**
-           * 2026-08-13 (audit C3, isolated) — the ring we ALREADY matched, instead of null.
-           *
-           * Four courses built live against the deployed engine came back with green_polygon empty on
-           * every hole, and I could not tell from code whether that was an engine bug or OSM simply
-           * not having the rings. Querying Overpass directly with this file's own query settled it:
-           * Kettle Brook returns 20 green polygons with full 24-point rings in 6s. The data was always
-           * there.
-           *
-           * This path fetched those rings, used them to pick the green and to derive front/back, and
-           * then dropped them on the floor — the polygon augmentation block lives only on the
-           * speculative pairing path below, and this branch returns before it. So the BETTER path
-           * produced the poorer payload.
-           *
-           * green_polygon is the field consumers actually read (smartAnalysisEngine's `polygonsKnown`,
-           * the orchestrator's completeness score). green_outline stays reserved for the vision
-           * derivation path that populates it.
-           */
-          green_polygon: r.ring as Loc[] | null,
-          // 2026-08-09 (course-engine audit C1) — the `estimated` flag drives the "AI ESTIMATE — not
-          // surveyed" badge + the 45% confidence cap, which are about COORDINATE provenance. These coords
-          // are REAL (community-mapped golf=hole ways + polygon-derived greens), so estimated:false even
-          // when PAR was inferred from distance — badging real coords "AI ESTIMATE" because par lacked a
-          // tag was backwards. par_estimated carries the (minor) par uncertainty separately.
-          estimated: false,
-        }));
-        console.log(`[course-geometry] OSM hole-way synthesis: ${holes.length} holes with REAL refs (par inferred on ${rows.filter(r => r.parEstimated).length})`);
-        return res.status(200).json({
-          course_id: courseId,
-          course_name: 'OSM-derived',
-          holes,
-          source: 'osm_holeways',
-        });
-      }
+    const synth = refWays.length >= 3 && greenPolys.length >= 3 ? holeWaysToHoles(refWays, greenPolys) : [];
+    if (synth.length >= 3) {
+      const holes = synth;
+      console.log(`[course-geometry] OSM hole-way synthesis: ${holes.length} holes with REAL refs`);
+      return res.status(200).json({
+        course_id: courseId,
+        course_name: 'OSM-derived',
+        holes,
+        source: 'osm_holeways',
+      });
     }
     const [osmGreens, osmTees] = await Promise.all([
       fetchOsmFeatures(centroid, 'green'),
@@ -1313,9 +1373,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('[course-geometry] sample hole coord-like keys:', JSON.stringify(slice).slice(0, 800));
       }
     }
-    const holes = rawHoles
+    let holes = rawHoles
       .map((h, i) => projectHole(h, i + 1))
       .filter(h => h.hole_number > 0);
+
+    // 2026-10-13 — numbered OSM holes, when the course has them, replace the proximity pairing (see
+    // mergeHoleWays). Fetched in ONE parallel round trip with the green rings the fill below needs.
+    let pairedByHoleWays = false;
+    let prefetchedGreenRings: OsmPolygon[] | null = null;
+    if (centroid && holes.length > 0) {
+      const [ways, rings] = await Promise.all([
+        fetchOsmHoleWays(centroid).catch(() => [] as OsmHoleWay[]),
+        fetchOsmPolygons(centroid, 'green').catch(() => [] as OsmPolygon[]),
+      ]);
+      prefetchedGreenRings = rings;
+      const card = cardYards.some((y) => y > 0) ? cardYards : holes.map((h) => (h.yardage > 0 ? Math.round(h.yardage) : 0));
+      const refWays = chooseCoherentHoleWays(ways, centroid, Math.min(holeCount, holes.length), wayLenYd, card);
+      const wayHoles = refWays.length >= 3 && rings.length >= 3 ? holeWaysToHoles(refWays, rings) : [];
+      const merged = mergeHoleWays(holes, wayHoles);
+      if (merged.applied) {
+        holes = merged.holes;
+        pairedByHoleWays = true;
+        console.log(`[course-geometry] numbered OSM holes: ${merged.replaced}/${holes.length} paired by hole number (${merged.disagreed} disagreed with the database pairing), ${merged.cleared} shared-green holes cleared`);
+      } else if (wayHoles.length > 0) {
+        console.log(`[course-geometry] numbered OSM holes too few to trust (${wayHoles.length}/${holes.length}) — keeping the database pairing`);
+      }
+    }
 
     // 2026-05-17 — OSM Overpass fallback. When the upstream returned
     // holes but with null greens (golfcourseapi's free-tier gap for
@@ -1326,7 +1409,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // polygons where possible.
     const nullGreens = holes.filter(h => !h.green).length;
     const nullTees = holes.filter(h => !h.tee).length;
-    if (centroid && (nullGreens > 0 || nullTees > 0)) {
+    // Skipped once numbered holes paired the course: a proximity guess must not refill a gap that was
+    // left empty on purpose (mergeHoleWays cleared a green that belongs to another hole).
+    if (centroid && !pairedByHoleWays && (nullGreens > 0 || nullTees > 0)) {
       console.log(`[course-geometry] OSM fallback triggered: ${nullGreens} null greens, ${nullTees} null tees`);
       /**
        * 2026-08-11 — fetch the green POLYGONS (not just centroids) in the same round trip.
@@ -1338,7 +1423,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * AND the shape (for real green depth) from ONE query that we were making anyway.
        */
       const [greenRingsRes, teesRes] = await Promise.all([
-        nullGreens > 0 ? fetchOsmPolygons(centroid, 'green') : Promise.resolve([] as OsmPolygon[]),
+        nullGreens > 0 ? (prefetchedGreenRings && prefetchedGreenRings.length > 0 ? Promise.resolve(prefetchedGreenRings) : fetchOsmPolygons(centroid, 'green')) : Promise.resolve([] as OsmPolygon[]),
         nullTees > 0 ? fetchOsmFeatures(centroid, 'tee') : Promise.resolve([] as Loc[]),
       ]);
       // Centroids for the existing fill logic; rings kept alongside for the depth pass below.
@@ -1560,6 +1645,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // Bounded: a slow database must not become a slow round. The reports are upserted first,
           // so even a timeout here leaves the data recoverable on the next build.
           await Promise.race([persist, new Promise(r => setTimeout(r, 6_000))]);
+          // A hole the numbered OSM holes left empty on purpose must not keep its old (wrong) cloud row.
+          const emptied = pairedByHoleWays ? holesWithPolygons.filter(h => !h.green).map(h => h.hole_number) : [];
+          if (emptied.length > 0) {
+            const { forgetServerHoles } = await import('./_courseCloud');
+            await Promise.race([forgetServerHoles(db, cloudKey ?? courseId, emptied), new Promise(r => setTimeout(r, 3_000))]);
+          }
         }
       } catch (e) {
         console.warn('[course-geometry] server build persist failed (non-fatal):', e instanceof Error ? e.message : e);

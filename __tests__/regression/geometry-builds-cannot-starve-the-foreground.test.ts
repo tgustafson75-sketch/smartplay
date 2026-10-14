@@ -130,7 +130,7 @@ describe('the cap protects the foreground instead of becoming it', () => {
     _seedGeometry({
       course_id: 'cached-course',
       fetched_at: Date.now(),
-      pipeline_version: 3,
+      pipeline_version: 4,   // the current GEOMETRY_PIPELINE_VERSION (servable = current version)
       holes: [{ hole: 1, green: { lat: 33.6, lng: -117.1 } }],
     } as never);
     const t0 = Date.now();

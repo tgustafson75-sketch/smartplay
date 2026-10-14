@@ -321,7 +321,9 @@ const CACHE_KEY_PREFIX = 'course-geometry-v3::';
  * the geometry pipeline's OUTPUT changes (pairing rules, validation, new fields), which is exactly
  * the class of change that was silently unable to reach existing users.
  */
-const GEOMETRY_PIPELINE_VERSION = 3;
+// 4 (2026-10-13): numbered OSM holes now pair database courses (Hemet Golf Club: 17/18 greens were on
+// the wrong hole) — every cached map from the old pairing must be rebuilt, not served.
+const GEOMETRY_PIPELINE_VERSION = 4;
 const REFRESH_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // weekly maximum
 
 const memCache: Map<string, CourseGeometry> = new Map();
