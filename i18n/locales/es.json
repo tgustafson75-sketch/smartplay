@@ -420,5 +420,13 @@
     "smart_vision_screen": {
       "no_signal_for_the_aerial": "Sin señal para cargar la vista aérea de este hoyo. Aparecerá en cuanto vuelva la conexión; tus distancias GPS siguen funcionando."
     }
+  },
+  "round_shot_tracked_sheet": {
+    "shot_tracked_sheet": {
+      "not_a_shot": "No fue golpe"
+    },
+    "accessibility_label": {
+      "not_a_shot": "No fue golpe — quitarlo, solo estaba midiendo"
+    }
   }
 }

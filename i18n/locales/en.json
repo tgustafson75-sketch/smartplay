@@ -3532,10 +3532,12 @@
       "shot_tracked": "SHOT TRACKED",
       "to_pin": "TO PIN",
       "yds_est": "YDS (est)",
-      "yds": "YDS"
+      "yds": "YDS",
+      "not_a_shot": "Not a shot"
     },
     "accessibility_label": {
-      "confirm_tracked_shot": "Confirm tracked shot"
+      "confirm_tracked_shot": "Confirm tracked shot",
+      "not_a_shot": "Not a shot — remove it, I was just measuring"
     }
   },
   "settings_cloud_backup_card": {

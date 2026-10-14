@@ -47,10 +47,17 @@ export default function ShotTrackedSheet({
   result,
   onCorrectClub,
   onDismiss,
+  onNotAShot,
 }: {
   result: ShotTrackResult;
   onCorrectClub: (club: ClubName) => void;
   onDismiss: () => void;
+  /**
+   * 2026-10-13 (SmartVision/GPS audit #6) — the tap that placed the cart had already LOGGED a shot, and
+   * the sheet's only exit confirmed it: a lay-up "what if I'm here" tap became a stroke on the card.
+   * This removes the shot it just logged. Optional — surfaces without the capability show no button.
+   */
+  onNotAShot?: () => void;
 }) {
   const { toDisplay, label } = useDistanceFormat();
   const { t } = useTranslation();
@@ -68,6 +75,11 @@ export default function ShotTrackedSheet({
         <Ionicons name="golf" size={18} color={colors.accent} />
         <Text style={[styles.title, { color: colors.text_primary }]}>{t('round_shot_tracked_sheet.shot_tracked_sheet.shot_tracked')}</Text>
         <View style={{ flex: 1 }} />
+        {onNotAShot ? (
+          <Pressable onPress={onNotAShot} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('round_shot_tracked_sheet.accessibility_label.not_a_shot')} style={[styles.notShot, { borderColor: colors.border }]}>
+            <Text style={[styles.notShotText, { color: colors.text_secondary }]}>{t('round_shot_tracked_sheet.shot_tracked_sheet.not_a_shot')}</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={onDismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('round_shot_tracked_sheet.accessibility_label.confirm_tracked_shot')}>
           <Ionicons name="checkmark-circle" size={26} color={colors.accent} />
         </Pressable>
@@ -117,4 +129,6 @@ const styles = StyleSheet.create({
   pickerRow: { gap: 6, paddingVertical: 2 },
   clubChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, minWidth: 44, alignItems: 'center' },
   clubChipText: { fontSize: 13, fontWeight: '800' },
+  notShot: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  notShotText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
 });

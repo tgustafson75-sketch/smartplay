@@ -419,5 +419,13 @@
     "smart_vision_screen": {
       "no_signal_for_the_aerial": "没有信号，无法加载本洞的航拍图。连接恢复后会立即显示——GPS 码数仍然可用。"
     }
+  },
+  "round_shot_tracked_sheet": {
+    "shot_tracked_sheet": {
+      "not_a_shot": "不是击球"
+    },
+    "accessibility_label": {
+      "not_a_shot": "不是击球——删除，我只是在测距"
+    }
   }
 }

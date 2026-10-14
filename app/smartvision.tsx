@@ -2281,7 +2281,8 @@ export default function SmartVisionScreen() {
                 const hMetaPar = hMeta && typeof hMeta.par === 'number' && hMeta.par > 0 ? hMeta.par : null;
                 const par = hMetaPar ?? geometry?.par ?? null;
                 const yardage = hMetaDist ?? holeYds(geometry?.yardage) ?? null;
-                return par != null && yardage != null ? `PAR ${par} · ${yardage}y` : '—';
+                // 2026-10-13 (audit #9) — was a hard-coded `${yardage}y`: a metres player read yards here.
+                return par != null && yardage != null ? `PAR ${par} · ${formatDistanceCompact(yardage, liveDistanceUnit())}` : '—';
               })()}
             </Text>
             {/* 2026-07-14 (Tim — "cheat the paid geometry DB") — when this hole's green/tee were
@@ -2805,6 +2806,11 @@ export default function SmartVisionScreen() {
             }}
             onDismiss={() => {
               if (trackedShot.shotId) confirmTrackedShot(trackedShot.shotId);
+              setTrackedShot(null);
+            }}
+            onNotAShot={() => {
+              // A measure, not a stroke: remove the shot the tap logged. The cart stays where he put it.
+              if (trackedShot.shotId) useRoundStore.getState().deleteShot(trackedShot.shotId);
               setTrackedShot(null);
             }}
           />

@@ -27,6 +27,7 @@ import type { HoleGeometry, LandmarkFeature } from '../../services/courseGeometr
 import { haversineYards as canonicalHaversineYards } from '../../utils/geoDistance';
 import { isValidGolfCoord, type LatLng } from '../../utils/coordGuard';
 import { useTranslation } from 'react-i18next';
+import { liveDistanceUnit, toDisplayDistance } from '../../services/distanceUnits';
 
 function haversineYards(a: LatLng, b: LatLng): number {
   if (!isValidGolfCoord(a.lat, a.lng) || !isValidGolfCoord(b.lat, b.lng)) {
@@ -182,7 +183,8 @@ export default function YardageBookPanel({
           <View key={r.key} style={styles.row}>
             <View style={[styles.dot, { backgroundColor: r.color }]} />
             <Text style={styles.label} numberOfLines={1}>{r.label}</Text>
-            <Text style={styles.fb}>F: {r.front}  B: {r.back}</Text>
+            {/* 2026-10-13 (audit #9) — raw yards for a metres player; converted like every other surface. */}
+            <Text style={styles.fb}>F: {toDisplayDistance(r.front, liveDistanceUnit())}  B: {toDisplayDistance(r.back, liveDistanceUnit())}</Text>
           </View>
         ))}
       </ScrollView>
