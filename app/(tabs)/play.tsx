@@ -55,7 +55,7 @@ import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, resolveDiscoveredCourseId, type AiCourseResult } from '../../services/golfCourseApi';
 import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
-import { composeYourCourses, decideAutoPick } from '../../services/yourCourses';
+import { composeYourCourses, decideAutoPick, chooseDefaultCourse } from '../../services/yourCourses';
 import { surveyedTwinOf, canonicalCourseId } from '../../services/courseCard';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
@@ -78,6 +78,13 @@ import { getApiBaseUrl } from '../../services/apiBase';
 import { prewarmBriefing } from '../../services/briefingGenerator';
 import { prewarmVoice } from '../../services/voiceWarmup';
 import { normalizeBallKey } from '../../services/ballPerformance';
+
+/** A usable course position, or null (missing, non-finite, out of range, or the 0,0 null island). */
+function placeOf(lat: unknown, lng: unknown): { lat: number; lng: number } | null {
+  if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180 || (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001)) return null;
+  return { lat, lng };
+}
 
 type CourseSummary = {
   id: string;
@@ -669,6 +676,7 @@ export default function PlayTab() {
   const recentCourseIds = useRoundStore(s => s.recentCourseIds);
   const roundHistory = useRoundStore(s => s.roundHistory);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
+  const previewCourseExplicit = useRoundStore(s => s.previewCourseExplicit);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const activeCourse = useRoundStore(s => s.activeCourse);
@@ -1147,15 +1155,19 @@ export default function PlayTab() {
         if (c) {
           const tee = pickTeeSet(c.tees, preferredTee, handicapGender);
           const location = [c.location.city, c.location.state].filter(Boolean).join(', ');
+          // 2026-10-13 — and WHERE it is. A played course used to carry no position, so "nearest of
+          // your courses" could only ever be a bundled survey (Hemet Golf Club → Echo Hills, 8 km).
+          const pos = placeOf(c.location?.latitude, c.location?.longitude);
           out.push({
             id: c.id,
             club_name: c.club_name,
             location,
             rating: tee?.course_rating ?? null,
             slope: tee?.slope_rating ?? null,
+            ...(pos ?? {}),
           });
-          // Remember the name so this course can be listed with no network next time.
-          rememberRecentCourseMeta(c.id, { club_name: c.club_name, location });
+          // Remember the name (and place) so this course can be listed with no network next time.
+          rememberRecentCourseMeta(c.id, { club_name: c.club_name, location, ...(pos ?? {}) });
         } else {
           /**
            * 2026-08-12 (Tim — "where the hell did Wachusett go? It's not even on my list anymore")
@@ -1170,7 +1182,8 @@ export default function PlayTab() {
            */
           const cached = recentCourseMeta[id];
           if (cached) {
-            out.push({ id, club_name: cached.club_name, location: cached.location, rating: null, slope: null });
+            const pos = placeOf(cached.lat, cached.lng);
+            out.push({ id, club_name: cached.club_name, location: cached.location, rating: null, slope: null, ...(pos ?? {}) });
           }
         }
       }
@@ -1518,28 +1531,19 @@ export default function PlayTab() {
       }
       return null;
     })();
-    // Phase 407 — default to the NEAREST of his courses (closestLocal[0]) once the GPS sort has run.
-    const gpsNearest = userPosition ? closestLocal[0] ?? null : null;
-    // 2026-06-08 — Fix sticky-Menifee: on tab remount `selected` resets to null; restore his last
-    // explicit selection (previewCourseId) before anything else.
-    const previewMatch = previewCourseId ? findById(previewCourseId) : null;
-    /**
-     * 2026-08-20 — precedence made EXPLICIT rather than decided by a race.
-     *
-     * The comment above says "live GPS-nearest → last picked", but that is not what shipped. The
-     * auto-locate effect used to bail out entirely when previewCourseId existed, so userPosition was
-     * null here and previewMatch always won; and even without that gate, location is async while this
-     * effect runs synchronously at mount, so previewMatch won the race anyway. Now that a cached fix
-     * can arrive almost instantly, that race would start flipping — and the observable result would
-     * be the Play tab quietly changing which course it defaults to, which is a PRODUCT decision and
-     * nothing to do with fixing discovery.
-     *
-     * So: an explicit prior pick beats GPS, which is the behaviour that has actually been shipping.
-     * (Worth revisiting with Tim — driving to a new course arguably should re-default to it — but
-     * that is a deliberate change to make on purpose, not a side effect of a location fix.)
-     */
+    // Explicit precedence (2026-08-20) is now the pure rule in services/yourCourses.chooseDefaultCourse:
+    // the course he is STANDING at first (2026-10-13 — Hemet Golf Club, not Echo Hills 8 km away), then
+    // his own pick, then the nearest of his courses, then an earlier automatic pick, then home.
     // No invented default: a player with no course of his own sees an empty card and the search.
-    const defaultPick = previewMatch ?? gpsNearest ?? homeMatch ?? closestLocal[0] ?? null;
+    const previewMatch = previewCourseId ? findById(previewCourseId) : null;
+    const choice = chooseDefaultCourse<CourseSummary>({
+      position: userPosition,
+      own: closestLocal,
+      discovered: nearbyApiCourses,
+      preview: previewMatch,
+      previewExplicit: previewCourseExplicit,
+      home: homeMatch,
+    });
     const pick = decideAutoPick<CourseSummary>({
       hasSelection: !!selected,
       loading: selectedLoading,
@@ -1547,10 +1551,11 @@ export default function PlayTab() {
       lastPickWasAutomatic: selectSeqRef.current === autoPickSeqRef.current,
       lastAutoPickId: autoPickIdRef.current,
       activeRoundCourse: activeMatch,
-      defaultPick,
+      defaultPick: choice.pick,
+      defaultIsHere: choice.here,
     });
     if (pick) {
-      void selectSummary(pick);
+      void selectSummary(pick, { automatic: true });
       autoPickSeqRef.current = selectSeqRef.current;   // selectSummary bumped it synchronously
       autoPickIdRef.current = pick.id;
     }
@@ -1559,7 +1564,7 @@ export default function PlayTab() {
     // hasOwnCourses: his list fills in after mount (recents resolve, stores rehydrate); an empty list
     // at mount must not be the last word. It flips once, so this still runs a handful of times.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeCourses, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId, hasOwnCourses, selectedLoading]);
+  }, [homeCourses, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId, previewCourseExplicit, hasOwnCourses, selectedLoading, nearbyApiCourses]);
 
   /**
    * 2026-09-14 (Tim) — "When user selects up to 3 home courses, logic should spool those to the play
@@ -1792,7 +1797,9 @@ export default function PlayTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  const selectSummary = useCallback(async (s: CourseSummary) => {
+  const selectSummary = useCallback(async (s: CourseSummary, opts?: { automatic?: boolean }) => {
+    // The Play tab choosing FOR him is not his choice (roundStore.previewCourseExplicit).
+    const explicit = !opts?.automatic;
     const mySeq = ++selectSeqRef.current;
     const isCurrent = () => mySeq === selectSeqRef.current;
     /** A course with a surveyed card: that card, built by the one pipeline. */
@@ -1863,6 +1870,7 @@ export default function PlayTab() {
       useRoundStore.getState().setPreviewCourse(
         row.id,
         row.lat != null && row.lng != null ? { lat: row.lat, lng: row.lng } : null,
+        { explicit },
       );
       // 2026-09-23 (Tim — "Unify the pipeline") — the SAME build every other course gets: map, hole
       // imagery, notes, with live progress on this card. This used to run its own imagery-only warm,
@@ -1936,7 +1944,7 @@ export default function PlayTab() {
           !(Math.abs(cLat) < 0.001 && Math.abs(cLng) < 0.001)
             ? { lat: cLat, lng: cLng }
             : null;
-        useRoundStore.getState().setPreviewCourse(c.id, cCoords);
+        useRoundStore.getState().setPreviewCourse(c.id, cCoords, { explicit });
         try {
           const courseLocation =
             typeof c.location?.latitude === 'number' &&

@@ -11836,10 +11836,11 @@ check('LOCK: a selected course can always draw itself — centroid captured at s
     const prev = read('components/caddie/L1HolePreview.tsx');
     // the store holds the centroid, and an id-only call can't wipe it
     const stored = /previewCourseCoords: \{ lat: number; lng: number \} \| null;/.test(rs) &&
-      /setPreviewCourse: \(id, coords\) => set\(\{/.test(rs) &&
+      /setPreviewCourse: \(id, coords, opts\) => set\(\{/.test(rs) &&
       /coords !== undefined \|\| id == null/.test(rs);
     // both selection paths supply it — API courses from the record, bundled from the summary
-    const passed = /useRoundStore\.getState\(\)\.setPreviewCourse\(c\.id, cCoords\);/.test(play) &&
+    // (2026-10-13: + `{ explicit }` — an automatic pick is not saved as his choice)
+    const passed = /useRoundStore\.getState\(\)\.setPreviewCourse\(c\.id, cCoords, \{ explicit \}\);/.test(play) &&
       /setPreviewCourse\(\s*row\.id,/.test(play);
     // the preview draws the centroid when hole geometry isn't there yet
     const draws = /if \(!previewCourseCoords\) return null;/.test(prev) &&

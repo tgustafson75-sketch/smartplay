@@ -39,11 +39,11 @@ describe('a recent course survives a failed lookup', () => {
   });
 
   it('caches the name on every successful lookup', () => {
-    expect(play).toContain('rememberRecentCourseMeta(c.id, { club_name: c.club_name, location });');
+    expect(play).toContain('rememberRecentCourseMeta(c.id, { club_name: c.club_name, location, ...(pos ?? {}) });');
   });
 
   it('the cache is persisted — a cold start must not need the network to draw the list', () => {
-    expect(store).toContain('recentCourseMeta: Record<string, { club_name: string; location: string }>;');
+    expect(store).toContain('recentCourseMeta: Record<string, { club_name: string; location: string; lat?: number; lng?: number }>;');
     expect(store).toContain('recentCourseMeta: s.recentCourseMeta,'); // in partialize
     expect(store).toContain('recentCourseMeta: {},');                 // initial state
   });
@@ -52,7 +52,7 @@ describe('a recent course survives a failed lookup', () => {
     // Only ever the handful of ids kept as recents, and no write when nothing changed.
     const i = store.indexOf('rememberRecentCourseMeta: (id, meta) =>');
     const block = store.slice(i, i + 600);
-    expect(block).toContain('if (prev && prev.club_name === meta.club_name && prev.location === meta.location) return;');
+    expect(block).toMatch(/if \(prev && prev\.club_name === meta\.club_name && prev\.location === meta\.location\s*&& prev\.lat === meta\.lat && prev\.lng === meta\.lng\) return;/);
   });
 
   it('recents honour Preferred Tee like every other surface', () => {

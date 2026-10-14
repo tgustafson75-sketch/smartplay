@@ -105,7 +105,9 @@ describe('the app sweep', () => {
     const p = code('app/(tabs)/play.tsx');
     expect((p.match(/resolveDiscoveredCourseId\(s\.club_name \?\? '', s\.lat != null && s\.lng != null \? \{ lat: s\.lat, lng: s\.lng \} : null\)/g) ?? []).length).toBe(2);
     expect(p).not.toMatch(/found\.find\(r => !r\._error && r\.id\)/);
-    expect(code('services/golfCourseApi.ts')).toMatch(/if \(best\) return best\.yds <= 8800 \? best\.id : null;/);
+    // 2026-10-13: one owner (nearestRecordId), and 3 km — 5 miles only ever admitted a different course
+    expect(code('services/golfCourseApi.ts')).toMatch(/if \(best\) return best\.m <= SAME_COURSE_M \? best\.id : null;/);
+    expect(code('services/golfCourseApi.ts')).toMatch(/return nearestRecordId\(found\.map/);
   });
   it('a strip score never overwrites one entered elsewhere during its settle', () => {
     const s = code('components/CaddieDataStrip.tsx');

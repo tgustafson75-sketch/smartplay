@@ -248,7 +248,7 @@ export function isApiCourseId(id: string): boolean {
  *   2. a surveyed course by name
  *   3. a database search by name
  */
-async function resolveCourse(name: string, explicitCourseId?: string | null): Promise<{ courseId: string; courseName: string; holes: CourseHole[]; rating?: string | number | null; slope?: string | number | null; byName?: boolean } | 'unavailable' | null> {
+async function resolveCourse(name: string, explicitCourseId?: string | null, near?: { lat: number; lng: number } | null): Promise<{ courseId: string; courseName: string; holes: CourseHole[]; rating?: string | number | null; slope?: string | number | null; byName?: boolean } | 'unavailable' | null> {
   const { loadCourseCard, readDatabaseCard } = require('./courseCard') as typeof import('./courseCard');
   const fromCard = (c: import('./courseCard').CourseCard) =>
     ({ courseId: c.courseId, courseName: c.name, holes: c.holes, rating: c.rating, slope: c.slope });
@@ -284,9 +284,11 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
     const hits = await searchCourses(name);
     // A failed search is not an empty one: the sentinel row carries `_error` and no id.
     if (hits.length === 1 && hits[0]._error) return 'unavailable';
-    const first = hits?.[0];
-    if (first?.id) {
-      const { card, emptyRecord } = await readDatabaseCard(String(first.id));
+    // 2026-10-13 — the record AT the place, not the first name match (golfCourseApi.nearestRecordId).
+    const { nearestRecordId } = require('./golfCourseApi') as typeof import('./golfCourseApi');
+    const firstId = await nearestRecordId(hits.filter((h) => !h._error && h.id).map((h) => String(h.id)), near ?? null);
+    if (firstId) {
+      const { card, emptyRecord } = await readDatabaseCard(firstId);
       // The search FOUND the course; its card did not come back (quota, network, nothing cached).
       // That is an outage, not "not in the database" — which is also what arms the 6h cooldown.
       // A record that came back with no holes is "nothing to play", not an outage.
@@ -311,6 +313,11 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
  * the same second and paid course-content calls in same-second pairs. A place that resolves to no
  * course was also searched again (up to four relaxed queries) on every single open.
  */
+function placeOfInput(i: { lat?: number | null; lng?: number | null }): { lat: number; lng: number } | null {
+  return typeof i.lat === 'number' && typeof i.lng === 'number' && Number.isFinite(i.lat) && Number.isFinite(i.lng)
+    && !(Math.abs(i.lat) < 0.001 && Math.abs(i.lng) < 0.001) ? { lat: i.lat, lng: i.lng } : null;
+}
+
 const downloadsInFlight: Map<string, Promise<{ ok: boolean; courseId?: string; reason?: string; fresh?: boolean }>> = new Map();
 const unresolvedAt: Map<string, number> = new Map();
 export const UNRESOLVED_RETRY_AFTER_MS = 6 * 60 * 60 * 1000;
@@ -364,7 +371,7 @@ function topUpInBackground(input: { name: string; courseId?: string | null; lat?
   toppedUp.add(key);
   void (async () => {
     try {
-      const resolved = await resolveCourse(input.name, input.courseId ?? null);
+      const resolved = await resolveCourse(input.name, input.courseId ?? null, placeOfInput(input));
       if (!resolved || resolved === 'unavailable') { toppedUp.delete(key); return; }
       await prefetchRoundData({
         courseId: resolved.courseId,
@@ -485,7 +492,7 @@ async function downloadCourseInner(input: {
   };
   publish(input.name, 0.05, 'card');
 
-  const resolved = await resolveCourse(input.name, input.courseId ?? null);
+  const resolved = await resolveCourse(input.name, input.courseId ?? null, placeOfInput(input));
   if (resolved === 'unavailable') { fail(downloadFailureText(input.name, 'unavailable')); return { ok: false, reason: 'unavailable' }; }
   if (!resolved) { fail(downloadFailureText(input.name, 'unresolved')); return { ok: false, reason: 'unresolved' }; }
   const { courseId, courseName, holes, rating, slope, byName } = resolved;
@@ -530,7 +537,9 @@ async function downloadCourseInner(input: {
     if (greens === 0) {
       console.warn(`[courseDownload] ${courseName} downloaded with ZERO greens — yardages will be estimates until geometry builds`);
     }
-    store.markDownloaded({ courseId, name: courseName, holeCount: holes.length, at: Date.now(), greens });
+    // Where it is, when we were handed a place (a by-id download is placed by its recent-course entry).
+    const at = placeOfInput(input);
+    store.markDownloaded({ courseId, name: courseName, holeCount: holes.length, at: Date.now(), ...(at ?? {}), greens });
     rememberAlias(courseId, courseName, holes.length, greens, byName);
     finish(courseId);
     return { ok: true, courseId, fresh: true };
@@ -571,9 +580,9 @@ export function isCourseDownloaded(courseId: string | null | undefined): boolean
  * the end of the Play tab's distance list, which is the existing behaviour for a coordless course.
  */
 export function downloadedCourseSummaries(
-  downloaded: Readonly<Record<string, { courseId: string; name: string; aliasOf?: string }>>,
-  nameMeta: Readonly<Record<string, { club_name: string; location: string }>> = {},
-): { id: string; club_name: string; location: string; rating: null; slope: null }[] {
+  downloaded: Readonly<Record<string, { courseId: string; name: string; aliasOf?: string; lat?: number; lng?: number }>>,
+  nameMeta: Readonly<Record<string, { club_name: string; location: string; lat?: number; lng?: number }>> = {},
+): { id: string; club_name: string; location: string; rating: null; slope: null; lat?: number; lng?: number }[] {
   const { canonicalCourseId } = require('./courseCard') as typeof import('./courseCard');
   const rows = Object.values(downloaded ?? {})
     .filter((d) => d != null && typeof d.courseId === 'string' && d.courseId !== '')
@@ -582,12 +591,14 @@ export function downloadedCourseSummaries(
     .filter((d) => !d.aliasOf)
     .map((d) => {
       const meta = nameMeta?.[d.courseId];
+      const at = placeOfInput({ lat: d.lat ?? meta?.lat, lng: d.lng ?? meta?.lng });
       return {
         id: d.courseId,
         club_name: (meta?.club_name ?? d.name ?? '').trim() || d.courseId,
         location: meta?.location ?? '',
         rating: null as null,
         slope: null as null,
+        ...(at ?? {}),
       };
     });
   // Stable order so the Play tab does not reshuffle between launches when no GPS fix is in yet.

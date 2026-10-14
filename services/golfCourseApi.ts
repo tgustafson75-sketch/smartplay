@@ -669,19 +669,42 @@ const cleanYardage = (v: unknown): number =>
 export async function resolveDiscoveredCourseId(name: string, near: { lat: number; lng: number } | null): Promise<string | null> {
   const found = (await searchCourses(name).catch(() => [])).filter((r) => !r._error && r.id);
   if (found.length === 0) return null;
-  if (!near || !Number.isFinite(near.lat) || !Number.isFinite(near.lng)) return String(found[0].id);
-  const { haversineYards } = require('../utils/geoDistance') as typeof import('../utils/geoDistance');
-  let best: { id: string; yds: number } | null = null;
-  for (const r of found.slice(0, 4)) {
-    const c = await getCourse(String(r.id)).catch(() => null);
+  return nearestRecordId(found.map((r) => String(r.id)), near);
+}
+
+/**
+ * 2026-10-13 — which of these database records is the course at `near`? ONE owner for the rule, used by
+ * the Play tab's tap on a discovered course AND the download engine's arrival/prefetch download (which
+ * took the first name match and ignored the position it was handed — a namesake in another state).
+ *
+ * The nearest of the first four with a position, accepted within SAME_COURSE_M. A Google place and the
+ * database record for the same course sit at the same clubhouse (Hemet Golf Club: 2 m apart; Echo Hills:
+ * 0 m) — this was 8,800 yards (5 miles), which only ever admitted a DIFFERENT course nearby. No position
+ * to compare: the first record, as before.
+ */
+export const SAME_COURSE_M = 3_000;
+export async function nearestRecordId(
+  ids: readonly string[],
+  near: { lat: number; lng: number } | null,
+  lookup: (id: string) => Promise<{ location?: { latitude?: number; longitude?: number } } | null> = getCourse,
+): Promise<string | null> {
+  if (ids.length === 0) return null;
+  if (!near || !Number.isFinite(near.lat) || !Number.isFinite(near.lng)) return ids[0];
+  const { haversineMeters } = require('../utils/geoDistance') as typeof import('../utils/geoDistance');
+  let best: { id: string; m: number } | null = null;
+  let anyPlaced = false;
+  for (const id of ids.slice(0, 4)) {
+    const c = await lookup(id).catch(() => null);
     const lat = c?.location?.latitude;
     const lng = c?.location?.longitude;
-    if (typeof lat !== 'number' || typeof lng !== 'number') continue;
-    const yds = haversineYards({ lat, lng }, near);
-    if (!best || yds < best.yds) best = { id: String(r.id), yds };
+    if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    anyPlaced = true;
+    const m = haversineMeters({ lat, lng }, near);
+    if (!best || m < best.m) best = { id, m };
   }
-  if (best) return best.yds <= 8800 ? best.id : null;
-  return String(found[0].id);
+  if (best) return best.m <= SAME_COURSE_M ? best.id : null;
+  // None of them could be placed (records unreachable): the name match is all there is.
+  return anyPlaced ? null : ids[0];
 }
 
 export function courseToHoles(course: Course, teeName?: string): CourseHole[] {

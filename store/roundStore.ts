@@ -473,7 +473,10 @@ interface RoundState {
    * Caching the name means the list is drawable with no network at all. A course you played
    * yesterday must not vanish because a fetch timed out this morning.
    */
-  recentCourseMeta: Record<string, { club_name: string; location: string }>;
+  /** lat/lng (2026-10-13): where the course IS, so the Play tab can rank it by distance like every
+   *  surveyed row. Without it a played database course sank to the bottom of "nearest" and a bundled
+   *  course 8 km away won (Hemet Golf Club → Echo Hills). Optional: older entries have none. */
+  recentCourseMeta: Record<string, { club_name: string; location: string; lat?: number; lng?: number }>;
   courseHoles: CourseHole[];
   nineHoleMode: boolean;
   // 2026-08-08 (verification wave) — TRUE only when runStartRound expanded a 9-hole course to 18 (twice
@@ -854,7 +857,14 @@ interface RoundState {
    * later when geometry arrives.
    */
   previewCourseCoords: { lat: number; lng: number } | null;
-  setPreviewCourse: (id: string | null, coords?: { lat: number; lng: number } | null) => void;
+  /**
+   * 2026-10-13 (Tim — "I got Echo Hills the last time I stood at Hemet") — did the PLAYER choose
+   * previewCourseId, or did the Play tab pick it for him? The one field held both, and the automatic
+   * pick saved itself as if he had chosen it, so a wrong guess beat GPS on every launch after.
+   * Only an explicit choice may outrank where he is standing (services/yourCourses.chooseDefaultCourse).
+   */
+  previewCourseExplicit: boolean;
+  setPreviewCourse: (id: string | null, coords?: { lat: number; lng: number } | null, opts?: { explicit?: boolean }) => void;
   /** Pre-beta — pending round factors set on the Play tab alongside the
    *  course pick. Caddie reads these when consuming the pendingStart
    *  signal so the round launches with the user's strategy/mental/format
@@ -912,7 +922,7 @@ interface RoundState {
   setMentalState: (state: string) => void;
   logScore: (hole: number, score: number) => void;
   /** Cache a recent course's name so the Play tab can list it with no network. */
-  rememberRecentCourseMeta: (id: string, meta: { club_name: string; location: string }) => void;
+  rememberRecentCourseMeta: (id: string, meta: { club_name: string; location: string; lat?: number; lng?: number }) => void;
   /** Set the caddie's risk posture. `bySelf` marks a caddie-initiated ease rather than a player choice. */
   setRiskMode: (mode: RiskMode, bySelf?: boolean) => void;
   /** Per-hole stats for the CURRENT round — derived, never fabricated. Empty until holes are scored. */
@@ -2769,8 +2779,11 @@ export const useRoundStore = create<RoundState>()(
       setPendingStartCourse: (id) => set({ pendingStartCourseId: id }),
       previewCourseId: null,
       previewCourseCoords: null,
-      setPreviewCourse: (id, coords) => set({
+      previewCourseExplicit: false,
+      setPreviewCourse: (id, coords, opts) => set({
         previewCourseId: id,
+        // Every caller but the Play tab's automatic pick is the player acting, so explicit by default.
+        previewCourseExplicit: id != null && (opts?.explicit ?? true),
         // Only overwrite the coords when the caller supplies them (or when clearing the course), so
         // a later id-only call can't wipe a good centroid we already captured.
         ...(coords !== undefined || id == null ? { previewCourseCoords: coords ?? null } : {}),
@@ -3152,7 +3165,8 @@ export const useRoundStore = create<RoundState>()(
       rememberRecentCourseMeta: (id, meta) => {
         if (!id || !meta?.club_name) return;
         const prev = get().recentCourseMeta[id];
-        if (prev && prev.club_name === meta.club_name && prev.location === meta.location) return;
+        if (prev && prev.club_name === meta.club_name && prev.location === meta.location
+          && prev.lat === meta.lat && prev.lng === meta.lng) return;
         // Bounded: only ever the ids we actually keep as recents, so this can't grow.
         set((s) => ({ recentCourseMeta: { ...s.recentCourseMeta, [id]: meta } }));
       },
@@ -3892,6 +3906,8 @@ export const useRoundStore = create<RoundState>()(
         // Persist the last previewed/selected course so a cold start
         // restores the user's pick instead of defaulting to Menifee.
         previewCourseId: s.previewCourseId,
+        // Absent in state persisted before 2026-10-13 → false: an old pick is not known to be his.
+        previewCourseExplicit: s.previewCourseExplicit,
         courseHoles: s.courseHoles,
         nineHoleMode: s.nineHoleMode,
         twiceAround: s.twiceAround,

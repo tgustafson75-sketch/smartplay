@@ -13,6 +13,10 @@ export interface DownloadedCourse {
   name: string;
   holeCount: number;
   at: number;
+  /** 2026-10-13 — where the course is, so the Play tab can rank a downloaded course by distance
+   *  (without it only bundled surveys had a position, and the nearest "of yours" could be 8 km off). */
+  lat?: number;
+  lng?: number;
   /**
    * 2026-09-10 — how many holes came back with a GREEN when this course was built.
    *
