@@ -482,6 +482,41 @@ export function mergeHoleWays<H extends MergeHole>(
   return { holes: out, applied: true, replaced, cleared, disagreed };
 }
 
+/**
+ * 2026-10-13 (course sweep, Echo Hills, Hemet) — A NINE PLAYED TWICE IS NINE HOLES OF GRASS.
+ *
+ * The course database lists Echo Hills as 18 holes whose 10-18 repeat 1-9 yard for yard on every tee
+ * (274,136,216,… then 274,136,216,…). The build paired all 18, so the back nine either had nothing or
+ * grabbed OTHER greens — on the same physical holes the front nine had just measured. When the second
+ * nine's card is the first nine's exactly, the build pairs holes 1-9 only and holes 10-18 take their
+ * geometry (expandRepeatedNine). Never when any yardage differs: then they are different holes.
+ */
+export function isRepeatedNine(holes: { hole_number: number; yardage: number }[]): boolean {
+  if (holes.length !== 18) return false;
+  const by = new Map(holes.map((h) => [h.hole_number, h] as const));
+  for (let n = 1; n <= 9; n++) {
+    const a = by.get(n), b = by.get(n + 9);
+    if (!a || !b || !(a.yardage > 0) || a.yardage !== b.yardage) return false;
+  }
+  return true;
+}
+export function expandRepeatedNine<H extends { hole_number: number }>(nine: H[], back: H[]): H[] {
+  const front = new Map(nine.map((h) => [h.hole_number, h] as const));
+  return [
+    ...nine,
+    ...back.map((b) => {
+      const f = front.get(b.hole_number - 9);
+      // the back-nine hole keeps its OWN card fields (par/yardage/handicap); geometry comes from its twin
+      return f ? { ...f, ...pickCard(b), hole_number: b.hole_number } : b;
+    }),
+  ];
+}
+function pickCard(h: Record<string, unknown>): Record<string, unknown> {
+  const o: Record<string, unknown> = {};
+  for (const k of ['par', 'yardage', 'handicap']) if (k in h) o[k] = h[k];
+  return o;
+}
+
 export function chooseCoherentHoleWays(
   holeWays: OsmHoleWay[],
   centroid: Loc,
@@ -1402,6 +1437,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .map((h, i) => projectHole(h, i + 1))
       .filter(h => h.hole_number > 0);
 
+    // A nine played twice: pair the nine, expand to eighteen at the end (isRepeatedNine).
+    const repeatedNine = isRepeatedNine(holes);
+    const backNine = repeatedNine ? holes.slice(9) : [];
+    if (repeatedNine) {
+      holes = holes.slice(0, 9);
+      console.log('[course-geometry] holes 10-18 repeat 1-9 yard for yard — building the nine, mirroring it');
+    }
+
     // 2026-10-13 — numbered OSM holes, when the course has them, replace the proximity pairing (see
     // mergeHoleWays). Fetched in ONE parallel round trip with the green rings the fill below needs.
     let pairedByHoleWays = false;
@@ -1599,7 +1642,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2026-05-17 — Bluegolf-style polygon overlay. Same logic as the
     // osmOnly branch above; attaches polygons for green/tee/fairway/
     // bunker/water_hazard to each hole when withPolygons=1.
-    const holesWithPolygons = holes.map(h => ({
+    let holesWithPolygons = holes.map(h => ({
       ...h,
       green_polygon: null as Loc[] | null,
       tee_polygon: null as Loc[] | null,
@@ -1658,6 +1701,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      *
      * Gated on being substantially mapped, so a thin build can never become the permanent record.
      */
+    if (repeatedNine) {
+      holesWithPolygons = expandRepeatedNine(holesWithPolygons, backNine as unknown as typeof holesWithPolygons);
+    }
     const mappedNow = holesWithPolygons.filter(h => h.tee && h.green).length;
     if (mappedNow >= CLOUD_COMPLETE_MIN) {
       try {
