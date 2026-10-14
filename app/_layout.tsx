@@ -1387,6 +1387,14 @@ function AppNavigator() {
               .useToastStore.getState().show(`Hole ${prevHole} not scored — add it on the scorecard anytime`);
           } catch { /* non-fatal */ }
         }
+        // 2026-10-13 (audit #2) — a BACKWARD move was silent: strip, watch and caddie switched to an old
+        // hole and nothing said so. Say it, so a wrong one is caught on the spot.
+        if (nextHole < prevHole) {
+          try {
+            (require('../store/toastStore') as typeof import('../store/toastStore'))
+              .useToastStore.getState().show(`GPS moved you back to hole ${nextHole} — wrong? Change it on the strip`);
+          } catch { /* non-fatal */ }
+        }
       }
     });
     // 2026-05-24 (Flow B) — GPS confidence-gated proactive ask

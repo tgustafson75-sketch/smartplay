@@ -27,6 +27,7 @@ import { useRoundStore } from '../store/roundStore';
 // renders when a ghost is active; defensive against null ghostRecord.
 import { useGhostStore } from '../store/ghostStore';
 import { useTranslation } from 'react-i18next';
+import { yardageSourceLabel } from '../services/yardageSource';
 
 export interface CaddieDataStripProps {
   yardage: number | null;
@@ -54,7 +55,7 @@ export interface CaddieDataStripProps {
    * map — and said nothing, so a temporary condition looked like a permanent failure. STATIC on a
    * course we're still mapping is not a status, it's a shrug.
    */
-  yardageSource?: 'live' | 'static' | 'building' | null;
+  yardageSource?: import('../services/yardageSource').YardageSource | null;
   /** 2026-09-29 — the optional pace-of-play line (services/paceOfPlay.paceLine), led in the stripe. */
   paceLine?: string | null;
   /**
@@ -648,7 +649,7 @@ export default function CaddieDataStrip({
                 yardageSource === 'building' ? { opacity: 0.9 } : null,
               ]}
             >
-              {yardageSource === 'live' ? 'LIVE' : yardageSource === 'building' ? 'MAPPING…' : 'STATIC'}
+              {yardageSourceLabel(yardageSource)}
             </Text>
           </View>
         )}

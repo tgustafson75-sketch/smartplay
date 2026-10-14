@@ -88,6 +88,13 @@ export type LastFix = {
   location: ShotLocation;
   accuracy_m: number | null;
   timestamp: number;
+  /**
+   * 2026-10-13 (SmartVision/GPS audit #3) — gpsManager has DEGRADED this fix: no fresh fix for 60 s, and
+   * not the benign stationary case (gpsManager's own rule: last accuracy ≤10 m means the phone is just
+   * throttling a golfer standing still). The position is kept — its number is still the best one — but
+   * it is no longer LIVE, and nothing may badge it so.
+   */
+  degraded?: boolean;
 };
 
 // 2026-05-20 — Day 1 / Fix 4: smartFinderService no longer holds its
@@ -104,6 +111,7 @@ function getLastFixInternal(): LastFix | null {
     location: { lat: fix.lat, lng: fix.lng },
     accuracy_m: fix.accuracy_m,
     timestamp: fix.timestamp,
+    degraded: fix.confidence === 'low' && !(fix.accuracy_m != null && fix.accuracy_m <= 10),
   };
 }
 

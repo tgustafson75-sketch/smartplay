@@ -154,17 +154,24 @@ describe('hole detection — walking a full round without the wrong hole', () =>
            *
            *   FORWARD  — to an UNSCORED hole, at most MAX_TRANSITION_LOOKAHEAD (2) ahead.
            *   RE-ENTRY — back to an ALREADY-SCORED hole, when the player is standing on its tee
-           *              (<20y) and well clear (>50y) of the current green. That is the documented
+           *              (≤15y) and well clear (>150y) of the current green, held 45 s (2026-10-13). That is the documented
            *              "walked back for a club / a lost ball" case, and it is deliberate.
            *
-           * Anything outside those two is a bug: a jump to a hole the player has neither played nor
+           *   RETURN   — (2026-10-13) FROM an already-scored hole (he is on it after a re-entry) to his
+           *              FRONTIER, the first unscored hole ahead, however far. Without it a re-entry was a
+           *              trap: from the old hole the forward rule could never reach his real hole.
+           *
+           * Anything outside those three is a bug: a jump to a hole the player has neither played nor
            * is approaching means every yardage the caddie gives is for the wrong hole.
            */
           if (res.transition_recommended && res.hole_number !== current) {
             const target = res.hole_number;
             const isReEntry = scores[target] != null;
             const isForward = target > current && target <= current + 2 && scores[target] == null;
-            if (!isReEntry && !isForward) {
+            let frontier: number | null = null;
+            for (let k = current + 1; k <= 18; k++) if (scores[k] == null) { frontier = k; break; }
+            const isReturn = scores[current] != null && target === frontier;
+            if (!isReEntry && !isForward && !isReturn) {
               flagL('transition that is neither a forward step nor a re-entry',
                 `${current} → ${target}, scored=${scores[target] != null} (round ${round}, hole ${h})`);
             }

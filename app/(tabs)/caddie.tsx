@@ -730,7 +730,9 @@ export default function CaddieTab() {
    */
   const liveYardage = useMemo(() => {
     if (yardageMode !== 'live' || !isRoundActive) return null;
-    return resolvedYardage?.source === 'gps_live' ? (resolvedYardage.value ?? null) : null;
+    // 2026-10-13 — the resolver's own `live` (not source alone): the tee estimate and a degraded fix
+    // were badged LIVE in green.
+    return resolvedYardage?.live === true ? (resolvedYardage.value ?? null) : null;
   }, [yardageMode, isRoundActive, resolvedYardage]);
 
   // 2026-05-25 — Fix L: route the displayed yardage through the unified
@@ -839,8 +841,11 @@ export default function CaddieTab() {
       displayYardage,
       liveYardage,
       isBuilding: !!geometryBuilding[activeCourseIdForReadout ?? ''],
+      gpsNotLive: resolvedYardage?.source === 'gps_live' && !resolvedYardage.live
+        ? (resolvedYardage.is_fallback ? 'estimate' : 'last')
+        : null,
     }),
-  }), [isRoundActive, displayYardage, liveYardage, geometryBuilding, activeCourseIdForReadout]);
+  }), [isRoundActive, displayYardage, liveYardage, geometryBuilding, activeCourseIdForReadout, resolvedYardage]);
 
   /**
    * 2026-09-11 (Tim, approved against the layout freeze) — THE PLAN, ON SCREEN.

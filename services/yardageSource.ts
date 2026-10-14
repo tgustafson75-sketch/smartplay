@@ -23,7 +23,9 @@
  * permanent condition and a temporary one, and a player deserves to know which they are looking at.
  */
 
-export type YardageSource = 'live' | 'building' | 'static';
+/** 2026-10-13 — + 'estimate' (the tee estimate: moves as you walk, not measured to a green) and 'last'
+ *  (a degraded fix — where you were). Both used to read LIVE in green. */
+export type YardageSource = 'live' | 'estimate' | 'last' | 'building' | 'static';
 
 /**
  * Resolve where a displayed yardage actually came from.
@@ -38,9 +40,12 @@ export function resolveYardageSource(args: {
   liveYardage: number | null;
   /** Whether geometry for this course is mid-build right now. */
   isBuilding: boolean;
+  /** The resolver's GPS tier, when it was not live: the tee estimate, or a degraded fix. */
+  gpsNotLive?: 'estimate' | 'last' | null;
 }): YardageSource | null {
   if (args.displayYardage == null) return null;
   if (args.liveYardage != null) return 'live';
+  if (args.gpsNotLive) return args.gpsNotLive;
   return args.isBuilding ? 'building' : 'static';
 }
 
@@ -48,6 +53,8 @@ export function resolveYardageSource(args: {
 export function yardageSourceLabel(s: YardageSource | null): string | null {
   switch (s) {
     case 'live': return 'LIVE';
+    case 'estimate': return 'EST.';
+    case 'last': return 'LAST FIX';
     case 'building': return 'MAPPING…';
     case 'static': return 'STATIC';
     default: return null;

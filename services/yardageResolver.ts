@@ -66,6 +66,13 @@ export interface ResolvedYardage {
   asOf: number;
   /** True when the resolver fell back from GPS to static. UI can hint. */
   is_fallback: boolean;
+  /**
+   * 2026-10-13 (audit #3/#4) — THE one answer to "is this number LIVE?". True only for a real GPS
+   * measurement to a real green that is not a degraded fix: never the tee estimate (card length minus
+   * the straight line from the tee — badly off on a dogleg), never a marked position, never a fix
+   * gpsManager degraded. The badge read `source === 'gps_live'`, which said LIVE for all three.
+   */
+  live?: boolean;
 }
 
 const STATED_TTL_MS = 5 * 60 * 1000; // 5 min — stale after that
@@ -245,6 +252,7 @@ function resolveYardageInner(
           : 'Using your marked position.',
         asOf: fix.timestamp,
         is_fallback: estimated,
+        live: false,
       };
     }
   }
@@ -258,12 +266,15 @@ function resolveYardageInner(
         front: y.front ?? null,
         back: y.back ?? null,
         source: 'gps_live',
-        confidence: estimated ? 'med' : (quality.level === 'strong' ? 'high' : 'med'),
+        confidence: estimated || fix.degraded ? (fix.degraded ? 'low' : 'med') : (quality.level === 'strong' ? 'high' : 'med'),
         reason: estimated
           ? 'GPS estimate from the tee — no green data yet.'
-          : (quality.level === 'strong' ? 'GPS clean.' : 'GPS okay.'),
+          : fix.degraded
+            ? `Last GPS fix ${Math.round(fixAge / 1000)}s ago — signal is weak; this is where you were.`
+            : (quality.level === 'strong' ? 'GPS clean.' : 'GPS okay.'),
         asOf: fix.timestamp,
         is_fallback: estimated,
+        live: !estimated && !fix.degraded,
       };
     }
   }

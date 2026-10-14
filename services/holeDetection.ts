@@ -49,6 +49,22 @@ const AT_NEXT_TEE_CONFIRM_YD     = 25;
 // can no longer shadow the loop-back safeguard from the far side of the course.
 const NEAR_NEXT_TEE_YD           = 100;
 const POLL_INTERVAL_MS           = 4_000;         // 4s poll cadence (cheap)
+/**
+ * 2026-10-13 (SmartVision/GPS audit #2) — GOING BACK NEEDS REAL EVIDENCE, AND IS NEVER A TRAP.
+ *
+ * The re-entry rule jumped to an already-played hole whenever the player was >50y from his green and
+ * <20y from an old tee for the ordinary 10 s — a cart waiting on a path beside an old tee was enough.
+ * And from that old hole the forward search (current+1..+2, skipping scored holes) could never reach
+ * the hole he was really on, so he stayed there — strip, watch and caddie all on the wrong hole —
+ * until he changed it by hand, with no toast.
+ *
+ * Now a backward move needs him standing ON that tee (≤15y), well away from his green (≥150y), held
+ * for 45 s; and from any played hole the forward search also sees the FRONTIER (the first unscored hole
+ * ahead), so walking to his real next tee brings him back. The consumer toasts a backward move.
+ */
+const REENTRY_ON_TEE_YD          = 15;
+const REENTRY_MIN_FROM_GREEN_YD  = 150;
+const REENTRY_SUSTAINED_MS       = 45_000;
 
 type LatLng = { lat: number; lng: number };
 
@@ -61,6 +77,8 @@ interface DetectionResult {
   hole_number: number;
   confidence: 'high' | 'medium' | 'low';
   transition_recommended: boolean;
+  /** A move to an already-played hole — held for REENTRY_SUSTAINED_MS, not the ordinary window. */
+  backward?: boolean;
   reason: string;
 }
 
@@ -313,8 +331,19 @@ function detectCurrentHoleInner(
     const rs = require('../store/roundStore') as typeof import('../store/roundStore');
     roundMaxHole = rs.roundLastHole(rs.useRoundStore.getState());
   } catch { /* store unavailable (tests) — keep 18 */ }
-  for (let offset = 1; offset <= MAX_TRANSITION_LOOKAHEAD; offset++) {
-    const candidate = currentHole + offset;
+  // The frontier: the first unscored hole ahead, however far. Normally it is currentHole+1 (already in
+  // the lookahead); after a re-entry to a played hole it is the hole he was really on.
+  let frontier: number | null = null;
+  for (let h = currentHole + 1; h <= roundMaxHole; h++) {
+    if (scoresByHole[h] == null) { frontier = h; break; }
+  }
+  const candidates: number[] = [];
+  for (let offset = 1; offset <= MAX_TRANSITION_LOOKAHEAD; offset++) candidates.push(currentHole + offset);
+  // Only from a hole he has ALREADY scored (he is on it after a re-entry): from his live hole the
+  // frontier is just the next hole, and a far jump from an unscored hole is never a step he took.
+  const onPlayedHole = scoresByHole[currentHole] != null;
+  if (onPlayedHole && frontier != null && !candidates.includes(frontier)) candidates.push(frontier);
+  for (const candidate of candidates) {
     if (candidate > roundMaxHole) break;
     if (scoresByHole[candidate] != null) continue; // already played
     const candTee = teeForHole(courseId, candidate);
@@ -402,7 +431,7 @@ function detectCurrentHoleInner(
   // a re-entry transition. The 20y inner-radius prevents drift; the
   // sequence-aware forward detector above still wins when the player
   // is genuinely advancing.
-  if (distFromCurrentGreen > 50) {
+  if (distFromCurrentGreen > REENTRY_MIN_FROM_GREEN_YD) {
     // 2026-08-08 (progression audit P0-3 — score-vs-GPS ping-pong at shared tee complexes). If the
     // player is ALSO within ~30y of the CURRENT hole's tee (co-located tees: waiting to hit on N+1
     // beside N's tee box), a <20y read on the played tee is ambiguous — do NOT jump backward. Genuine
@@ -417,11 +446,12 @@ function detectCurrentHoleInner(
       // 2026-06-01 — Fix GL: guard played-hole tee coord.
       if (!playedTee || !isValidGolfCoord(playedTee.lat, playedTee.lng)) continue;
       const d = haversineYards(position, playedTee);
-      if (d < 20) {
+      if (d <= REENTRY_ON_TEE_YD) {
         return {
           hole_number: playedHole,
           confidence: 'medium',
           transition_recommended: true,
+          backward: true,
           reason: `re-entry to hole ${playedHole} (${Math.round(d)}y from tee, ${Math.round(distFromCurrentGreen)}y from hole ${currentHole} green)`,
         };
       }
@@ -597,8 +627,11 @@ async function tick(): Promise<void> {
     return;
   }
 
-  // Sustained the same candidate long enough?
-  if (handleSustainedPosition(candidateHole, candidateSince)) {
+  // Sustained the same candidate long enough? A backward move must hold far longer.
+  const held = result.backward
+    ? now - candidateSince >= REENTRY_SUSTAINED_MS && handleSustainedPosition(candidateHole, candidateSince)
+    : handleSustainedPosition(candidateHole, candidateSince);
+  if (held) {
     if (now - lastTransitionAt < SUSTAINED_TRANSITION_MS) return; // debounce
     lastTransitionAt = now;
     const next = candidateHole;
