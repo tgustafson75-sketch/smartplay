@@ -38,10 +38,20 @@ const BASE = 'https://api.golfcourseapi.com';
  * first is throttled the next usually isn't — which is the difference between a course loading on
  * the first tee and not loading at all.
  */
+/**
+ * 2026-10-13 — measured, not assumed. From Vercel, overpass-api.de answered 504 on every query of a
+ * live Hemet build while mirrors 2 and 3 timed out; tested the same minute from outside:
+ *   lz4.overpass-api.de   200 in 1 s     (same operator, separate backend)
+ *   overpass-api.de       200 in 6 s     (504s from Vercel's shared IPs)
+ *   maps.mail.ru          200 in 18 s    (slow but up — the reason the per-attempt timeout is 20 s)
+ *   overpass.kumi.systems no answer in 30 s · overpass.private.coffee no answer in 30 s (dropped)
+ * Fastest first; the total budget still bounds the walk.
+ */
 const OVERPASS_MIRRORS = [
+  'https://lz4.overpass-api.de/api/interpreter',
   'https://overpass-api.de/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
 ];
 const OVERPASS_URL = OVERPASS_MIRRORS[0];
 
@@ -123,7 +133,7 @@ async function overpassQuery(
   return null;
 }
 const TIMEOUT_MS = 10_000;
-const OVERPASS_TIMEOUT_MS = 15_000;
+const OVERPASS_TIMEOUT_MS = 20_000;
 /**
  * 2026-08-13 — wall-clock ceiling for ALL Overpass work in one request.
  *
