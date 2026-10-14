@@ -48,4 +48,6 @@ export interface Hole {
   handicap: number | null;
   gps: { lat: number; lng: number } | null;
   hazards: string[];
+  /** 2026-10-13 — the card had no par; `par` was inferred from the yardage (services/golfCourseApi.parFromYards). */
+  par_estimated?: boolean;
 }

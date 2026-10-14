@@ -11579,8 +11579,9 @@ check('LOCK: a built hole\'s par is MEASURED, never assumed — no path emits a 
     const cg = read('api/course-geometry.ts');
     // Neither OSM path may emit a literal par. Both derive from the tee→green distance.
     const noHardcoded = !/^\s*par: 4,\s*$/m.test(cg);
-    const holeWayDerives = /const par = w\.par \?\? \(center <= 215 \? 3 : center >= 460 \? 5 : 4\);/.test(cg);
-    const pairingDerives = /const par = !p\.tee \? 4 : yardage <= 215 \? 3 : yardage >= 460 \? 5 : 4;/.test(cg);
+    // 2026-10-13 — every path derives through ONE rule (utils/parFromYards), not its own copy of the bands.
+    const holeWayDerives = /const par = w\.par \?\? parFromYards\(center\);/.test(cg);
+    const pairingDerives = /const par = !p\.tee \? 4 : parFromYards\(yardage\);/.test(cg);
     // and the speculative pairing path must stop echoing the centroid for front AND back once it has
     // matched a real green ring — three identical yardages is a green with no depth.
     const pairingDepth = /h\.green_front = front;/.test(cg) && /h\.green_back = back;/.test(cg);

@@ -3,6 +3,7 @@ import type { Course, TeeBox, Hole } from '../types/course';
 import type { CourseHole } from '../store/roundStore';
 import { playerTee } from './teeSelection';
 import { getApiBaseUrl } from './apiBase';
+import { parFromYards } from '../utils/parFromYards';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -162,7 +163,11 @@ function extractHazardsFromRawHole(raw: RawHole): string[] {
   return [...new Set(hazardStrings)];
 }
 
+export { parFromYards };
+
 function normalizeHole(raw: RawHole, indexFallback: number): Hole {
+  const yards = raw.yardage ?? raw.yards ?? 0;
+  const hasPar = typeof raw.par === 'number' && raw.par >= 3 && raw.par <= 6;
   return {
     // Phase 405 — when the upstream omits hole_number / number (some
     // golfcourseapi entries do this for older or partially-populated
@@ -170,8 +175,9 @@ function normalizeHole(raw: RawHole, indexFallback: number): Hole {
     // previous `?? 0` collapsed every hole to "0" in the Hole Guide
     // table on those courses.
     hole_number: raw.hole_number ?? raw.number ?? (indexFallback + 1),
-    par: raw.par ?? 4,
-    yardage: raw.yardage ?? raw.yards ?? 0,
+    par: hasPar ? (raw.par as number) : parFromYards(yards),
+    ...(hasPar ? {} : { par_estimated: true }),
+    yardage: yards,
     handicap: raw.handicap ?? raw.handicap_index ?? null,
     gps: (raw.lat != null && raw.lng != null) ? { lat: raw.lat, lng: raw.lng } : null,
     hazards: extractHazardsFromRawHole(raw),
@@ -180,13 +186,15 @@ function normalizeHole(raw: RawHole, indexFallback: number): Hole {
 
 function normalizeTee(raw: RawTee): TeeBox {
   const holes: RawHole[] = raw.holes ?? [];
+  const normalized = holes.map((h, i) => normalizeHole(h, i));
+  const parSum = normalized.reduce((n, h) => n + h.par, 0);
   return {
     tee_name: raw.tee_name ?? raw.name ?? 'Default',
     total_yards: raw.total_yards ?? raw.yardage ?? 0,
     course_rating: raw.course_rating ?? raw.rating ?? null,
     slope_rating: raw.slope_rating ?? raw.slope ?? null,
-    par_total: raw.par_total ?? raw.par ?? 72,
-    holes: holes.map((h, i) => normalizeHole(h, i)),
+    par_total: raw.par_total ?? raw.par ?? (parSum > 0 ? parSum : 72),
+    holes: normalized,
   };
 }
 

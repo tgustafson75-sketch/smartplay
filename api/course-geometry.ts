@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { getSmartPlaySupabase } from './_supabase';
 import { readSharedGeometry } from './_courseCloud';
+import { parFromYards } from '../utils/parFromYards';
 
 // Course Cloud only SERVES a course once it's substantially mapped — this many holes with usable
 // tee+green coords. 8 lets a fully-crowd-mapped 9-hole course qualify (12 never could) while still
@@ -380,7 +381,7 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
            */
           const tee = A, g = B;
           const center = haversineYards(tee, g);
-          rows.push({ ref: w.ref!, par: w.par ?? (center <= 215 ? 3 : center >= 460 ? 5 : 4), parEstimated: w.par == null, tee, green: g, front: g, back: g, ring: [] });
+          rows.push({ ref: w.ref!, par: w.par ?? parFromYards(center), parEstimated: w.par == null, tee, green: g, front: g, back: g, ring: [] });
           continue;
         }
         const greenEnd = !gB || (gA && gA.d <= gB.d) ? gA! : gB;
@@ -394,7 +395,7 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
           if (d > dB) { dB = d; back = p; }
         }
         const center = haversineYards(tee, greenEnd.poly.centroid);
-        const par = w.par ?? (center <= 215 ? 3 : center >= 460 ? 5 : 4);
+        const par = w.par ?? parFromYards(center);
         rows.push({ ref: w.ref!, par, parEstimated: w.par == null, tee, green: greenEnd.poly.centroid, front, back, ring: greenEnd.poly.polygon });
       }
       return rows.map(r => ({
@@ -977,10 +978,11 @@ function projectHole(raw: Record<string, unknown>, indexFallback: number): {
   const holeNumber =
     typeof raw.hole_number === 'number' && raw.hole_number > 0 ? raw.hole_number :
     typeof raw.number === 'number' && raw.number > 0 ? raw.number : indexFallback;
-  const par = typeof raw.par === 'number' ? raw.par : 4;
   const yardage =
     typeof raw.yardage === 'number' ? raw.yardage :
     typeof raw.yards === 'number' ? raw.yards : 0;
+  // 2026-10-13 — no par on the card: inferred from length (utils/parFromYards), not a blanket 4.
+  const par = typeof raw.par === 'number' && raw.par >= 3 && raw.par <= 6 ? raw.par : parFromYards(yardage);
 
   return {
     hole_number: holeNumber,
@@ -1218,7 +1220,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        *
        * No tee paired means no measurement, so keep the neutral 4 rather than inferring par from a 0.
        */
-      const par = !p.tee ? 4 : yardage <= 215 ? 3 : yardage >= 460 ? 5 : 4;
+      const par = !p.tee ? 4 : parFromYards(yardage);
       return {
       hole_number: i + 1,
       par,
