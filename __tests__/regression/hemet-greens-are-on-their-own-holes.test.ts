@@ -75,6 +75,25 @@ describe('Hemet Golf Club: every green on its own hole', () => {
   });
 });
 
+describe('Overpass 504s the green rings (live, 2026-10-13) — the numbered holes still place every green', () => {
+  it('no rings at all: tee→green by the way\'s own direction, all 18 on their own holes', () => {
+    const wayHoles = holeWaysToHoles(chooseCoherentHoleWays([...ways], CLUBHOUSE, 18, wayLenYd, card), []);
+    expect(wayHoles.length).toBe(18);
+    const r = mergeHoleWays(served.map((h) => ({ ...h })), wayHoles);
+    expect(r.holes.filter(onOwnHole).length).toBe(18);
+    for (const h of r.holes) expect((h as { green_polygon?: unknown }).green_polygon).toBeNull();   // honest: no outline, F = M = B
+  });
+
+  it('one hole\'s ring missing: it does not borrow a neighbour\'s green', () => {
+    const own3 = trueGreen(3);
+    const fewer = rings.filter((r) => haversineYards(r.centroid, own3) > 40);
+    expect(fewer.length).toBe(rings.length - 1);
+    const wayHoles = holeWaysToHoles(chooseCoherentHoleWays([...ways], CLUBHOUSE, 18, wayLenYd, card), fewer);
+    const h3 = wayHoles.find((w) => w.hole_number === 3)!;
+    expect(haversineYards(h3.green, own3)).toBeLessThan(30);
+  });
+});
+
 describe('the main database build runs it', () => {
   const src = require('fs').readFileSync(require('path').join(__dirname, '../../api/course-geometry.ts'), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');

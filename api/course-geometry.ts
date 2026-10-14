@@ -356,10 +356,25 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
       const rows: Array<{ ref: number; par: number; parEstimated: boolean; tee: Loc; green: Loc; front: Loc; back: Loc; ring: Loc[] }> = [];
       for (const w of refWays.sort((a, b) => (a.ref! - b.ref!))) {
         const A = w.pts[0]; const B = w.pts[w.pts.length - 1];
-        const gA = nearestGreen(A); const gB = nearestGreen(B);
-        if (!gA || !gB) continue;
-        const greenEnd = gA.d <= gB.d ? gA : gB;
-        const tee = gA.d <= gB.d ? B : A;
+        // An end is AT a green only within 60 yd of one — the nearest of 19 rings 300 yd away is a
+        // neighbouring hole's green, not this one's (2026-10-13).
+        const near = (p: Loc) => { const g = nearestGreen(p); return g && g.d <= 60 ? g : null; };
+        const gA = near(A); const gB = near(B);
+        if (!gA && !gB) {
+          /**
+           * 2026-10-13 — NO GREEN RINGS (Overpass 504'd them on the live Hemet build while the hole
+           * ways came back). A golf=hole way is drawn FROM the tee TO the green (OSM convention, and
+           * measured on Hemet: hole 9 starts on the west tee boxes, ends at the clubhouse green), so
+           * the way alone places both ends. Front/back stay the centre — honest F = M = B — until a
+           * build with rings refines them.
+           */
+          const tee = A, g = B;
+          const center = haversineYards(tee, g);
+          rows.push({ ref: w.ref!, par: w.par ?? (center <= 215 ? 3 : center >= 460 ? 5 : 4), parEstimated: w.par == null, tee, green: g, front: g, back: g, ring: [] });
+          continue;
+        }
+        const greenEnd = !gB || (gA && gA.d <= gB.d) ? gA! : gB;
+        const tee = greenEnd === gA ? B : A;
         // Front/back of the green relative to the tee, from the actual polygon.
         let front = greenEnd.poly.centroid; let back = greenEnd.poly.centroid;
         let dF = Infinity; let dB = -Infinity;
@@ -402,7 +417,7 @@ export function holeWaysToHoles(refWays: OsmHoleWay[], greenPolys: OsmPolygon[])
            * the orchestrator's completeness score). green_outline stays reserved for the vision
            * derivation path that populates it.
            */
-          green_polygon: r.ring as Loc[] | null,
+          green_polygon: (r.ring.length >= 3 ? r.ring : null) as Loc[] | null,
           // 2026-08-09 (course-engine audit C1) — the `estimated` flag drives the "AI ESTIMATE — not
           // surveyed" badge + the 45% confidence cap, which are about COORDINATE provenance. These coords
           // are REAL (community-mapped golf=hole ways + polygon-derived greens), so estimated:false even
@@ -1386,10 +1401,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         fetchOsmHoleWays(centroid).catch(() => [] as OsmHoleWay[]),
         fetchOsmPolygons(centroid, 'green').catch(() => [] as OsmPolygon[]),
       ]);
-      prefetchedGreenRings = rings;
       const card = cardYards.some((y) => y > 0) ? cardYards : holes.map((h) => (h.yardage > 0 ? Math.round(h.yardage) : 0));
       const refWays = chooseCoherentHoleWays(ways, centroid, Math.min(holeCount, holes.length), wayLenYd, card);
-      const wayHoles = refWays.length >= 3 && rings.length >= 3 ? holeWaysToHoles(refWays, rings) : [];
+      // The rings only refine front/back — the numbered holes place tee and green on their own. A ring
+      // query that 504'd gets one more try here (the same query succeeded on the retry, live, 10-13).
+      let ringsNow = rings;
+      if (refWays.length >= 3 && ringsNow.length === 0) {
+        ringsNow = await fetchOsmPolygons(centroid, 'green').catch(() => [] as OsmPolygon[]);
+      }
+      prefetchedGreenRings = ringsNow;
+      const wayHoles = refWays.length >= 3 ? holeWaysToHoles(refWays, ringsNow) : [];
       const merged = mergeHoleWays(holes, wayHoles);
       if (merged.applied) {
         holes = merged.holes;
