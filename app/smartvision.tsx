@@ -40,6 +40,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { formatDistanceCompact, liveDistanceUnit, toDisplayDistance, unitWord } from '../services/distanceUnits';
+import { resolveYardage, resolvedToFmb } from '../services/yardageResolver';
 import {
   View,
   Text,
@@ -1559,7 +1560,7 @@ export default function SmartVisionScreen() {
   //      pixel-axis interpolation against bundled courseHoles distance.
   //      Y position along tee→pin axis maps proportionally to yardage.
   //   3) Neither → static bundled values.
-  const yardages = useMemo(() => {
+  const markerYardages = useMemo(() => {
     // 2026-06-23 (SV-2) — Owner decision: "Full hole distance from tee."
     // Until the user explicitly places/drags the cart (target) marker,
     // the default target sits at the tee→pin MIDPOINT, so MIDDLE reads
@@ -1705,6 +1706,27 @@ export default function SmartVisionScreen() {
     // added to deps so the calibrated Mode 2 branch recomputes when
     // user re-marks or drags the cart.
   }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex, calibration2Anchor, greenOverrideGeo, targetCanvas, projectCanvasToLatLngVia2Anchor, targetOverride]);
+
+  /**
+   * 2026-10-13 (SmartVision/GPS audit #5) — ONE NUMBER FOR ONE MOMENT.
+   *
+   * SmartVision measured its own F/M/B from the cart marker to its own pin, ignoring a declared pin, a
+   * stated yardage and the resolver's edges — so at the same instant the strip, this screen and the
+   * caddie's voice could give three numbers. When the cart is where GPS put him (the hole he is
+   * playing, not placed by hand), this screen shows the resolver's answer — the one every surface reads.
+   * When HE placed or dragged the cart, the marker measurement stands: that is the what-if this screen
+   * exists for, from a point that is not where he is.
+   */
+  const followedByGps = isRoundActive && holeIndex === currentHole && !userPlacedByHole[holeKey];
+  const yardages = useMemo(() => {
+    if (followedByGps) {
+      const f = resolvedToFmb(resolveYardage(currentHole));
+      if (f && f.middle != null) return { front: f.front, middle: f.middle, back: f.back };
+    }
+    return markerYardages;
+    // markBumpTick: a new fix re-reads the resolver
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followedByGps, markerYardages, currentHole, markBumpTick]);
 
   // 2026-06-23 (Phase 3b) — honest AI recommendation read. Pure/local/offline:
   // the player's real bag (ladder fallback) picks the club for the MIDDLE
