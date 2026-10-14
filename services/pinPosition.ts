@@ -48,7 +48,18 @@ export function pinForHole(
   round: { pinByHole?: Record<number, PinPosition> | null; pinDeclared: boolean; pinPosition: PinPosition },
   hole: number | null | undefined,
 ): { pin: PinPosition; scope: 'hole' | 'round' } | null {
-  const own = hole != null ? round.pinByHole?.[hole] : undefined;
+  /**
+   * 2026-10-13 (course audit #8) — TWICE AROUND, the flag on hole 12 is the flag on hole 3: same green,
+   * same day. pinByHole is keyed by the ROUND's hole, so a pin said on 3 did not apply on 12, which fell
+   * back to the round-level pin (possibly the opposite depth). A hole with no pin of its own reads its
+   * physical hole's (services/personalHoleKey — the same wrap marked greens use).
+   */
+  let own = hole != null ? round.pinByHole?.[hole] : undefined;
+  if (!own && hole != null && hole >= 10) {
+    const { personalHoleKey } = require('./personalHoleKey') as typeof import('./personalHoleKey');
+    const physical = personalHoleKey(hole);
+    if (physical !== hole) own = round.pinByHole?.[physical];
+  }
   if (own) return { pin: own, scope: 'hole' };
   return round.pinDeclared ? { pin: round.pinPosition, scope: 'round' } : null;
 }
