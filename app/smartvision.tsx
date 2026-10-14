@@ -2032,6 +2032,26 @@ export default function SmartVisionScreen() {
     const acc = fix.accuracy_m ?? null;
     if (acc == null || acc > 15) return; // trust gate — don't follow a weak fix
     if (fix.timestamp && Date.now() - fix.timestamp > 30_000) return; // stale — don't follow an old position
+    /**
+     * 2026-10-13 (audit — "SmartVision gives a confident, wrong yardage when you are off the picture")
+     * — OFF THE HOLE IS NOT THE EDGE OF THE PICTURE.
+     *
+     * This clamped every fix onto the image, so a player off the hole — walking to the next tee, on a
+     * parallel fairway, or at a DIFFERENT COURSE than the one loaded — had the cart pinned to the
+     * border, and F/M/B, the spoken line and the club pick were measured from a point he was not at.
+     * The hole-entry seed below has refused off-image fixes since GPS-audit #7; the follow never did.
+     *
+     * Off the hole now means: no GPS-placed cart. The numbers fall back to the hole from the tee (the
+     * owner's unplaced default, SV-2) — a plan, not a fake position. A cart he placed himself never
+     * reaches here (userPlacedByHole bails above).
+     */
+    const clearFollowed = () => setTargetByHole(prev => {
+      const k = holeKeyOf(holeIndex);
+      if (!(k in prev)) return prev;
+      const next = { ...prev };
+      delete next[k];
+      return next;
+    });
     let canvasCoord: { x: number; y: number } | null = null;
     if (usingGpsTile && projection) {
       try {
@@ -2039,17 +2059,25 @@ export default function SmartVisionScreen() {
           { lat: fix.location.lat, lng: fix.location.lng },
           projection.center, projection.zoom, projection.bearing,
         );
-        canvasCoord = clampToCanvas({ x: px.x + imageW / 2, y: imageH / 2 - px.y });
+        const raw = { x: px.x + imageW / 2, y: imageH / 2 - px.y };
+        if (raw.x < 0 || raw.x > imageW || raw.y < 0 || raw.y > imageH) { clearFollowed(); return; }
+        canvasCoord = clampToCanvas(raw);
       } catch { /* skip this tick */ }
     } else if (calibration2Anchor) {
       const tG = calibration2Anchor.teeGeo;
       const gG = calibration2Anchor.greenGeo;
-      const dLat = gG.lat - tG.lat;
-      const dLng = gG.lng - tG.lng;
-      const useLat = Math.abs(dLat) > Math.abs(dLng);
-      const t = useLat
-        ? (fix.location.lat - tG.lat) / (dLat || 1)
-        : (fix.location.lng - tG.lng) / (dLng || 1);
+      // Where the fix sits relative to the tee→green line, in metres (local flat projection).
+      const kx = 111_320 * Math.cos((tG.lat * Math.PI) / 180), ky = 110_540;
+      const ax = (gG.lng - tG.lng) * kx, ay = (gG.lat - tG.lat) * ky;
+      const px = (fix.location.lng - tG.lng) * kx, py = (fix.location.lat - tG.lat) * ky;
+      const len2 = ax * ax + ay * ay;
+      if (len2 < 1) return;
+      const t = (px * ax + py * ay) / len2;                       // 0 at the tee, 1 at the green
+      const sideways = Math.abs(px * ay - py * ax) / Math.sqrt(len2);
+      // Behind the tee, past the green, or off to the side (a parallel hole) is not this hole —
+      // the curated image has no lateral mapping, so before this a neighbouring fairway projected
+      // straight onto it.
+      if (t < -0.05 || t > 1.08 || sideways > 70) { clearFollowed(); return; }
       canvasCoord = clampToCanvas({
         x: calibration2Anchor.teePx.x + t * calibration2Anchor.axisDx,
         y: calibration2Anchor.teePx.y + t * calibration2Anchor.axisDy,

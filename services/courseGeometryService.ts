@@ -663,10 +663,22 @@ async function commitGeometry(courseId: string, geo: CourseGeometry): Promise<Co
 // this service for greenForHole). Returns null when no active round
 // or no valid tee coords — caller treats null as "no centroid" and
 // the existing pre-fix behavior holds.
-function deriveCentroidFromActiveCourseHoles(): { lat: number; lng: number } | null {
+/**
+ * 2026-10-13 (course-engine audit #2) — THE ACTIVE ROUND'S TEES DESCRIBE THE ACTIVE ROUND'S COURSE.
+ *
+ * This averaged `courseHoles` with no check of which course they belong to, and it outranked the
+ * location the caller passed. So every build of ANOTHER course while a round was live — a sister
+ * course for the layout verifier, the Play-tab prefetch, the weekly refresh, the detail screen —
+ * sent the active course's centroid, the server snapped THAT course's greens onto the other course's
+ * holes, and the no-downgrade guard then kept the bad copy. Now: only for the course being built.
+ */
+export function deriveCentroidFromActiveCourseHoles(courseId: string): { lat: number; lng: number } | null {
   try {
     const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
-    const holes = useRoundStore.getState().courseHoles ?? [];
+    const st = useRoundStore.getState();
+    const { canonicalCourseId: canon } = require('./courseCard') as typeof import('./courseCard');
+    if (!st.activeCourseId || canon(String(st.activeCourseId)) !== canon(String(courseId))) return null;
+    const holes = st.courseHoles ?? [];
     let latSum = 0;
     let lngSum = 0;
     let count = 0;
@@ -1209,7 +1221,7 @@ async function fetchCourseGeometryInner(
     // to query Overpass against. golfcourseapi free tier returns tee
     // coords per hole but null greens; the OSM fallback fills the
     // greens automatically — but only when we send a centroid.
-    centroid = deriveCentroidFromActiveCourseHoles();
+    centroid = deriveCentroidFromActiveCourseHoles(courseId);
     if (!centroid) {
       const provided = options?.courseLocation;
       if (
@@ -1506,7 +1518,7 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
       // derivation. Stale-cache background refresh hits this for any
       // golfcourseapi-only course; if we don't supply a centroid the
       // refresh writes back a no-polygon entry, regressing SmartVision.
-      centroid = deriveCentroidFromActiveCourseHoles();
+      centroid = deriveCentroidFromActiveCourseHoles(courseId);
       if (!centroid) {
         centroid = deriveCentroidFromActiveCourseLocation(courseId);
       }
