@@ -5386,3 +5386,29 @@ orchestrator (0b1d6357, OTA 2b9fd25d). `main` fast-forwarded to release-1.0.2-po
 - Local Xcode 27 SDK: watch target fails to compile (`CaddieState`/WCSessionDelegate) — EAS's Xcode
   built it for 31; check the EAS log for the watch target.
 - iOS still has no club tracker (WebView engine is Android-only) — arc falls back to the cloud finder.
+
+### Day 141 (cont.) — course location + course engine + SmartVision
+
+**Shipped (all OTA / server, no store build)**
+- `3ca33adf` OTA `b82aa483` — Play card opens on the course you are STANDING at (Hemet GC, not Echo Hills
+  8 km away): services/yourCourses.chooseDefaultCourse; automatic picks no longer saved as his pick
+  (previewCourseExplicit); recent/downloaded courses keep coordinates; download engine resolves a place
+  to the record AT it (golfCourseApi.nearestRecordId, 3 km, was 5 mi).
+- `82c80273` OTA `baa73596` — SmartVision GPS follow never pins the player to the image edge (off-hole =
+  tee-plan numbers); a course map is built around its own course (active-round centroid leak).
+- `131fa0dc` — api/course-verify: vision cross-check per hole (server only; NOT wired to the app).
+  Measured on Hemet: it cannot catch a wrong pairing on its own (frames our own pairing → "a green is
+  there"); kept as a secondary signal, not a gate.
+- `689fe4d3` + `8f5cd9e0` + `18a276a8` — **numbered OSM holes pair database courses**. Hemet Golf Club was
+  served with 17/18 greens on OTHER holes; now 18/18 live (Course Cloud overwritten). Way direction places
+  tee/green without rings; Overpass mirrors re-measured (lz4 first, mail.ru added). OTA `1673d344` bumps
+  GEOMETRY_PIPELINE_VERSION 3→4 so phones rebuild cached maps.
+
+**Open**
+- Sweep other courses for the same wrong-hole pairing (Hemet-area, Tim's CT courses, every Course Cloud
+  stored build). Stored builds stay wrong until a successful live build replaces them.
+- Hemet front/back = centre until a build gets green rings.
+- Audit items not yet fixed: SV#2 auto-advance jumps back to an old hole and sticks; SV#3 stale fix shown
+  LIVE; SV#4 tee-estimate badged LIVE; SV#5 SmartVision's own yardage owner; SV#6 what-if tap logs a shot;
+  CE#4 CENTER shows pin-adjusted; CE#5 no altitude; CE#6 par ?? 4; CE#7 surveyed F/B dropped; units.
+- iOS club-arc tracker (WebView engine) is Android-only.
