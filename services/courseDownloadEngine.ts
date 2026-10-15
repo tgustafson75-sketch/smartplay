@@ -15,6 +15,7 @@
  * /api/course-locate and get the courses there, using the same engine edge the app uses.
  */
 import { getApiBaseUrl } from './apiBase';
+import { probeReachability, isProvenOffline, type NetVerdict } from './reachability';
 import { prefetchRoundData } from './roundPrefetch';
 import { searchCourses } from './golfCourseApi';
 import { COURSES } from '../data/courses';
@@ -39,6 +40,11 @@ export interface LocateResult {
   courses: NearbyCourse[];
   /** null when the call SUCCEEDED. Non-null means we do not know what is nearby. */
   failure: LocateFailure;
+  /**
+   * 2026-10-15 — set when the lookup failed in transport: did the phone have internet at all?
+   * 'internet_ok' means the failure was ours, not the player's signal.
+   */
+  net?: NetVerdict;
 }
 
 /**
@@ -183,24 +189,35 @@ async function locateNearbyCoursesInner(
   };
 
   let out = await attempt();
+  // Started alongside the retry so the answer is ready if it fails too, and costs nothing if it works.
+  let probe: ReturnType<typeof probeReachability> | null = null;
   if (out.failure === 'timeout' || out.failure === 'network') {
     logLocate('course_locate_retry', { first_failure: out.failure });
+    probe = probeReachability();
     out = await attempt();
   }
   if (!out.failure) {
+    try { require('../store/connectivityStore').reportOnline(); } catch { /* never breaks a lookup */ }
     void writeCache(out.courses);
     return out;
+  }
+  if (out.failure === 'timeout' || out.failure === 'network') {
+    const net = (await (probe ?? probeReachability())).verdict;
+    out = { ...out, net };
+    if (isProvenOffline(net)) {
+      try { require('../store/connectivityStore').reportVerifiedOffline(); } catch { /* diagnostic only */ }
+    }
   }
 
   // The network could not answer. Fall back to what this spot returned last time rather than
   // handing the player nothing on the first tee.
   const cached = await readCache();
   if (cached) {
-    logLocate('course_locate_served_from_cache', { reason: out.failure, count: cached.length });
+    logLocate('course_locate_served_from_cache', { reason: out.failure, count: cached.length, ...(out.net ? { net: out.net } : {}) });
     return { courses: cached, failure: null };
   }
 
-  logLocate('course_locate_failed', { reason: out.failure, lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 });
+  logLocate('course_locate_failed', { reason: out.failure, ...(out.net ? { net: out.net } : {}), lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 });
   return out;
 }
 

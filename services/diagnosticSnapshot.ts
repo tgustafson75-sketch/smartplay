@@ -74,7 +74,11 @@ export interface DiagnosticSnapshot {
     accuracyM: number | null;
   };
   audio: { route: string | null };
-  network: { class: string | null; latencyMs: number | null; kbps: number | null };
+  network: {
+    class: string | null; latencyMs: number | null; kbps: number | null;
+    /** 2026-10-15 — last reachability verdict (services/reachability): was it the phone or us? */
+    internet: string | null; internetAgeMs: number | null; controlMs: number | null;
+  };
   battery: { level: number | null; saverActive: boolean | null };
   /** Only modules that are ABSENT, with the reason. A full list is noise; an absence is the signal. */
   nativeModulesMissing: string[] | null;
@@ -157,7 +161,7 @@ export async function collectDiagnosticSnapshot(): Promise<DiagnosticSnapshot> {
     session: { uptimeMs: null, activeSurface: null, roundActive: null, hole: null, courseId: null },
     gps: { fixAgeMs: null, accuracyM: null },
     audio: { route: null },
-    network: { class: null, latencyMs: null, kbps: null },
+    network: { class: null, latencyMs: null, kbps: null, internet: null, internetAgeMs: null, controlMs: null },
     battery: { level: null, saverActive: null },
     nativeModulesMissing: null,
     flagsOff: null,
@@ -260,6 +264,14 @@ export async function collectDiagnosticSnapshot(): Promise<DiagnosticSnapshot> {
     snap.network.class = r.klass ?? null;
     snap.network.latencyMs = r.latencyMs ?? null;
     snap.network.kbps = r.kbps ?? null;
+  });
+  safe(() => {
+    const { lastReachability } = require('./reachability') as typeof import('./reachability');
+    const r = lastReachability();
+    if (!r) return;
+    snap.network.internet = r.verdict;
+    snap.network.internetAgeMs = Date.now() - r.at;
+    snap.network.controlMs = r.controlMs;
   });
 
   safe(() => {
@@ -375,7 +387,9 @@ export function formatSnapshotForEmail(s: DiagnosticSnapshot): string {
     `Audio:    ${s.audio.route ?? '?'}`,
     `Network:  ${s.network.class ?? '?'}${s.network.latencyMs != null ? ` · ${s.network.latencyMs}ms` : ''}${
       s.network.kbps != null ? ` · ${s.network.kbps}kbps` : ''
-    }`,
+    }${s.network.internet != null
+      ? ` · internet ${s.network.internet}${s.network.controlMs != null ? ` ${s.network.controlMs}ms` : ''} (checked ${ms(s.network.internetAgeMs)} ago)`
+      : ''}`,
     `Battery:  ${s.battery.level != null ? `${Math.round(s.battery.level * 100)}%` : '?'}${
       s.battery.saverActive ? ' · saver ON' : ''
     }`,

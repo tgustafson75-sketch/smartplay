@@ -18,10 +18,8 @@ import { View, Text, StyleSheet, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useConnectivityStore, reportOnline } from '../store/connectivityStore';
-import { getApiBaseUrl } from '../services/apiBase';
+import { probeReachability, isProvenOffline } from '../services/reachability';
 import { useTranslation } from 'react-i18next';
-
-const apiUrl = getApiBaseUrl();
 
 export function OfflineBanner() {
   const { t } = useTranslation();
@@ -33,19 +31,14 @@ export function OfflineBanner() {
     let cancelled = false;
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * 2026-10-15 — the recovery check asks the same question that raised the banner: can the phone
+     * reach the internet? It used to POST /api/kevin, so a slow or broken backend kept "No signal"
+     * on screen for a player whose signal had come back — blaming them for our outage.
+     */
     const probe = async () => {
-      if (!apiUrl) return;
-      try {
-        await fetch(apiUrl + '/api/kevin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: '__ping__', language: 'en' }),
-          signal: AbortSignal.timeout(12000),
-        });
-        if (!cancelled) reportOnline();
-      } catch {
-        /* still offline */
-      }
+      const r = await probeReachability({ force: true });
+      if (!cancelled && !isProvenOffline(r.verdict)) reportOnline();
     };
     // 2026-06-08 (audit #2) — back off the poll so a long offline stretch
     // (e.g. a dead-zone hole) doesn't wake the radio every 20s all round.

@@ -53,6 +53,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // /tournament with the course pre-filled (saves the free-text typing).
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, resolveDiscoveredCourseId, type AiCourseResult } from '../../services/golfCourseApi';
+import { probeReachability, unreachableMessage } from '../../services/reachability';
 import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { composeYourCourses, decideAutoPick, chooseDefaultCourse } from '../../services/yourCourses';
@@ -1993,7 +1994,11 @@ export default function PlayTab() {
       }
     } catch (e) {
       console.log('[play] selectSummary failed:', e);
-      if (isCurrent()) setSelectError('Trouble opening that course — check your connection and tap it again.');
+      // 2026-10-15 — only blame the connection when the reachability probe proves it (services/reachability).
+      const net = (await probeReachability()).verdict;
+      if (isCurrent()) setSelectError(net === 'internet_ok'
+        ? 'Trouble opening that course on our end — tap it again in a moment.'
+        : unreachableMessage(net, 'That course'));
     } finally {
       if (isCurrent()) setSelectedLoading(false);
     }

@@ -3095,7 +3095,7 @@
   },
   "offline_banner": {
     "text": {
-      "no_signal_working_offline": "No signal — working offline"
+      "no_signal_working_offline": "No internet — yardages & scoring still work"
     }
   },
   "owner_issue_log_prompt": {

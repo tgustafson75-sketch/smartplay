@@ -3,6 +3,7 @@ import type { Course, TeeBox, Hole } from '../types/course';
 import type { CourseHole } from '../store/roundStore';
 import { playerTee } from './teeSelection';
 import { getApiBaseUrl } from './apiBase';
+import { probeReachability, unreachableMessage, isProvenOffline, type NetVerdict } from './reachability';
 import { parFromYards } from '../utils/parFromYards';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -464,6 +465,8 @@ export async function searchCourses(
     ok: boolean;
     list: RawSearchResult[];
     transient: boolean;
+    /** The request never got an HTTP answer (threw / timed out) — the only case that asks "is it the phone?". */
+    transport: boolean;
     message: string;
   };
 
@@ -485,6 +488,7 @@ export async function searchCourses(
           list: [],
           // 5xx = the server fell over (often a cold start); 4xx = a real answer we must not re-ask.
           transient: res.status >= 500,
+          transport: false,
           message: searchErrorMessage(res.status, err.error),
         };
       }
@@ -495,17 +499,19 @@ export async function searchCourses(
         (data.courses as RawSearchResult[] | undefined) ??
         (data.data as RawSearchResult[] | undefined) ??
         (Array.isArray(data) ? data as RawSearchResult[] : []);
-      return { ok: true, list, transient: false, message: '' };
+      return { ok: true, list, transient: false, transport: false, message: '' };
     } catch (e) {
       console.error('[golfcourseapi] searchCourses exception:', e);
-      return { ok: false, list: [], transient: true, message: 'Course search unavailable — check connection' };
+      // Deliberately NOT "check connection": we do not know that yet. The probe below decides.
+      return { ok: false, list: [], transient: true, transport: true, message: 'Course search didn’t respond. Try again in a moment.' };
     }
   };
 
   // Written without relying on narrowing across a reassigned `let` — that compiles under the app's
   // tsconfig and NOT under the test project's looser one, which is a difference worth never depending on.
   const candidates = relaxedQueries(query);
-  let final: Attempt = { ok: false, list: [], transient: false, message: 'Search unavailable' };
+  let final: Attempt = { ok: false, list: [], transient: false, transport: false, message: 'Search unavailable' };
+  let net: NetVerdict | null = null;
   let activeQuery = candidates[0] ?? query;
 
   for (const candidate of candidates) {
@@ -513,7 +519,15 @@ export async function searchCourses(
     final = await attempt(12_000);
     if (!final.ok && final.transient) {
       logSearch('course_search_retry', { query: activeQuery.slice(0, 60) }, 'diag');
+      // 2026-10-15 — start asking "is it the phone?" alongside the retry, so the answer is ready if the
+      // retry fails too and costs the player no extra wait if it succeeds.
+      const probe = final.transport ? probeReachability() : null;
       final = await attempt(6_000);
+      if (!final.ok && final.transport) {
+        net = (await (probe ?? probeReachability())).verdict;
+        final = { ...final, message: unreachableMessage(net, 'Course search') };
+        if (isProvenOffline(net)) reportVerifiedOfflineQuietly();
+      }
     }
     // A hard failure is NOT a reason to relax — re-asking a broken API a looser question just spends
     // the player's time. Only an honest, empty answer earns another try.
@@ -525,12 +539,22 @@ export async function searchCourses(
   }
 
   if (final.ok) {
+    reportOnlineQuietly();
     const mapped = final.list.slice(0, 10).map(normalizeSearchResult);
     return rankByDroppedTokens(mapped, query, activeQuery);
   }
-  logSearch('course_search_failed', { query: query.slice(0, 60), reason: final.message.slice(0, 120), ...(opts?.background ? { background: true } : {}) },
+  logSearch('course_search_failed', { query: query.slice(0, 60), reason: final.message.slice(0, 120), ...(net ? { net } : {}), ...(opts?.background ? { background: true } : {}) },
     opts?.background ? 'diag' : 'analysis_error');
   return [{ id: '', club_name: '', course_name: '', location: '', _error: final.message }];
+}
+
+/** A search that answered proves the phone is online — clears a stale offline banner. Never throws. */
+function reportOnlineQuietly(): void {
+  try { require('../store/connectivityStore').reportOnline(); } catch { /* never breaks a search */ }
+}
+
+function reportVerifiedOfflineQuietly(): void {
+  try { require('../store/connectivityStore').reportVerifiedOffline(); } catch { /* never breaks a search */ }
 }
 
 /** Best-effort breadcrumb. A search failure the UI deliberately hides (because a bundled course
