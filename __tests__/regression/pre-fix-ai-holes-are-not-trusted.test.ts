@@ -30,8 +30,7 @@ describe('AI holes from before the scale fix are not trusted', () => {
     expect(SCALE_FIX_CLOUD_CLEAN_AT).toBeGreaterThan(Date.UTC(2026, 8, 23));
     const src = fs.readFileSync(path.join(__dirname, '../../services/courseGeometryService.ts'), 'utf8');
     expect(src).toMatch(/if \(preScaleEstimateCount\(geo\) > 0\) return false;/);
-    // 2026-10-15 — an older-pipeline copy counts 0 so it cannot block its corrected replacement.
-    expect(src).toMatch(/const had = supersededPipeline\(existing, true\) \? 0 : trustedMappedHoleCount\(existing\);/);
-    expect(src).toMatch(/const had = trustedMappedHoleCount\(inMem\);/);
+    expect(src).toMatch(/const had = trustedMappedHoleCount\(existing\);/);
+    expect(src).toMatch(/if \(trustedMappedHoleCount\(inMem\) > incoming\)/);
   });
 });
