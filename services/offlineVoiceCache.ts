@@ -27,16 +27,17 @@
  *   - It self-heals: any line not yet cached is fetched the next time we're online.
  *
  * Safety floor: this is PURELY ADDITIVE. resolveCachedOfflineClipUri() returns null unless a valid clip
- * is on disk; callers (speakDeviceNotice) then fall back to device TTS exactly as before. A cold cache
+ * is on disk; callers (speakDeviceNotice, and since 2026-10-15 every speak() failure via
+ * deviceSpeakFallback) then stay silent with the answer on screen. A cold cache
  * (brand-new install, never online) simply behaves like today until the first online warm.
  *
  * DYNAMIC offline lines (live yardage/club reads from deadEndLine) are intentionally NOT here — they
- * carry real numbers and can't be pre-rendered; they keep device TTS.
+ * carry real numbers and can't be pre-rendered as whole lines; they are silent (caption only).
  */
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
-import { DEAD_END_PRACTICE } from './localStatusResponder';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { DEAD_END_PRACTICE, FIXED_OFFLINE_REPLIES_EN } from './localStatusResponder';
+import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { _allCaddieTemplates } from '../constants/dialogTemplates/caddieTemplates';
 import { _allCoachTemplates } from '../constants/dialogTemplates/coachTemplates';
 import { _allPsychologistTemplates } from '../constants/dialogTemplates/psychologistTemplates';
@@ -72,7 +73,7 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   // ack + the bare "Didn't catch that." via speakDeviceNotice; none were cached, so they always played in
   // the robotic OS voice (north-star defect, heard every turn). Pre-render the ENGLISH set in the persona
   // voice, built from the SAME source listeningSession speaks (caddieAckLines) so they can't drift. es/zh
-  // acks keep the device-TTS fallback until there are non-English testers.
+  // acks stay silent until there are non-English testers.
   { slug: 'didnt_catch_short', language: 'en', text: CADDIE_NOTICE_DIDNT_CATCH },
   // 2026-08-17 — the mic-failed line (spoken instead of "Didn't catch that." when the microphone
   // never opened). Same treatment: it's a line the user hears at a bad moment, so it must not be
@@ -102,6 +103,15 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   { slug: 'off_course_en', language: 'en', text: DEAD_END_PRACTICE.en },
   { slug: 'off_course_es', language: 'es', text: DEAD_END_PRACTICE.es },
   { slug: 'off_course_zh', language: 'zh', text: DEAD_END_PRACTICE.zh },
+  /**
+   * 2026-10-15 (offline audit) — lines spoken offline that were never recorded, so they went silent:
+   * the two honest-failure notices (speakHonestFailure / the voice hook's failure caption) and the
+   * fixed offline replies ("No GPS lock yet…", "I don't have a wind reading…"). Each is fixed wording,
+   * so the caddie's own voice can say it with no signal.
+   */
+  ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `notice_connection_${language}`, language, text: CADDIE_NOTICE_CONNECTION[language] })),
+  ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `notice_on_us_${language}`, language, text: CADDIE_NOTICE_ON_US[language] })),
+  ...FIXED_OFFLINE_REPLIES_EN.map(({ slug, text }) => ({ slug, language: 'en' as const, text })),
 ];
 
 /** Normalize a spoken line for tolerant matching (whitespace/case only — punctuation stays because the
@@ -166,13 +176,27 @@ const cachedKeys = new Set<string>();
 
 /**
  * If the given spoken line is one of our fixed offline lines AND its persona-voice clip is cached on
- * disk, return the file uri to play. Otherwise null → caller uses device TTS. Sync + cheap.
+ * disk, return the file uri to play. Otherwise null → the caller stays silent (there is no device
+ * voice — removed 2026-08-22). Sync + cheap.
  */
 export function resolveCachedOfflineClipUri(text: string, gender: Gender, persona: string): string | null {
   const line = TEXT_TO_LINE.get(norm(text));
   if (!line) return null;
-  if (!cachedKeys.has(cacheKey(line.slug, gender, persona, line.text))) return null;
-  return fileFor(line.slug, gender, persona, line.text).uri;
+  const key = cacheKey(line.slug, gender, persona, line.text);
+  const file = fileFor(line.slug, gender, persona, line.text);
+  if (!cachedKeys.has(key)) {
+    /**
+     * 2026-10-15 — registration used to happen ONLY inside the warm pass, which is deferred 45s past
+     * launch and runs only after a warmup. A phone reopened on the course with no signal therefore had
+     * every clip on disk and none registered, so every offline line was silent. One sync stat here
+     * (File.exists / size are synchronous) closes that without touching the network.
+     */
+    try {
+      if (!(file.exists && (file.size ?? 0) >= MIN_CLIP_BYTES)) return null;
+      cachedKeys.add(key);
+    } catch { return null; }
+  }
+  return file.uri;
 }
 
 let warmInFlight: Promise<void> | null = null;

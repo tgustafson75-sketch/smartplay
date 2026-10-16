@@ -1410,8 +1410,21 @@ const FEMALE_VOICE_TOKENS = ['female', 'samantha', 'karen', 'moira', 'tessa', 'v
  * cached clips (prewarmOfflineVoiceClips) are untouched: that is the REAL voice offline, which is
  * the thing this was a poor imitation of.
  */
-async function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', myId: number, gender: 'male' | 'female' = 'male'): Promise<void> {
+async function deviceSpeakFallback(
+  text: string, language: 'en' | 'es' | 'zh', myId: number, gender: 'male' | 'female' = 'male',
+  opts?: { clipAlreadyTried?: boolean },
+): Promise<void> {
   if (!text || myId !== currentSpeechId) return;
+  /**
+   * 2026-10-15 (offline audit) — the persona's OWN voice first. ~46 fixed lines are cached in Kevin's
+   * real voice on every phone, but only speakDeviceNotice / playVerbalCue ever looked: the seven
+   * failure branches of speak() came straight here and went silent, so even "didn't catch that" was
+   * mute offline while its recording sat on disk. A cached clip is the real caddie, not the robot
+   * voice this function exists to refuse — the no-device-voice rule is unchanged below.
+   */
+  // Every caller but speakDeviceNotice runs INSIDE the speech queue (speak / speakFromBase64 bodies),
+  // so the clip plays un-queued — the queued playLocalFile would wait behind the very job awaiting it.
+  if (!opts?.clipAlreadyTried && await playCachedPersonaClip(text, gender, { inQueue: true })) return;
   // Breadcrumb only, as `diag`: a silent turn stays explainable in the issue log without reading as
   // a failure the player has to act on. [[silent-failure-audit-analysis-and-first-turn]]
   try {
@@ -1419,6 +1432,28 @@ async function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', m
       .getState().addAppEvent('voice_device_tts_suppressed', { chars: text.length, language, gender }, 'diag');
   } catch { /* best-effort */ }
   console.log('[voice] cloud voice unavailable — staying silent rather than speaking in a device voice');
+}
+
+/**
+ * Play `text` from the persona's cached real-voice clips if it is one (offlineVoiceCache). True when it
+ * played. Keyed by the CURRENT persona so a caddie switch never plays the previous caddie's clip.
+ * Never throws; a miss or a failed play is false and the caller stays silent.
+ */
+async function playCachedPersonaClip(text: string, gender: 'male' | 'female', where: { inQueue: boolean }): Promise<boolean> {
+  try {
+    const cache = await import('./offlineVoiceCache');
+    let persona = 'kevin';
+    try { persona = (require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? 'kevin') as string; } catch { /* default */ }
+    const uri = cache.resolveCachedOfflineClipUri(text, gender, persona);
+    if (!uri) return false;
+    // In the queue → the un-queued body (see playLocalFileNow's 09-28 deadlock note); outside → queued.
+    if (where.inQueue) await playLocalFileNow(uri, undefined, { userInitiated: true });
+    else await playLocalFile(uri, undefined, { userInitiated: true });
+    return true;
+  } catch (e) {
+    console.log('[voice] cached persona clip unavailable:', e);
+    return false;
+  }
 }
 
 // 2026-06-19 (Tim — dead-zone testing: "local mode does nothing, doesn't respond or anything") —
@@ -1447,23 +1482,13 @@ export async function speakDeviceNotice(
   // (warmed while online, see prewarmOfflineVoiceClips), play THAT. A miss falls through to
   // deviceSpeakFallback, which since 2026-08-22 SPEAKS NOTHING — it logs a breadcrumb and returns.
   // So a cache miss here means silence with the answer on screen, not a robotic voice.
-  try {
-    const cache = await import('./offlineVoiceCache');
-    // Key by the CURRENT persona so a caddie switch doesn't play the previous caddie's cached clip.
-    let persona = 'kevin';
-    try { persona = (require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? 'kevin') as string; } catch { /* default */ }
-    const uri = cache.resolveCachedOfflineClipUri(text, gender, persona);
-    if (uri) {
-      try { await playLocalFile(uri, undefined, { userInitiated: true }); return; }
-      catch (e) { console.log('[voice] offline persona clip play failed — device TTS:', e); }
-    }
-  } catch { /* cache is additive — a miss means the silent breadcrumb path, not device TTS */ }
+  if (await playCachedPersonaClip(text, gender, { inQueue: false })) return;
   /**
    * 2026-09-28 — this used to CLAIM a speech id first. The fallback speaks nothing, so the claim's only
    * effect was to make whatever else was mid-fetch stale: a reply loading at that moment was dropped
    * without a sound. A notice that cannot play must not silence one that can. Breadcrumb only.
    */
-  await deviceSpeakFallback(text, language, currentSpeechId, gender);
+  await deviceSpeakFallback(text, language, currentSpeechId, gender, { clipAlreadyTried: true });
 }
 
 /**

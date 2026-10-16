@@ -4877,7 +4877,9 @@ check('Voice: dead-zone failures SPEAK via device TTS (not just a silent text bu
       // 2026-09-28 — the claim pair this pinned was the defect. The fallback has spoken NOTHING since
       // 2026-08-22, so claiming a speech id first only made a reply loading at that moment stale and
       // silent. The notice now runs under the current id and claims nothing. Assert both halves.
-      /await deviceSpeakFallback\(text, language, currentSpeechId, gender\);/.test(vs) &&
+      // 2026-10-15 — speakDeviceNotice tries the persona clip itself (outside the queue) and tells the
+      // fallback not to try it again; the run-under-the-current-id rule is unchanged.
+      /await deviceSpeakFallback\(text, language, currentSpeechId, gender, \{ clipAlreadyTried: true \}\);/.test(vs) &&
       !/claimSpeechId\('device_notice'\)/.test(vs) &&
       /if \(voiceEnabled\) void speakDeviceNotice\(/.test(vc) &&
       /(can't reach|not reaching|lost) the network/i.test(vc) // refreshed: message reworded (Phase A offline-degrade); feature intact

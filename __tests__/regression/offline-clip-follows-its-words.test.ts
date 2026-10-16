@@ -63,7 +63,8 @@ describe('the line Tim was hearing is genuinely gone from the code', () => {
 
   it('the offline cache still sources its text from the single definition', () => {
     // If the cache ever hard-coded its own copy, the two could drift and this returns.
-    expect(src).toContain("import { DEAD_END_PRACTICE } from './localStatusResponder'");
+    // 2026-10-15 — the import now also brings FIXED_OFFLINE_REPLIES_EN from the same single source.
+    expect(src).toMatch(/import \{ DEAD_END_PRACTICE[^}]*\} from '\.\/localStatusResponder'/);
     const offCourse = OFFLINE_LINES.find(l => l.slug === 'off_course_en');
     expect(offCourse?.text).toBe(DEAD_END_PRACTICE.en);
   });

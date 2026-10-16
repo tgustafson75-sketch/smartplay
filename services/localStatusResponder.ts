@@ -631,6 +631,24 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
 // off-course line in the persona voice — single source of truth, no drift.
 // 2026-08-06 (Tim — "revert 'we're off the course right now…'; it reads robotic"). A real caddie doesn't
 // announce your location back to you. Ground straight in what's useful — tempo/short game — and stay present.
+/**
+ * 2026-10-15 (offline audit) — the English replies whose wording NEVER changes, so they can be recorded
+ * ahead of time in the caddie's own voice (services/offlineVoiceCache) and heard offline. Taken from the
+ * same table the replies are built from, so a reworded line re-records instead of drifting.
+ */
+export const FIXED_OFFLINE_REPLIES_EN: { slug: string; text: string }[] = [
+  { slug: 'reply_no_fix', text: L.en.noFix },
+  { slug: 'reply_no_green', text: L.en.noGreen },
+  { slug: 'reply_no_bag', text: L.en.noBag },
+  { slug: 'reply_no_wind', text: L.en.noWind },
+  { slug: 'reply_dead_calm', text: L.en.windCalm(0) },
+  { slug: 'reply_no_last_shot', text: L.en.noLastShot },
+  { slug: 'reply_no_hole_info', text: L.en.noHoleInfo },
+  { slug: 'reply_no_score_yet', text: L.en.scoreNoneYet },
+  { slug: 'reply_no_club', text: L.en.noClub },
+  { slug: 'reply_no_round', text: L.en.noRound },
+];
+
 export const DEAD_END_PRACTICE: Record<LocalReplyLanguage, string> = {
   en: "Good moment to sharpen your tempo or short game — I'm right here whenever you want to dig in.",
   es: 'Buen momento para pulir tu tempo o tu juego corto: aquí estoy cuando quieras ponerte a ello.',
