@@ -73,6 +73,11 @@ export function tryAnswerPendingPar(transcript: string): { line: string; strokes
     return null;
   }
   const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
+  // The round ended while the question was open: nothing can be stored, so do not claim it was.
+  if (!rs.isRoundActive) { clearAwaitingPar(); return null; }
+  // Keep the par he told us (2026-10-15 review): it was used once and dropped, so the next named
+  // score on this hole asked again and vs-par never knew it.
+  rs.setHolePar(hole, par);
   rs.logScore(hole, strokes);
   clearAwaitingPar();
   // The score is in — now the putt question is the honest next one, on the SAME hole.

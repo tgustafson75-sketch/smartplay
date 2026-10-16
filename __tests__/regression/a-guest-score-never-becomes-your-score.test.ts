@@ -97,7 +97,9 @@ describe('a guest score never becomes your score', () => {
      */
     const src = fs.readFileSync(path.join(ROOT, 'components/scorecard/AddedPlayerCards.tsx'), 'utf8');
     expect(src).toMatch(/useGuestCardStore\(\(s\) => s\.noteCourse\)/);
-    expect(src).toMatch(/useEffect\(\(\) => \{ noteCourse\(courseName\); \}, \[courseName, noteCourse\]\)/);
+    // 2026-10-15 — it now also passes the round id, so the same course next week starts clean
+    // (a-guest-card-belongs-to-one-round.test.ts). Same intent: the app calls it on every change.
+    expect(src).toMatch(/useEffect\(\(\) => \{ noteCourse\(courseName, roundId \?\? null\); \}, \[courseName, roundId, noteCourse\]\)/);
   });
 
   it('a new course clears the scores rather than carrying them over', () => {

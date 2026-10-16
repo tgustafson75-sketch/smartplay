@@ -123,9 +123,28 @@ export function startWatchRoundSync(): void {
     let total = 0;
     try {
       vsPar = typeof s.getScoreVsPar === 'function' ? s.getScoreVsPar() : null;
-      total = typeof s.getTotalScore === 'function' ? s.getTotalScore() : 0;
+      /**
+       * 2026-10-15 (review) — the total is taken over the SAME holes as vs-par (scored, known par > 0).
+       * It was the all-holes total beside a known-par vs-par, two numbers about different holes.
+       */
+      const pars = new Map((s.courseHoles ?? []).map((h) => [h.hole, h.par]));
+      total = Object.entries(s.scores ?? {}).reduce((a, [h, sc]) => {
+        const par = pars.get(Number(h));
+        return typeof sc === 'number' && sc > 0 && typeof par === 'number' && par > 0 ? a + sc : a;
+      }, 0);
     } catch { return; }
-    if (vsPar == null || total <= 0) return;
+    if (vsPar == null || total <= 0) {
+      /**
+       * 2026-10-15 (review) — an undo that leaves no par-known score used to stop the updates here,
+       * so the wrist kept showing the score that had just been taken back. The watch renders a null
+       * vsPar as "+0" (optInt), so the clear goes out as a status line, never as a fake even par.
+       */
+      if (lastScore !== '') {
+        lastScore = '';
+        pushWatchNotification('Score —');
+      }
+      return;
+    }
 
     const scoreKey = `${vsPar}|${total}|${hole}`;
     if (scoreKey === lastScore) return;

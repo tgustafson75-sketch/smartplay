@@ -936,6 +936,8 @@ interface RoundState {
   /** Per-hole stats for the CURRENT round — derived, never fabricated. Empty until holes are scored. */
   getHoleStats: () => HoleStats[];
   logPutts: (hole: number, putts: number) => void;
+  /** A par the PLAYER told us for a hole whose card has none (pendingParAsk). Fills unknown pars only. */
+  setHolePar: (hole: number, par: number) => void;
   /** One utterance, two facts ("a five with two putts") — ONE undoable mutation for both. */
   logScoreWithPutts: (hole: number, score: number, putts: number) => void;
   addPenalty: (hole: number) => void;
@@ -3456,6 +3458,26 @@ export const useRoundStore = create<RoundState>()(
           putts: { ...s.putts, [hole]: putts },
           lastMutation: { kind: 'putts', hole, prevPutts: s.putts[hole], at: Date.now() },
         }));
+      },
+
+      /**
+       * 2026-10-15 (review) — the player answered "what's the par here?" and the answer resolved the
+       * score, then was thrown away: the next named score on that hole asked again, and vs-par stayed
+       * unknown for it. Written into the round's own card row, which is what holePar, getScoreVsPar
+       * and endRound's holePars snapshot all read. Only fills a par the card does not know (missing
+       * or 0) — a real scorecard par is never overwritten by a spoken one. A hole with no card row
+       * at all is left alone: inserting a lone row into an empty card would change what the
+       * scorecard renders (it synthesises the full range only when the card is empty).
+       */
+      setHolePar: (hole, par) => {
+        if (!get().isRoundActive || ![3, 4, 5].includes(par)) return;
+        set((s) => {
+          const i = s.courseHoles.findIndex((h) => h.hole === hole);
+          if (i < 0 || (s.courseHoles[i].par ?? 0) > 0) return {};
+          const courseHoles = s.courseHoles.slice();
+          courseHoles[i] = { ...courseHoles[i], par };
+          return { courseHoles };
+        });
       },
 
       /**

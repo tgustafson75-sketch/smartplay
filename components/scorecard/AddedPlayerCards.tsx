@@ -36,13 +36,15 @@ interface Props {
   /** Holes of the round being scored, so the card matches the course the player is on. */
   holes: { hole: number; par: number }[];
   courseName: string | null;
+  /** The round being viewed (live or just finished) — a new round starts the guests' scores clean. */
+  roundId?: string | null;
   /** The owner's name for the first tab. Read-only here — this screen never edits his profile. */
   ownerName: string;
   /** The owner's own scores, for the export only. Never written to. */
   ownerScores: Record<number, number>;
 }
 
-export function AddedPlayerCards({ holes, courseName, ownerName, ownerScores }: Props) {
+export function AddedPlayerCards({ holes, courseName, roundId, ownerName, ownerScores }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
   const c = theme.colors;
@@ -67,7 +69,7 @@ export function AddedPlayerCards({ holes, courseName, ownerName, ownerScores }: 
    * scores are still sitting on it — exportable, with the new course's name on the export.
    * [[orphans-are-live-bugs-not-dead-code]] [[grep-guards-cant-see-dead-code]]
    */
-  useEffect(() => { noteCourse(courseName); }, [courseName, noteCourse]);
+  useEffect(() => { noteCourse(courseName, roundId ?? null); }, [courseName, roundId, noteCourse]);
 
   /** 0 = the owner's tab (read-only summary); 1..n = guest cards. */
   const [activeTab, setActiveTab] = useState(0);

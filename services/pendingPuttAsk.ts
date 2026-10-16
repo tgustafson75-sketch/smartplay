@@ -122,6 +122,9 @@ export function tryAnswerPendingPutts(transcript: string): { line: string; putts
     return null;
   }
   const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
+  // 2026-10-15 (review) — the round ended while the question was open: logPutts refuses a write into
+  // the idle store, so do not answer "Got it" for a count that was not kept.
+  if (!rs.isRoundActive) { clearAwaitingPutts(); return null; }
   const { voicePuttsHole } = require('../store/voiceScoringHole') as typeof import('../store/voiceScoringHole');
   const hole = awaitingPuttsHole() ?? voicePuttsHole(rs);
   rs.logPutts(hole, putts);

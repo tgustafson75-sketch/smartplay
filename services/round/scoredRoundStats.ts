@@ -45,7 +45,8 @@ export function isGirHole(
 ): boolean | null {
   if (typeof score !== 'number' || !(score > 0)) return null;
   if (typeof putts !== 'number' || !Number.isFinite(putts)) return null;
-  if (typeof par !== 'number' || !Number.isFinite(par)) return null;
+  // A par of 0 is a data gap (card scan / data-less course), not a par — 2026-10-15 review.
+  if (typeof par !== 'number' || !Number.isFinite(par) || !(par > 0)) return null;
   return (score - putts) <= (par - 2);
 }
 
@@ -81,19 +82,36 @@ export function puttStatsFrom(r: ScoredRound): {
   return { holes: holes.length, total, threePutts, onePutts, avg: holes.length > 0 ? total / holes.length : null };
 }
 
+/**
+ * 2026-10-15 (review) — VS-PAR IS A PER-HOLE DIFFERENCE over holes with a known par > 0 (the store's
+ * getScoreVsPar rule). Summing every scored hole's strokes against only the known pars invented
+ * strokes over par — the live scorecard read +17 for a round the saved record called +12.
+ */
+export function vsParFrom(r: ScoredRound, lo = 1, hi = Number.MAX_SAFE_INTEGER): { vs: number | null; parSum: number; holes: number } {
+  let vs = 0, parSum = 0, holes = 0;
+  for (const hStr of Object.keys(r.scores ?? {})) {
+    const h = Number(hStr);
+    if (!Number.isFinite(h) || h < lo || h > hi) continue;
+    const s = r.scores[h];
+    const par = r.parOf(h);
+    if (!(s > 0) || typeof par !== 'number' || !(par > 0)) continue;
+    vs += s - par; parSum += par; holes++;
+  }
+  return { vs: holes > 0 ? vs : null, parSum, holes };
+}
+
 export function nineSplitFrom(r: ScoredRound, lo: number, hi: number): {
   strokes: number; parSum: number; played: number; vs: number | null;
 } {
-  let strokes = 0, parSum = 0, played = 0;
+  let strokes = 0, played = 0;
   for (let h = lo; h <= hi; h++) {
     const s = r.scores?.[h];
     if (!(s > 0)) continue;
     played++;
     strokes += s;
-    const par = r.parOf(h);
-    if (par != null) parSum += par;
   }
-  return { strokes, parSum, played, vs: parSum > 0 ? strokes - parSum : null };
+  const v = vsParFrom(r, lo, hi);
+  return { strokes, parSum: v.parSum, played, vs: v.vs };
 }
 
 /**

@@ -55,6 +55,12 @@ interface GuestCardState {
   cards: GuestCard[];
   /** Course this set of cards belongs to, so a new course starts a clean card. */
   courseLabel: string | null;
+  /**
+   * The round these scores belong to. 2026-10-15 (review) — only the COURSE was checked, so the same
+   * course next week reopened last week's guest scores on the new card. A new round id clears them
+   * (names and Indexes stay), exactly as a new course does. Absent on cards saved before this.
+   */
+  roundId?: string | null;
 
   addCard: (name?: string) => GuestCard | null;
   removeCard: (id: string) => void;
@@ -63,7 +69,7 @@ interface GuestCardState {
   setScore: (id: string, hole: number, strokes: number) => void;
   bumpScore: (id: string, hole: number, delta: number) => void;
   clearAll: () => void;
-  noteCourse: (label: string | null) => void;
+  noteCourse: (label: string | null, roundId?: string | null) => void;
 }
 
 function mintId(): string {
@@ -127,17 +133,21 @@ export const useGuestCardStore = create<GuestCardState>()(
         get().setScore(id, hole, (card.scores[hole] ?? 0) + delta);
       },
 
-      clearAll: () => set({ cards: [], courseLabel: null }),
+      clearAll: () => set({ cards: [], courseLabel: null, roundId: null }),
 
-      noteCourse: (label) =>
+      noteCourse: (label, roundId) =>
         set((s) => {
           const next = (label ?? '').trim() || null;
-          // A different course means a different card. Silently carrying yesterday's scores onto a
-          // new scorecard is the kind of quiet wrongness that costs someone a whole round.
-          if (s.courseLabel && next && s.courseLabel !== next) {
-            return { courseLabel: next, cards: s.cards.map((c) => ({ ...c, scores: {} })) };
+          const nextRound = roundId ?? null;
+          // A different course — or a different ROUND on the same course — means a different card.
+          // Silently carrying yesterday's scores onto a new scorecard is the kind of quiet wrongness
+          // that costs someone a whole round.
+          const newCourse = !!(s.courseLabel && next && s.courseLabel !== next);
+          const newRound = !!(s.roundId && nextRound && s.roundId !== nextRound);
+          if (newCourse || newRound) {
+            return { courseLabel: next ?? s.courseLabel, roundId: nextRound ?? s.roundId ?? null, cards: s.cards.map((c) => ({ ...c, scores: {} })) };
           }
-          return { courseLabel: next ?? s.courseLabel };
+          return { courseLabel: next ?? s.courseLabel, roundId: nextRound ?? s.roundId ?? null };
         }),
     }),
     {

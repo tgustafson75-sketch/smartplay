@@ -26,7 +26,7 @@ import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';import { GreenHeatCard } from '../../components/GreenHeatCard';
 import { AddedPlayerCards } from '../../components/scorecard/AddedPlayerCards';
-import { isGirHole } from '../../services/round/scoredRoundStats';
+import { isGirHole, vsParFrom, puttStatsFrom } from '../../services/round/scoredRoundStats';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
 import { recommendBagForCourse } from '../../services/bagRecommendation';
@@ -253,10 +253,20 @@ export default function Scorecard() {
   // A real CourseHole from the bundle carries no parKnown flag and never needs one — its par IS a
   // fact. Only the two synthesized branches above set it false, so absent means known.
   const parIsKnown = (h: unknown) => (h as { parKnown?: boolean }).parKnown !== false;
-  const scoredWithPar = viewCourseHoles.filter(h => scoredHoleNums.has(h.hole) && parIsKnown(h));
-  const totalPar = scoredWithPar.reduce((a, h) => a + h.par, 0);
+  /**
+   * 2026-10-15 (review) — a par of 0 (data-less card / scan gap) is not a known par either, and vs-par
+   * is the per-hole difference over holes with a known par > 0 — the store's getScoreVsPar rule. It
+   * subtracted the known-par holes' par from EVERY scored hole's strokes, so the live card read +17
+   * while the saved record (built by the store) said +12.
+   */
+  const knownParOf = (hole: number): number | null => {
+    const h = viewCourseHoles.find(x => x.hole === hole);
+    return h && parIsKnown(h) && h.par > 0 ? h.par : null;
+  };
+  const vsPar = vsParFrom({ scores: viewScores as Record<number, number>, putts: viewPutts as Record<number, number>, parOf: knownParOf });
+  const totalPar = vsPar.parSum;
   /** null when not one scored hole has a real par — "we do not know", not "level". */
-  const scoreVsPar: number | null = scoredWithPar.length > 0 ? totalScore - totalPar : null;
+  const scoreVsPar: number | null = vsPar.vs;
   const holesPlayed = scoredHoleNums.size;
 
   // 2026-05-25 — Fix AM: scorecard breakdown stats. Putts, fairways
@@ -265,7 +275,7 @@ export default function Scorecard() {
   //
   // Definitions:
   //   - Total putts: sum of viewPutts
-  //   - Avg putts/hole: totalPutts / holesPlayed
+  //   - Avg putts/hole: totalPutts / holes with a recorded putt count
   //   - Fairway hits: tee shots (shot_in_hole_index === 1) on par
   //     4/5 with outcome 'clean' or null. Par 3 tee shots aren't
   //     counted toward fairway tries (no fairway to hit). Same
@@ -313,18 +323,22 @@ export default function Scorecard() {
     let girEligible = 0;
     for (const [holeStr, score] of Object.entries(viewScores)) {
       const hole = parseInt(holeStr, 10);
-      const holeData = viewCourseHoles.find(h => h.hole === hole);
-      const gir = isGirHole(score as number, (viewPutts as Record<number, number>)[hole], holeData?.par);
+      // A placeholder par (synthetic row) or a par of 0 is not a par — skip the hole, as girFrom does.
+      const gir = isGirHole(score as number, (viewPutts as Record<number, number>)[hole], knownParOf(hole));
       if (gir == null) continue;
       girEligible++;
       if (gir) girHoles++;
     }
     const girPct = girEligible === 0 ? null : Math.round((girHoles / girEligible) * 100);
 
-    const avgPutts = holesPlayed === 0 ? null : (totalPutts / holesPlayed);
+    // 2026-10-15 (review) — averaged over the holes with a RECORDED putt count, as the caddie's answer
+    // (scoredRoundStats.puttStatsFrom) does. Dividing by every scored hole read 2 putts on 3 holes,
+    // one entered, as 0.7 a hole.
+    const avgPutts = puttStatsFrom({ scores: viewScores as Record<number, number>, putts: viewPutts as Record<number, number>, parOf: knownParOf }).avg;
 
     return { totalPutts, avgPutts, fairwayPct, girPct };
-  }, [viewShots, viewPutts, viewScores, viewCourseHoles, holesPlayed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- knownParOf reads viewCourseHoles, listed
+  }, [viewShots, viewPutts, viewScores, viewCourseHoles]);
 
   const sumNine = (start: number, end: number): number => {
     let total = 0;
@@ -514,7 +528,8 @@ export default function Scorecard() {
       lines.push('');
       lines.push('TOTAL ' + totalScore);
     } else {
-      lines.push(...drawNine(1, 9, 'OUT'));
+      // 2026-10-15 (review) — a BACK-nine round shared holes 1-9 (all dashes); share the nine played.
+      lines.push(...(isBackNineView ? drawNine(10, 18, 'IN') : drawNine(1, 9, 'OUT')));
     }
     if (clubUsage.length > 0) {
       lines.push('');
@@ -538,7 +553,7 @@ export default function Scorecard() {
       Alert.alert(t('scorecard.share'), t('scorecard.share_failed'));
       console.log('[scorecard] share error', e);
     }
-  }, [t, viewCourseName, isCompetition, totalScore, scoreVsParDisplay, effectiveNineHoleMode, viewCourseHoles, viewScores, clubUsage, recap]);
+  }, [t, viewCourseName, isCompetition, totalScore, scoreVsParDisplay, effectiveNineHoleMode, isBackNineView, viewCourseHoles, viewScores, clubUsage, recap]);
 
   const handleQuickScore = (hole: number, score: number) => {
     // Audit fix (2026-06-07): clear any prior quick-score placeholders for
@@ -993,8 +1008,13 @@ export default function Scorecard() {
             Lives HERE, on the scorecard he is already looking at, not behind a format picker. Every
             score it takes goes to guestCardStore, never roundStore — see that file's header. */}
         <AddedPlayerCards
-          holes={viewCourseHoles.map((h) => ({ hole: h.hole, par: h.par }))}
+          // 2026-10-15 (review) — the holes of the ROUND, not the course: a nine at an 18-hole course
+          // gave the guest card 18 holes, so its net used a full 18-hole allowance on a nine.
+          holes={(effectiveNineHoleMode
+            ? viewCourseHoles.filter((h) => (isBackNineView ? h.hole >= 10 && h.hole <= 18 : h.hole <= 9))
+            : viewCourseHoles).map((h) => ({ hole: h.hole, par: h.par }))}
           courseName={viewCourseName}
+          roundId={viewingRoundId}
           ownerName={ownerDisplayName}
           ownerScores={viewScores as Record<number, number>}
         />
