@@ -105,7 +105,7 @@ describe('every entry path consults the block instead of speaking a failure', ()
     // which can also answer locally; a plan decline must still be consulted before either.
     const src = code('hooks/useCaddieTabMic.ts');
     const at = src.indexOf('if (!turn) {');
-    const reply = src.indexOf('caddieFailureReply(', at);
+    const reply = src.indexOf('failure.localAnswer(', at);
     expect(src.indexOf('takeCaddiePaywallBlock()', at)).toBeGreaterThan(at);
     expect(reply).toBeGreaterThan(at);
     expect(src.indexOf('takeCaddiePaywallBlock()', at)).toBeLessThan(reply);

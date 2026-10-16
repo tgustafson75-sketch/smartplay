@@ -37,6 +37,19 @@ describe('offline golf knowledge, asked the way golfers talk', () => {
     expect(top('stop thinking over the ball')).not.toBe('fault.thin'); // was fault.thin ("thin-king")
   });
 
+  it('review: a short word must be a whole word — "thinking", "topic", "rainbow" do not trigger "thin", "top", "rain"', () => {
+    expect(top('i keep thinking about my last hole')).not.toBe('fault.thin');
+    expect(retrieveKB('stop thinking over the ball', { max: 2, minScore: 8 }).map((e) => e.id)).not.toContain('fault.thin');
+    expect(top('is there a rainbow')).toBeNull();
+    expect(top('i keep topping it')).toBe('fault.thin');   // inflections still count
+    expect(top('its raining')).toBe('cond.firm-vs-wet');
+  });
+
+  it('review: a fairway-bunker question is never answered with the greenside splash shot', () => {
+    expect(top('how do i get out of the sand in a fairway bunker')).toBe('sg.bunker.fairway');
+    expect(top('fairway bunker out of the sand')).toBe('sg.bunker.fairway');
+  });
+
   it('a suffix still matches — "putt" finds putting questions', () => {
     expect(top('how do I putt better')).toBe('focus.putting');
     expect(top('fairway bunker')).toBe('sg.bunker.fairway');

@@ -155,6 +155,24 @@ describe('offline banner', () => {
   });
 });
 
+describe('reachability re-ask (review 10-15)', () => {
+  it('controls that fail FAST once (radio just resumed) are asked again before calling it offline', async () => {
+    let calls = 0;
+    global.fetch = jest.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.startsWith('https://captive.apple.com/')) {
+        calls += 1;
+        if (calls === 1) throw new TypeError('The network connection was lost.');
+        return new Response(APPLE_OK, { status: 200 });
+      }
+      throw new TypeError('The network connection was lost.');
+    }) as unknown as typeof fetch;
+    const r = await probeReachability();
+    expect(r.verdict).toBe('internet_ok');
+    expect(calls).toBe(2);
+  });
+});
+
 describe('issue log diagnostics', () => {
   it('the emailed snapshot carries the verdict, so the next report answers "app or signal?" itself', async () => {
     install({ ours: 'down', internet: 'up' });

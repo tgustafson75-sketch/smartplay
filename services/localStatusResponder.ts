@@ -654,14 +654,28 @@ export const FIXED_OFFLINE_REPLIES_EN: { slug: string; text: string }[] = [
  * on Local Mode?" — a toggle removed 09-13, so a dead end), and cloudFailureLine / deadEndLine, which
  * chose between them from the Local Mode flag. Failure wording now has one owner.
  */
+/**
+ * 2026-10-15 — true for the replies that say the phone does NOT have the data ("No GPS lock yet",
+ * "I don't have a wind reading"...). They are honest answers to a direct question, but they are not
+ * answers to stand in for a failed turn: services/caddieFailureReply then says why the turn failed.
+ */
+export function isNoDataReply(text: string, language: LocalReplyLanguage = 'en'): boolean {
+  const lang = (['en', 'es', 'zh'] as const).includes(language) ? language : 'en';
+  const t = L[lang];
+  return [t.noFix, t.noGreen, t.noBag, t.noWind, t.noLastShot, t.noHoleInfo, t.scoreNoneYet, t.noClub, t.noRound]
+    .some((s) => s === text.trim());
+}
+
 export function roundReadLine(language: LocalReplyLanguage = 'en'): string | null {
   const lang = (['en', 'es', 'zh'] as const).includes(language) ? language : 'en';
   const round = useRoundStore.getState();
   if (!round.isRoundActive) return null;
+  // A "no GPS lock / no green / no bag" reply is not a read: offline it would blame the GPS for what
+  // is a missing connection, and send the player to retry something that cannot succeed.
   const read = composedReadReply(lang);
-  if (read?.text) return read.text;
+  if (read?.text && !isNoDataReply(read.text, lang)) return read.text;
   const club = clubCallReply(lang);
-  if (club?.text) return club.text;
+  if (club?.text && !isNoDataReply(club.text, lang)) return club.text;
   if (round.currentHole != null) return L[lang].holeIs(round.currentHole);
   return null;
 }
@@ -831,7 +845,7 @@ function windReply(lang: LocalReplyLanguage): LocalReplyResult {
     return { text: L[lang].noWind, queryType: 'wind' };
   }
   const weather = known.snapshot;
-  const asOf = known.ageMinutes > 30 ? L[lang].windAsOf(known.ageMinutes) : '';
+  const asOf = known.ageMinutes >= 30 ? L[lang].windAsOf(known.ageMinutes) : '';
   const mph = Math.round(weather.wind_speed_mph ?? 0);
   if (mph < 3) {
     // "Dead calm right now" would claim the present; an old reading says its speed and its age.

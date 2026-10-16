@@ -5,7 +5,7 @@
  * the exact bucket was ever loaded from disk.
  *
  * Rules pinned here: same course (≤1.5km) + same 30 minutes = same weather, for everyone. Older than
- * 30 minutes is used ONLY by the offline wind answer, only on proven-offline, and said with its age —
+ * 30 minutes is used ONLY by the offline wind answer (reached only after a failed turn), said with its age —
  * never folded silently into a plays-like number.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -67,17 +67,28 @@ describe('the wind on the next tee', () => {
 });
 
 describe('the offline wind answer', () => {
-  it('PROVEN offline: an hour-old reading answers, with its age', async () => {
+  it('an hour-old reading answers the offline wind question, with its age', async () => {
     await fetchWeatherAt(TEE_1);
     minutes(65);
-    useConnectivityStore.setState({ isOnline: false });
     expect(lastKnownWindOffline(TEE_4)).toMatchObject({ ageMinutes: 65 });
   });
 
-  it('online it does not — a fresh fetch is the honest answer there', async () => {
+  it('the first wind question in a fresh dead zone, before any banner, still gets the old reading', async () => {
+    // Review finding: it was gated on the banner, which nothing had raised yet. The age keeps it honest.
     await fetchWeatherAt(TEE_1);
     minutes(65);
-    expect(lastKnownWindOffline(TEE_4)).toBeNull();
+    expect(lastKnownWindOffline(TEE_4)).toMatchObject({ ageMinutes: 65 });
+  });
+
+  it('the freshest reading on the course wins over a nearer, older one', async () => {
+    await fetchWeatherAt(TEE_4);          // older, but the same spot asked about
+    minutes(20);
+    (global.fetch as jest.Mock).mockImplementationOnce(async () => new Response(JSON.stringify({
+      temp_f: 68, humidity: 40, pressure_hpa: 1015, wind_speed_mph: 20, wind_direction_deg: 90,
+      wind_gust_mph: null, conditions: 'Clear', description: 'clear', timestamp: clock,
+    }), { status: 200 }));
+    await fetchWeatherAt(TEE_1);          // newer, 580m away
+    expect(getCachedWeatherEvenIfStale({ lat: 33.4990, lng: -117.2261 })?.wind_speed_mph).toBe(20);
   });
 
   it('never older than 3 hours', async () => {

@@ -152,7 +152,8 @@ function nearestEntry(location: ShotLocation, maxAgeMs: number): CacheEntry | nu
     const [lat, lng] = k.split(',').map(Number);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     const m = metresBetween(location, { lat, lng });
-    if (m <= SAME_AREA_M && (!best || m < best.m || (m === best.m && entry.cached_at > best.entry.cached_at))) best = { entry, m };
+    // Freshest wins; distance only breaks a tie. Across one course a newer reading is the better one.
+    if (m <= SAME_AREA_M && (!best || entry.cached_at > best.entry.cached_at || (entry.cached_at === best.entry.cached_at && m < best.m))) best = { entry, m };
   }
   return best?.entry ?? null;
 }
@@ -172,7 +173,11 @@ function hydrateAllOnce(): void {
         const key = full.slice(STORAGE_PREFIX.length);
         if (cache.has(key)) continue;
         const entry = await readPersisted(key);
-        if (entry && !cache.has(key)) cache.set(key, entry);
+        if (!entry) continue;
+        // Readings older than anything can use are deleted rather than loaded (one per ~100m bucket
+        // ever fetched would otherwise accumulate forever and be scanned on render-path reads).
+        if (Date.now() - entry.cached_at > OFFLINE_WIND_MAX_MS) { await AsyncStorage.removeItem(full).catch(() => undefined); continue; }
+        if (!cache.has(key)) cache.set(key, entry);
       }
     } catch { /* best-effort: a miss just means no wind reading */ }
   })();
@@ -180,20 +185,19 @@ function hydrateAllOnce(): void {
 
 /**
  * 2026-10-15 — the last wind reading on this course, up to 3 hours old, for the offline WIND ANSWER
- * ONLY — and only when the phone is PROVEN offline (the connectivity banner is raised only on proof,
- * services/reachability). Returned with its age so the reply says how old it is. Deliberately NOT used
- * for plays-like or the club call: an hour-old wind folded silently into a yardage would be a number
- * presented as current that is not.
+ * ONLY (localStatusResponder.windReply, reached solely through offlineCaddie after a failed turn).
+ * Returned with its age so the reply says how old it is. Deliberately NOT used for plays-like or the
+ * club call: an hour-old wind folded silently into a yardage would be a number presented as current.
+ *
+ * Not gated on the offline banner (review, same day): the first "what's the wind" in a dead zone
+ * arrives before anything has raised it, and the stated age is what keeps an old reading honest.
  */
 export function lastKnownWindOffline(location: ShotLocation): { snapshot: WeatherSnapshot; ageMinutes: number } | null {
   const fresh = getCachedWeatherEvenIfStale(location);
   if (fresh) return { snapshot: fresh, ageMinutes: 0 };
-  let offline = false;
-  try { offline = require('../store/connectivityStore').useConnectivityStore.getState().isOnline === false; } catch { /* treat as online */ }
-  if (!offline) return null;
   const entry = nearestEntry(location, OFFLINE_WIND_MAX_MS);
   if (!entry) return null;
-  return { snapshot: entry.snapshot, ageMinutes: Math.round((Date.now() - entry.cached_at) / 60_000) };
+  return { snapshot: entry.snapshot, ageMinutes: Math.floor((Date.now() - entry.cached_at) / 60_000) };
 }
 
 /**

@@ -80,6 +80,9 @@ const CONTROL_TIMEOUT_MS = 6000;
  * LTE costs ~0.5–0.8s, and calling a healthy connection "slow" is the same false blame we are removing.
  */
 const SLOW_CONTROL_MS = 2500;
+/** All controls failing faster than this looks like a just-resumed radio, not a dead zone. */
+const FAST_FAIL_MS = 1500;
+const RETRY_AFTER_MS = 1000;
 /** A verdict holds briefly, so a burst of failures (one per keystroke in a search box) probes once. */
 const CACHE_MS = 20_000;
 
@@ -128,20 +131,31 @@ export function probeReachability(opts?: { force?: boolean }): Promise<Reachabil
       logVerdict(r, outcomes);
       resolve(r);
     };
-    for (const c of CONTROLS) {
-      void askControl(c).then((o) => {
-        outcomes.push(o);
-        if (o.kind === 'genuine') {
-          finish({ verdict: o.ms > SLOW_CONTROL_MS ? 'slow' : 'internet_ok', via: o.name, controlMs: o.ms, at: Date.now() });
-          return;
-        }
-        if (outcomes.length < CONTROLS.length) return;
-        const intercepted = outcomes.find((x) => x.kind === 'intercepted');
-        finish(intercepted
-          ? { verdict: 'captive', via: intercepted.name, controlMs: null, at: Date.now() }
-          : { verdict: 'offline', via: null, controlMs: null, at: Date.now() });
-      });
-    }
+    let retried = false;
+    const onOutcome = (o: ControlOutcome) => {
+      if (settled) return;
+      outcomes.push(o);
+      if (o.kind === 'genuine') {
+        finish({ verdict: o.ms > SLOW_CONTROL_MS ? 'slow' : 'internet_ok', via: o.name, controlMs: o.ms, at: Date.now() });
+        return;
+      }
+      if (outcomes.length < CONTROLS.length) return;
+      const intercepted = outcomes.find((x) => x.kind === 'intercepted');
+      if (intercepted) { finish({ verdict: 'captive', via: intercepted.name, controlMs: null, at: Date.now() }); return; }
+      /**
+       * Review (10-15): every control failing FAST can be the first requests after the app returns
+       * from the background (iOS throws "connection lost" before the radio is back), not a dead zone.
+       * Ask once more after a beat before calling it offline — a false "offline" is the 07-24 shape.
+       */
+      if (!retried && outcomes.every((x) => x.ms < FAST_FAIL_MS)) {
+        retried = true;
+        outcomes.length = 0;
+        setTimeout(() => { for (const c2 of CONTROLS) void askControl(c2).then(onOutcome); }, RETRY_AFTER_MS);
+        return;
+      }
+      finish({ verdict: 'offline', via: null, controlMs: null, at: Date.now() });
+    };
+    for (const c of CONTROLS) void askControl(c).then(onOutcome);
   });
   return inFlight;
 }
@@ -155,7 +169,14 @@ export function isProvenOffline(v: NetVerdict): boolean {
   return v === 'offline' || v === 'captive';
 }
 
-export function unreachableMessage(verdict: NetVerdict, what: string): string {
+export function unreachableMessage(verdict: NetVerdict, what: string, action: 'search' | 'open' = 'search'): string {
+  // Review (10-15): opening a course is not a search — its own wording, so the player is not told to
+  // "try the search again" after tapping a course.
+  if (action === 'open' && verdict !== 'captive' && verdict !== 'internet_ok') {
+    return verdict === 'slow'
+      ? 'Your connection is very slow right now — tap the course again when it picks up.'
+      : 'Your phone isn’t reaching the internet right now. Courses you’ve played or downloaded still open — this one needs a connection the first time.';
+  }
   switch (verdict) {
     // What still works is from the offline audit: yardages + scoring on courses already on the phone
     // (played, downloaded, or bundled) and the watch. Kevin's voice and new searches need the internet.
@@ -164,7 +185,7 @@ export function unreachableMessage(verdict: NetVerdict, what: string): string {
     case 'slow':
       return 'Your connection is very slow right now. Yardages and scoring still work on courses you’ve played or downloaded — try the search again when it picks up.';
     case 'captive':
-      return 'This Wi-Fi needs you to sign in first — open Safari to finish connecting.';
+      return 'This Wi-Fi needs you to sign in first — open your browser to finish connecting.';
     case 'internet_ok':
       return `${what} isn’t responding on our end — your connection is fine. Try again in a moment.`;
   }

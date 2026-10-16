@@ -238,20 +238,21 @@ export function useCaddieTabMic({
         }
         const settings = useSettingsStore.getState();
         const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
-        onVoiceStateChange?.('speaking');
         /**
          * 2026-10-15 (offline audit gap #4) — this surface said "I saved what you said" even when the
          * phone could answer the question itself ("what does this play like" with GPS, bag and green
          * all on the device), while the earbud path answered it. Same shared owner as every other
-         * failure path now: a question answerable from REAL local data is answered; anything else falls
-         * through to the capture below, with the verdict-based line when nothing was captured.
+         * failure path now (services/caddieFailureReply): a question answerable from REAL local data is
+         * answered; otherwise the statement is kept, and only if nothing was kept does the internet
+         * check decide the line. Nothing waits on the network before 'speaking' is shown (review).
          */
         const failure = await import('../services/caddieFailureReply');
-        const reply = await failure.caddieFailureReply({ heard: transcript, language: lang });
-        if (reply.source === 'local_answer') {
-          onKevinSpoke?.(reply.text);
+        const local = failure.localAnswer(transcript, lang);
+        if (local) {
+          onVoiceStateChange?.('speaking');
+          onKevinSpoke?.(local);
           if (settings.voiceEnabled) {
-            await speak(reply.text, settings.voiceGender, lang, getApiBaseUrl(), { userInitiated: true }).catch(() => undefined);
+            await speak(local, settings.voiceGender, lang, getApiBaseUrl(), { userInitiated: true }).catch(() => undefined);
           }
           onVoiceStateChange?.('idle');
           return;
@@ -263,7 +264,8 @@ export function useCaddieTabMic({
         } catch { /* capture is best-effort */ }
         const line = captured
           ? "I didn't get that through just now, but I saved what you said. I'll pick it back up in a second."
-          : reply.text;
+          : (await failure.caddieFailureReply({ heard: null, language: lang })).text;
+        onVoiceStateChange?.('speaking');
         onKevinSpoke?.(line);
         const { speakDeviceNotice } = await import('../services/voiceService');
         await speakDeviceNotice(line, lang, settings.voiceGender).catch(() => {});
@@ -406,6 +408,7 @@ export function useCaddieTabMic({
      * be deadEndLine(), whose off-round answer was "Good moment to sharpen your tempo" — offered after a
      * failed transcribe as if it answered the question. No transcript here, so nothing to answer.
      */
+    const epoch = getUserTurnEpoch();
     void (async () => {
       let line = "Let's stay on this one — what are you working with?";
       try {
@@ -415,7 +418,12 @@ export function useCaddieTabMic({
           ? CADDIE_NOTICE_DIDNT_CATCH
           : (await failure.caddieFailureReply({ heard: null, language: useSettingsStore.getState().language })).text;
       } catch { /* keep the neutral fallback */ }
+      // Review (10-15): the reply waits on the internet check. If the player started a new turn in that
+      // window (VAD / a tap), a late 'idle' and a failure line spoken over their live mic is the wrong
+      // thing — show the line, leave the state to the new turn.
+      const superseded = getUserTurnEpoch() !== epoch && (pendingTurnRef.current !== null || isCapturing() || isExternalMicActive());
       try { onKevinSpoke?.(line); } catch { /* non-fatal */ }
+      if (superseded) return;
       try {
         const s = useSettingsStore.getState();
         if (s.voiceEnabled) void speak(line, s.voiceGender, s.language, getApiBaseUrl(), { userInitiated: true });

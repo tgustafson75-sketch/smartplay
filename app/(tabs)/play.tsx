@@ -1998,7 +1998,7 @@ export default function PlayTab() {
       const net = (await probeReachability()).verdict;
       if (isCurrent()) setSelectError(net === 'internet_ok'
         ? 'Trouble opening that course on our end — tap it again in a moment.'
-        : unreachableMessage(net, 'That course'));
+        : unreachableMessage(net, 'That course', 'open'));
     } finally {
       if (isCurrent()) setSelectedLoading(false);
     }

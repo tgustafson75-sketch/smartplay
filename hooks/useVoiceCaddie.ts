@@ -1789,6 +1789,13 @@ export const useVoiceCaddie = ({
           isProcessingRef.current = false;
         };
         const failure = require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply');
+        // Our own host answered one of the three probes → the device is online and the failure is ours.
+        // Never "offline", never the on-device route, whatever the control hosts say (a DNS filter or VPN
+        // can block Apple/Google while we are reachable).
+        if (pingOk || getOk || cdnOk === true) {
+          say(failure.failureNoticeFor('internet_ok', langSafe));
+          return;
+        }
         const net = (await probeReachability()).verdict;
         if (isProvenOffline(net)) {
           try {
@@ -1958,6 +1965,9 @@ export const useVoiceCaddie = ({
         // report legible. Static assets are served from the edge without invoking a Lambda, so
         // cdnOk true + pingOk false = "our functions were cold, the network was fine", while all
         // three false = the device truly could not reach the host. Same 3s window, no added latency.
+        // 2026-10-15 — the internet check (hosts that are not ours) starts in the SAME window, so if this
+        // turn ends in failTranscribeOffline its verdict is already in hand rather than costing up to 6s more.
+        void probeReachability();
         const [ping, get, cdn] = await Promise.all([reachabilityPing(3000), healthGet(3000), staticReachable(3000)]);
         /**
          * 2026-08-10 (Tim, mid-round — "we have five Gs signal, but you're giving me an error

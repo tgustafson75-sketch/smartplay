@@ -10,7 +10,7 @@ import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail'
 import { conversationalBrainTurn } from './conversationalBrain';
 import { askCaddie } from './caddieBrain';
 import { abortVoiceWarmup } from './voiceWarmup';
-import { noteUserTurn } from './userTurnClock';
+import { noteUserTurn, getUserTurnEpoch } from './userTurnClock';
 import { noteCaddieTurn } from './funnelEvents';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from './featureAccess';
 import { getDialog } from './dialogEngine';
@@ -683,7 +683,14 @@ export async function speakHonestFailure(
   voiceGender: 'male' | 'female',
   apiUrl: string,
 ): Promise<void> {
+  const epoch = getUserTurnEpoch();
   const msg = await (require('./caddieFailureReply') as typeof import('./caddieFailureReply')).failureNotice(language);
+  // Review (10-15): the notice now waits on the internet check. A turn the player started in that
+  // window must not be cut off by the stopSpeaking below, nor talked over.
+  if (getUserTurnEpoch() !== epoch) {
+    console.log('[listeningSession] honest-failure notice dropped — a newer turn started');
+    return;
+  }
   try { Vibration.vibrate(120); } catch {}
   try { await stopSpeaking('screen:services-listeningsession').catch(() => {}); } catch {}
   try {

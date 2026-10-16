@@ -86,6 +86,21 @@ function personalizationMatch(entry: KBEntry, profile?: CnsProfile): boolean {
 }
 
 /**
+ * 2026-10-15 (review) — a SHORT single-word alias (thin, top, block, rain, aim…) must be a whole word
+ * or a plain inflection of one. Start-of-word alone still let "top" match "topic", "thin" match
+ * "thinking" and "rain" match "rainbow". Longer and multi-word aliases keep start-of-word matching,
+ * which is specific enough on its own.
+ */
+const SHORT_ALIAS_SUFFIX = '(?:s|es|ed|ing|y|ped|ping|ned|ning)?';
+const shortAliasRx = new Map<string, RegExp>();
+function aliasHit(qb: string, na: string): boolean {
+  if (na.length > 5 || na.includes(' ')) return qb.includes(' ' + na);
+  let rx = shortAliasRx.get(na);
+  if (!rx) { rx = new RegExp(` ${na}${SHORT_ALIAS_SUFFIX}(?= |$)`); shortAliasRx.set(na, rx); }
+  return rx.test(qb);
+}
+
+/**
  * Score one entry against the normalized query.
  *   - whole-phrase alias contained in the query → strong (10 + alias length)
  *   - topic phrase contained in the query → solid (8)
@@ -103,7 +118,7 @@ function scoreEntry(entry: KBEntry, q: string, qWords: Set<string>): number {
   const qb = ' ' + q;
   for (const alias of entry.aliases) {
     const na = norm(alias);
-    if (na.length >= 3 && qb.includes(' ' + na)) {
+    if (na.length >= 3 && aliasHit(qb, na)) {
       score += 10 + Math.min(na.length, 20) / 10;
     }
   }

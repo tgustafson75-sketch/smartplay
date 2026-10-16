@@ -28,7 +28,8 @@ jest.mock('expo-av', () => {
     setPositionAsync: async () => undefined,
     setVolumeAsync: async () => undefined,
     getStatusAsync: async () => ({ isLoaded: true, durationMillis: 800, didJustFinish: true }),
-    setOnPlaybackStatusUpdate: (cb: (s: unknown) => void) => { setTimeout(() => cb({ isLoaded: true, didJustFinish: true, durationMillis: 800 }), 0); },
+    // The player detaches its listener with null on finish; only a real listener is called back.
+    setOnPlaybackStatusUpdate: (cb: ((s: unknown) => void) | null) => { if (cb) setTimeout(() => cb({ isLoaded: true, didJustFinish: true, durationMillis: 800 }), 0); },
   };
   const Sound = { createAsync: async (src: { uri?: string } | number) => {
     mockPlayed.push(typeof src === 'object' && src ? String(src.uri) : String(src));

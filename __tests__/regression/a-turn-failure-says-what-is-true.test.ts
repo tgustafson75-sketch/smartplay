@@ -113,7 +113,7 @@ describe('what a failed turn says', () => {
         }
       }
     }
-  });
+  }, 30_000); // each proven-offline case includes the reachability re-ask (1s)
 
   it('the caption-only path never blames the connection without a fresh verdict', () => {
     expect(failureNoticeSync('en')).toBe(CADDIE_NOTICE_ON_US.en);
@@ -123,6 +123,35 @@ describe('what a failed turn says', () => {
     world('down');
     await caddieFailureReply({ heard: null });
     expect(mockEvents.find((e) => e.stage === 'caddie_failure_reply')?.details).toMatchObject({ source: 'offline', verdict: 'offline' });
+  });
+});
+
+describe('review fixes (10-15)', () => {
+  it('offline on a round with no GPS read: the truth, not "No GPS lock yet" (which blames the GPS)', async () => {
+    world('down');
+    useRoundStore.setState({ isRoundActive: true, currentHole: 7 });
+    const r = await caddieFailureReply({ heard: null, language: 'en' });
+    expect(r.text).not.toMatch(/No GPS lock/);
+  });
+
+  it('a "no data" local reply does not stand in for an answer on good signal', async () => {
+    world('up');
+    mockAnswer.fn = () => ({ text: "I don't have a wind reading right now.", source: 'round_state' });
+    expect((await caddieFailureReply({ heard: "what's the wind", language: 'en' })).source).toBe('on_us');
+  });
+
+  it('the tap mic never calls it offline when our own host answered a probe', () => {
+    const tap = code('hooks/useVoiceCaddie.ts');
+    const fn = tap.slice(tap.indexOf('const failTranscribeOffline = async'), tap.indexOf('const failTranscribeOffline = async') + 4000);
+    expect(fn.indexOf('if (pingOk || getOk || cdnOk === true)')).toBeGreaterThan(-1);
+    expect(fn.indexOf('if (pingOk || getOk || cdnOk === true)')).toBeLessThan(fn.indexOf('await probeReachability()'));
+    // ...and the check overlaps the existing probes rather than adding a wait after them.
+    expect(tap).toMatch(/void probeReachability\(\);\s*const \[ping, get, cdn\] = await Promise\.all/);
+  });
+
+  it('a late failure line never lands on a newer turn', () => {
+    expect(code('services/listeningSession.ts')).toMatch(/const epoch = getUserTurnEpoch\(\);[\s\S]{0,200}failureNotice\(language\);\s*if \(getUserTurnEpoch\(\) !== epoch\)/);
+    expect(code('hooks/useCaddieTabMic.ts')).toMatch(/const superseded = getUserTurnEpoch\(\) !== epoch/);
   });
 });
 
@@ -159,7 +188,7 @@ describe('Local Mode cannot come back', () => {
   it('08-23 rule holds — the failure owner runs only AFTER a failed turn, never before the brain', () => {
     // Every caller sits in a failure branch: a failed transcribe, an aborted upload, or a null brain turn.
     const tab = code('hooks/useCaddieTabMic.ts');
-    const at = tab.indexOf('caddieFailureReply({ heard: transcript');
+    const at = tab.indexOf('failure.localAnswer(transcript');
     expect(at).toBeGreaterThan(tab.indexOf('if (!turn) {'));
     expect(at).toBeGreaterThan(tab.indexOf('const turn = await askCaddie('));
   });

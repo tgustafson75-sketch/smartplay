@@ -42,14 +42,8 @@ export async function caddieFailureReply(opts: { heard?: string | null; language
   const lang = safeLang(opts.language);
 
   // 1 — the question, answered from real local data.
-  const heard = opts.heard?.trim();
-  if (heard) {
-    try {
-      const off = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(heard, lang);
-      const text = off?.text?.trim();
-      if (text) return record({ text, source: 'local_answer', verdict: null });
-    } catch { /* the local answer is a bonus, never a dependency */ }
-  }
+  const local = localAnswer(opts.heard, lang);
+  if (local) return record({ text: local, source: 'local_answer', verdict: null });
 
   // 2 — why did it fail?
   const verdict = (await probeReachability()).verdict;
@@ -62,6 +56,24 @@ export async function caddieFailureReply(opts: { heard?: string | null; language
     } catch { /* fall through to the truth */ }
   }
   return record({ text: CADDIE_NOTICE_OFFLINE[lang], source: 'offline', verdict });
+}
+
+/**
+ * Rule 1 alone, synchronous and network-free: the question answered from real local data (GPS, bag,
+ * green, bundled knowledge), or null. A "no data" reply ("I don't have a wind reading") answers
+ * nothing, so it is null too — the caller then says why the turn failed.
+ */
+export function localAnswer(heard: string | null | undefined, language?: string | null): string | null {
+  const q = heard?.trim();
+  if (!q) return null;
+  const lang = safeLang(language);
+  try {
+    const text = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(q, lang)?.text?.trim();
+    if (!text) return null;
+    return (require('./localStatusResponder') as typeof import('./localStatusResponder')).isNoDataReply(text, lang) ? null : text;
+  } catch {
+    return null; // the local answer is a bonus, never a dependency
+  }
 }
 
 function record(r: FailureReply): FailureReply {
