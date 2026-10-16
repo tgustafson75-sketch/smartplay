@@ -23,7 +23,7 @@ import * as VideoThumbnails from '../utils/videoThumbnail';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from './apiBase';
 import { inferCameraAngle } from './cameraAngleInference';
-import { anchorsFromPoseFrames } from './swing/poseMotion';
+import { anchorsFromPoseFrames, trustHeardStrike } from './swing/poseMotion';
 import { rejectImplausible } from './swing/biomechPlausibility';
 import { roiFromBodyBounds } from './swing/clubPath';
 
@@ -590,8 +590,8 @@ export async function poseAtTime(
  *  frames tagged with `position` (P1_address / P4_top / P6_impact)
  *  for the metric reads — callers must populate those tags before
  *  calling. */
-export function computeBiomechanicsFromFrames(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null, handedness?: 'right' | 'left' | null): SwingBiomechanics {
-  return computeBiomechanics(frames, angle, handedness);
+export function computeBiomechanicsFromFrames(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null, handedness?: 'right' | 'left' | null, impactHeard = false): SwingBiomechanics {
+  return computeBiomechanics(frames, angle, handedness, impactHeard);
 }
 
 // 2026-08-06 (Tim — "body mechanics SUPER tight"). Make each phase anchor robust to a single bad pose
@@ -621,7 +621,7 @@ function robustAnchor(frames: PoseFrame[], anchor: PoseFrame | undefined, window
   return { ...anchor, keypoints: composite };
 }
 
-function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null, handedness: 'right' | 'left' | null = 'right'): SwingBiomechanics {
+function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null, handedness: 'right' | 'left' | null = 'right', impactHeard = false): SwingBiomechanics {
   // 2026-07-24 (full-app audit, root D) — when the caller doesn't KNOW the angle
   // (null/undefined — Coach lesson, library uploads), infer it from the pose
   // geometry so the honesty gate below fires everywhere, not just where a caller
@@ -642,7 +642,13 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
    * motion yields the swing's anchors (poseMotion — the same ones the stage buttons seek to), each
    * phase reads the frame nearest its anchor. A strike label still times impact when it agrees.
    */
-  const motion = anchorsFromPoseFrames(frames);
+  /**
+   * 2026-10-16 (review) — a HEARD strike outranks the motion read. When the P6 label sits on a heard
+   * strike and the hands' read puts impact more than 150ms away, the hands' read is the one that is wrong
+   * (sparse or jittery wrists), so every phase reads its label — the same rule the stage buttons use
+   * (poseMotion.swingStageTimesMs), so the Impact button and the impact numbers name one instant.
+   */
+  const motion = trustHeardStrike(frames, anchorsFromPoseFrames(frames), impactHeard);
   const nearest = (ms: number): PoseFrame | undefined => {
     let best: PoseFrame | undefined;
     for (const f of frames) if (!best || Math.abs(f.timestampMs - ms) < Math.abs(best.timestampMs - ms)) best = f;
@@ -1132,12 +1138,14 @@ export async function analyzeSwingFromVideo(
   impactToleranceMs = 0,
   /** 2026-10-05 — stop decoding once the caller's run is cancelled (a superseded body read must not keep the decoder). */
   shouldAbort?: () => boolean,
+  /** 2026-10-16 — `impactMs` is a strike the microphone HEARD (frame-exact), not a located guess. */
+  impactHeard = false,
 ): Promise<SwingBiomechanics | null> {
   const frames = await extractPoseFramesFromVideo(
     videoUri, durationMs, trustDuration, window, impactMs, shouldAbort, impactToleranceMs,
   );
   if (!frames) return null;
-  return computeBiomechanics(frames, angle, handedness);
+  return computeBiomechanics(frames, angle, handedness, impactHeard);
 }
 
 /** 2026-05-22 — Path A (SmartMotion real pose overlay): same keyframe-

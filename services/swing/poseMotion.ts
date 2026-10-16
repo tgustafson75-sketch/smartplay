@@ -202,6 +202,24 @@ export function anchorsFromPoseFrames(frames: readonly PoseFrame[] | null | unde
   return deriveSwingAnchors(samples);
 }
 
+/** A heard strike and the motion read disagreeing by more than this: the motion read is wrong. */
+export const HEARD_DISAGREE_MS = 150;
+
+/**
+ * 2026-10-16 (review) — the motion anchors, unless a HEARD strike says they are wrong. When the P6 label
+ * sits on a heard strike (frame-exact) and the hands' read puts impact more than HEARD_DISAGREE_MS away,
+ * the hands' read is the wrong one (sparse or jittery wrists): null, and every phase falls back to its
+ * label. The stage buttons (swingStageTimesMs) and the body read (computeBiomechanics) both apply this,
+ * so the Impact button and the impact numbers name one instant.
+ */
+export function trustHeardStrike(
+  frames: readonly PoseFrame[], anchors: SwingAnchors | null, heardStrike: boolean,
+): SwingAnchors | null {
+  if (!anchors || !heardStrike) return anchors;
+  const heard = frames.find((p) => p.position === 'P6_impact' && p.positionSource === 'strike');
+  return heard && Math.abs(heard.timestampMs - anchors.impactMs) > HEARD_DISAGREE_MS ? null : anchors;
+}
+
 export type SwingStageKey = 'P1_address' | 'P4_top' | 'P6_impact' | 'P10_finish';
 export const SWING_STAGES: readonly { key: SwingStageKey; label: string }[] = [
   { key: 'P1_address', label: 'Address' }, { key: 'P4_top', label: 'Top' },
@@ -226,7 +244,7 @@ export function swingStageTimesMs(
   opts: { heardStrike?: boolean; anchors?: SwingAnchors | null } = {},
 ): { key: SwingStageKey; label: string; ms: number }[] {
   if (!frames?.length) return [];
-  const a = opts.anchors !== undefined ? opts.anchors : anchorsFromPoseFrames(frames);
+  const a = trustHeardStrike(frames, opts.anchors !== undefined ? opts.anchors : anchorsFromPoseFrames(frames), !!opts.heardStrike);
   const measured: Record<SwingStageKey, number | undefined> = {
     P1_address: a?.startMs, P4_top: a?.topMs, P6_impact: a?.impactMs, P10_finish: a?.endMs,
   };

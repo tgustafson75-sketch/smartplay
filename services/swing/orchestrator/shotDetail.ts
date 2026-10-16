@@ -129,9 +129,14 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
   if (signal.aborted) return null;
   const { swingerForSession } = require('../sessionSwinger') as typeof import('../sessionSwinger');
   const poseMod = await import('../../poseAnalysisApi');
+  // 2026-10-16 — is that impact a HEARD strike (frame-exact) or a located one? The body read trusts only
+  // a heard one over the hands' own motion.
+  const impactHeard = impactMs != null && shot.detectionMethod === 'audio_transient'
+    && typeof shot.detectionOffsetSeconds === 'number' && Math.abs(shot.detectionOffsetSeconds * 1000 - impactMs) <= 50;
   const biomech = await poseMod.analyzeSwingFromVideo(
     uri, durMs, s.upload?.angleOverride ?? null, probed > 0, window, impactMs, swingerForSession(s).handedness,
     0, () => signal.aborted,   // a superseded / cancelled body read stops decoding, not just writing
+    impactHeard,
   );
   const store = liveSessionStore(signal);
   store.setShotBiomechanics(input.sessionId, input.shotId, biomech);

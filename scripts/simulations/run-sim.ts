@@ -3224,7 +3224,8 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
       // 2026-08-19 — was /computeBiomechanicsFromFrames\(frames, angle/. The camera angle is no longer
       // a value the screen holds and passes down; null makes the engine infer it from these very frames,
       // which is now the single source of truth. This guard is about the SHARED extraction, not the angle.
-      /return computeBiomechanics\(frames, angle, handedness\);/.test(pose)
+      // 2026-10-16 — the shared extraction also carries whether its impact was HEARD (trustHeardStrike).
+      /return computeBiomechanics\(frames, angle, handedness, impactHeard\);/.test(pose)
     );
   })(),
   'trusted real duration skips the reprobe (2-8s saved on Motion); acoustic strike anchors the phase frames; one extraction feeds both skeleton and biomech; on-device pose latency is measurable');
