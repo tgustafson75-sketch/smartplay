@@ -156,12 +156,16 @@ export function faultPauseTick(t: {
  * Whether the screen is HELD ON THE FAULT — the only time the ring and the "Paused on the issue" card
  * show. Always within a couple of frames of the fault: the old rule let the `atIssue` flag alone keep the
  * card and ring up while the player scrubbed to Address / Top / Finish (Lily's 4075 screenshots), because
- * nothing but playing cleared it. Independent of whether the review PAUSES there (2026-10-16 review): a
- * player who switched the pause off and jumps to the fault still sees what is wrong.
+ * nothing but playing cleared it.
+ *   atIssue  the replay stopped there, or the player jumped there — shown whether or not the review
+ *            pauses (a player who switched the pause off and jumps to the fault still sees what is wrong);
+ *   paused   merely paused on the fault frame — shown only while this review pauses on the fault, so
+ *            turning the Issue chip OFF while stopped there takes the ring and card away (2026-10-16
+ *            re-review: they used to stay until the player pressed play).
  */
-export function heldOnFault(h: { faultSec: number | null; posSec: number; paused: boolean; atIssue: boolean }): boolean {
+export function heldOnFault(h: { faultSec: number | null; posSec: number; paused: boolean; atIssue: boolean; pausing: boolean }): boolean {
   if (h.faultSec == null) return false;
-  return Math.abs(h.posSec - h.faultSec) < 0.08 && (h.atIssue || h.paused);
+  return Math.abs(h.posSec - h.faultSec) < 0.08 && (h.atIssue || (h.paused && h.pausing));
 }
 
 /**

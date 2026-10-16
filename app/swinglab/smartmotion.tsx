@@ -4721,7 +4721,10 @@ export default function SmartMotion() {
   // 2026-10-16 — THIS REVIEW's fault pause (the library's rule): the persisted setting is the default each
   // swing opens with; the Issue chip flips only this, never the setting.
   const [reviewPause, setReviewPause] = useState(pauseOnIssue);
-  useEffect(() => { setReviewPause(pauseOnIssue); }, [pauseOnIssue, selectedSwing]);
+  // Keyed on the SHOT reviewed (session + shot id), not the index: a new recording resets selectedSwing to
+  // 0, a no-op when it is already 0, and a chip turned off on the last recording leaked into the next.
+  const reviewShotKey = `${cageSession?.id ?? ''}:${cageSession?.shots[selectedSwing]?.id ?? selectedSwing}`;
+  useEffect(() => { setReviewPause(pauseOnIssue); }, [pauseOnIssue, reviewShotKey]);
   const pauseOnIssueRef = useRef(reviewPause);
   pauseOnIssueRef.current = reviewPause;
   const [reviewAtIssue, setReviewAtIssue] = useState(false);
@@ -4957,10 +4960,10 @@ export default function SmartMotion() {
     // 2026-10-10 — the fault, as a tick on the same scrubber.
     ...(reviewFaultMoment ? [{ ms: Math.round(reviewFaultMoment.sec * 1000), label: t('swinglab_swing.swing_detail.jump_to_issue') }] : []),
   ];
-  // Held on the fault — only there (faultSpotlight.heldOnFault, the library's rule too), whether or not this
-  // review pauses there. 2026-10-16: a stage chip or a scrub no longer carries the ring and card along.
+  // Held on the fault — only there (faultSpotlight.heldOnFault, the library's rule too). A stop or a jump
+  // shows it whether or not this review pauses; merely paused there shows it only while it pauses.
   const reviewOnIssueFrame = isReview && heldOnFault({
-    faultSec: reviewFaultMoment?.sec ?? null, posSec: playbackMs / 1000, paused: videoPaused, atIssue: reviewAtIssue,
+    faultSec: reviewFaultMoment?.sec ?? null, posSec: playbackMs / 1000, paused: videoPaused, atIssue: reviewAtIssue, pausing: reviewPause,
   });
   /** The Issue chip turns the fault review on and off (faultSpotlight.issueChipPress). Not a hook: below the gate. */
   const onReviewIssueChip = () => {

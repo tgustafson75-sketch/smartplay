@@ -508,7 +508,9 @@ export default function SwingDetail() {
    * tap switched the default review off for every future swing on both screens).
    */
   const [reviewPause, setReviewPause] = useState(pauseOnIssue);
-  useEffect(() => { setReviewPause(pauseOnIssue); }, [pauseOnIssue, swing_id]);
+  // Keyed on the SHOT on screen too: paging to another swing of a multi-swing session is a new review.
+  const reviewShotKey = `${swing_id}:${shot?.id ?? ''}`;
+  useEffect(() => { setReviewPause(pauseOnIssue); }, [pauseOnIssue, reviewShotKey]);
   const pauseOnIssueRef = useRef(reviewPause);
   pauseOnIssueRef.current = reviewPause;
   const issuePausedRef = useRef(false);
@@ -1228,7 +1230,7 @@ export default function SwingDetail() {
   // there (2026-10-16: scrubbing to Address / Top / Finish no longer carries the ring and card along),
   // whether or not this review pauses there (a manual jump shows it too). One rule with SmartMotion:
   // faultSpotlight.heldOnFault.
-  const onIssueFrame = heldOnFault({ faultSec: faultMoment?.sec ?? null, posSec: position, paused: !isPlaying, atIssue });
+  const onIssueFrame = heldOnFault({ faultSec: faultMoment?.sec ?? null, posSec: position, paused: !isPlaying, atIssue, pausing: reviewPause });
   /** The Issue chip turns the fault review on and off (faultSpotlight.issueChipPress). */
   const onIssueChip = useCallback(() => {
     const next = issueChipPress(reviewPause);
