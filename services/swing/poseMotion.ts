@@ -256,7 +256,10 @@ export function swingStageTimesMs(
     if (s.key === 'P6_impact' && opts.heardStrike && f && f.positionSource === 'strike') ms = f.timestampMs;
     else if (typeof m === 'number' && Number.isFinite(m)) ms = m;
     else if (f) ms = f.timestampMs;
-    if (ms != null) out.push({ key: s.key, label: s.label, ms });
+    // 2026-10-16 (review) — the stages are an ORDER. Taken from different sources (a heard Impact, the
+    // motion's others, a fallback label) they could cross; a stage that would sit at or before the one
+    // before it is left out rather than shown as "Top after Impact".
+    if (ms != null && (out.length === 0 || ms > out[out.length - 1].ms)) out.push({ key: s.key, label: s.label, ms });
   }
   return out;
 }

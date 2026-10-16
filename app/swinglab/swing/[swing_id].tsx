@@ -1856,9 +1856,11 @@ export default function SwingDetail() {
   // 2026-08-09 (verification wave C2) — legacy sessions persisted EVERY frame-sample time in this
   // field (the fake "DETECTED MOMENTS" grid); new analyses persist at most the single fault-frame
   // moment. >2 entries = legacy fabricated array → show nothing rather than fake detections.
-  const issueTimestamps = (shot.detected_issue_timestamps_sec ?? []).slice(0, 2).length === (shot.detected_issue_timestamps_sec ?? []).length
+  // 2026-10-16 (review) — and only times inside the swing on screen: the pill seeks there, and a stored
+  // read time outside the located window would jump the player into the walk-up or the dead air.
+  const issueTimestamps = ((shot.detected_issue_timestamps_sec ?? []).slice(0, 2).length === (shot.detected_issue_timestamps_sec ?? []).length
     ? (shot.detected_issue_timestamps_sec ?? [])
-    : [];
+    : []).filter((t) => Number.isFinite(t) && t >= winStartSec - 0.05 && t <= winEndSec);
 
   // 2026-06-23 — DrillCard recommendation. Prefer the persisted
   // session.drill_recommendation, but FALL BACK to computing it from the
@@ -1937,7 +1939,8 @@ export default function SwingDetail() {
     // impact anchor (user-supplied signal, not a fabricated fraction). The old path windowed around it
     // and then sampled "impact" at 65% of that window — 1.1s after the very frame they pointed at.
     useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, center, 'user');
-    useToastStore.getState().show(`Analyzing the swing at 0:${Math.floor(center).toString().padStart(2, '0')}…`);
+    // 2026-10-16 — on the transport's swing clock, like every other time on this screen (swingClock).
+    useToastStore.getState().show(`Analyzing the swing at ${swingClock(center, winStartSec)}…`);
     onReanalyze();
   };
 
@@ -2091,9 +2094,7 @@ export default function SwingDetail() {
         // primary-issue auto-narration policy.
         if (voiceEnabled && trustLevel !== 1) {
           await configureAudioForSpeech();
-          const headline = (result.overall_match == null
-            ? `Not enough data to compare to ${ref.label} yet. ${result.takeaways[0] ?? ''}`
-            : `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`).trim();
+          const headline = engineMod.comparisonHeadline(result, ref.label);
           await speakChunked(result.voice_summary || headline, voiceGender, language, apiUrl);
         }
       } catch (e) {
@@ -2149,9 +2150,7 @@ export default function SwingDetail() {
         setComparisonResult({ result, reference: ref });
         if (voiceEnabled && trustLevel !== 1) {
           await configureAudioForSpeech();
-          const headline = (result.overall_match == null
-            ? `Not enough to compare against your ${ref.label} swing yet. ${result.takeaways[0] ?? ''}`
-            : `${result.overall_match}% match to your ${ref.label} swing. ${result.takeaways[0] ?? ''}`).trim();
+          const headline = engineMod.comparisonHeadline(result, `your ${ref.label} swing`);
           await speakChunked(result.voice_summary || headline, voiceGender, language, apiUrl);
         }
       } catch (e) {

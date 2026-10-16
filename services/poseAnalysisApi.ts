@@ -922,18 +922,26 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
    * ambiguous at address (shoulder line 0.4-0.55 of torso height), and an ambiguous angle gated
    * nothing, so a lateral distance divided by a shoulder line 0.03 of the frame wide printed "111% of
    * shoulder-width". A read normalised by a width needs that width to be there: the shoulder line
-   * clearly broad (the face-on edge, 0.6 of torso height) for sway, the feet clearly apart (0.5) for
-   * the weight reads.
+   * clearly broad (the face-on edge) for sway, the feet clearly apart for the weight reads.
    */
   if (address) {
     const ls = getKp(address, 'left_shoulder'); const rs = getKp(address, 'right_shoulder');
     const lh = getKp(address, 'left_hip'); const rh = getKp(address, 'right_hip');
     const la = getKp(address, 'left_ankle'); const ra = getKp(address, 'right_ankle');
+    // 2026-10-16 (review) — x and y are normalised SEPARATELY (by the frame's width and height), so a
+    // width-over-height ratio is only true once scaled by the frame's aspect. The thresholds are in TRUE
+    // proportions: 0.34 and 0.28 are the 0.6 / 0.5 these gates were set at on a 9:16 portrait clip (Lily's),
+    // so a portrait clip reads as before and a landscape one is no longer judged 0.56x too narrow.
+    // Pixel coordinates (> 1.5) are already true; normalised ones without frame dims assume portrait.
+    const pts4 = [ls, rs, lh, rh].filter((k): k is Keypoint => !!k);
+    const normalised = pts4.length > 0 && pts4.every(k => k.x <= 1.5 && k.y <= 1.5);
+    const aspect = !normalised ? 1
+      : address.frameW && address.frameH ? address.frameW / address.frameH : 9 / 16;
     const torso = ls && rs && lh && rh ? Math.abs((lh.y + rh.y) / 2 - (ls.y + rs.y) / 2) : 0;
     if (torso > 0) {
       // Head drift is divided by the same shoulder line, so it goes with it.
-      if (ls && rs && Math.abs(rs.x - ls.x) / torso < 0.6) { swayNorm = null; headDriftPxNorm = null; }
-      if (!la || !ra || Math.abs(ra.x - la.x) / torso < 0.5) { weightShiftPct = null; finishWeightPct = null; }
+      if (ls && rs && (Math.abs(rs.x - ls.x) * aspect) / torso < 0.34) { swayNorm = null; headDriftPxNorm = null; }
+      if (!la || !ra || (Math.abs(ra.x - la.x) * aspect) / torso < 0.28) { weightShiftPct = null; finishWeightPct = null; }
     }
   }
   // 2026-07-07 (biomech audit #3) — the tilt gate was INVERTED from the geometry:

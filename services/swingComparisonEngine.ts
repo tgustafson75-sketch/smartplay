@@ -187,6 +187,20 @@ export interface CompareInput {
  * inputs are thin; caller checks `overall_match` + `sources_used` to
  * decide how prominently to render.
  */
+/**
+ * 2026-10-16 (Lily's DTL swing: "Tour-median driver 0% match") — the ONE spoken/toasted headline for a
+ * comparison (swing screen, library). A 0 is not a percentage match to announce: it says the swings share
+ * nothing the engine could line up, so it is said in words, with the biggest gap after it.
+ */
+export function comparisonHeadline(result: Pick<SwingComparison, 'overall_match' | 'takeaways'>, refLabel: string): string {
+  const lead = result.overall_match == null
+    ? `Not enough data to compare to ${refLabel} yet.`
+    : result.overall_match <= 0
+      ? `No close match to ${refLabel}.`
+      : `${result.overall_match}% match to ${refLabel}.`;
+  return `${lead} ${result.takeaways[0] ?? ''}`.trim();
+}
+
 export function compareSwings(input: CompareInput): SwingComparison {
   const kind = input.kind ?? (input.reference ? 'self_vs_self' : 'self_vs_pro');
   const currentBio = input.current.biomechanics;
@@ -502,7 +516,8 @@ function buildVoiceSummary(
     : kind === 'self_vs_pro' ? (benchmark ? 'Vs the tour benchmark (directional)' : 'Vs tour median')
     : kind === 'self_vs_amateur' ? 'Vs single-digit baseline'
     : 'Vs ideal avatar';
-  return `${lead}: ${overall}% match. ${takeaways.slice(0, 2).join(' ')}`.trim();
+  // 2026-10-16 — a 0 is said in words (see comparisonHeadline), never spoken as "0% match".
+  return `${lead}: ${overall <= 0 ? 'no close match' : `${overall}% match`}. ${takeaways.slice(0, 2).join(' ')}`.trim();
 }
 
 // ─── 2026-05-22 — Multi-reference compare ────────────────────────────────
