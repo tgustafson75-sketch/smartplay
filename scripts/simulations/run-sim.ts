@@ -11361,7 +11361,12 @@ check('LOCK: geometry cache is versioned, self-healing, race-free, and purgeable
     const bumped = /const CACHE_KEY_PREFIX = 'course-geometry-v3::';/.test(g);
     // a SUSPECT entry (old pipeline / zero mapped holes) must never be served, not even once more —
     // stale-while-revalidate is for OLD data, not for data we have reason to distrust
-    const noSuspectServe = /const suspect =/.test(g) && /discarding suspect cache/.test(g);
+    // 2026-10-15 — a suspect map WITH greens now stays on disk as the offline fallback (it used to be
+    // deleted before the refetch, losing it with no signal); it is dropped from memory so it is not
+    // served while a fresh build is reachable, and it reaches the yardage path only via offlineFallback.
+    const noSuspectServe = /const suspect =/.test(g) && /suspect cache for \$\{courseId\}/.test(g) &&
+      /if \(suspect\) \{[\s\S]{0,200}?memCache\.delete\(courseId\);/.test(g) &&
+      /function offlineFallback\(/.test(g);
     // one fetch per course, so concurrent surfaces can't triple-hammer Overpass or race the writer
     const antiRace = /const inflight: Map<string, Promise<CourseGeometry \| null>>/.test(g) &&
       /const pending = inflight\.get\(courseId\);/.test(g) &&
@@ -11821,7 +11826,9 @@ check('LOCK: the engine replaces bundled coords that fail their own scorecard �
       !/if \(bundled\) \{ memCache\.set\(courseId, bundled\);/.test(g);
     // and a failed engine build must NOT leave a tester with less than they had
     const safeFallback = /let bundledFallback: CourseGeometry \| null = null;/.test(g) &&
-      (g.match(/bundledFallback \?\? buildBundledGeometry\(courseId\)/g) ?? []).length === 2;
+      // 2026-10-15 — both failure exits share offlineFallback (saved map with greens, then bundled).
+      (g.match(/offlineFallback\(courseId, persisted, bundledFallback\)/g) ?? []).length === 2 &&
+      /return bundledFallback \?\? buildBundledGeometry\(courseId\) \?\? persisted \?\? null;/.test(g);
     return gated && safeFallback;
   })(),
   'untrustworthy bundled coords yield to an engine build; a failed build falls back to them rather than to nothing');

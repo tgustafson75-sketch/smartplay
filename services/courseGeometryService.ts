@@ -586,6 +586,20 @@ export function mappedHoleCount(geo: CourseGeometry | null | undefined): number 
  * is dropped. Real improvements (more holes mapped, refreshed detail) still land normally, and a
  * course we have nothing for is still written the first time.
  */
+/**
+ * 2026-10-15 — a map from an older pipeline may be KEPT as an offline fallback (offlineFallback), so
+ * it now sits on disk / in memory where it used to be deleted. It must never block its own
+ * replacement: the newer pipeline exists to correct it, and a corrected build often has FEWER greens
+ * (wrongly paired ones removed). Without this the downgrade guards below would pin the old map forever.
+ * `onDisk`: every disk write is stamped, so an unstamped disk entry is ancient. In memory an unstamped
+ * entry is bundled/derived geometry and keeps its weight.
+ */
+function supersededPipeline(geo: CourseGeometry | null | undefined, onDisk: boolean): boolean {
+  if (!geo) return false;
+  const v = (geo as CourseGeometry & { pipeline_version?: number }).pipeline_version;
+  return onDisk ? (v ?? 0) !== GEOMETRY_PIPELINE_VERSION : v != null && v !== GEOMETRY_PIPELINE_VERSION;
+}
+
 async function writePersistedCache(geo: CourseGeometry): Promise<void> {
   try {
     // Stamp the pipeline that produced this entry so a future correction can invalidate it.
@@ -593,13 +607,14 @@ async function writePersistedCache(geo: CourseGeometry): Promise<void> {
     const incoming = mappedHoleCount(geo);
     if (incoming === 0) {
       const existing = await readPersistedCache(geo.course_id);
+      // An EMPTY read never replaces greens, from any pipeline — an old map still beats no map.
       if (trustedMappedHoleCount(existing) > 0) {
         console.warn(`[courseGeometry] refusing to overwrite ${mappedHoleCount(existing)} mapped holes with an EMPTY read for ${geo.course_id} — keeping the good cache`);
         return;
       }
     } else {
       const existing = await readPersistedCache(geo.course_id);
-      const had = trustedMappedHoleCount(existing);
+      const had = supersededPipeline(existing, true) ? 0 : trustedMappedHoleCount(existing);
       if (had > incoming) {
         console.warn(`[courseGeometry] refusing to downgrade ${geo.course_id}: cached ${had} mapped holes, incoming only ${incoming}`);
         return;
@@ -621,7 +636,9 @@ async function writePersistedCache(geo: CourseGeometry): Promise<void> {
 async function commitGeometry(courseId: string, geo: CourseGeometry): Promise<CourseGeometry> {
   const incoming = mappedHoleCount(geo);
   const inMem = memCache.get(courseId);
-  if (trustedMappedHoleCount(inMem) > incoming) {
+  const had = trustedMappedHoleCount(inMem);
+  // Empty never replaces greens; a fuller OLD-pipeline copy never blocks a corrected build.
+  if (incoming === 0 ? had > 0 : !supersededPipeline(inMem, false) && had > incoming) {
     console.warn(`[courseGeometry] keeping the better in-memory copy of ${courseId} (${mappedHoleCount(inMem)} vs ${incoming} mapped holes)`);
     await writePersistedCache(geo); // still guarded on disk; a no-op when it would downgrade
     return inMem as CourseGeometry;
@@ -1100,9 +1117,19 @@ async function fetchCourseGeometryInner(
       ((persisted as CourseGeometry & { pipeline_version?: number }).pipeline_version ?? 0) !== GEOMETRY_PIPELINE_VERSION ||
       mappedHoleCount(persisted) === 0;
     if (suspect) {
-      console.log(`[courseGeometry] discarding suspect cache for ${courseId} (pipeline/empty) — fetching fresh`);
+      console.log(`[courseGeometry] suspect cache for ${courseId} (pipeline/empty) — fetching fresh`);
       memCache.delete(courseId);
-      await AsyncStorage.removeItem(cacheKey(courseId)).catch(() => undefined);
+      /**
+       * 2026-10-15 — an OLD-PIPELINE map with greens stays on disk until a fresh build replaces it
+       * (commitGeometry overwrites the key). It used to be deleted here, BEFORE the fetch: the
+       * pipeline went 3→4 on 10-13, so the first open of every saved course with no signal deleted
+       * the map and the round had no yardages, then or ever. It is still never served while a fresh
+       * build is reachable — only as the failure fallback below (offlineFallback). An EMPTY map is
+       * worthless at any version and is still dropped.
+       */
+      if (mappedHoleCount(persisted) === 0) {
+        await AsyncStorage.removeItem(cacheKey(courseId)).catch(() => undefined);
+      }
     } else {
     // 2026-05-26 — Fix DI: stale-while-revalidate. When a persisted
     // entry exists but is older than REFRESH_AFTER_MS (1 week), return
@@ -1363,7 +1390,7 @@ async function fetchCourseGeometryInner(
       // 2026-08-11 — if we bypassed bundled coords to try the engine and the engine failed, fall
       // back to those bundled coords rather than to nothing. Testers are mid-beta on these courses;
       // partially-wrong geometry still beats a blank hole view.
-      return persisted ?? bundledFallback ?? buildBundledGeometry(courseId) ?? null;
+      return offlineFallback(courseId, persisted, bundledFallback);
     }
     const geo = (await res.json()) as CourseGeometry;
     geo.fetched_at = Date.now();
@@ -1389,7 +1416,7 @@ async function fetchCourseGeometryInner(
     return await commitGeometry(courseId, geo);
   } catch (e) {
     console.warn('[courseGeometry] fetch exception:', e);
-    const fallback = persisted ?? bundledFallback ?? buildBundledGeometry(courseId) ?? null;
+    const fallback = offlineFallback(courseId, persisted, bundledFallback);
     /**
      * 2026-08-13 (live audit) — a TIMEOUT is not a failed build, it is a build we stopped listening to.
      *
@@ -1410,6 +1437,27 @@ async function fetchCourseGeometryInner(
     if (timedOut && !fallback) scheduleGeometryRecheck(courseId, options);
     return fallback;
   }
+}
+
+/**
+ * 2026-10-15 — what a FAILED build falls back to, in order: the saved map if it has greens (even from
+ * an older pipeline — partially-stale geometry beats no yardages), then the bundled copy. A saved map
+ * with zero greens is skipped in favour of bundled; it used to win and blank the hole view.
+ *
+ * A fallback taken from disk is published to memCache, because the yardage readers
+ * (getHoleGeometry / getCachedGeometry) are synchronous and read only memCache — returning it to the
+ * caller alone left the round with no yardages. A later successful build overwrites it.
+ */
+function offlineFallback(
+  courseId: string,
+  persisted: CourseGeometry | null,
+  bundledFallback: CourseGeometry | null,
+): CourseGeometry | null {
+  if (persisted && mappedHoleCount(persisted) > 0) {
+    if (!memCache.has(courseId)) memCache.set(courseId, persisted);
+    return persisted;
+  }
+  return bundledFallback ?? buildBundledGeometry(courseId) ?? persisted ?? null;
 }
 
 /**
