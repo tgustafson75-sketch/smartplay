@@ -19,21 +19,23 @@ const F = 6.04;   // Lily's impact (early extension is an impact fault)
 
 describe('the ring and the card show only on the fault', () => {
   it('held on the fault after the replay stopped there', () => {
-    expect(heldOnFault({ faultSec: F, posSec: F, paused: true, atIssue: true, enabled: true })).toBe(true);
+    expect(heldOnFault({ faultSec: F, posSec: F, paused: true, atIssue: true })).toBe(true);
   });
   it('scrubbing to Address / Top / Finish takes them away, even with the stop flag still set', () => {
     for (const pos of [4.85, 5.65, 6.55]) {
-      expect(heldOnFault({ faultSec: F, posSec: pos, paused: true, atIssue: true, enabled: true })).toBe(false);
+      expect(heldOnFault({ faultSec: F, posSec: pos, paused: true, atIssue: true })).toBe(false);
     }
   });
   it('playing through the fault never shows them', () => {
-    expect(heldOnFault({ faultSec: F, posSec: F + 0.01, paused: false, atIssue: false, enabled: true })).toBe(false);
+    expect(heldOnFault({ faultSec: F, posSec: F + 0.01, paused: false, atIssue: false })).toBe(false);
   });
   it('paused by hand on the fault frame shows them', () => {
-    expect(heldOnFault({ faultSec: F, posSec: F + 0.03, paused: true, atIssue: false, enabled: true })).toBe(true);
+    expect(heldOnFault({ faultSec: F, posSec: F + 0.03, paused: true, atIssue: false })).toBe(true);
   });
-  it('with the fault review switched off, nothing shows', () => {
-    expect(heldOnFault({ faultSec: F, posSec: F, paused: true, atIssue: true, enabled: false })).toBe(false);
+  // 2026-10-16 (review) — the ring and card no longer depend on the pause: a player who turned the pause
+  // off and jumps to the fault (heldOnFault takes no pause flag at all) still sees what is wrong.
+  it('the pause has no say in it: a manual jump to the fault shows it', () => {
+    expect(heldOnFault({ faultSec: F, posSec: F, paused: true, atIssue: true })).toBe(true);
   });
 });
 
@@ -70,12 +72,39 @@ describe('the Issue chip turns the fault review on and off', () => {
   });
 });
 
+/**
+ * 2026-10-16 (adversarial review of S1b) — the chip flipped the PERSISTED swingReviewPauseOnIssue, so one
+ * tap switched the founder's default review (stop on the fault) off for every future swing on both
+ * screens. The chip now flips a per-review pause seeded from the setting on every swing opened.
+ */
+describe('the Issue chip changes THIS review, never the saved default', () => {
+  const root = path.join(__dirname, '..', '..');
+  const lib = fs.readFileSync(path.join(root, 'app/swinglab/swing/[swing_id].tsx'), 'utf8');
+  const sm = fs.readFileSync(path.join(root, 'app/swinglab/smartmotion.tsx'), 'utf8');
+  const handler = (src: string, name: string) => src.slice(src.indexOf(name), src.indexOf(name) + 500);
+  for (const [label, src, name, seed] of [
+    ['library', lib, 'const onIssueChip', /useEffect\(\(\) => \{ setReviewPause\(pauseOnIssue\); \}, \[pauseOnIssue, swing_id\]\);/],
+    ['SmartMotion', sm, 'const onReviewIssueChip', /useEffect\(\(\) => \{ setReviewPause\(pauseOnIssue\); \}, \[pauseOnIssue, selectedSwing\]\);/],
+  ] as const) {
+    it(`${label}: the chip flips the review's pause, not the setting`, () => {
+      const h = handler(src, name);
+      expect(h).toMatch(/issueChipPress\(reviewPause\)/);
+      expect(h).toMatch(/setReviewPause\(next\.enabled\)/);
+      expect(h).not.toMatch(/setPauseOnIssue/);
+    });
+    it(`${label}: every swing opens with the saved default, and the stop reads the review's pause`, () => {
+      expect(src).toMatch(seed);
+      expect(src).toMatch(/pauseOnIssueRef\.current = reviewPause;/);
+    });
+  }
+});
+
 describe('both review screens use the one rule', () => {
   const root = path.join(__dirname, '..', '..');
   const lib = fs.readFileSync(path.join(root, 'app/swinglab/swing/[swing_id].tsx'), 'utf8');
   const sm = fs.readFileSync(path.join(root, 'app/swinglab/smartmotion.tsx'), 'utf8');
   it('the library: held-on-fault gate, Issue chip as the toggle', () => {
-    expect(lib).toMatch(/const onIssueFrame = heldOnFault\(\{ faultSec: faultMoment\?\.sec \?\? null, posSec: position, paused: !isPlaying, atIssue, enabled: pauseOnIssue \}\);/);
+    expect(lib).toMatch(/const onIssueFrame = heldOnFault\(\{ faultSec: faultMoment\?\.sec \?\? null, posSec: position, paused: !isPlaying, atIssue \}\);/);
     expect(lib).toMatch(/onPress=\{onIssueChip\}/);
     expect(lib).not.toMatch(/onPress=\{jumpToIssue\}/);
     expect(lib).toMatch(/faultPauseTick\(\{/);

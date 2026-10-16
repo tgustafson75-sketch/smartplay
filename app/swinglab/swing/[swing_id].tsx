@@ -502,8 +502,15 @@ export default function SwingDetail() {
    * player jumps to it), cleared when playback goes back before it — the tail loop, a restart, a scrub.
    */
   const faultSecRef = useRef<number | null>(null);
-  const pauseOnIssueRef = useRef(pauseOnIssue);
-  pauseOnIssueRef.current = pauseOnIssue;
+  /**
+   * 2026-10-16 (review of S1b) — THIS REVIEW's fault pause. The persisted setting is the default every
+   * swing opens with; the Issue chip flips only this one (it used to flip the persisted setting, so one
+   * tap switched the default review off for every future swing on both screens).
+   */
+  const [reviewPause, setReviewPause] = useState(pauseOnIssue);
+  useEffect(() => { setReviewPause(pauseOnIssue); }, [pauseOnIssue, swing_id]);
+  const pauseOnIssueRef = useRef(reviewPause);
+  pauseOnIssueRef.current = reviewPause;
   const issuePausedRef = useRef(false);
   const lastRawPosRef = useRef(-1);
   /** While our OWN seek back to the fault lands, its position report must not clear the latch. */
@@ -1219,15 +1226,16 @@ export default function SwingDetail() {
   }, []);
   // Held on the fault: stopped there by the replay, or paused within a frame or two of it — and only
   // there (2026-10-16: scrubbing to Address / Top / Finish no longer carries the ring and card along),
-  // and only with the fault review on (the Issue chip). One rule with SmartMotion: faultSpotlight.heldOnFault.
-  const onIssueFrame = heldOnFault({ faultSec: faultMoment?.sec ?? null, posSec: position, paused: !isPlaying, atIssue, enabled: pauseOnIssue });
+  // whether or not this review pauses there (a manual jump shows it too). One rule with SmartMotion:
+  // faultSpotlight.heldOnFault.
+  const onIssueFrame = heldOnFault({ faultSec: faultMoment?.sec ?? null, posSec: position, paused: !isPlaying, atIssue });
   /** The Issue chip turns the fault review on and off (faultSpotlight.issueChipPress). */
   const onIssueChip = useCallback(() => {
-    const next = issueChipPress(pauseOnIssue);
-    setPauseOnIssue(next.enabled);
+    const next = issueChipPress(reviewPause);
+    setReviewPause(next.enabled);
     if (!next.enabled) { issuePausedRef.current = false; setAtIssue(false); }
     if (next.jumpToFault) jumpToIssue();
-  }, [pauseOnIssue, setPauseOnIssue, jumpToIssue]);
+  }, [reviewPause, jumpToIssue]);
   const spotlightOn = onIssueFrame && highlightIssue && hasPose && overlayFaultJoints.length > 0;
 
   // 2026-07-10 (Tim — "missing play rewind and forward and slider controls in swing
@@ -2360,7 +2368,7 @@ export default function SwingDetail() {
                 // seek bar, so playback doesn't re-render the screen 25x/s for nothing.
                 // 2026-10-10 — 100ms while the replay has a fault to stop on, so the stop lands within a
                 // frame or two of it before the seek back (250ms overshot by a quarter of a swing).
-                progressUpdateIntervalMillis={hasPose && (showSkeleton || showTrace || motionOnly) ? 40 : (faultMoment && pauseOnIssue ? 100 : 250)}
+                progressUpdateIntervalMillis={hasPose && (showSkeleton || showTrace || motionOnly) ? 40 : (faultMoment && reviewPause ? 100 : 250)}
                 // 2026-06-11 — native controls OFF: tap-anywhere toggles play/pause
                 // (via ZoomableView) and a thin tap-to-seek bar replaces the native
                 // scrubber, so there's no native tap-handling competing with the
@@ -2595,15 +2603,15 @@ export default function SwingDetail() {
                     {faultMoment && (
                       <TouchableOpacity
                         onPress={onIssueChip}
-                        style={[styles.issueChip, pauseOnIssue
+                        style={[styles.issueChip, reviewPause
                           ? { borderColor: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }
                           : { borderColor: colors.border, backgroundColor: 'transparent' }]}
                         accessibilityRole="switch"
-                        accessibilityState={{ checked: pauseOnIssue }}
+                        accessibilityState={{ checked: reviewPause }}
                         accessibilityLabel={t('swinglab_swing.swing_detail.jump_to_issue')}
                       >
-                        <Ionicons name={pauseOnIssue ? 'alert-circle' : 'alert-circle-outline'} size={13} color={pauseOnIssue ? (overlayFaultSevere ? '#EF4444' : '#FF6B2C') : colors.text_muted} />
-                        <Text style={[styles.issueChipText, { color: pauseOnIssue ? (overlayFaultSevere ? '#EF4444' : '#FF6B2C') : colors.text_muted }, !pauseOnIssue && { textDecorationLine: 'line-through' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
+                        <Ionicons name={reviewPause ? 'alert-circle' : 'alert-circle-outline'} size={13} color={reviewPause ? (overlayFaultSevere ? '#EF4444' : '#FF6B2C') : colors.text_muted} />
+                        <Text style={[styles.issueChipText, { color: reviewPause ? (overlayFaultSevere ? '#EF4444' : '#FF6B2C') : colors.text_muted }, !reviewPause && { textDecorationLine: 'line-through' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
                       </TouchableOpacity>
                     )}
                     {hasPose && swingStageChips.map((c) => (

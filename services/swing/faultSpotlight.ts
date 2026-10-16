@@ -156,17 +156,19 @@ export function faultPauseTick(t: {
  * Whether the screen is HELD ON THE FAULT — the only time the ring and the "Paused on the issue" card
  * show. Always within a couple of frames of the fault: the old rule let the `atIssue` flag alone keep the
  * card and ring up while the player scrubbed to Address / Top / Finish (Lily's 4075 screenshots), because
- * nothing but playing cleared it. And never with the fault review switched off (the Issue chip).
+ * nothing but playing cleared it. Independent of whether the review PAUSES there (2026-10-16 review): a
+ * player who switched the pause off and jumps to the fault still sees what is wrong.
  */
-export function heldOnFault(h: { faultSec: number | null; posSec: number; paused: boolean; atIssue: boolean; enabled: boolean }): boolean {
-  if (h.faultSec == null || !h.enabled) return false;
+export function heldOnFault(h: { faultSec: number | null; posSec: number; paused: boolean; atIssue: boolean }): boolean {
+  if (h.faultSec == null) return false;
   return Math.abs(h.posSec - h.faultSec) < 0.08 && (h.atIssue || h.paused);
 }
 
 /**
- * The Issue chip is the fault review's ON/OFF (Tim, 10-16: "you can't turn it off, so every time you
- * continue the swing it always stops again at the fault"). On → off: no more stops, and the card and
- * ring go. Off → on: stops again, and the player is shown the fault now.
+ * The Issue chip turns THIS review's fault pause on and off (Tim, 10-16: "you can't turn it off, so
+ * every time you continue the swing it always stops again at the fault"). On → off: no more stops in
+ * this review. Off → on: stops again, and the player is shown the fault now. The persisted setting
+ * ("Pause on issue") stays the default for the next swing opened — the chip never writes it.
  */
 export function issueChipPress(enabled: boolean): { enabled: boolean; jumpToFault: boolean } {
   return enabled ? { enabled: false, jumpToFault: false } : { enabled: true, jumpToFault: true };

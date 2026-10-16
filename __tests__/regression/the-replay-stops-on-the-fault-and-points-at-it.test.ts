@@ -175,7 +175,7 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
   it('the fault hooks sit above the permission gate (the 08-09 "more hooks" crash)', () => {
     const gate = sm.indexOf('if (!camPerm) {');
     expect(gate).toBeGreaterThan(-1);
-    for (const h of ['const reviewAnchors = useMemo(', 'const reviewStageTimes = useMemo(', 'const reviewFaultMoment = useMemo(', 'const jumpToReviewIssue = useCallback(', 'const [reviewAtIssue, setReviewAtIssue] = useState(']) {
+    for (const h of ['const [reviewPause, setReviewPause] = useState(', 'const reviewAnchors = useMemo(', 'const reviewStageTimes = useMemo(', 'const reviewFaultMoment = useMemo(', 'const jumpToReviewIssue = useCallback(', 'const [reviewAtIssue, setReviewAtIssue] = useState(']) {
       const at = sm.indexOf(h);
       expect(at).toBeGreaterThan(-1);
       expect(at).toBeLessThan(gate);
