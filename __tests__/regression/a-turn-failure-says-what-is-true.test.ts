@@ -134,24 +134,42 @@ describe('review fixes (10-15)', () => {
     expect(r.text).not.toMatch(/No GPS lock/);
   });
 
+  it('the templated "no <club> shot logged" reply counts as no data too', () => {
+    const { isNoDataReply } = require('../../services/localStatusResponder');
+    expect(isNoDataReply("I don't have a driver shot logged this round yet.", 'en')).toBe(true);
+    expect(isNoDataReply('152 yards to the middle of the green.', 'en')).toBe(false);
+  });
+
   it('a "no data" local reply does not stand in for an answer on good signal', async () => {
     world('up');
     mockAnswer.fn = () => ({ text: "I don't have a wind reading right now.", source: 'round_state' });
     expect((await caddieFailureReply({ heard: "what's the wind", language: 'en' })).source).toBe('on_us');
   });
 
-  it('the tap mic never calls it offline when our own host answered a probe', () => {
+  it('the tap mic decides on the fresh verdict, started alongside its own probes (no added wait)', () => {
     const tap = code('hooks/useVoiceCaddie.ts');
     const fn = tap.slice(tap.indexOf('const failTranscribeOffline = async'), tap.indexOf('const failTranscribeOffline = async') + 4000);
-    expect(fn.indexOf('if (pingOk || getOk || cdnOk === true)')).toBeGreaterThan(-1);
-    expect(fn.indexOf('if (pingOk || getOk || cdnOk === true)')).toBeLessThan(fn.indexOf('await probeReachability()'));
-    // ...and the check overlaps the existing probes rather than adding a wait after them.
+    // Third review: our own probes can be ~15s stale at the retry-failed exit — they must not decide.
+    expect(fn).not.toMatch(/if \(pingOk \|\| getOk/);
+    expect(fn).toMatch(/const net = \(await probeReachability\(\)\)\.verdict;\s*if \(isProvenOffline\(net\)\)/);
     expect(tap).toMatch(/void probeReachability\(\);\s*const \[ping, get, cdn\] = await Promise\.all/);
   });
 
+  it('every failure path that answers locally drops "no data" replies (third review: 3 of 5 did not)', () => {
+    const sites = [
+      ...(code('hooks/useVoiceCaddie.ts').match(/answerOffline\(message, langSafe\);\s*if \(local[^)]*\)/g) ?? []),
+    ];
+    expect(sites).toHaveLength(2);
+    for (const s of sites) expect(s).toMatch(/!isNoDataLocalReply\(local\.text, langSafe\)/);
+    expect(code('services/listeningSession.ts')).not.toMatch(/answerOffline\(/);
+    expect(code('services/listeningSession.ts')).toMatch(/\.localAnswer\(utterance, lang\)/);
+  });
+
   it('a late failure line never lands on a newer turn', () => {
-    expect(code('services/listeningSession.ts')).toMatch(/const epoch = getUserTurnEpoch\(\);[\s\S]{0,200}failureNotice\(language\);\s*if \(getUserTurnEpoch\(\) !== epoch\)/);
-    expect(code('hooks/useCaddieTabMic.ts')).toMatch(/const superseded = getUserTurnEpoch\(\) !== epoch/);
+    // Only a turn that is REALLY there (live mic) — a VAD false start must not swallow the notice.
+    expect(code('services/listeningSession.ts')).toMatch(/const epoch = getUserTurnEpoch\(\);[\s\S]{0,200}failureNotice\(language\);\s*if \(getUserTurnEpoch\(\) !== epoch && \(isCapturing\(\) \|\| isExternalMicActive\(\)\)\)/);
+    expect(code('services/listeningSession.ts')).toMatch(/delivered = await speakHonestFailure\(/);
+    expect(code('hooks/useCaddieTabMic.ts')).toMatch(/const superseded = getUserTurnEpoch\(\) !== epoch\s*&& \(turnInFlightRef\.current \|\|/);
   });
 });
 

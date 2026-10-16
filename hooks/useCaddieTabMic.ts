@@ -421,7 +421,8 @@ export function useCaddieTabMic({
       // Review (10-15): the reply waits on the internet check. If the player started a new turn in that
       // window (VAD / a tap), a late 'idle' and a failure line spoken over their live mic is the wrong
       // thing — show the line, leave the state to the new turn.
-      const superseded = getUserTurnEpoch() !== epoch && (pendingTurnRef.current !== null || isCapturing() || isExternalMicActive());
+      const superseded = getUserTurnEpoch() !== epoch
+        && (turnInFlightRef.current || pendingTurnRef.current !== null || isCapturing() || isExternalMicActive());
       try { onKevinSpoke?.(line); } catch { /* non-fatal */ }
       if (superseded) return;
       try {

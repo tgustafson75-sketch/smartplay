@@ -2,7 +2,7 @@ import { Vibration } from 'react-native';
 
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
-import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, isCapturing, isExternalMicActive, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
 import { noteTurnState, noteTurnIntent, noteTurnClosing, noteTurnActed } from './voice/turnAnswerWatch';
 import { adviceIsStillWorthSaying, captureShotEpoch, currentTurnEpoch } from './adviceFreshness';
@@ -682,20 +682,23 @@ export async function speakHonestFailure(
   language: 'en' | 'es' | 'zh' | null | undefined,
   voiceGender: 'male' | 'female',
   apiUrl: string,
-): Promise<void> {
+): Promise<boolean> {
   const epoch = getUserTurnEpoch();
   const msg = await (require('./caddieFailureReply') as typeof import('./caddieFailureReply')).failureNotice(language);
   // Review (10-15): the notice now waits on the internet check. A turn the player started in that
   // window must not be cut off by the stopSpeaking below, nor talked over.
-  if (getUserTurnEpoch() !== epoch) {
-    console.log('[listeningSession] honest-failure notice dropped — a newer turn started');
-    return;
+  // Only a turn that is REALLY there: the epoch also moves for a VAD false start or a tap that never
+  // became a turn, and dropping the notice then left the player with nothing (third review, 10-15).
+  if (getUserTurnEpoch() !== epoch && (isCapturing() || isExternalMicActive())) {
+    console.log('[listeningSession] honest-failure notice dropped — a newer turn is live');
+    return false;
   }
   try { Vibration.vibrate(120); } catch {}
   try { await stopSpeaking('screen:services-listeningsession').catch(() => {}); } catch {}
   try {
     await speak(msg, voiceGender, language ?? 'en', apiUrl, { userInitiated: true });
   } catch (e) { console.log('[listeningSession] failure-fallback speak threw', e); }
+  return true;
 }
 
 /**
@@ -833,8 +836,8 @@ async function deliverBrainReply(opts: {
   //     bag and the green, and a local club call beats "I'm having trouble connecting" every time.
   let localAnswer: string | null = null;
   try {
-    const off = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(utterance, lang);
-    localAnswer = off?.text?.trim() || null;
+    // 2026-10-15 — the shared rule 1: a "no data" reply ("No GPS lock yet") is not an answer.
+    localAnswer = (require('./caddieFailureReply') as typeof import('./caddieFailureReply')).localAnswer(utterance, lang);
   } catch { /* the local answer is a bonus, never a dependency */ }
   if (localAnswer) {
     if (maySpeak()) {
@@ -850,7 +853,7 @@ async function deliverBrainReply(opts: {
   // 3 — Nothing left but the truth, in the SAME words whether it is heard or read.
   let delivered = false;
   if (maySpeak()) {
-    try { await speakHonestFailure(lang, voiceGender, apiUrl); delivered = true; }
+    try { delivered = await speakHonestFailure(lang, voiceGender, apiUrl); }
     catch (e) { console.log(`[${site}] honest-failure speak threw`, e); }
   }
   if (!delivered) delivered = caption(failureFallbackFor(lang), 6000);

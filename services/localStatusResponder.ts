@@ -662,8 +662,11 @@ export const FIXED_OFFLINE_REPLIES_EN: { slug: string; text: string }[] = [
 export function isNoDataReply(text: string, language: LocalReplyLanguage = 'en'): boolean {
   const lang = (['en', 'es', 'zh'] as const).includes(language) ? language : 'en';
   const t = L[lang];
-  return [t.noFix, t.noGreen, t.noBag, t.noWind, t.noLastShot, t.noHoleInfo, t.scoreNoneYet, t.noClub, t.noRound]
-    .some((s) => s === text.trim());
+  const s = text.trim();
+  if ([t.noFix, t.noGreen, t.noBag, t.noWind, t.noLastShot, t.noHoleInfo, t.scoreNoneYet, t.noClub, t.noRound].includes(s)) return true;
+  // "I don't have a <club> shot logged this round yet." — a template, matched around its slot.
+  const [head, tail] = t.noClubShot('\u0000').split('\u0000');
+  return s.startsWith(head) && s.endsWith(tail) && s.length > head.length + tail.length;
 }
 
 export function roundReadLine(language: LocalReplyLanguage = 'en'): string | null {

@@ -91,12 +91,18 @@ function personalizationMatch(entry: KBEntry, profile?: CnsProfile): boolean {
  * "thinking" and "rain" match "rainbow". Longer and multi-word aliases keep start-of-word matching,
  * which is specific enough on its own.
  */
-const SHORT_ALIAS_SUFFIX = '(?:s|es|ed|ing|y|ped|ping|ned|ning)?';
 const shortAliasRx = new Map<string, RegExp>();
+/** The alias plus its plain English inflections — "slice": sliced/slicing; "heavy": heavier; "top": topped. */
+function inflected(na: string): string {
+  if (na.endsWith('e')) return `${na.slice(0, -1)}(?:e|es|ed|er|ing)`;
+  if (na.endsWith('y')) return `${na.slice(0, -1)}(?:y|ies|ied|ier)`;
+  return `${na}(?:s|es|ed|er|ing|ped|ping|ned|ning)?`;
+}
 function aliasHit(qb: string, na: string): boolean {
   if (na.length > 5 || na.includes(' ')) return qb.includes(' ' + na);
   let rx = shortAliasRx.get(na);
-  if (!rx) { rx = new RegExp(` ${na}${SHORT_ALIAS_SUFFIX}(?= |$)`); shortAliasRx.set(na, rx); }
+  // norm() leaves only [a-z0-9 ], so the alias needs no escaping.
+  if (!rx) { rx = new RegExp(` ${inflected(na)}(?= |$)`); shortAliasRx.set(na, rx); }
   return rx.test(qb);
 }
 

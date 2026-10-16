@@ -64,6 +64,11 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail, logVoiceDiag, noteVoiceTurnStarted } from '../services/voiceErrorLog';
 import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { probeReachability, isProvenOffline } from '../services/reachability';
+/** 2026-10-15 — the shared "this reply says we lack the data" test (services/localStatusResponder). */
+function isNoDataLocalReply(text: string, lang: 'en' | 'es' | 'zh'): boolean {
+  try { return (require('../services/localStatusResponder') as typeof import('../services/localStatusResponder')).isNoDataReply(text, lang); }
+  catch { return false; }
+}
 import { CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 
 // ─── CONSTANTS ────────────────────────────
@@ -1140,7 +1145,8 @@ export const useVoiceCaddie = ({
           const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
             ? (language as 'en' | 'es' | 'zh') : 'en';
           const local = offline.answerOffline(message, langSafe);
-          if (local) {
+          // 2026-10-15 — a "no data" reply ("No GPS lock yet") is not an answer; the failure line is.
+          if (local && !isNoDataLocalReply(local.text, langSafe)) {
             logVoiceSilentFail('local_responder_hit', { source: local.source, detail: local.detail ?? null, language: langSafe, transcriptHead: message.slice(0, 60) });
             return { text: local.text, audioBase64: null, toolAction: null, fallback: false };
           }
@@ -1245,7 +1251,7 @@ export const useVoiceCaddie = ({
           ? (language as 'en' | 'es' | 'zh')
           : 'en';
         const local = offline.answerOffline(message, langSafe);
-        if (local) {
+        if (local && !isNoDataLocalReply(local.text, langSafe)) {
           logVoiceSilentFail('local_responder_hit', {
             source: local.source,
             detail: local.detail ?? null,
@@ -1789,13 +1795,8 @@ export const useVoiceCaddie = ({
           isProcessingRef.current = false;
         };
         const failure = require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply');
-        // Our own host answered one of the three probes → the device is online and the failure is ours.
-        // Never "offline", never the on-device route, whatever the control hosts say (a DNS filter or VPN
-        // can block Apple/Google while we are reachable).
-        if (pingOk || getOk || cdnOk === true) {
-          say(failure.failureNoticeFor('internet_ok', langSafe));
-          return;
-        }
+        // The verdict, not our own probes: those ran before the retry and can be ~15s stale by the
+        // transcribe_retry_failed exit (third review, 10-15). The check started alongside them is fresh.
         const net = (await probeReachability()).verdict;
         if (isProvenOffline(net)) {
           try {

@@ -42,6 +42,9 @@ describe('offline golf knowledge, asked the way golfers talk', () => {
     expect(retrieveKB('stop thinking over the ball', { max: 2, minScore: 8 }).map((e) => e.id)).not.toContain('fault.thin');
     expect(top('is there a rainbow')).toBeNull();
     expect(top('i keep topping it')).toBe('fault.thin');   // inflections still count
+    // Third review: an alias ending in -e / -y lost its past tense and comparative (server RAG too).
+    expect(retrieveKB('i sliced it again', { max: 3, minScore: 8 }).length).toBeGreaterThan(0);
+    expect(retrieveKB('i keep slicing it', { max: 3, minScore: 8 }).length).toBeGreaterThan(0);
     expect(top('its raining')).toBe('cond.firm-vs-wet');
   });
 
