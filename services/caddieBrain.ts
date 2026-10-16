@@ -79,7 +79,8 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
     });
     if (!res.ok) return null;
     // 2026-09-28 — a real answer is the best proof the brain is awake; it refreshes the warmth the
-    // budgets read (and spares the next heartbeat a redundant warmup).
+    // budgets read (and spares the next heartbeat a redundant warmup). (A 200 failure below still
+    // proves the function is warm — warmth is about the Lambda, not the model.)
     markEndpointWarmed('/api/kevin');
 
     const raw = (await res.json()) as {
@@ -87,7 +88,27 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
       audioBase64?: string | null;
       toolAction?: ToolAction | null;
       toolActions?: ToolAction[] | null;
+      error?: string;
+      errorType?: string;
     };
+
+    /**
+     * 2026-10-15 (review) — A FAILURE THAT ARRIVES AS A 200 IS STILL A FAILURE.
+     *
+     * api/kevin's outer catch answers HTTP 200 with "I'm having trouble connecting — try that again."
+     * plus `error` / `errorType` (Fix I shape C, 05-21). res.ok is true, so this returned it as a real
+     * turn: every surface spoke it AS the caddie's answer, it went into the shared history as
+     * something the caddie "said" (so the next turn answered in that context), the putt-ask and
+     * style notes ran on it, and proactive lines read it out unprompted.
+     *
+     * Null is this function's documented "the brain could not answer"; every caller already owns
+     * that outcome (the honest failure line, a proactive fallback, or silence). Checked BEFORE any
+     * turn side effect — history, putt-ask, style notes — so a failure leaves no trace of a turn.
+     */
+    if (raw.error || raw.errorType) {
+      console.log('[caddieBrain] /api/kevin answered a failure as 200 —', raw.errorType ?? 'error', '— treated as no answer');
+      return null;
+    }
 
     /**
      * kevin returns a singular `toolAction`, and the `toolActions` ARRAY only when a turn produced

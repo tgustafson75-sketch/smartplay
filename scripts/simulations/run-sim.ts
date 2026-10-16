@@ -2330,7 +2330,10 @@ check('Voice: on-device (local) STT fallback runs only when the phone is PROVEN 
     const v = readCode('hooks/useVoiceCaddie.ts');
     const fn = v.slice(v.indexOf('const failTranscribeOffline = async'), v.indexOf('const failTranscribeOffline = async') + 4000);
     return (
-      /const net = \(await probeReachability\(\)\)\.verdict;\s*if \(isProvenOffline\(net\)\) \{[\s\S]{0,200}?if \(stt\.isOnDeviceSTTReady\(\)\)/.test(fn) &&
+      // 2026-10-15 (review) — the gate also requires speech-recognition permission ALREADY granted
+      // (never requested from this path — a mid-round system dialog is the 5.1.1 risk). Same intent:
+      // proven offline is still the first condition; the window widened for the comment between.
+      /const net = \(await probeReachability\(\)\)\.verdict;\s*if \(isProvenOffline\(net\)\) \{[\s\S]{0,600}?if \(stt\.isOnDeviceSTTReady\(\) && await stt\.hasOnDeviceSTTPermission\(\)\)/.test(fn) &&
       !/localMode/.test(fn) &&
       !/Local Mode in Settings/.test(v)
     );
@@ -7520,10 +7523,12 @@ check('Lifecycle: VAD start is single-flight + silence poller fires once',
       // useVoiceCaddie silence poller fires the stop ONCE via the single-flight
       // hardStopAndProcess fn (refreshed: was an inline handleMicPress call). It
       // clears the poller + nulls recordingRef (idempotent guard) so it can't double-fire.
-      /const hardStopAndProcess = async \(\) => \{/.test(vc) &&
+      // 2026-10-15 — hardStopAndProcess now takes optional processOpts (the no-speech stand-down
+      // transcribes quietly through it); still the one single-flight stop.
+      /const hardStopAndProcess = async \((?:processOpts\?: [^)]*)?\) => \{/.test(vc) &&
       /clearInterval\(silenceVadTimer\.current\); silenceVadTimer\.current = null;/.test(vc) &&
       /recordingRef\.current = null;/.test(vc) &&
-      /void hardStopAndProcess\(\)\.catch/.test(vc)
+      /void hardStopAndProcess\([^)]*\)\.catch/.test(vc)
     );
   })(),
   'the auto-listen loop never runs two competing recorders, a stop/disable mid-acquire cancels cleanly, and the silence detector fires the stop exactly once instead of every 200ms');
@@ -8632,14 +8637,20 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Bug-hunt: voice bypasses match whole-word commands, not raw substrings',
     // matchesCommand (word-boundary + short-utterance) replaces the naive t.includes(p) that let
     // "ob" inside "problem"/"probably" add a penalty stroke and drop the user's question.
-    /const matchesCommand = \(raw: string, phrases: string\[\], maxWords = 6\)/.test(read('hooks/useVoiceCaddie.ts')) &&
-      /matchesCommand\(transcript, PENALTY_PHRASES\)/.test(read('hooks/useVoiceCaddie.ts')) &&
-      /matchesCommand\(transcript, MUTE_PHRASES\)/.test(read('hooks/useVoiceCaddie.ts')) &&
+    // 2026-10-15 — the phrase lists + matchesCommand moved to services/tabVoiceBypass (so the rule is
+    // tested against the real lists — __tests__/regression/a-question-is-not-a-tab-command). Same
+    // intent, pointed at the new owner, plus a pin that the hook still routes through it. The quote
+    // class widened because the moved lists use single quotes; a double-quote-only negative would
+    // pass vacuously.
+    /const matchesCommand = \(raw: string, phrases: string\[\], maxWords = 6\)/.test(read('services/tabVoiceBypass.ts')) &&
+      /matchesCommand\(transcript, PENALTY_PHRASES\)/.test(read('services/tabVoiceBypass.ts')) &&
+      /matchesCommand\(transcript, MUTE_PHRASES\)/.test(read('services/tabVoiceBypass.ts')) &&
+      /tabBypassKind\(transcript, \{ isRoundActive, language \}\)/.test(read('hooks/useVoiceCaddie.ts')) &&
       // the raw-substring bypass matching must be gone
-      !/PENALTY_PHRASES\.some\(p => t\.includes\(p\)\)/.test(read('hooks/useVoiceCaddie.ts')) &&
+      !/PENALTY_PHRASES\.some\(p => t\.includes\(p\)\)/.test(read('hooks/useVoiceCaddie.ts') + read('services/tabVoiceBypass.ts')) &&
       // the ambiguous bare tokens that fired on ordinary speech were removed
-      !/^\s*"water",\s*$/m.test(read('hooks/useVoiceCaddie.ts')) &&
-      !/^\s*"quiet",\s*$/m.test(read('hooks/useVoiceCaddie.ts')),
+      !/^\s*["']water["'],\s*$/m.test(read('hooks/useVoiceCaddie.ts') + read('services/tabVoiceBypass.ts')) &&
+      !/^\s*["']quiet["'],\s*$/m.test(read('hooks/useVoiceCaddie.ts') + read('services/tabVoiceBypass.ts')),
     'penalty/hero/mute/vision voice bypasses only fire on short whole-word commands — ordinary conversational speech ("problem", "probably", "I need some water") no longer corrupts the scorecard or drops the question');
 
   check('Bug-hunt: first-launch consent gate is anchored on termsAcceptedAt, not first_opened_at',

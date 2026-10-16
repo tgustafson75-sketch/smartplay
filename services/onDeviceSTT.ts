@@ -46,7 +46,7 @@ interface STTModule {
   addListener: (event: string, cb: (e: never) => void) => Subscription;
   isRecognitionAvailable: () => boolean;
   supportsOnDeviceRecognition: () => boolean;
-  requestPermissionsAsync: () => Promise<{ granted?: boolean }>;
+  getPermissionsAsync?: () => Promise<{ granted?: boolean }>;
 }
 
 // Dynamic, guarded load. Absent native module → module stays null → all calls
@@ -81,6 +81,31 @@ export function isOnDeviceSTTReady(): boolean {
 }
 
 /**
+ * 2026-10-15 (review) — IS SPEECH RECOGNITION ALREADY ALLOWED? Never asks.
+ *
+ * recognizeOnceOnDevice used to call requestPermissionsAsync, and nothing else in the app requests
+ * speech-recognition permission. So the first time this offline path ran on iOS, the player got a
+ * surprise system "Allow Speech Recognition?" dialog in the middle of a round, at the exact moment
+ * the network had gone — no context, no purpose string the player had seen before. That is the
+ * request-in-context problem App Review rejected 1.0 for (5.1.1, 2026-09-16).
+ *
+ * So this path only runs where the permission is ALREADY granted (Android grants it with the mic;
+ * on iOS it stays off until a deliberate, explained ask exists). Anything unknown — no native
+ * module, an older API without getPermissionsAsync, a throw — counts as not granted: a missing
+ * offline transcript degrades to the normal offline reply, while a surprise dialog cannot be undone.
+ */
+export async function hasOnDeviceSTTPermission(): Promise<boolean> {
+  const m = getModule();
+  if (!m || typeof m.getPermissionsAsync !== 'function') return false;
+  try {
+    const perm = await m.getPermissionsAsync();
+    return perm?.granted === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Run ONE on-device recognition session and resolve the final transcript, or
  * null on no-speech / error / unavailable. Zero network. Bounded by timeoutMs so
  * it can never hang the voice flow. The caller owns mic coordination — nothing
@@ -94,13 +119,8 @@ export async function recognizeOnceOnDevice(
   if (!m) return null;
   const timeoutMs = opts.timeoutMs ?? 9000;
 
-  // Permission — request mic + recognizer; bail quietly if denied.
-  try {
-    const perm = await m.requestPermissionsAsync();
-    if (perm && perm.granted === false) return null;
-  } catch {
-    // Older/edge API — proceed; start() will emit an error we handle below.
-  }
+  // 2026-10-15 (review) — READ the permission, never REQUEST it. See hasOnDeviceSTTPermission.
+  if (!(await hasOnDeviceSTTPermission())) return null;
 
   return new Promise<string | null>((resolve) => {
     let settled = false;

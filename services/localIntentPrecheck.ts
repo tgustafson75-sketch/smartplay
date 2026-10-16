@@ -32,6 +32,7 @@ import type { VoiceIntent } from '../types/voiceIntent';
 import { ACTIVE_PERSONAS, type Persona } from '../lib/persona';
 import { isSmartMotionActive } from './smartMotionRecordBus';
 import { resolveSpokenCourse } from './courseNameResolver';
+import { isQuestionShaped, isStoryFramed } from './utteranceIsCommand';
 
 interface Pattern {
   rx: RegExp;
@@ -518,7 +519,10 @@ const PATTERNS: Pattern[] = [
   // mutation) on a hands-free path where the user may never hear the "reverted" line. Undo now
   // requires an explicit undo verb; "never mind" falls through to the brain as a plain dismissal.
   {
-    rx: /\b(undo(?:\s+that)?|scratch\s+that|delete\s+(?:that|the\s+last)(?:\s+(?:shot|score|putt))?|take\s+that\s+back|nix\s+that)\b/i,
+    // 2026-10-15 (review) — and only as an INSTRUCTION: at the start of a clause, optionally after
+    // "oops / wait / actually / please" or a polite "can you". "I wish I could take that back" is a
+    // golfer regretting a shot, and it reverted the last logged score.
+    rx: /(?:^|[,.!;]\s*)(?:(?:ok|okay|alright|all\s+right|and|so|cool|great|nice|hey|right|good|perfect|done|oops|wait|actually|no|please|sorry)[\s,]+)*(?:[a-z]+,\s*)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(undo(?:\s+that)?|scratch\s+that|delete\s+(?:that|the\s+last)(?:\s+(?:shot|score|putt))?|take\s+that\s+back|nix\s+that)\b/i,
     build: (raw) => intent(raw, 'undo'),
   },
   // "next hole" / "next tee" → advance. Deterministic so it never rides the cloud (offline dead-end).
@@ -526,11 +530,13 @@ const PATTERNS: Pattern[] = [
     // The mirror of the hole_read exclusion above: a bare move is deterministic and stays local and
     // instant, but "next hole, what's the read?" is a move AND a question. Handing that to navigate
     // advances the hole and silently drops the question, which is the same half-answer in reverse.
-    rx: /^(?!.*\b(?:briefing|brief\s+me|the\s+read|rundown|hole\s+info|walk\s+me\s+through|tell\s+me\s+about)\b)(?=.*\b(?:next\s+hole|next\s+tee|on\s+to\s+the\s+next(?:\s+hole)?|done\s+here,?\s*next)\b)/i,
+    rx: /^(?!.*\b(?:briefing|brief\s+me|the\s+read|rundown|hole\s+info|walk\s+me\s+through|tell\s+me\s+about)\b)(?=.*(?:(?:(?:^|[,.!;]\s*)(?:(?:ok|okay|alright|all\s+right|and|so|cool|great|nice|hey|right|good|perfect|done|oops|wait|actually|no|please|sorry)[\s,]+)*(?:[a-z]+,\s*)?|\b(?:go|move(?:\s+on)?|head|skip|take\s+me|let'?s\s+go)\s+(?:to\s+)?(?:the\s+)?)(?:next\s+hole|next\s+tee)\b(?!\s+(?:is|was|looks?|has|like)\b|'s)|\bon\s+to\s+the\s+next(?:\s+hole)?\b|\bdone\s+here,?\s*next\b))/i,
     build: (raw) => intent(raw, 'navigate', { direction: 'next_hole' }),
   },
   {
-    rx: /\b(previous\s+hole|go\s+back\s+a\s+hole|back\s+(?:one|a)\s+hole|last\s+hole\s+again)\b/i,
+    // 2026-10-15 (review) — "previous hole" as an INSTRUCTION (clause start, or after a motion verb).
+    // "What did I make on the previous hole?" is a question about the card, and it moved the round.
+    rx: /(?:(?:(?:^|[,.!;]\s*)(?:(?:ok|okay|alright|all\s+right|and|so|cool|great|nice|hey|right|good|perfect|done|oops|wait|actually|no|please|sorry)[\s,]+)*(?:[a-z]+,\s*)?|\b(?:go|move|head|take\s+me)\s+(?:back\s+)?(?:to\s+)?(?:the\s+)?)previous\s+hole\b(?!\s+(?:is|was|looks?|has|like)\b|'s)|\bgo\s+back\s+a\s+hole\b|\bback\s+(?:one|a)\s+hole\b|\blast\s+hole\s+again\b)/i,
     build: (raw) => intent(raw, 'navigate', { direction: 'previous_hole' }),
   },
   // Bare "start a round" (no course/name) → open the Play tab to pick one. A NAMED start
@@ -549,7 +555,54 @@ const PATTERNS: Pattern[] = [
 /** "pin's back right", "the flag is at the front of the green", "they've got the pin tucked back left". */
 const PIN_LOCATION_RX = /\b(?:pin|flag|hole\s+location)\b[^.?!]{0,40}\b(?:front|back|middle|left|right|tucked|centre|center)\b/i;
 
+/**
+ * 2026-10-15 (review) — THE INTENTS THAT CHANGE SOMETHING. A query answered locally ("what's my
+ * score") is harmless if a story trips it; these move the round, write the card, change a setting or
+ * take the player off the screen he is on. Each one is acted on before the caddie hears a word.
+ */
+/**
+ * Opens that only match on an explicit imperative verb ("pull up / show me / open …"), where a time
+ * word is part of WHAT to open ("pull up my round from yesterday"), not a story. The question half of
+ * the guard still applies to them; the story half would take a real command away.
+ */
+const VERB_ANCHORED_OPENS = new Set(['find_my_data', 'open_course', 'open_tool']);
+
+const ACTING_INTENTS = new Set([
+  'change_setting', 'log_score', 'navigate', 'undo', 'find_my_data', 'open_tool', 'open_course',
+  'correct_last_shot', 'set_club_distance', 'media_capture',
+]);
+
 export function precheckLocalIntent(transcript: string): VoiceIntent | null {
+  const hit = classifyLocalIntent(transcript);
+  if (!hit || !ACTING_INTENTS.has(hit.intent_type)) return hit;
+  /**
+   * 2026-10-15 (review) — A QUESTION OR A STORY IS NEVER AN ORDER.
+   *
+   * Verified against this file: "Should I go for it?" set risk mode to aggressive, "I birdied this
+   * hole last year" logged a 3, "How long is the next hole?" advanced the hole, "Should I just go
+   * home?" left the round screen, "Did you see that swing?" opened the swing library — every one at
+   * confidence 'high', so the router acted and the caddie never heard the question.
+   *
+   * The guard is the shared one (services/utteranceIsCommand) so the tab-mic bypasses apply the same
+   * rule. It belongs HERE, at the dispatcher, for the reason INSTRUCTIONAL_QUESTION_RX does: the next
+   * pattern someone adds would bite too.
+   *
+   * It answers 'conversational', not null. A null is handed to the cloud classifier, which can make
+   * the same mistake ("should I go for it" → change_setting); 'conversational' is the route both
+   * routers send straight to the brain — the same lesson as the 09-30 tee-time fix above.
+   *
+   * The putt read is exempt: "how's my read" and "can you read this putt" were written as questions
+   * on purpose (2026-09-13), and reading a putt changes nothing on the card.
+   */
+  const raw = transcript.trim();
+  const blocked = hit.intent_type === 'open_tool' && hit.parameters?.tool_name === 'putt_read'
+    ? false
+    : isQuestionShaped(raw) || (!VERB_ANCHORED_OPENS.has(hit.intent_type) && isStoryFramed(raw));
+  if (blocked) return intent(raw, 'conversational', { raw_utterance: raw, not_a_command: hit.intent_type });
+  return hit;
+}
+
+function classifyLocalIntent(transcript: string): VoiceIntent | null {
   if (!transcript || typeof transcript !== 'string') return null;
   const t = transcript.trim();
   if (!t) return null;
@@ -635,7 +688,12 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     // 2026-07-30 (audit #11) — the (?!\s*lab) negative lookahead stops "open swing lab" / "open my swing
     // lab" from matching the `swing` data-noun and shadowing the SwingLab open_tool path. A real data ask
     // ("pull up my last swing") still matches; "swing lab" falls through to the tool/course open.
-    const dm = t.match(/\b(?:pull up|bring up|find|show|open|get|see|look up)\s+(?:me\s+)?(?:my\s+)?(.*\b(?:round|rounds|scorecard|score\s*card|recap|swings?)\b(?!\s*lab).*)/i);
+    //
+    // 2026-10-15 (review) — and only as an INSTRUCTION. The verb now has to OPEN a clause (after an
+    // optional "hey / please / Kevin," or a polite "can you"), and `get` / `see` are gone: "I need to
+    // find my swing", "I can't get my swing going today" and "let's see how this round goes" are a
+    // golfer talking about his game, and each one pushed him off the round to the swing library.
+    const dm = t.match(/(?:^|[,.!;]\s*)(?:(?:hey|ok|okay|so|please|alright)[\s,]+)*(?:[a-z]+,\s*)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:pull up|bring up|find|show|open|look up)\s+(?:me\s+)?(?:my\s+)?(.*\b(?:round|rounds|scorecard|score\s*card|recap|swings?)\b(?!\s*lab).*)/i);
     if (dm) return intent(t, 'find_my_data', { query: dm[1].trim(), raw_utterance: t });
   }
 

@@ -64,12 +64,9 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail, logVoiceDiag, noteVoiceTurnStarted } from '../services/voiceErrorLog';
 import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { probeReachability, isProvenOffline } from '../services/reachability';
-/** 2026-10-15 — the shared "this reply says we lack the data" test (services/localStatusResponder). */
-function isNoDataLocalReply(text: string, lang: 'en' | 'es' | 'zh'): boolean {
-  try { return (require('../services/localStatusResponder') as typeof import('../services/localStatusResponder')).isNoDataReply(text, lang); }
-  catch { return false; }
-}
 import { CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
+import { tabBypassKind } from '../services/tabVoiceBypass';
+import { createMeterTracker } from '../services/micStanddown';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -321,107 +318,8 @@ let micBlockedPromptShown = false;
 // voiceService aligned on format / sample rate / bit rate forever.
 
 // ─── BYPASS PHRASES ───────────────────────
-
-const YARDAGE_PHRASES = [
-  "what's my yardage",
-  "what is my yardage",
-  "how far",
-  "how many yards",
-  "what's the distance",
-  "distance to the pin",
-  "yards to the pin",
-  "how far to the green",
-  "yardage",
-  "cuántas yardas",
-  "distancia al green",
-];
-
-const HERO_PHRASES = [
-  "did you get that",
-  "save that",
-  "save that shot",
-  "save that one",
-  "hero reel",
-  "that's a keeper",
-  // 2026-07-20 (bug-hunt fix) — removed bare "got that" / "save it": too colloquial,
-  // they fired the hero-reel on ordinary speech ("you got that right", "save it for
-  // the back nine") and dropped the user's real question. The specific phrases above
-  // still catch a genuine "save that shot".
-];
-
-const HERO_VIEW_PHRASES = [
-  'show me my hero reel',
-  'show my best shots',
-  'show me my best',
-  'hero reel',
-  'my best shots',
-  'show me my drives',
-  'show me my irons',
-];
-
-const PENALTY_PHRASES = [
-  "penalty",
-  "penalty stroke",
-  // 2026-07-20 (bug-hunt fix) — removed bare "water" and "drop": as loose substrings
-  // (and even as bare words) they fired a penalty on ordinary speech ("I need some
-  // water", "should I drop back a club"). The specific penalty phrases below still
-  // catch a real "in the water" / "take a drop".
-  "in the water",
-  "hit it in the water",
-  "ob",
-  "out of bounds",
-  "lost ball",
-  "lost it",
-  "take a drop",
-  "penalty drop",
-  "add a penalty",
-];
-
-const MUTE_PHRASES = [
-  "mute",
-  "be quiet",
-  "stop talking",
-  "silence",
-  // 2026-07-20 (bug-hunt fix) — removed bare "quiet": it muted on ordinary speech
-  // ("the greens are quiet today"). "be quiet" / "mute" / "stop talking" still work.
-  "silenciar",
-];
-
-const VISION_PHRASES = [
-  "smart vision",
-  "analyze the hole",
-  "analyze this hole",
-  "read the hole",
-  "what do you see",
-  "hole analysis",
-];
-
-// 2026-07-20 (bug-hunt fix) — the caddie voice bypasses (penalty / hero / mute / vision /
-// yardage shortcuts) used raw `transcript.includes(phrase)` substring matching, so:
-//   • a 2-char token like "ob" matched INSIDE ordinary words ("problem", "probably", "job"),
-//     silently adding a penalty stroke and dropping the user's real question;
-//   • single words ("water", "drop", "quiet") matched anywhere in a long conversational
-//     sentence and fired the wrong action.
-// matchesCommand fixes both: a bypass only fires when the utterance is SHORT (a command,
-// not a question) AND the phrase appears as WHOLE WORDS — never as a substring inside a
-// longer word, and never buried in a long sentence (those route to the brain instead).
-const normalizeUtterance = (s: string): string =>
-  s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-
-const matchesCommand = (raw: string, phrases: string[], maxWords = 6): boolean => {
-  const t = normalizeUtterance(raw);
-  if (!t) return false;
-  // A real question ("what's the problem with my swing") is longer than a command
-  // ("penalty", "be quiet", "hit it in the water" = 5) — cap the command length.
-  if (t.split(' ').length > maxWords) return false;
-  return phrases.some((p) => {
-    const np = normalizeUtterance(p);
-    if (!np) return false;
-    // whole-word / whole-phrase match, tolerant of extra spacing between words
-    const re = new RegExp(`(^|\\s)${np.replace(/\s+/g, '\\s+')}(\\s|$)`);
-    return re.test(t);
-  });
-};
+// 2026-10-15 — the phrase lists and matchesCommand moved to services/tabVoiceBypass (tabBypassKind),
+// so the rule can be tested against the real lists; checkBypasses below still performs the effects.
 
 // ─── HOOK ─────────────────────────────────
 
@@ -881,12 +779,14 @@ export const useVoiceCaddie = ({
     triggerHeroReelView?: boolean;
     triggerMute?: boolean;
   } => {
-    if (isRoundActive && matchesCommand(transcript, PENALTY_PHRASES)) {
+    const kind = tabBypassKind(transcript, { isRoundActive, language });
+
+    if (kind === 'penalty') {
       useRoundStore.getState().addPenalty(currentHole);
       return { handled: true, response: 'Got it — penalty stroke added.' };
     }
 
-    if (matchesCommand(transcript, HERO_PHRASES)) {
+    if (kind === 'hero') {
       const kevinSaid = addHeroMoment({
         clipUri: null,
         hole: currentHole,
@@ -898,10 +798,7 @@ export const useVoiceCaddie = ({
       return { handled: true, response: kevinSaid, triggerHero: true };
     }
 
-    // Non-English yardage queries skip the bypass so Kevin answers in the
-    // player's language via the full voice-intent pipeline (which sends
-    // language='es'/'zh' to Kevin). Only English gets the hardcoded shortcut.
-    if (language === 'en' && matchesCommand(transcript, YARDAGE_PHRASES)) {
+    if (kind === 'yardage') {
       // 2026-08-10 (logic-universality fix #1) — speak the SAME resolved yardage the screen + the
       // non-English voice path use (user-stated > live GPS > static card), not the raw static
       // `currentYardage` store field. Was: the English 'how far?' shortcut spoke the scorecard tee→green
@@ -914,15 +811,15 @@ export const useVoiceCaddie = ({
       return { handled: true, response };
     }
 
-    if (matchesCommand(transcript, VISION_PHRASES)) {
+    if (kind === 'vision') {
       return { handled: true, triggerVision: true, response: 'Taking a look at the hole.' };
     }
 
-    if (matchesCommand(transcript, HERO_VIEW_PHRASES)) {
+    if (kind === 'hero_view') {
       return { handled: true, triggerHeroReelView: true, response: 'Here are your best moments.' };
     }
 
-    if (matchesCommand(transcript, MUTE_PHRASES)) {
+    if (kind === 'mute') {
       return { handled: true, triggerMute: true, response: '' };
     }
 
@@ -936,6 +833,24 @@ export const useVoiceCaddie = ({
   // is down, or we hit the local dead-end). The caller still SPEAKS it, but must
   // NOT log it as a real conversational turn or award engagement points for it.
   const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null; toolActions?: ToolAction[]; fallback: boolean }> => {
+    /**
+     * 2026-10-15 (review) — what a FAILED follow-up turn says, from the one owner. A local answer
+     * from real data is a real answer (logged + kept); anything else is a fallback (spoken, never
+     * logged as something the caddie said).
+     */
+    const failedTurn = async (): Promise<{ text: string; audioBase64: null; toolAction: null; fallback: boolean }> => {
+      const failure = require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply');
+      const langSafe = failure.safeLang(language);
+      // Never throws: it is called inside sendToBrain's try, where a throw would fire the retry.
+      const r = await failure.caddieFailureReply({ heard: message, language: langSafe })
+        .catch(() => ({ text: CADDIE_NOTICE_ON_US[langSafe], source: 'on_us' as const, verdict: null }));
+      logVoiceSilentFail(r.source === 'local_answer' ? 'local_responder_hit' : 'local_responder_miss', {
+        source: r.source,
+        language: langSafe,
+        transcriptHead: message.slice(0, 60),
+      });
+      return { text: r.text, audioBase64: null, toolAction: null, fallback: r.source !== 'local_answer' };
+    };
     // 2026-06-29 (fix A) — read the LIVE host at call-time. The hook-level
     // apiUrl (~line 671) is captured per render, so a mid-session dual-host
     // failover (ensureBackendReachable → activeBase switch) never reached these
@@ -1138,29 +1053,19 @@ export const useVoiceCaddie = ({
       // 2026-07-10 (audit V1) — the server cascade fully failed but returned a graceful HTTP
       // 200 (not a throw), so this SUCCESS path never reached the catch's offline responder →
       // the player heard "having trouble connecting" instead of the local round-state answer.
-      // Try the on-device local brain FIRST, honoring the "→ local brain backup" design.
-      if (isFallback) {
-        try {
-          const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
-          const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
-            ? (language as 'en' | 'es' | 'zh') : 'en';
-          const local = offline.answerOffline(message, langSafe);
-          // 2026-10-15 — a "no data" reply ("No GPS lock yet") is not an answer; the failure line is.
-          if (local && !isNoDataLocalReply(local.text, langSafe)) {
-            logVoiceSilentFail('local_responder_hit', { source: local.source, detail: local.detail ?? null, language: langSafe, transcriptHead: message.slice(0, 60) });
-            return { text: local.text, audioBase64: null, toolAction: null, fallback: false };
-          }
-        } catch (e) { console.log('[voice] offlineCaddie (fallback path) threw:', e); }
-      }
+      //
+      // 2026-10-15 (review) — and when there was no local answer it STILL spoke the server's
+      // "I'm having trouble connecting" (data.text) as the caddie's reply, blaming the signal on a
+      // failure that was ours. The failed turn now goes to the one failure owner, which answers from
+      // real local data first and otherwise says what is TRUE (services/caddieFailureReply).
+      if (isFallback) return failedTurn();
 
-      // Points — every REAL caddie response is a 3-pt interaction (Tim's spec).
-      // A fallback canned line is not an interaction, so skip it.
-      if (!isFallback) {
-        try {
-          const pointsMod = require('../store/pointsStore');
-          pointsMod.usePointsStore.getState().addPoints(3, 'caddie_interaction');
-        } catch (e) { console.log('[points] caddie-interaction emit failed:', e); }
-      }
+      // Points — every REAL caddie response is a 3-pt interaction (Tim's spec). (A failed turn
+      // returned above, so everything reaching here is real.)
+      try {
+        const pointsMod = require('../store/pointsStore');
+        pointsMod.usePointsStore.getState().addPoints(3, 'caddie_interaction');
+      } catch (e) { console.log('[points] caddie-interaction emit failed:', e); }
 
       return {
         text:        data.text       ?? 'Got nothing back from the brain. Try again.',
@@ -1168,7 +1073,7 @@ export const useVoiceCaddie = ({
         toolAction:  data.toolAction  ?? null,
         // 2026-07-10 (audit V3) — all actions from a multi-action turn (dispatched below).
         toolActions: (data.toolActions ?? undefined) as ToolAction[] | undefined,
-        fallback:    isFallback,
+        fallback:    false,
       };
 
     } catch (err) {
@@ -1220,12 +1125,14 @@ export const useVoiceCaddie = ({
           const d = await retryRes.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; toolActions?: ToolAction[] | null; error?: string; errorType?: string };
           // 2026-07-06 (voice-parity F3) — same graceful-200 masking applies on the
           // minimal retry; don't log/score a canned degrade line.
+          // 2026-10-15 (review) — and never speak the server's canned failure as the reply.
+          if (d.error || d.errorType) return failedTurn();
           return {
             text: d.text ?? 'Ready when you are.',
             audioBase64: d.audioBase64 ?? null,
             toolAction: d.toolAction ?? null,
             toolActions: (d.toolActions ?? undefined) as ToolAction[] | undefined,
-            fallback: Boolean(d.error || d.errorType),
+            fallback: false,
           };
         }
       } catch (retryErr) {
@@ -1233,45 +1140,15 @@ export const useVoiceCaddie = ({
       }
 
       try { Vibration.vibrate(120); } catch {}
-      // 2026-06-06 — Phase 3 of on-course resilience sprint. Tim's
-      // Echo Hills round hit this catch ~28 times (cellular died at
-      // the course); user got "Hit a snag" canned every time. Now
-      // answer LOCALLY via services/offlineCaddie.answerOffline:
-      //   1) round-state patterns (yardage, club call, score, hole info,
-      //      wind, plays-like, last shot) from local round state + GPS,
-      //   2) and — new 2026-06-27 — the on-device golf-knowledge KB for
-      //      coaching / strategy questions that previously fell through
-      //      to the canned "Give me one sec" dead-end. retrieveKB used to
-      //      run server-side only, so the bundled KB did nothing offline;
-      //      this brings it to the device. [[caddie-brain-kb-spec]]
-      // Phase 1 device TTS then speaks the reply via system voice.
-      try {
-        const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
-        const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
-          ? (language as 'en' | 'es' | 'zh')
-          : 'en';
-        const local = offline.answerOffline(message, langSafe);
-        if (local && !isNoDataLocalReply(local.text, langSafe)) {
-          logVoiceSilentFail('local_responder_hit', {
-            source: local.source,
-            detail: local.detail ?? null,
-            language: langSafe,
-            transcriptHead: message.slice(0, 60),
-          });
-          // Local responder IS a real answer (round state / on-device KB), so it
-          // logs + scores normally — not a fallback.
-          return { text: local.text, audioBase64: null, toolAction: null, fallback: false };
-        }
-        logVoiceSilentFail('local_responder_miss', {
-          transcriptHead: message.slice(0, 60),
-          language: langSafe,
-        });
-      } catch (e) {
-        console.log('[voice] offlineCaddie threw (non-fatal):', e);
-      }
-      // Reached only if the healthy endpoint, the minimal retry, AND the local
-      // responder all came up empty — genuinely rare. Keep it warm, not alarmy.
-      return { text: 'Give me one sec and ask me again.', audioBase64: null, toolAction: null, fallback: true };
+      // 2026-06-06 — Phase 3 of on-course resilience sprint. Tim's Echo Hills round hit this catch
+      // ~28 times (cellular died at the course); the player got a canned line every time. A failed
+      // turn answers LOCALLY where it can (round state + GPS, the on-device golf-knowledge KB).
+      //
+      // 2026-10-15 (review) — through the ONE failure owner (services/caddieFailureReply), which runs
+      // that same local answer (with the "no data" filter) and otherwise says why the turn failed on
+      // evidence. This path used to end in its own "Give me one sec and ask me again." — the last
+      // failure line in the app that bypassed the owner, on the follow-up loop.
+      return failedTurn();
     }
   };
 
@@ -1534,7 +1411,7 @@ export const useVoiceCaddie = ({
 
   // ── PROCESS AUDIO URI (shared by manual + VAD) ────
 
-  const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad'; meterSilent?: boolean; durationMs?: number | null }): Promise<void> => {
+  const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad'; meterSilent?: boolean; durationMs?: number | null; quietIfEmpty?: boolean }): Promise<void> => {
     // 2026-08-10 — stuck-turn watchdog. A legitimate turn is bounded by the cold transcribe budget
     // plus the brain call; 90s is comfortably past any real one. Beyond that the flag is a leak, not
     // a turn in progress, so clear it and serve the user instead of ignoring them forever.
@@ -1801,7 +1678,10 @@ export const useVoiceCaddie = ({
         if (isProvenOffline(net)) {
           try {
             const stt = require('../services/onDeviceSTT') as typeof import('../services/onDeviceSTT');
-            if (stt.isOnDeviceSTTReady()) {
+            // 2026-10-15 (review) — and only when speech recognition is ALREADY allowed: checked before
+            // "Say that again" is spoken, so a player without the permission is neither re-prompted
+            // for nothing nor shown a system dialog mid-round (onDeviceSTT.hasOnDeviceSTTPermission).
+            if (stt.isOnDeviceSTTReady() && await stt.hasOnDeviceSTTPermission()) {
               const prompt = 'Say that again for me?';
               onResponseReceived(prompt);
               if (voiceEnabled) await speakDeviceNotice(prompt, language, voiceGender).catch(() => {});
@@ -2111,6 +1991,17 @@ export const useVoiceCaddie = ({
           source: 'processAudioUri', sourceKind: source,
           meterSilent: opts?.meterSilent ?? null, durationMs: opts?.durationMs ?? null,
         });
+        /**
+         * 2026-10-15 (review) — a NO-SPEECH STAND-DOWN that was transcribed only because the meter
+         * could not prove silence (see the stand-down in handleMicPress) and came back empty: nobody
+         * spoke. It closes as quietly as the stand-down always did — no "Say that again?", no miss
+         * streak. That is what keeps an unanswered mic from turning into "Didn't catch that" spam.
+         */
+        if (opts?.quietIfEmpty) {
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
         /**
          * 2026-08-10 — PERSIST + stay a person about it.
          *
@@ -3148,12 +3039,16 @@ export const useVoiceCaddie = ({
       // 2026-07-30 — when the user FIRST crossed the speech threshold, so the poll below can tell a
       // quick command (short silence window) from a mid-sentence pause (long window) — the adaptive VAD.
       let micSpeechStartAt = 0;
+      // 2026-10-15 (review) — the ambient-relative read of the same meter, consulted ONLY at the
+      // no-speech stand-down (services/micStanddown).
+      const meterTracker = createMeterTracker();
       const { recording } = await Audio.Recording.createAsync(
         { ...RECORDING_OPTIONS, isMeteringEnabled: true },
         (status) => {
           if (!status.isRecording) return;
           const metering = (status as { metering?: number }).metering;
           if (typeof metering !== 'number') return;
+          meterTracker.update(metering);
           if (metering > MIC_SPEECH_DETECT_DB) {
             if (!micHasSpoken) micSpeechStartAt = Date.now();
             micHasSpoken = true;
@@ -3189,7 +3084,7 @@ export const useVoiceCaddie = ({
       // own size/duration guards). Idempotent: first caller nulls recordingRef,
       // any second caller sees null and returns.
       const recordStartedAt = Date.now();
-      const hardStopAndProcess = async () => {
+      const hardStopAndProcess = async (processOpts?: { meterSilent?: boolean; durationMs?: number | null; quietIfEmpty?: boolean }) => {
         if (silenceVadTimer.current) { clearInterval(silenceVadTimer.current); silenceVadTimer.current = null; }
         if (autoStopTimer.current) { clearTimeout(autoStopTimer.current); autoStopTimer.current = null; }
         const rec = recordingRef.current;
@@ -3201,7 +3096,7 @@ export const useVoiceCaddie = ({
           await rec.stopAndUnloadAsync();
           uri = rec.getURI();
         } catch (e) { console.log('[voice] hard-stop error:', e); }
-        if (uri) { await processAudioUri(uri); }
+        if (uri) { await processAudioUri(uri, processOpts); }
         else { wrappedOnVoiceStateChange('idle'); }
       };
 
@@ -3225,7 +3120,26 @@ export const useVoiceCaddie = ({
          * close the mic, no transcribe, no error, no announcement. It offered, you didn't answer.
          * A capture that HAS heard speech is untouched — the adaptive endpoint below owns that.
          */
+        /**
+         * 2026-10-15 (review) — BUT ONLY ON EVIDENCE OF SILENCE. "Nothing crossed -30 dBFS" is the
+         * same fixed-threshold veto the 08-19 note (handleMicPress STOP branch) removed from the tap:
+         * on Android outdoors the meter sits under -30 while he talks, and this branch threw the
+         * recording away untranscribed and unlogged — the turn just vanished. Now the meter stands
+         * the mic down only when its readings never rose off the ambient floor (micStanddown, the
+         * same floor + margin voiceService uses). Otherwise the capture is transcribed with
+         * quietIfEmpty, so a mic nobody answered still closes silently if Whisper hears nothing.
+         */
         if (!micHasSpoken && Date.now() - recordStartedAt >= NO_SPEECH_STANDDOWN_MS) {
+          const realSilence = meterTracker.isRealSilence();
+          const durationMs = Date.now() - recordStartedAt;
+          logVoiceDiag('no_speech_standdown', {
+            decision: realSilence ? 'stood_down' : 'transcribing', durationMs, ...meterTracker.snapshot(),
+          });
+          if (!realSilence) {
+            console.log('[voice] no speech over -30 dBFS, but the meter cannot prove silence — transcribing (quiet if empty)');
+            void hardStopAndProcess({ meterSilent: true, durationMs, quietIfEmpty: true }).catch(() => undefined);
+            return;
+          }
           clearAutoStop();
           const rec = recordingRef.current;
           recordingRef.current = null;

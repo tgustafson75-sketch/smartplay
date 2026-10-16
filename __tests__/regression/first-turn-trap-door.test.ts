@@ -238,14 +238,27 @@ describe('a mic the user never asked for does not stay hot', () => {
     expect(src).toContain('if (!micHasSpoken && Date.now() - recordStartedAt >= NO_SPEECH_STANDDOWN_MS) {');
   });
 
-  it('stands down QUIETLY — no transcribe, no error, no announcement', () => {
+  /**
+   * 2026-10-15 (review) — updated to the same intent. "No transcribe, ever" discarded a speaking
+   * player's turn on the device where the meter sits under -30 (the 08-19 note). Real silence (per
+   * services/micStanddown, behaviourally tested in a-quiet-voice-is-not-silence) still stands down
+   * with no transcribe; a capture the meter cannot prove silent is transcribed, and an empty result
+   * stays QUIET — no error, no announcement — which is what this guard always protected.
+   */
+  it('stands down QUIETLY — real silence is never shipped, and an unproven one stays quiet if empty', () => {
     const branch = src.slice(src.indexOf('if (!micHasSpoken && Date.now() - recordStartedAt >= NO_SPEECH_STANDDOWN_MS) {'));
-    const body = branch.slice(0, 700);
-    expect(body).toContain('rec.stopAndUnloadAsync()');
-    expect(body).toContain("wrappedOnVoiceStateChange('idle')");
-    // Shipping the silence anywhere is the bug being fixed.
-    expect(body).not.toContain('processAudioUri');
-    expect(body).not.toContain('hardStopAndProcess');
+    const body = branch.slice(0, 1400);
+    expect(body).toContain('const realSilence = meterTracker.isRealSilence();');
+    expect(body).toMatch(/if \(!realSilence\) \{[\s\S]{0,300}hardStopAndProcess\(\{ meterSilent: true, durationMs, quietIfEmpty: true \}\)/);
+    const silentTail = body.slice(body.indexOf('clearAutoStop();'));
+    expect(silentTail).toContain('rec.stopAndUnloadAsync()');
+    expect(silentTail).toContain("wrappedOnVoiceStateChange('idle')");
+    expect(silentTail.slice(0, 400)).not.toContain('processAudioUri');
+    expect(silentTail.slice(0, 400)).not.toContain('hardStopAndProcess');
+    // and the empty-transcript branch honours quietIfEmpty BEFORE any "say that again".
+    const empty = src.slice(src.indexOf("('empty_transcript', {"));
+    expect(empty.indexOf('if (opts?.quietIfEmpty) {')).toBeGreaterThan(-1);
+    expect(empty.indexOf('if (opts?.quietIfEmpty) {')).toBeLessThan(empty.indexOf('Say that again? Wind took it.'));
   });
 
   it('stands down well before the 18s wall-clock cap that used to hold the mic', () => {

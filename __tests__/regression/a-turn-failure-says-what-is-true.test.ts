@@ -156,11 +156,13 @@ describe('review fixes (10-15)', () => {
   });
 
   it('every failure path that answers locally drops "no data" replies (third review: 3 of 5 did not)', () => {
-    const sites = [
-      ...(code('hooks/useVoiceCaddie.ts').match(/answerOffline\(message, langSafe\);\s*if \(local[^)]*\)/g) ?? []),
-    ];
-    expect(sites).toHaveLength(2);
-    for (const s of sites) expect(s).toMatch(/!isNoDataLocalReply\(local\.text, langSafe\)/);
+    // 2026-10-15 (review) — the tap mic's two sites (sendToBrain's 200-error branch and its catch) no
+    // longer answer locally themselves: both hand the failed turn to caddieFailureReply, whose
+    // localAnswer applies the no-data filter (pinned behaviourally above). Same intent, one owner:
+    // no raw answerOffline left in the hook, and the failed-turn helper goes through the owner.
+    const tapSrc = code('hooks/useVoiceCaddie.ts');
+    expect(tapSrc).not.toMatch(/answerOffline\(/);
+    expect(tapSrc).toMatch(/const failedTurn = async[\s\S]{0,600}caddieFailureReply\(\{ heard: message/);
     expect(code('services/listeningSession.ts')).not.toMatch(/answerOffline\(/);
     expect(code('services/listeningSession.ts')).toMatch(/\.localAnswer\(utterance, lang\)/);
   });
