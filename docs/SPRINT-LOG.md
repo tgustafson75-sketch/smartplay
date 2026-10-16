@@ -5462,3 +5462,21 @@ not seed a coarse/cached fix · SmartVision shows the resolver's number when GPS
 ### Open / carried
 - Not OTA'd. Tim: `npm run ota:production` when ready.
 - No SwingLab card for imported lessons yet (store holds them; practice history + brain already show the fix).
+
+## Day 143–144 — 2026-10-15/16 — offline honesty, Local Mode retired, full round-play sweep, swing review (branch only, NOT pushed / NOT OTA'd)
+
+**Shipped to branch `swing-review-2026-10-10` (held per review-sweep rule; no push, no OTA):**
+- Offline: `services/reachability` (Apple/Google probe → offline/captive/slow/internet_ok); "check connection" only on proof. One owner of failed-turn lines (`services/caddieFailureReply`); Local Mode retired from all failure paths (Quiet keeps its own gates). Kevin's saved lines play offline in his voice. KB matches whole words + golfer phrasings. Weather course-wide within 30 min; offline wind answer states its age.
+- Reverted the "keep old course maps offline" idea (old-pipeline maps = wrong-hole greens); a failed rebuild now never returns a superseded map.
+- Five-path sweep (round, GPS, scorecard, voice, connections) → ~60 confirmed defects fixed by five parallel fixers + two seam passes + a re-review. Highlights: cart GPS freeze (700 m lag → <15 m); questions no longer become commands ("Should I go for it?" no longer flips aggressive); server 200-error not spoken as Kevin; round history can't be wiped by a read error; putts unentered ≠ 0; score card scores the hole it opened on; AI recap built from the saved round; earbud session ownership; "What should I hit here?" no longer silent on the tab mic.
+- Swing review (Tim's 4075.mp4): stage buttons land on the real phases; ring/card only at the fault; Issue chip toggles fault pause; one fault time; DTL swings stop showing face-on-only numbers.
+
+**Verified:** tsc, lint, jest (622 suites / 6875 tests), sim 1077/1077. NOT device-verified.
+
+**Open / carried:**
+- Tim device checks: PATH 2/4/5/6 + Path 3 swing review (see test manual offline section + phase commit bodies).
+- Product calls: weight-shift scale (move 6 benchmark sources to the 07-07 scale — recommended); tee-colour picker changes no yardage; strip score+putts as one undo.
+- Native (parked): Kokoro offline voice; Apple Watch yardage queue (`updateApplicationContext`); watch apps showing live/est/unit flags.
+- `sendToBrain` follow-up loop still a second brain transport (failure line fixed; not folded into askCaddie).
+- Dead duplicate `useCaddieTabMic.processAudioUri`/`speakDeadEnd` (unreachable; pinned by two sim guards).
+

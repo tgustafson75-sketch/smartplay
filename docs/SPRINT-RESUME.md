@@ -8,6 +8,7 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+- **2026-10-16:** Big sweep on branch `swing-review-2026-10-10` — offline honesty + Local Mode retired, ~60 round-play defects (GPS cart freeze, questions-as-commands, score/putts/recap, earbud), swing review stage/fault/DTL fixes. All gates green, NOT pushed, NOT OTA'd, NOT device-verified. Next: Tim device-checks, then says go → push + one OTA. Detail: SPRINT-LOG Day 143–144.
 - **2026-10-14 (afternoon):** SmartBay ↔ Caddie JSON exchange v1 in Settings (import a bay lesson, export the player). Committed, NOT OTA'd. Detail: SPRINT-LOG Day 142 (cont.).
 - **2026-10-14:** OTA 8bb5a645 live — altitude plays-like, BG location task defined at entry (index.js), pocket-tracking-off alert. Source maps unuploaded until the Sentry token file exists. expo-modules-core reload fix still waits on the next native build.
 
