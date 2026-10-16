@@ -436,7 +436,8 @@ function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_t
         params.send_log = true;
       }
       if (matcher.tool_name === 'coach_mode') {
-        const playerMatch = transcript.match(/\b(?:coach|watch my student|watching|i'?m coaching|let's coach)\s+([A-Z][a-zA-Z'-]*)/i);
+        // "coach mode for Lily" → Lily, not "mode" (re-review 10-16).
+        const playerMatch = transcript.match(/\b(?:coach(?:\s+mode)?(?:\s+for)?|watch my student|watching|i'?m coaching|let's coach)\s+(?!mode\b|for\b)([A-Z][a-zA-Z'-]*)/i);
         if (playerMatch?.[1]) params.player_name = playerMatch[1];
       }
       return { intent_type: 'open_tool', parameters: params };
@@ -445,8 +446,10 @@ function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_t
 
   // 2026-10-16 — bare "let's play" / "another round" removed: "let's play it safe" and "I don't want another
   // round like that" started a quick round at the home course.
-  if (includesAny(cleaned, ['quick round', 'start a round', 'start round', "let's play a round", "let's play 9", "let's play 18", 'play a quick round', 'start another round', 'start a quick round'])) {
-    const holeCount = /\b9[- ]?hole\b|\blet's play 9\b|\bplay 9\b/.test(cleaned) ? 9 : 18;
+  // normalizeForMatch turns apostrophes into spaces, so "let's" is matched as "let s" (re-review 10-16:
+  // the apostrophe forms could never match).
+  if (includesAny(cleaned, ['quick round', 'start a round', 'start round', 'let s play a round', 'let us play a round', 'let s play 9', 'let s play 18', 'play a quick round', 'start another round', 'start a quick round'])) {
+    const holeCount = /\b9[- ]?hole\b|\blet s play 9\b|\bplay 9\b/.test(cleaned) ? 9 : 18;
     const courseMatch = transcript.match(/\b(?:at|on|for)\s+(.+?)(?:\s+with\s+|\s+today\b|\s+now\b|\s*$)/i);
     const courseHint = courseMatch?.[1]?.trim() || familyHomeCourse;
     const guestMatch = transcript.match(/\bwith\s+(.+?)(?:\s+at\b|\s+on\b|\s+for\b|\s+today\b|\s+now\b|$)/i);

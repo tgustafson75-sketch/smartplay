@@ -2263,16 +2263,18 @@ export default function CaddieTab() {
         const p = action as { club?: string; distance_yards?: number; shot_number?: number; hole?: number; target?: string };
         const rs = useRoundStore.getState();
         if (typeof p.club === 'string' && p.club.trim()) rs.setClub(p.club.trim());
-        if (typeof p.distance_yards === 'number' && p.distance_yards > 0 && p.distance_yards <= 700) {
-          // 2026-10-16 (seam review) — spoken, in the player's unit (api/_brainTools plan_shot).
-          const { spokenDistanceToYards } = require('../../services/intents/stateYardageHandler') as typeof import('../../services/intents/stateYardageHandler');
-          rs.setUserStatedYardage(Math.round(spokenDistanceToYards(p.distance_yards, '')), 'user');
+        // 2026-10-16 (seam review) — spoken, in the player's unit (api/_brainTools plan_shot); converted
+        // ONCE, and that yardage is what is stored and what the toast formats.
+        const { spokenDistanceToYards } = require('../../services/intents/stateYardageHandler') as typeof import('../../services/intents/stateYardageHandler');
+        const plannedYards = typeof p.distance_yards === 'number' && p.distance_yards > 0 ? Math.round(spokenDistanceToYards(p.distance_yards, '')) : null;
+        if (plannedYards != null && p.distance_yards! <= 700) {
+          rs.setUserStatedYardage(plannedYards, 'user');
         }
         try {
           const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
           const bits = [
             typeof p.club === 'string' && p.club.trim() ? p.club.trim() : null,
-            typeof p.distance_yards === 'number' && p.distance_yards > 0 ? formatDistanceCompact(p.distance_yards, liveDistanceUnit()) : null,
+            plannedYards != null ? formatDistanceCompact(plannedYards, liveDistanceUnit()) : null,
             typeof p.shot_number === 'number' && p.shot_number > 0 ? `shot ${Math.round(p.shot_number)}` : null,
             // 2026-07-04 (clean-audit M1) — surface the stated target too.
             typeof p.target === 'string' && p.target.trim() ? `→ ${p.target.trim()}` : null,

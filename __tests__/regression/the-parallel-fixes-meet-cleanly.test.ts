@@ -70,6 +70,38 @@ describe('round / score / GPS seams', () => {
     useSettingsStore.getState().setDistanceUnit('yards');
   });
 
+  it('re-review: twice-around maps from the round FRONTIER, not a lagging current hole', () => {
+    const scores: Record<number, number> = { 1: 4, 2: 4, 3: 3, 4: 5, 5: 4, 6: 4, 7: 3, 8: 4, 9: 5, 11: 4 };
+    // currentHole stuck at 10 while hole 11 is already scored: "three on three" is the second pass (12).
+    expect(roundHoleForSpoken({ twiceAround: true, currentHole: 10, scores }, 3)).toBe(12);
+    // just onto the second loop with nothing scored past 9: "five on nine" is still hole 9.
+    expect(roundHoleForSpoken({ twiceAround: true, currentHole: 10, scores: { 1: 4, 2: 4 } }, 9)).toBe(9);
+  });
+
+  it('re-review: the plan toast shows the CONVERTED distance in the player\'s unit', () => {
+    const toastMod = require('../../store/toastStore') as typeof import('../../store/toastStore');
+    useRoundStore.setState({ isRoundActive: true, currentHole: 3, userStatedYardage: null } as never);
+    useSettingsStore.getState().setDistanceUnit('meters');
+    dispatchConversationalToolActions([{ type: 'plan_shot', club: '7 iron', distance_yards: 150 }]);
+    const msg = toastMod.useToastStore.getState().message ?? '';
+    useSettingsStore.getState().setDistanceUnit('yards');
+    expect(msg).toMatch(/150\s?m/);
+    expect(msg).not.toMatch(/150y/);
+    expect(useRoundStore.getState().userStatedYardage?.value).toBe(164);
+  });
+
+  it('re-review: "let\'s play 9" can match (normalisation turns the apostrophe into a space)', () => {
+    const v = code('hooks/useVoiceCaddie.ts');
+    expect(v).toMatch(/'let s play 9'/);
+    expect(v).toMatch(/\\blet s play 9\\b/);
+  });
+
+  it('re-review: a GPS stop that lands while a start is setting up releases the watch it armed', () => {
+    const g = code('services/gpsManager.ts');
+    expect(g).toMatch(/await startWatchInternal\(\);\s*if \(epoch !== stopEpoch\) \{/);
+    expect(g).toMatch(/export function stopGpsManager\(\): void \{\s*stopEpoch \+= 1;/);
+  });
+
   it('pattern insights never see quick-score placeholder shots', () => {
     const r = recapRoundFromRecord({
       id: 'r', courseName: 'X', courseId: null, scores: {}, shots: [{ id: 'qs-3-1', hole: 3 }, { id: 'real', hole: 3 }],

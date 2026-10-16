@@ -59,11 +59,12 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
   // 2026-08-25 — the one caddie access gate (services/featureAccess.mayTalkToCaddie). Inert while
   // subscriptions are off; when they are on, a blocked turn raises the paywall rather than going quiet.
   // A turn the player asked for raises the paywall; a proactive one (is_proactive) stays silent.
+  // 2026-10-16 (voice seam review) — an 'abort' listener never fires for a signal that is ALREADY
+  // aborted, so a shushed earbud turn's retry ran a full, billed brain call. Already cancelled: no call
+  // — checked before the plan gate, so a shushed turn cannot raise or record a paywall block either.
+  if (opts.signal?.aborted) return null;
   if (!mayTalkToCaddie({ userInitiated: !opts.overrides?.is_proactive })) return null;
   const { timeoutMs, skipTts, signal, ...extras } = opts;
-  // 2026-10-16 (voice seam review) — an 'abort' listener never fires for a signal that is ALREADY
-  // aborted, so a shushed earbud turn's retry ran a full, billed brain call. Already cancelled: no call.
-  if (signal?.aborted) return null;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

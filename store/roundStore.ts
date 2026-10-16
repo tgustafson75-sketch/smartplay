@@ -1141,13 +1141,20 @@ export { voiceScoreHole, voicePuttsHole } from './voiceScoringHole';
  * Every spoken-hole parser (voice intents, the brain's tool dispatch, the caddie tab) uses this.
  */
 export function roundHoleForSpoken(
-  s: { twiceAround?: boolean; currentHole: number }, spoken: number,
+  s: { twiceAround?: boolean; currentHole: number; scores?: Record<number, number> }, spoken: number,
 ): number {
-  if (s.twiceAround !== true || s.currentHole < 10 || spoken < 1 || spoken > 9) return spoken;
-  // 2026-10-16 (seam review) — only when the second-loop hole is where he is (or the next one): just
-  // onto the second loop at round hole 10, "five on nine" means the hole he just walked off (9), not
-  // 18, which he has not played yet.
-  return spoken + 9 <= s.currentHole + 1 ? spoken + 9 : spoken;
+  /**
+   * 2026-10-16 (seam review, re-reviewed) — measured from the round's FRONTIER: the furthest of the
+   * current hole and the highest scored hole. currentHole alone lags (GPS behind, no map, auto-advance
+   * off — a score for another hole never advances), and the lag sent "three on three" back onto the
+   * first loop's hole 3, overwriting it.
+   */
+  const scored = Object.keys(s.scores ?? {}).map(Number).filter((h) => (s.scores?.[h] ?? 0) > 0);
+  const frontier = Math.max(s.currentHole, ...scored, 0);
+  if (s.twiceAround !== true || frontier < 10 || spoken < 1 || spoken > 9) return spoken;
+  // Only when the second-loop hole is where he is (or the next one): just onto the second loop at round
+  // hole 10, "five on nine" means the hole he just walked off (9), not 18, which he has not played.
+  return spoken + 9 <= frontier + 1 ? spoken + 9 : spoken;
 }
 
 export const useRoundStore = create<RoundState>()(

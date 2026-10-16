@@ -58,6 +58,16 @@ describe('the brain call', () => {
     expect(f).not.toHaveBeenCalled();
   });
 
+  it('re-review: an aborted turn is refused before the plan gate (no paywall raised for a shushed turn)', async () => {
+    const gate = jest.fn(() => true);
+    jest.doMock('../../services/featureAccess', () => ({ mayTalkToCaddie: gate, takeCaddiePaywallBlock: () => null }));
+    const { askCaddie } = require('../../services/caddieBrain') as typeof import('../../services/caddieBrain');
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await askCaddie({ message: 'x', language: 'en', timeoutMs: 1000, signal: ctrl.signal });
+    expect(gate).not.toHaveBeenCalled();
+  });
+
   it('any answer from our server retires a cached "no internet" verdict', async () => {
     global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ text: 'x', error: 'boom', errorType: 'Error' }) })) as unknown as typeof fetch;
     const conn = require('../../store/connectivityStore') as typeof import('../../store/connectivityStore');

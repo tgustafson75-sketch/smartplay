@@ -594,13 +594,17 @@ function dispatchOne(a: AnyAction): void {
     case 'plan_shot': {
       const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
       if (typeof a.club === 'string' && a.club.trim()) round.setClub(a.club.trim());
-      if (typeof a.distance_yards === 'number' && a.distance_yards > 0 && a.distance_yards <= 700) {
-        const { spokenDistanceToYards } = require('../intents/stateYardageHandler') as typeof import('../intents/stateYardageHandler');
-        round.setUserStatedYardage(Math.round(spokenDistanceToYards(a.distance_yards, '')), 'user');
+      const { spokenDistanceToYards } = require('../intents/stateYardageHandler') as typeof import('../intents/stateYardageHandler');
+      const plannedYards = typeof a.distance_yards === 'number' && a.distance_yards > 0 ? Math.round(spokenDistanceToYards(a.distance_yards, '')) : null;
+      if (plannedYards != null && (a.distance_yards as number) <= 700) {
+        round.setUserStatedYardage(plannedYards, 'user');
       }
       const bits = [
         a.club?.trim() || null,
-        typeof a.distance_yards === 'number' && a.distance_yards > 0 ? `${Math.round(a.distance_yards)}y` : null,
+        plannedYards != null ? (() => {
+          const du = require('../distanceUnits') as typeof import('../distanceUnits');
+          return du.formatDistanceCompact(plannedYards, du.liveDistanceUnit());
+        })() : null,
         typeof a.shot_number === 'number' && a.shot_number > 0 ? `shot ${Math.round(a.shot_number)}` : null,
         a.target?.trim() ? `→ ${a.target.trim()}` : null,
       ].filter(Boolean).join(' · ');

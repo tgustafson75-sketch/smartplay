@@ -1164,7 +1164,12 @@ export function startGpsManager(): Promise<void> {
   return startInFlight;
 }
 
+/** Bumped by every stopGpsManager — a start that was awaiting permission/the watch when the round
+ *  ended must not arm a watch, timers and the background task for a round that no longer exists. */
+let stopEpoch = 0;
+
 async function startGpsManagerInner(): Promise<void> {
+  const epoch = stopEpoch;
   if (subscription && refreshOwnsWatch) {
     // A refresh's watch is running — adopt it rather than return with no manager around it.
     refreshOwnsWatch = false;
@@ -1174,6 +1179,13 @@ async function startGpsManagerInner(): Promise<void> {
     lastMotionAt = Date.now();
     lastTickAt = 0;
     await startWatchInternal();
+    if (epoch !== stopEpoch) {
+      // Stopped while the watch was being set up (re-review 10-16): release what it armed and stop here.
+      // (TS narrowed `subscription` to null at the early return above; startWatchInternal set it since.)
+      const armed = subscription as { remove: () => void } | null;
+      if (armed) { try { armed.remove(); } catch { /* already gone */ } subscription = null; }
+      return;
+    }
   }
   if (!evalTimer) evalTimer = setInterval(evaluateMode, 5_000);
   if (!appStateSub) {
@@ -1200,6 +1212,7 @@ async function startGpsManagerInner(): Promise<void> {
 
 /** Called by round-end. Drops the underlying subscription. */
 export function stopGpsManager(): void {
+  stopEpoch += 1;
   if (subscription) {
     try { subscription.remove(); } catch {}
     subscription = null;
