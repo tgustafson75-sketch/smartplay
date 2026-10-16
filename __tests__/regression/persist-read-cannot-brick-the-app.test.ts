@@ -31,13 +31,16 @@ describe('a bad persisted value can never brick the app', () => {
     await expect(store.getItem('round-store-v1')).resolves.toBeNull();
   });
 
-  it('and it DROPS the poison, so the next launch is clean rather than failing forever', async () => {
+  it('and it MOVES the poison aside, so the next launch is clean rather than failing forever', async () => {
     await AsyncStorage.setItem('round-store-v1', 'not json at all');
     const store = getPersistStorage();
     await store.getItem('round-store-v1');
     // The value that could not be read must not survive to poison every future launch — that is what
     // made this unrecoverable from inside the app.
     await expect(AsyncStorage.getItem('round-store-v1')).resolves.toBeNull();
+    // 2026-10-15 — same intent, but moved rather than deleted: the bytes are kept in quarantine
+    // (see read-failure-never-deletes-round-history.test.ts).
+    await expect(AsyncStorage.getItem('round-store-v1::quarantine')).resolves.toBe('not json at all');
   });
 
   it('a READ THROWING (not just bad json) also degrades instead of rejecting', async () => {

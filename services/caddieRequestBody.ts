@@ -746,8 +746,11 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       const stats = typeof r.getHoleStats === 'function' ? (r.getHoleStats() ?? []) : [];
       if (!stats.length) return null;
       const played = stats.length;
-      const putts = stats.reduce((a: number, h: { putts?: number }) => a + (h.putts ?? 0), 0);
-      const threePutts = stats.filter((h: { putts?: number }) => (h.putts ?? 0) >= 3).length;
+      // Putts only over the holes where he actually entered them — an unanswered hole is not a
+      // zero-putt hole (2026-10-15 review: "0 putts/hole" reached the brain).
+      const withPutts = stats.filter((h: { putts?: number | null }) => typeof h.putts === 'number') as { putts: number }[];
+      const putts = withPutts.reduce((a, h) => a + h.putts, 0);
+      const threePutts = withPutts.filter((h) => h.putts >= 3).length;
       const girs = stats.filter((h: { girHit?: boolean | null }) => h.girHit === true).length;
       const girKnown = stats.filter((h: { girHit?: boolean | null }) => h.girHit != null).length;
       const fairways = stats.filter((h: { fairwayHit?: boolean | null }) => h.fairwayHit === true).length;
@@ -756,13 +759,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return {
         holesPlayed: played,
         putts,
-        puttsPerHole: Math.round((putts / played) * 10) / 10,
+        puttsPerHole: withPutts.length > 0 ? Math.round((putts / withPutts.length) * 10) / 10 : null,
         threePutts,
         // Only reported when we actually know — a null GIR is not a missed green.
         gir: girKnown ? `${girs}/${girKnown}` : null,
         fairways: fwKnown ? `${fairways}/${fwKnown}` : null,
         penalties,
-        lastThreeHoles: stats.slice(-3).map((h: { hole: number; score: number; putts?: number }) =>
+        lastThreeHoles: stats.slice(-3).map((h: { hole: number; score: number; putts?: number | null }) =>
           ({ hole: h.hole, score: h.score, putts: h.putts ?? null })),
       };
     }, null),

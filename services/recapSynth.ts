@@ -23,7 +23,8 @@ export function synthesizeRecapFromRecord(record: RoundRecord): RoundRecap {
     .sort((a, b) => a - b);
   const hole_comparisons: HoleComparison[] = holes.map((hole) => ({
     hole_number: hole,
-    actual_shots: (record.shots ?? []).filter((s) => s.hole === hole),
+    // Quick-score placeholders (`qs-`) are a typed total spread into rows, not shots he hit.
+    actual_shots: (record.shots ?? []).filter((s) => s.hole === hole && !(typeof s.id === 'string' && s.id.startsWith('qs-'))),
     actual_score: typeof record.scores[hole] === 'number' ? record.scores[hole] : null,
     matched_shots: [],
     kevin_summary: null,

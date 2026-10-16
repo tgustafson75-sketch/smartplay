@@ -283,7 +283,13 @@ export interface ShotResult {
 export interface HoleStats {
   hole: number;
   score: number;
-  putts: number;
+  /**
+   * Null when the player never entered putts for the hole. 2026-10-15 (review) — this was `?? 0`, so
+   * every unanswered hole read as a ZERO-putt hole: the caddie was told "0 putts/hole", the three-putt
+   * warning could never fire, and endRound rolled the zeros into caddie memory permanently.
+   * A missing answer is not a zero (see a-putt-count-is-an-answer-not-a-default).
+   */
+  putts: number | null;
   penalties: number;
   /** Null until a real fairway signal exists — never derived from penalty-free tee shots. */
   fairwayHit: boolean | null;
@@ -308,7 +314,9 @@ export type RiskMode = 'safe' | 'normal' | 'aggressive';
  *  - shot:  removes the just-appended shot by id (via deleteShot).
  */
 export type LastMutation =
-  | { kind: 'score'; hole: number; prevScore: number; prevCurrentHole: number; at: number }
+  | { kind: 'score'; hole: number; prevScore: number; prevCurrentHole: number; at: number;
+      /** Set when the same utterance also stated putts (logScoreWithPutts): undo restores both. */
+      putts?: { prevPutts: number | undefined } }
   | { kind: 'putts'; hole: number; prevPutts: number | undefined; at: number }
   | { kind: 'shot'; shotId: string; hole: number; at: number };
 
@@ -928,6 +936,8 @@ interface RoundState {
   /** Per-hole stats for the CURRENT round — derived, never fabricated. Empty until holes are scored. */
   getHoleStats: () => HoleStats[];
   logPutts: (hole: number, putts: number) => void;
+  /** One utterance, two facts ("a five with two putts") — ONE undoable mutation for both. */
+  logScoreWithPutts: (hole: number, score: number, putts: number) => void;
   addPenalty: (hole: number) => void;
   /** Record-only: note (delta +1) or un-note (delta -1) a penalty on a hole. Never alters the score. */
   noteHolePenalty: (hole: number, delta: number) => void;
@@ -1017,12 +1027,34 @@ const capHistory = (h: RoundRecord[]): RoundRecord[] =>
 // (scores, putts, holePars, totals, scoreVsPar). In-memory history stays full for
 // the session; only the on-disk copy is compacted, so old rounds lose only their
 // shot-by-shot / photo detail after a reload — never their score or Index impact.
+//
+// 2026-10-15 (review) — A COUNT IS NOT A SIZE. Measured: 50 full rounds at a bogey golfer's ~54 logged
+// shots (≈0.9KB each with GPS + weather) serialise to ≈2.5MB — over the very limit this was written to
+// stay under, at the count it chose. So the full-detail window is now ALSO bounded by bytes: newest
+// rounds stay full while their running size fits FULL_DETAIL_BUDGET_CHARS, which leaves about half
+// the row for the live round, the course and everything else. Sizes are cached per record object
+// (records are replaced, not mutated) so persist writes don't re-stringify the history every time.
 const FULL_DETAIL_ROUNDS = 50;
-const compactHistoryForPersist = (rounds: RoundRecord[]): RoundRecord[] => {
-  if (rounds.length <= FULL_DETAIL_ROUNDS) return rounds;
-  const cutoff = rounds.length - FULL_DETAIL_ROUNDS;
+export const FULL_DETAIL_BUDGET_CHARS = 1_000_000;
+const roundSizeCache = new WeakMap<RoundRecord, number>();
+const roundSize = (r: RoundRecord): number => {
+  let n = roundSizeCache.get(r);
+  if (n == null) {
+    try { n = JSON.stringify(r).length; } catch { n = 0; }
+    roundSizeCache.set(r, n);
+  }
+  return n;
+};
+export const compactHistoryForPersist = (rounds: RoundRecord[]): RoundRecord[] => {
+  let cutoff = Math.max(0, rounds.length - FULL_DETAIL_ROUNDS);
+  let used = 0;
+  for (let i = rounds.length - 1; i >= cutoff; i--) {
+    used += roundSize(rounds[i]);
+    if (used > FULL_DETAIL_BUDGET_CHARS) { cutoff = i + 1; break; }
+  }
+  if (cutoff === 0) return rounds;
   return rounds.map((r, i) => {
-    if (i >= cutoff) return r; // most recent → keep full
+    if (i >= cutoff) return r; // most recent, within count AND byte budget → keep full
     const heavy = (r.shots?.length ?? 0) > 0 || r.round_photos != null || r.emotionalLog != null || r.health != null;
     if (!heavy) return r; // already light
     return { ...r, shots: [], round_photos: undefined, emotionalLog: undefined, health: undefined };
@@ -1044,11 +1076,29 @@ const compactHistoryForPersist = (rounds: RoundRecord[]): RoundRecord[] => {
  * tee shot to a man standing in the fairway; two answers to "which shot is he on" is how that comes
  * back. [[two-owners-is-the-root-cause]]
  */
+function isQsPlaceholder(sh: { id?: string }): boolean {
+  return typeof sh.id === 'string' && sh.id.startsWith('qs-');
+}
+
+/**
+ * 2026-10-15 (review) — quick-score placeholders must always match the score they stand for. The
+ * scorecard chip writes `score` placeholders then the score; every OTHER path (voice, ±, strip,
+ * cockpit, undo) changed the score and left the old placeholders, so recap and stroke counts read a
+ * hole the player had corrected. Called after any score change: placeholders whose count no longer
+ * equals the hole's score are dropped (a quick-score write keeps its own — the counts match).
+ */
+function stalePlaceholdersRemoved<T extends { id?: string; hole: number }>(shots: T[], hole: number, score: number): T[] | null {
+  const qs = shots.filter((x) => x.hole === hole && typeof x.id === 'string' && x.id.startsWith(`qs-${hole}-`));
+  if (qs.length === 0 || qs.length === score) return null;
+  return shots.filter((x) => !(typeof x.id === 'string' && x.id.startsWith(`qs-${hole}-`)));
+}
+
 export function strokesPlayedOnHole(
-  s: { shots: { hole: number; penalty_strokes?: number }[] }, hole: number | null,
+  s: { shots: { id?: string; hole: number; penalty_strokes?: number }[] }, hole: number | null,
 ): number {
   if (hole == null) return 0;
-  const shots = (s.shots ?? []).filter((sh) => sh.hole === hole);
+  // `qs-` quick-score placeholders are a typed total, not strokes played (2026-10-15 review).
+  const shots = (s.shots ?? []).filter((sh) => sh.hole === hole && !isQsPlaceholder(sh));
   return shots.length + shots.reduce((a, sh) => a + (sh.penalty_strokes ?? 0), 0);
 }
 
@@ -1076,6 +1126,20 @@ export function roundLastHole(s: { nineHoleMode: boolean; roundStartHole: number
 // store/voiceScoringHole (no asset imports, so it's unit-testable); re-exported here so the require()
 // call sites are unchanged. See voice-scoring-hole.test.ts.
 export { voiceScoreHole, voicePuttsHole } from './voiceScoringHole';
+
+/**
+ * 2026-10-15 (review) — THE ONE MAPPING from a hole the player SAYS to the round hole it means.
+ *
+ * On a twice-around round (a nine played twice, holes 10-18 = the second loop) the player reads the
+ * hole number off the sign: standing on round hole 12 he says "five on hole 3". Taken literally that
+ * overwrote the FRONT-nine hole 3. On the second loop a spoken 1-9 means that hole's second pass.
+ * Every spoken-hole parser (voice intents, the brain's tool dispatch, the caddie tab) uses this.
+ */
+export function roundHoleForSpoken(
+  s: { twiceAround?: boolean; currentHole: number }, spoken: number,
+): number {
+  return s.twiceAround === true && s.currentHole >= 10 && spoken >= 1 && spoken <= 9 ? spoken + 9 : spoken;
+}
 
 export const useRoundStore = create<RoundState>()(
   persist(
@@ -1530,7 +1594,13 @@ export const useRoundStore = create<RoundState>()(
               courseId,
               courseName: course,
               courseLocation,
-              holes,
+              /**
+               * 2026-10-15 (review) — a twice-around round holds the nine EXPANDED to 18. Prefetching
+               * that made fetchCourseContent save invented notes for holes 10-18 of a 9-hole course
+               * (caddie.tsx's runStartRound deliberately writes only ≤9 to the course book for the
+               * same reason). The course has nine holes; fetch nine.
+               */
+              holes: options.twiceAround === true ? holes.filter((h) => h.hole <= 9) : holes,
             });
           } catch (e) {
             console.log('[roundStore.startRound] prefetch dispatch failed (non-fatal):', e);
@@ -2305,7 +2375,7 @@ export const useRoundStore = create<RoundState>()(
           // feed REAL approachClub (last clubbed shot that isn't the tee shot) +
           // trouble (hole played 2+ over par) into memory instead of null/[].
           // Indexed once — getHoleStats() walks the whole round, and this map is read per hole below.
-          const holeStatsByHole: Record<number, { putts: number; girHit: boolean | null; fairwayHit: boolean | null }> =
+          const holeStatsByHole: Record<number, { putts: number | null; girHit: boolean | null; fairwayHit: boolean | null }> =
             Object.fromEntries((get().getHoleStats() ?? []).map(h => [h.hole, h]));
           const holesData = Object.entries(s.scores)
             .filter(([, sc]) => typeof sc === 'number' && sc > 0)
@@ -2929,8 +2999,17 @@ export const useRoundStore = create<RoundState>()(
         // source of truth) with courseHoles records as legacy fallback.
         const prevHole = state.currentHole;
         if (prevHole !== clamped) {
-          const green = greenForHole(prevHole);
-          if (green) get().closeHoleEndLocation(prevHole, green);
+          /**
+           * 2026-10-15 (review) — only a FINISHED hole is closed at its green: moving FORWARD off a
+           * hole that has a score. This ran on any hole change, so the data strip's ▶ preview (or a
+           * ◀ look back) pinned the current hole's last shot to the green while the player was still
+           * mid-hole, and his next shot then measured from the green (shotTracking reads
+           * prev.end_location). A hole scored LATER is closed by logScore instead.
+           */
+          if (clamped > prevHole && (state.scores[prevHole] ?? 0) > 0) {
+            const green = greenForHole(prevHole);
+            if (green) get().closeHoleEndLocation(prevHole, green);
+          }
           // Pace of play: the first arrival on a hole is its start. A revisit keeps the first stamp.
           // 2026-09-29 (review) — stepping BACK drops the stamps of holes beyond it that are only
           // moments old: those were a look ahead (the strip arrows), and a preview stamp would later
@@ -3121,12 +3200,12 @@ export const useRoundStore = create<RoundState>()(
           .sort((a, b) => a - b);
         return holes.map((hole) => {
           const score = s.scores[hole] ?? 0;
-          const putts = s.putts[hole] ?? 0;
+          const putts = s.putts[hole] ?? null;
           const par = s.courseHoles.find((h) => h.hole === hole)?.par;
           // Needs a real par AND a real putt count: with putts unrecorded, score - 0 <= par - 2
           // would call every bogey a green in regulation.
           const girHit =
-            typeof par === 'number' && par > 0 && s.putts[hole] != null
+            typeof par === 'number' && par > 0 && putts != null
               ? score - putts <= par - 2
               : null;
           return {
@@ -3210,6 +3289,16 @@ export const useRoundStore = create<RoundState>()(
           console.log(`[path6:scorecard] score_write REJECTED hole=${hole} (outside 1..${MAX_ROUND_HOLES})`);
           return;
         }
+        /**
+         * 2026-10-15 (review) — no round, no write. Every caller scores a LIVE round: the scorecard
+         * shows a completed round read-only (its ± are gated on isRoundActive), and endRound flushes
+         * settling entries BEFORE it ends the round. A score arriving after End Round (the par answer,
+         * a late brain tool call) otherwise landed in the idle store and on the next round's card.
+         */
+        if (!get().isRoundActive) {
+          console.log(`[path6:scorecard] score_write REJECTED hole=${hole} (no active round)`);
+          return;
+        }
         // A golf score is at least one stroke. Zero is not an erase anywhere in this app — nothing
         // calls logScore(hole, 0) — and a zero or negative would be silently dropped by every
         // downstream `score > 0` filter while still overwriting a real score the player entered.
@@ -3232,7 +3321,18 @@ export const useRoundStore = create<RoundState>()(
         // 2026-07-25 — capture the undo snapshot BEFORE the write + any auto-advance, so
         // "scratch that" restores both the prior score and the hole we were on.
         set({ lastMutation: { kind: 'score', hole, prevScore, prevCurrentHole: get().currentHole, at: Date.now() } });
-        set(s => ({ scores: { ...s.scores, [hole]: score } }));
+        set(s => {
+          const shots = stalePlaceholdersRemoved(s.shots, hole, score);
+          return shots ? { scores: { ...s.scores, [hole]: score }, shots } : { scores: { ...s.scores, [hole]: score } };
+        });
+        // A hole scored after the player has already moved on is finished: close its last shot at
+        // the green now, since setCurrentHole only closes a hole that was scored when he left it.
+        if (hole < get().currentHole) {
+          try {
+            const green = greenForHole(hole);
+            if (green) get().closeHoleEndLocation(hole, green);
+          } catch { /* non-fatal */ }
+        }
         /**
          * 2026-08-10 (Tim — "two pars and one bogey, and it would tell me to forget the last three").
          *
@@ -3344,11 +3444,35 @@ export const useRoundStore = create<RoundState>()(
           ].slice(-50),
         })),
 
-      logPutts: (hole, putts) =>
+      logPutts: (hole, putts) => {
+        // 2026-10-15 (review) — no round, no write. A putt count answered after End Round (the open
+        // "how many putts?" question, a late strip/cockpit tap) went into the idle store, where it
+        // reached no saved record and leaked into the next round's card. See logScore.
+        if (!get().isRoundActive) {
+          console.log(`[path6:scorecard] putts_write REJECTED hole=${hole} (no active round)`);
+          return;
+        }
         set(s => ({
           putts: { ...s.putts, [hole]: putts },
           lastMutation: { kind: 'putts', hole, prevPutts: s.putts[hole], at: Date.now() },
-        })),
+        }));
+      },
+
+      /**
+       * 2026-10-15 (review) — "I made a 5 with two putts" was two mutations, score then putts, so
+       * "scratch that" undid only the putts and left the 5 standing. One utterance → one undo.
+       */
+      logScoreWithPutts: (hole, score, putts) => {
+        const prevPutts = get().putts[hole];
+        const before = get().lastMutation;
+        get().logScore(hole, score);
+        const m = get().lastMutation;
+        if (m === before || m?.kind !== 'score' || m.hole !== hole) return; // score refused → write nothing
+        set(s => ({
+          putts: { ...s.putts, [hole]: putts },
+          lastMutation: { ...m, putts: { prevPutts } },
+        }));
+      },
 
       /**
        * 2026-09-11 — RECORD-ONLY. This writes nothing computeHoleScore reads.
@@ -3645,13 +3769,28 @@ export const useRoundStore = create<RoundState>()(
             const scores = { ...s.scores };
             if (snap.prevScore > 0) scores[snap.hole] = snap.prevScore;
             else delete scores[snap.hole];
-            return { scores, currentHole: snap.prevCurrentHole };
+            // Putts stated in the same utterance (logScoreWithPutts) are undone with the score.
+            let puttsPatch: { putts?: Record<number, number> } = {};
+            if (snap.putts) {
+              const putts = { ...s.putts };
+              if (typeof snap.putts.prevPutts === 'number') putts[snap.hole] = snap.putts.prevPutts;
+              else delete putts[snap.hole];
+              puttsPatch = { putts };
+            }
+            // Placeholders written for the undone score go with it.
+            const shots = stalePlaceholdersRemoved(s.shots, snap.hole, snap.prevScore > 0 ? snap.prevScore : 0);
+            return { scores, ...puttsPatch, ...(shots ? { shots } : {}), currentHole: snap.prevCurrentHole };
           });
           // Keep the ghost match in step with the reverted score.
           try {
             const ghostMod = require('./ghostStore');
-            if (ghostMod.useGhostStore.getState().ghostRecord) {
-              ghostMod.useGhostStore.getState().updateHole(snap.hole, snap.prevScore > 0 ? snap.prevScore : 0);
+            const g = ghostMod.useGhostStore.getState();
+            if (g.ghostRecord) {
+              if (snap.prevScore > 0) g.updateHole(snap.hole, snap.prevScore);
+              // 2026-10-15 (review) — an undone FIRST score leaves the hole unplayed. updateHole(hole, 0)
+              // recorded a 0 against the ghost ("4 better than last time"); replaying the remaining
+              // scores drops that hole from the match instead.
+              else g.rehydrateProgress(g.ghostRecord, get().scores);
             }
           } catch { /* non-fatal */ }
           return {

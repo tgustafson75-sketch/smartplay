@@ -147,8 +147,10 @@ export function getCaddieContext(input: {
       const patternReady = hm != null && hm.played >= MIN_HOLE_PLAYS_FOR_GUIDANCE;
       // Learned putting/greens ride along ONLY once the same honesty floor is met — a three-putt rate
       // off a single visit is noise asserted as fact.
-      const puttsAvg = patternReady ? hm!.puttsAvg ?? null : null;
-      const threePuttRate = patternReady ? hm!.threePuttRate ?? null : null;
+      // …and the putting floor counts rounds that REPORTED putts, not visits (2026-10-15).
+      const puttsReady = patternReady && (hm!.puttsSamples ?? hm!.played) >= MIN_HOLE_PLAYS_FOR_GUIDANCE;
+      const puttsAvg = puttsReady ? hm!.puttsAvg ?? null : null;
+      const threePuttRate = puttsReady ? hm!.threePuttRate ?? null : null;
       const girRate = patternReady ? hm!.girRate ?? null : null;
       course = {
         name: cm.name,

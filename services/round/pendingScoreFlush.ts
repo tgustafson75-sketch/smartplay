@@ -8,15 +8,22 @@
  * caller: button, voice, auto-end) flushes before it snapshots anything. Zero deps, so the store can
  * import it without a cycle.
  */
-let flushFn: (() => void) | null = null;
+/**
+ * 2026-10-15 (review) — SEVERAL holders, not one. The caddie strip and the cockpit stepper both hold
+ * a settling score; with a single slot the later registration silently replaced the earlier one, so
+ * only one surface's pending entry could ever be flushed by End Round.
+ */
+const flushFns = new Set<() => void>();
 
-/** The holder registers its flush; the returned function unregisters it (only if still current). */
+/** The holder registers its flush; the returned function unregisters it. */
 export function registerPendingScoreFlush(fn: () => void): () => void {
-  flushFn = fn;
-  return () => { if (flushFn === fn) flushFn = null; };
+  flushFns.add(fn);
+  return () => { flushFns.delete(fn); };
 }
 
-/** Write any pending score entry now. Safe to call with nothing pending. */
+/** Write every pending score entry now. Safe to call with nothing pending. */
 export function flushPendingScores(): void {
-  try { flushFn?.(); } catch { /* a flush must never block ending the round */ }
+  for (const fn of Array.from(flushFns)) {
+    try { fn(); } catch { /* a flush must never block ending the round */ }
+  }
 }

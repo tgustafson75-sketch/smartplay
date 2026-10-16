@@ -152,7 +152,10 @@ describe('what was inert is now wired, not deleted', () => {
   it('GIR returns null rather than false when par or putts are unknown', () => {
     // Otherwise a course with no card silently reports every hole as a miss, and an unrecorded
     // putt count would call every bogey a green in regulation.
-    expect(rs).toContain("typeof par === 'number' && par > 0 && s.putts[hole] != null");
+    // 2026-10-15 — `putts` is now `s.putts[hole] ?? null` (an unentered count is null, not 0), so the
+    // guard reads the local. Same intent: no GIR without a real par AND a real putt count.
+    expect(rs).toContain("const putts = s.putts[hole] ?? null;");
+    expect(rs).toContain("typeof par === 'number' && par > 0 && putts != null");
   });
 
   it('fairwayHit stays null — we still have no honest fairway signal', () => {

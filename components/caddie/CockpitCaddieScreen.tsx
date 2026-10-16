@@ -24,14 +24,15 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView, Text, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, Pressable, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, router as globalRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useRoundStore, roundFirstHole, roundLastHole, type ShotResult } from '../../store/roundStore';
+import { useRoundStore, roundFirstHole, roundLastHole, voicePuttsHole, type ShotResult } from '../../store/roundStore';
+import { registerPendingScoreFlush } from '../../services/round/pendingScoreFlush';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
@@ -135,6 +136,7 @@ export default function CockpitCaddieScreen({
     nineHoleMode,
     roundStartHole,
     activeCourseId,
+    lastMutation,
   } = useRoundStore(
     useShallow((s) => ({
       isRoundActive: s.isRoundActive,
@@ -148,6 +150,7 @@ export default function CockpitCaddieScreen({
       nineHoleMode: s.nineHoleMode,
       roundStartHole: s.roundStartHole,
       activeCourseId: s.activeCourseId,
+      lastMutation: s.lastMutation,
     })),
   );
   // 2026-07-24 (full-app audit) — 9-hole-aware total, matching roundStore + caddie.tsx. courseHoles.length
@@ -257,7 +260,6 @@ export default function CockpitCaddieScreen({
       : 0;
   const holeShots: number | undefined =
     scores[currentHole] ?? (runningStrokeCount > 0 ? runningStrokeCount : undefined);
-  const holePutts = putts[currentHole];
 
   const handleStepperHole = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
@@ -286,6 +288,8 @@ export default function CockpitCaddieScreen({
   const pendingHoleRef = useRef<number | null>(null);
   const pendingParRef = useRef<number>(4);
   const pendingCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The hole the cockpit last committed a score for — putts follow it (see puttsTargetHole). */
+  const [lastScored, setLastScored] = useState<{ hole: number; at: number } | null>(null);
   const commitPendingShots = useCallback(() => {
     const val = pendingShotsRef.current;
     const hole = pendingHoleRef.current;
@@ -319,6 +323,7 @@ export default function CockpitCaddieScreen({
      * [[two-owners-is-the-root-cause]] [[no-half-fixes-enforce-every-surface]]
      */
     logScore(hole, val);
+    setLastScored({ hole, at: Date.now() });
   }, [logScore]);
   const handleStepperShots = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
@@ -343,9 +348,47 @@ export default function CockpitCaddieScreen({
     commitPendingShots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /**
+   * 2026-10-15 (review) — a score inside its 1.6s settle window was DROPPED on End Round (the commit
+   * then saw the round inactive) and LOST if the OS killed the app (no background commit). The data
+   * strip already handled both; the cockpit now does the same: endRound flushes every registered
+   * holder before it snapshots, and going to the background commits.
+   */
+  const flushPendingRef = useRef<() => void>(() => undefined);
+  flushPendingRef.current = () => {
+    if (pendingCommitTimerRef.current) { clearTimeout(pendingCommitTimerRef.current); pendingCommitTimerRef.current = null; }
+    commitPendingShots();
+  };
+  useEffect(() => {
+    const leave = registerPendingScoreFlush(() => flushPendingRef.current());
+    // 'background' only, as on the strip: iOS goes 'inactive' for Control Center or a permission sheet.
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'background') flushPendingRef.current(); });
+    return () => { sub.remove(); leave(); };
+  }, []);
+  /**
+   * 2026-10-15 (review) — PUTTS GO TO THE HOLE BEING SCORED. They were written to currentHole at tap
+   * time, while the score commits 1.6s later and auto-advances — so putts tapped after a pause landed
+   * on the NEXT hole. The target is the pending score's hole, else the hole just scored (the same
+   * rule voice putts use: voicePuttsHole), else the current hole. The stepper shows that hole's putts.
+   */
+  const resolvePuttsHole = (cur: number, mutation: typeof lastMutation): number => {
+    if (pendingHoleRef.current != null) return pendingHoleRef.current;
+    // The cockpit's own last score, held for the same window and adjacency voicePuttsHole uses, so a
+    // putts tap does not itself become "the last mutation" and flip the second tap to the next hole.
+    if (lastScored && Date.now() - lastScored.at < 120_000
+        && (lastScored.hole === cur || lastScored.hole === cur - 1)) return lastScored.hole;
+    return voicePuttsHole({ lastMutation: mutation, currentHole: cur });
+  };
+  const puttsTargetHole = (): number => {
+    const st = useRoundStore.getState();
+    return resolvePuttsHole(st.currentHole, st.lastMutation);
+  };
+  const puttsHole = resolvePuttsHole(currentHole, lastMutation);
+  const holePutts = putts[puttsHole];
   const handleStepperPutts = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
-    logPutts(currentHole, next);
+    if (!useRoundStore.getState().isRoundActive) return;
+    logPutts(puttsTargetHole(), next);
   };
 
   // ── Manual shot logging (v3 ShotResultRow parity) ──────────────────

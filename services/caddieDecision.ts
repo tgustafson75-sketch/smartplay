@@ -305,7 +305,9 @@ function composeProfile(): PlayProfile | null {
   const stats = typeof r.getHoleStats === 'function' ? (r.getHoleStats() ?? []) : [];
   const played = stats.length;
   const penalties = stats.reduce((a: number, h: { penalties?: number }) => a + (h.penalties ?? 0), 0);
-  const putts = stats.reduce((a: number, h: { putts?: number }) => a + (h.putts ?? 0), 0);
+  // Over the holes with an entered putt count only — an unanswered hole is not a zero-putt hole.
+  const puttHoles = stats.filter((h: { putts?: number | null }) => typeof h.putts === 'number') as { putts: number }[];
+  const putts = puttHoles.reduce((a, h) => a + h.putts, 0);
   /**
    * 2026-09-11 — THE PAR AND THE HOLE COUNT MUST BOTH COME FROM THE HOLES BEING PLAYED.
    *
@@ -392,7 +394,7 @@ function composeProfile(): PlayProfile | null {
     puttsPerRound: safe(() => {
       const { livePuttingRead } = require('./puttingRead') as typeof import('./puttingRead');
       return livePuttingRead().puttsPerRound;
-    }, played > 0 ? (putts / played) * 18 : null),
+    }, puttHoles.length > 0 ? (putts / puttHoles.length) * 18 : null),
     roundsPlayed: rounds,
   });
 }

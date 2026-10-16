@@ -51,6 +51,22 @@ function reportPersistFailure(key: string, err: unknown): void {
   } catch { /* logging is best-effort */ }
 }
 
+/** Where an unparseable persisted value is moved instead of being deleted. */
+export const quarantineKey = (name: string): string => `${name}::quarantine`;
+
+function reportPersistReadFailure(key: string, kind: 'read_threw' | 'unparseable', err: unknown): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  console.log('[persist] getItem FAILED for', key, `(${kind}) — starting this store EMPTY, value kept:`, msg);
+  if (key === ISSUE_LOG_KEY) return; // the log's own hydration must not call back into the log
+  try {
+    require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('persist_read_failed', {
+      store_key: key,
+      kind,
+      error: msg.slice(0, 200),
+    }, 'app_error');
+  } catch { /* logging is best-effort */ }
+}
+
 const guardedStorage: StateStorage = {
   /**
    * 2026-08-14 (Tim's round — app opened to a white screen, no splash greeting, and taps landed but
@@ -70,9 +86,30 @@ const guardedStorage: StateStorage = {
    * one store's history is a bad day; an app that will not open is a brick. Returning null makes
    * zustand fall back to initial state and re-persist cleanly on the next write.
    */
+  /**
+   * 2026-10-15 (review) — NEVER DELETE ON A READ FAILURE. This used to removeItem() whatever it could
+   * not read, and for 'round-store-v1' that is every past round plus the live one. The realistic
+   * trigger was not corruption: Android's ~2MB per-row CursorWindow read limit (AsyncStorage 2.2.0
+   * has no window-size setting). A row that grew past it threw on read and was then erased — a
+   * size problem turned into total history loss.
+   *
+   *   - Unparseable but READABLE value: moved aside to `<key>::quarantine` (one slot per key) and
+   *     only then removed, so the next launch is clean and the bytes are still recoverable.
+   *   - The READ ITSELF throws: nothing is touched — the value stays on disk for a fix to recover.
+   *     (zustand will write fresh state over it on the next save; that cannot be prevented from here
+   *     without stopping the store persisting at all — the row-size budget in roundStore is the
+   *     defence for that case.)
+   * Both paths return null so the app still starts, and both leave a breadcrumb.
+   */
   getItem: async (name) => {
+    let raw: string | null;
     try {
-      const raw = await (AsyncStorage as unknown as StateStorage).getItem(name);
+      raw = await (AsyncStorage as unknown as StateStorage).getItem(name) as string | null;
+    } catch (err) {
+      reportPersistReadFailure(name, 'read_threw', err);
+      return null;
+    }
+    try {
       if (raw == null) return null;
       /**
        * VALIDATE THE JSON HERE, not downstream. zustand's createJSONStorage runs JSON.parse on
@@ -86,12 +123,12 @@ const guardedStorage: StateStorage = {
       JSON.parse(raw);
       return raw;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.log('[persist] getItem FAILED for', name, '— starting this store EMPTY:', msg);
+      reportPersistReadFailure(name, 'unparseable', err);
       try {
-        // Best-effort: drop the unreadable value so it cannot poison every future launch.
+        // Move aside, never just drop: remove the original only once the copy is safely written.
+        await (AsyncStorage as unknown as StateStorage).setItem(quarantineKey(name), raw as string);
         await (AsyncStorage as unknown as StateStorage).removeItem(name);
-      } catch { /* nothing more we can do; null below still keeps the app alive */ }
+      } catch { /* copy failed → leave the original where it is; null below still keeps the app alive */ }
       return null;
     }
   },

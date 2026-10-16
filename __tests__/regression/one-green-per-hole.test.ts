@@ -29,7 +29,9 @@ const holes = (middle: { lat: number; lng: number }) => ([
 const seedWithGreen = (middle: { lat: number; lng: number }) => {
   useRoundStore.setState({
     isRoundActive: true, activeCourseId: 'test-course', currentHole: 1,
-    roundStartHole: 1, nineHoleMode: false, scores: {},
+    // 2026-10-15 — hole 1 is SCORED: only a finished hole is closed at its green on advance
+    // (see a-preview-never-closes-the-hole.test.ts). Same intent — the closer uses the one green.
+    roundStartHole: 1, nineHoleMode: false, scores: { 1: 4 },
     courseHoles: holes(middle) as never,
     shots: [{ id: 's1', hole: 1, shot_in_hole_index: 1, start_location: { lat: 37.71, lng: -122.51 } }] as never,
   } as never);

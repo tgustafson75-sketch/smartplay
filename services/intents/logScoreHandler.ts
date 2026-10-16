@@ -67,8 +67,10 @@ export const logScoreHandler: IntentHandler = {
     // 2026-08-09 (on-course audit C2) — a bare score (no hole spoken) targets the lowest UNSCORED hole
     // at/behind currentHole, NOT the nav currentHole (which GPS/first-score auto-advance move on their
     // own). An explicit spoken hole still wins.
-    const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
-    const hole = parseHole(params.hole_number, voiceScoreHole(round));
+    const { voiceScoreHole, roundHoleForSpoken } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+    const spokenHole = parseHole(params.hole_number, 0);
+    // A spoken hole is the number on the SIGN — on a twice-around second loop it means 10-18.
+    const hole = spokenHole > 0 ? roundHoleForSpoken(round, spokenHole) : voiceScoreHole(round);
     const par = holePar(hole);
     // Numeric parsing first (params.strokes is the classifier's primary
     // emit; raw_text is the verbatim utterance fallback). If neither
@@ -122,7 +124,13 @@ export const logScoreHandler: IntentHandler = {
     // Snapshot whether the hole was already scored (>0) BEFORE logScore
     // overwrites it; skip updateMentalState on a re-log/edit.
     const alreadyScored = (round.scores[hole] ?? 0) > 0;
-    round.logScore(hole, strokes);
+    // If the utterance also stated putts, score + putts are written as ONE undoable mutation, so
+    // "scratch that" takes back both (PATH 6: undo restores the score and the hole).
+    const inlinePutts = typeof params.num_putts === 'number' && params.num_putts >= 0 && params.num_putts <= 6
+      ? params.num_putts
+      : parsePutts(intent.raw_text);
+    if (inlinePutts !== null) round.logScoreWithPutts(hole, strokes, inlinePutts);
+    else round.logScore(hole, strokes);
 // 2026-08-11 (adversarial audit) — REMOVED. roundStore.logScore now DERIVES the mental state from
 // the scorecard at the single seam every score path funnels through. This call ran immediately
 // AFTER logScore and re-accumulated on top of it, so the old per-surface tally won and the derived
@@ -136,15 +144,11 @@ export const logScoreHandler: IntentHandler = {
       ? `${holePart} — ${strokes} (${label}).`
       : `${holePart} — ${strokes}.`;
 
-    // If the classifier already extracted num_putts, log them now and skip the follow-up.
+    // If the classifier already extracted num_putts, they were written with the score above — skip the follow-up.
     // 2026-08-10 — also read the putt count out of the UTTERANCE, not just the classifier param.
     // "I got a par with two putts" states both facts; discarding the second and then asking
     // "how many putts?" is what made this exchange feel robotic.
-    const inlinePutts = typeof params.num_putts === 'number' && params.num_putts >= 0 && params.num_putts <= 6
-      ? params.num_putts
-      : parsePutts(intent.raw_text);
     if (inlinePutts !== null) {
-      round.logPutts(hole, inlinePutts);
       track('log_putts_voice', { hole, source: 'inline' });
       return {
         success: true,

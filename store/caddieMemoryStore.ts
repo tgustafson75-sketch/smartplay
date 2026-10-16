@@ -66,6 +66,12 @@ export interface HoleMemory {
    */
   puttsAvg: number | null;
   threePuttRate: number | null;
+  /**
+   * 2026-10-15 — how many rounds actually REPORTED putts on this hole. `played` counts every visit,
+   * and averaging putts over visits that never reported them biases the mean toward the first value.
+   * Optional: absent on memory persisted before it, where it is derived (see recordRoundEnd).
+   */
+  puttsSamples?: number;
   girRate: number | null;
   fairwayRate: number | null;
   lastPlayed: number;
@@ -501,8 +507,16 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
               return Math.round(((prev * ph.played + value) / played) * 100) / 100;
             };
             const hasPutts = typeof h.putts === 'number' && h.putts >= 0;
-            const puttsAvg = roll(ph.puttsAvg, hasPutts ? (h.putts as number) : null);
-            const threePuttRate = roll(ph.threePuttRate, hasPutts ? ((h.putts as number) >= 3 ? 1 : 0) : null);
+            // Putts average over the rounds that REPORTED putts (puttsSamples), not over every visit.
+            const prevPuttsN = ph.puttsSamples ?? (ph.puttsAvg == null ? 0 : ph.played);
+            const rollPutts = (prev: number | null, value: number | null): number | null => {
+              if (value == null) return prev;
+              if (prev == null || prevPuttsN === 0) return Math.round(value * 100) / 100;
+              return Math.round(((prev * prevPuttsN + value) / (prevPuttsN + 1)) * 100) / 100;
+            };
+            const puttsAvg = rollPutts(ph.puttsAvg, hasPutts ? (h.putts as number) : null);
+            const threePuttRate = rollPutts(ph.threePuttRate, hasPutts ? ((h.putts as number) >= 3 ? 1 : 0) : null);
+            const puttsSamples = prevPuttsN + (hasPutts ? 1 : 0);
             const girRate = roll(ph.girRate, h.girHit == null ? null : (h.girHit ? 1 : 0));
             const fairwayRate = roll(ph.fairwayRate, h.fairwayHit == null ? null : (h.fairwayHit ? 1 : 0));
             holesMap[h.hole] = {
@@ -513,7 +527,7 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
               played, scoringAvg, trouble,
               // AFTER the spread — placed before it, `...ph` silently overwrote every one of them
               // with the previous round's value and nothing would ever have been learned.
-              puttsAvg, threePuttRate, girRate, fairwayRate,
+              puttsAvg, threePuttRate, puttsSamples, girRate, fairwayRate,
               lastPlayed: nowMs,
             };
           }
@@ -625,17 +639,40 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
       name: 'caddie-memory-v1',
       // 2026-06-14 — v2 adds the static `courseBook`. Migrate preserves all learned
       // player memory and seeds an empty book; never throws, never wipes.
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => getPersistStorage()),
       // `players` (learned, per-player) + `courseBook` (static, shared) both persist.
       partialize: (s) => ({ players: s.players, courseBook: s.courseBook }),
-      migrate: (persisted) => {
+      migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<{ players: Record<string, PlayerMemory>; courseBook: Record<string, CourseBookEntry> }>;
-        return { players: p.players ?? {}, courseBook: p.courseBook ?? {} };
+        const players = p.players ?? {};
+        if (version < 3) resetPollutedPuttAggregates(players);
+        return { players, courseBook: p.courseBook ?? {} };
       },
     },
   ),
 );
+
+/**
+ * 2026-10-15 (review) — v2 → v3. Until today roundStore.getHoleStats reported an UNENTERED putt count
+ * as 0, and recordRoundEnd rolled those zeros into every hole's puttsAvg / threePuttRate. The
+ * aggregates do not record which rounds contributed a real answer and which a fake zero, so they
+ * cannot be repaired exactly — and a wrong "you average 0.7 putts here" is worse than none. Reset
+ * just the putting aggregates; scoring, clubs, lines, GIR and fairway memory are untouched, and putts
+ * relearn from the next round that actually reports them.
+ */
+export function resetPollutedPuttAggregates(players: Record<string, PlayerMemory>): void {
+  for (const pl of Object.values(players)) {
+    for (const c of Object.values(pl?.courses ?? {})) {
+      for (const h of Object.values(c?.holes ?? {})) {
+        if (!h) continue;
+        h.puttsAvg = null;
+        h.threePuttRate = null;
+        h.puttsSamples = 0;
+      }
+    }
+  }
+}
 
 /** Owner-logs / telemetry: a compact snapshot of what's been learned. */
 export function caddieMemorySnapshot(playerId?: string): {

@@ -7155,10 +7155,12 @@ check('Course book: per-hole knowledge anchored into CNS (offline + brain + offl
       /courseBook: Record<string, CourseBookEntry>/.test(store) &&
       /saveCourseBook: \(input:/.test(store) &&
       /getStaticHole: \(courseId: string, hole: number\) => StaticHoleKnowledge \| null/.test(store) &&
-      // persisted (v2 migrate preserves players + seeds book)
-      /version: 2/.test(store) &&
+      // persisted (v2 migrate preserves players + seeds book). 2026-10-15 — v3 adds the one-time reset
+      // of putt aggregates polluted by unentered-putts-as-zero; the book is still preserved by migrate.
+      /version: 3/.test(store) &&
       /partialize: \(s\) => \(\{ players: s\.players, courseBook: s\.courseBook \}\)/.test(store) &&
-      /players: p\.players \?\? \{\}, courseBook: p\.courseBook \?\? \{\}/.test(store);
+      /const players = p\.players \?\? \{\};/.test(store) &&
+      /return \{ players, courseBook: p\.courseBook \?\? \{\} \};/.test(store);
     // writer: course-content anchors on BOTH fresh fetch and persisted-cache hit
     const writerOk =
       /function anchorCourseBook\(/.test(content) &&
@@ -10385,7 +10387,9 @@ check('Voice scoring targets the reported hole (voiceScoreHole/voicePuttsHole), 
     return (
       /export function voiceScoreHole/.test(leaf) && /export function voicePuttsHole/.test(leaf) &&
       /export \{ voiceScoreHole, voicePuttsHole \} from '.\/voiceScoringHole'/.test(rs) &&
-      /parseHole\(params\.hole_number, voiceScoreHole\(round\)\)/.test(lsh) &&
+      // 2026-10-15 — a SPOKEN hole now goes through roundHoleForSpoken (twice-around second loop);
+      // a bare score still resolves through voiceScoreHole. Same lock: never a raw currentHole default.
+      /spokenHole > 0 \? roundHoleForSpoken\(round, spokenHole\) : voiceScoreHole\(round\)/.test(lsh) &&
       /voicePuttsHole\(round\)/.test(lph) &&
       /voiceScoreHole\(round\)/.test(disp) &&
       /voiceScoreHole\(useRoundStore\.getState\(\)\)/.test(cad)

@@ -463,7 +463,7 @@ function dispatchOne(a: AnyAction): void {
       // after endRound would flash a transient score on the scorecard between rounds (never persisted).
       if (!round.isRoundActive) break;
       // 2026-08-09 (on-course audit C2) — bare score → lowest unscored hole at/behind currentHole.
-      const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+      const { voiceScoreHole, roundHoleForSpoken } = require('../../store/roundStore') as typeof import('../../store/roundStore');
       /**
        * 2026-09-11 (full-app audit) — `a.hole > 0` WAS THE WHOLE CHECK.
        *
@@ -480,7 +480,8 @@ function dispatchOne(a: AnyAction): void {
        */
       const askedHole = typeof a.hole === 'number' && Number.isFinite(a.hole) ? Math.round(a.hole) : null;
       if (askedHole != null && (askedHole < 1 || askedHole > MAX_HOLES)) break;
-      const targetHole = askedHole ?? voiceScoreHole(round);
+      // A spoken hole is the number on the sign — on a twice-around second loop it means 10-18.
+      const targetHole = askedHole != null ? roundHoleForSpoken(round, askedHole) : voiceScoreHole(round);
       const rounded = Math.round(a.score);
       if (rounded < 1) break; // not a golf score
 
