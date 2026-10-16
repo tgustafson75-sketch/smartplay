@@ -193,7 +193,7 @@ Most cards are conditional (a fresh install shows far fewer).
 ## 13. SETTINGS (`/settings`) — every option
 Reach: dashboard gear, Tools → Settings. Search bar filters + expands. Sections: Profile · Caddie · Round Experience · Voice & Conversation · Language & Display · Devices & Health · Developer (dev only) · Data & Privacy · Help · Owner Tools (owner only) · Reset.
 
-**Key options (default):** Active Caddie persona (Kevin) · per-pillar caddie assignments · Response Style (Normal) · Greet on launch (ON) · Caddie presence/trust (Companion) · Skip briefing (off) · Proactive caddie (on) · **Riding in a cart (ON)** · **Local Mode** (off — battery/weak-signal, ask-only) · **Active Listening** (off) · Cecily Mode (off) · Continuous Conversation (off) · Voice on Phone Speaker (on) · Captions (on) · **Language** (English — *spoken only, UI stays English*) · Theme (System) · Cast (off) · High Contrast (off) · Screenshot mode (off, not persisted) · Large Text (off) · **Simple briefing** (on) · per-persona intensity · **Distance Unit (Yards)**.
+**Key options (default):** Active Caddie persona (Kevin) · per-pillar caddie assignments · Response Style (Normal) · Greet on launch (ON) · Caddie presence/trust (Companion) · Skip briefing (off) · Proactive caddie (on) · **Riding in a cart (ON)** · ~~Local Mode~~ (removed 09-13; offline is now decided per turn by the internet check, not a setting — see §offline below) · **Active Listening** (off) · Cecily Mode (off) · Continuous Conversation (off) · Voice on Phone Speaker (on) · Captions (on) · **Language** (English — *spoken only, UI stays English*) · Theme (System) · Cast (off) · High Contrast (off) · Screenshot mode (off, not persisted) · Large Text (off) · **Simple briefing** (on) · per-persona intensity · **Distance Unit (Yards)**.
 
 **Devices & Health:** Samsung Watch (**DORMANT**), Health Connect (Android), Earbud tap (**dormant — no native listener**), Ray-Ban temple tap (**BLOCKED**).
 
@@ -228,3 +228,14 @@ Reach: dashboard gear, Tools → Settings. Search bar filters + expands. Section
 - **Language** translates voice, not UI text.
 - **Places booking / Jukebox** need their respective API keys enabled server-side.
 - **Mark Location + debug screens** are owner-gated.
+
+---
+
+## Offline behaviour (2026-10-15)
+No setting. When a turn fails, `services/caddieFailureReply` decides what Kevin says, from `services/reachability` (Apple + Google checks):
+- **Internet works** (our failure) → "That one got away from me — say it again?"
+- **Slow** → "I'm having trouble connecting — try that again."
+- **Proven offline** → a question the phone can answer from real data is answered (yardage, club, score, KB); otherwise on a round the shot read, off a round "I can't get online right now — your yardages and score still work."
+- Banner "No internet — yardages & scoring still work" appears only on proven offline.
+- **MIN VERIFY:** airplane mode mid-round → ask "how far?" → a yardage (spoken in Kevin's voice only if it is a recorded line, else caption). Ask on Wi-Fi with the server down → "That one got away from me". Issue log shows `caddie_failure_reply` + `reachability` diag rows.
+
