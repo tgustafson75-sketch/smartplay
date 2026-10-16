@@ -113,12 +113,14 @@ describe('where the ring goes', () => {
 describe('the swing screen stops, rings and names it — the skeleton stays opt-in', () => {
   const sd = code('app/swinglab/swing/[swing_id].tsx');
   it('the playback callback stops on the fault and seeks back to exactly it, only when the setting is on', () => {
-    expect(sd).toMatch(/pauseOnIssueRef\.current && !issuePausedRef\.current/);
+    // 2026-10-16 — the crossing rule moved to faultSpotlight.faultPauseTick (tested by behaviour in
+    // the-fault-review-shows-only-on-the-fault); the screen feeds it the setting and the latch.
+    expect(sd).toMatch(/enabled: pauseOnIssueRef\.current, latched: issuePausedRef\.current/);
     // zero tolerance: iOS otherwise snaps to a keyframe up to a second off the fault
     expect(sd).toMatch(/await videoRef\.current\?\.pauseAsync\(\);\s*await videoRef\.current\?\.setPositionAsync\(Math\.round\(f \* 1000\), \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\);/);
     // a seek that jumps over the fault is not a crossing; our own seek back never clears the latch
-    expect(sd).toMatch(/posSec - lastRawPosRef\.current < 0\.45/);
-    expect(sd).toMatch(/if \(posSec < f - 0\.25 && Date\.now\(\) > selfSeekUntilRef\.current\)/);
+    expect(sd).toMatch(/lastPosSec: lastRawPosRef\.current/);
+    expect(sd).toMatch(/selfSeeking: Date\.now\(\) <= selfSeekUntilRef\.current/);
     // the overlay draws at the fault frame, not the overshoot tick
     expect(sd).toMatch(/playbackEmitRef\.current\.pos = f;\s*playbackEmitRef\.current\.lastPosAt = Date\.now\(\);\s*setPosition\(f\);\s*setAtIssue\(true\);/);
     // every scrub lands on its frame
@@ -152,9 +154,9 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
     expect(sm).toMatch(/const sh = cageSession\?\.shots\[selectedSwing\];/);
   });
   it('the status handler stops on it (declarative pause too) only with the setting on', () => {
-    expect(sm).toMatch(/pauseOnIssueRef\.current && !reviewIssuePausedRef\.current/);
+    expect(sm).toMatch(/enabled: pauseOnIssueRef\.current, latched: reviewIssuePausedRef\.current/);
     expect(sm).toMatch(/reviewIssuePausedRef\.current = true;\s*reviewSelfSeekUntilRef\.current = Date\.now\(\) \+ 800;\s*setVideoPaused\(true\);/);
-    expect(sm).toMatch(/posSec - reviewLastPosRef\.current < 0\.45/);
+    expect(sm).toMatch(/lastPosSec: reviewLastPosRef\.current, playing: !videoPaused/);
     expect(sm).toMatch(/setPositionAsync\(Math\.round\(f \* 1000\), \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\)/);
   });
   it('a placed (estimated) pose label is not a timing anchor; the read frame only for the same fault', () => {

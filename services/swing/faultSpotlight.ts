@@ -126,6 +126,53 @@ export function faultMomentFor(args: {
 }
 
 /**
+ * 2026-10-16 — THE FAULT PAUSE, ONE RULE FOR BOTH REVIEW SCREENS (the swing library and SmartMotion's
+ * review each copied the same crossing logic, and both kept the ring up away from the fault).
+ *
+ * What a playback tick means for the fault stop. `latched` is the one-stop-per-pass latch: set when the
+ * replay stops on the fault (or the player jumps to it), released once playback is back before it — the
+ * tail loop, a restart, a scrub — unless it is our own seek back landing (`selfSeeking`). A stop needs
+ * the setting on, playback running, and a real crossing (not a seek that jumped over the fault).
+ */
+export function faultPauseTick(t: {
+  faultSec: number | null;
+  posSec: number;
+  /** The previous tick's position; < 0 before the first tick. */
+  lastPosSec: number;
+  playing: boolean;
+  enabled: boolean;
+  latched: boolean;
+  selfSeeking: boolean;
+}): 'stop' | 'unlatch' | null {
+  const f = t.faultSec;
+  if (f == null) return null;
+  if (t.posSec < f - 0.25 && !t.selfSeeking) return 'unlatch';
+  if (t.playing && t.enabled && !t.latched && t.lastPosSec >= 0 && t.lastPosSec < f && t.posSec >= f - 0.02
+    && t.posSec - t.lastPosSec < 0.45) return 'stop';
+  return null;
+}
+
+/**
+ * Whether the screen is HELD ON THE FAULT — the only time the ring and the "Paused on the issue" card
+ * show. Always within a couple of frames of the fault: the old rule let the `atIssue` flag alone keep the
+ * card and ring up while the player scrubbed to Address / Top / Finish (Lily's 4075 screenshots), because
+ * nothing but playing cleared it. And never with the fault review switched off (the Issue chip).
+ */
+export function heldOnFault(h: { faultSec: number | null; posSec: number; paused: boolean; atIssue: boolean; enabled: boolean }): boolean {
+  if (h.faultSec == null || !h.enabled) return false;
+  return Math.abs(h.posSec - h.faultSec) < 0.08 && (h.atIssue || h.paused);
+}
+
+/**
+ * The Issue chip is the fault review's ON/OFF (Tim, 10-16: "you can't turn it off, so every time you
+ * continue the swing it always stops again at the fault"). On → off: no more stops, and the card and
+ * ring go. Off → on: stops again, and the player is shown the fault now.
+ */
+export function issueChipPress(enabled: boolean): { enabled: boolean; jumpToFault: boolean } {
+  return enabled ? { enabled: false, jumpToFault: false } : { enabled: true, jumpToFault: true };
+}
+
+/**
  * Where the callout sits so it never covers what it points at: the head, and the hands high at the top of
  * the swing or in transition, live in the upper part of the frame — those captions go to the bottom.
  */

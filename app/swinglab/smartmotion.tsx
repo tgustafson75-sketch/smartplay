@@ -50,7 +50,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
-import { calloutAtBottom, faultCaption, faultMomentFor } from '../../services/swing/faultSpotlight';
+import { calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress } from '../../services/swing/faultSpotlight';
 import { anchorsFromPoseFrames, swingStageTimesMs, type SwingStageKey } from '../../services/swing/poseMotion';
 import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
@@ -4766,12 +4766,15 @@ export default function SmartMotion() {
     if ('positionMillis' in s && typeof s.positionMillis === 'number') {
       const posSec = s.positionMillis / 1000;
       const f = reviewFaultSecRef.current;
+      // 2026-10-16 — the crossing rule is faultSpotlight.faultPauseTick, shared with the swing library.
+      const tick = faultPauseTick({
+        faultSec: f, posSec, lastPosSec: reviewLastPosRef.current, playing: !videoPaused && 'isPlaying' in s && s.isPlaying === true,
+        enabled: pauseOnIssueRef.current, latched: reviewIssuePausedRef.current, selfSeeking: Date.now() <= reviewSelfSeekUntilRef.current,
+      });
       if (f != null) {
-        if (posSec < f - 0.25 && Date.now() > reviewSelfSeekUntilRef.current) {
+        if (tick === 'unlatch') {
           reviewIssuePausedRef.current = false;
-        } else if (!videoPaused && 'isPlaying' in s && s.isPlaying && pauseOnIssueRef.current && !reviewIssuePausedRef.current
-            && reviewLastPosRef.current >= 0 && reviewLastPosRef.current < f && posSec >= f - 0.02
-            && posSec - reviewLastPosRef.current < 0.45) {
+        } else if (tick === 'stop') {
           // Past the frame already (ticks are 40-250ms apart): stop, then seek back to exactly it.
           reviewIssuePausedRef.current = true;
           reviewSelfSeekUntilRef.current = Date.now() + 800;
@@ -4950,9 +4953,18 @@ export default function SmartMotion() {
     // 2026-10-10 — the fault, as a tick on the same scrubber.
     ...(reviewFaultMoment ? [{ ms: Math.round(reviewFaultMoment.sec * 1000), label: t('swinglab_swing.swing_detail.jump_to_issue') }] : []),
   ];
-  // Held on the fault: stopped there by the replay, or paused within a frame or two of it.
-  const reviewOnIssueFrame = isReview && !!reviewFaultMoment
-    && (reviewAtIssue || (videoPaused && Math.abs(playbackMs / 1000 - reviewFaultMoment.sec) < 0.08));
+  // Held on the fault — only there, and only with the fault review on (faultSpotlight.heldOnFault, the
+  // library's rule too). 2026-10-16: a stage chip or a scrub no longer carries the ring and card along.
+  const reviewOnIssueFrame = isReview && heldOnFault({
+    faultSec: reviewFaultMoment?.sec ?? null, posSec: playbackMs / 1000, paused: videoPaused, atIssue: reviewAtIssue, enabled: pauseOnIssue,
+  });
+  /** The Issue chip turns the fault review on and off (faultSpotlight.issueChipPress). Not a hook: below the gate. */
+  const onReviewIssueChip = () => {
+    const next = issueChipPress(pauseOnIssue);
+    setPauseOnIssue(next.enabled);
+    if (!next.enabled) { reviewIssuePausedRef.current = false; setReviewAtIssue(false); }
+    if (next.jumpToFault) void jumpToReviewIssue();
+  };
   const reviewFaultJoints = faultJointsFor(reviewFaultId);
   const reviewSpotlightOn = reviewOnIssueFrame && highlightIssue && poseReady && reviewFaultJoints.length > 0;
   const reviewCaption = reviewOnIssueFrame && reviewFaultId ? faultCaption(reviewFaultId) : null;
@@ -4975,8 +4987,14 @@ export default function SmartMotion() {
         )) : null}
         {reviewFaultMoment ? (
           <>
-            <TactilePressable onPress={() => void jumpToReviewIssue()} style={[styles.scrubChip, { borderColor: '#FF6B2C', borderWidth: 1 }]}>
-              <Text style={[styles.scrubChipText, { color: '#FF6B2C' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
+            <TactilePressable
+              onPress={onReviewIssueChip}
+              style={[styles.scrubChip, { borderColor: pauseOnIssue ? '#FF6B2C' : 'rgba(255,255,255,0.3)', borderWidth: 1 }]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: pauseOnIssue }}
+              accessibilityLabel={t('swinglab_swing.swing_detail.jump_to_issue')}
+            >
+              <Text style={[styles.scrubChipText, { color: pauseOnIssue ? '#FF6B2C' : 'rgba(255,255,255,0.6)' }, !pauseOnIssue && { textDecorationLine: 'line-through' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
             </TactilePressable>
             <TactilePressable
               onPress={() => setPauseOnIssue(!pauseOnIssue)}

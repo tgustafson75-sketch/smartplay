@@ -67,7 +67,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
-import { calloutAtBottom, faultCaption, faultMomentFor } from '../../../services/swing/faultSpotlight';
+import { calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { buildPoseSwingRead } from '../../../services/swing/poseSwingRead';
@@ -1039,13 +1039,15 @@ export default function SwingDetail() {
     if (s.positionMillis != null) {
       const posSec = s.positionMillis / 1000;
       const f = faultSecRef.current;
+      // 2026-10-16 — the crossing rule is faultSpotlight.faultPauseTick, shared with SmartMotion's review.
+      const tick = faultPauseTick({
+        faultSec: f, posSec, lastPosSec: lastRawPosRef.current, playing: s.isPlaying === true,
+        enabled: pauseOnIssueRef.current, latched: issuePausedRef.current, selfSeeking: Date.now() <= selfSeekUntilRef.current,
+      });
       if (f != null) {
-        if (posSec < f - 0.25 && Date.now() > selfSeekUntilRef.current) {
+        if (tick === 'unlatch') {
           issuePausedRef.current = false;
-        } else if (s.isPlaying === true && pauseOnIssueRef.current && !issuePausedRef.current
-            && lastRawPosRef.current >= 0 && lastRawPosRef.current < f && posSec >= f - 0.02
-            // a real crossing in playback, not a seek that jumped over the fault
-            && posSec - lastRawPosRef.current < 0.45) {
+        } else if (tick === 'stop') {
           // Ticks land every 40-250ms, so the player has already passed the frame: stop, then seek
           // back to exactly it (zero tolerance — iOS otherwise snaps to a keyframe up to a second away).
           issuePausedRef.current = true;
@@ -1214,8 +1216,17 @@ export default function SwingDetail() {
     setPosition(f);
     void scrubTo(f);
   }, []);
-  // Held on the fault: stopped there by the replay, or paused within a frame or two of it.
-  const onIssueFrame = !!faultMoment && (atIssue || (!isPlaying && Math.abs(position - faultMoment.sec) < 0.08));
+  // Held on the fault: stopped there by the replay, or paused within a frame or two of it — and only
+  // there (2026-10-16: scrubbing to Address / Top / Finish no longer carries the ring and card along),
+  // and only with the fault review on (the Issue chip). One rule with SmartMotion: faultSpotlight.heldOnFault.
+  const onIssueFrame = heldOnFault({ faultSec: faultMoment?.sec ?? null, posSec: position, paused: !isPlaying, atIssue, enabled: pauseOnIssue });
+  /** The Issue chip turns the fault review on and off (faultSpotlight.issueChipPress). */
+  const onIssueChip = useCallback(() => {
+    const next = issueChipPress(pauseOnIssue);
+    setPauseOnIssue(next.enabled);
+    if (!next.enabled) { issuePausedRef.current = false; setAtIssue(false); }
+    if (next.jumpToFault) jumpToIssue();
+  }, [pauseOnIssue, setPauseOnIssue, jumpToIssue]);
   const spotlightOn = onIssueFrame && highlightIssue && hasPose && overlayFaultJoints.length > 0;
 
   // 2026-07-10 (Tim — "missing play rewind and forward and slider controls in swing
@@ -2582,13 +2593,16 @@ export default function SwingDetail() {
                   <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     {faultMoment && (
                       <TouchableOpacity
-                        onPress={jumpToIssue}
-                        style={[styles.issueChip, { borderColor: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }]}
-                        accessibilityRole="button"
+                        onPress={onIssueChip}
+                        style={[styles.issueChip, pauseOnIssue
+                          ? { borderColor: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }
+                          : { borderColor: colors.border, backgroundColor: 'transparent' }]}
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: pauseOnIssue }}
                         accessibilityLabel={t('swinglab_swing.swing_detail.jump_to_issue')}
                       >
-                        <Ionicons name="alert-circle" size={13} color={overlayFaultSevere ? '#EF4444' : '#FF6B2C'} />
-                        <Text style={[styles.issueChipText, { color: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
+                        <Ionicons name={pauseOnIssue ? 'alert-circle' : 'alert-circle-outline'} size={13} color={pauseOnIssue ? (overlayFaultSevere ? '#EF4444' : '#FF6B2C') : colors.text_muted} />
+                        <Text style={[styles.issueChipText, { color: pauseOnIssue ? (overlayFaultSevere ? '#EF4444' : '#FF6B2C') : colors.text_muted }, !pauseOnIssue && { textDecorationLine: 'line-through' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
                       </TouchableOpacity>
                     )}
                     {hasPose && swingStageChips.map((c) => (
