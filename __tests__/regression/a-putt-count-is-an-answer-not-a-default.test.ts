@@ -66,8 +66,10 @@ describe('the caddie card only logs a putt count the player supplied', () => {
     const fs = require('fs') as typeof import('fs');
     const path = require('path') as typeof import('path');
     const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf8');
-    expect(src).toMatch(/if \(puttsTouched\) logPutts\(/);
-    expect(src).not.toMatch(/if \(holePutts > 0\) logPutts\(/);
+    // 2026-10-15 (review G3a) — the card now writes score+putts as ONE mutation (logScoreWithPutts,
+    // one undo); the guard is unchanged in intent: putts only when the stepper was touched.
+    expect(src).toMatch(/if \(puttsTouched\) useRoundStore\.getState\(\)\.logScoreWithPutts\(/);
+    expect(src).not.toMatch(/if \(holePutts > 0\) (logPutts|useRoundStore\.getState\(\)\.logScoreWithPutts)\(/);
     // and the flag must be cleared per hole, or hole 2 inherits hole 1's answer
     expect(src).toMatch(/setPuttsTouched\(false\)/);
   });

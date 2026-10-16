@@ -1,8 +1,9 @@
 import type { HoleComparison, MatchedShot, RoundRecap } from '../types/plan';
-import type { ShotResult, CourseHole } from '../store/roundStore';
+import type { ShotResult, CourseHole, RoundRecord } from '../store/roundStore';
 import type { RoundMode } from '../types/patterns';
 import type { GhostMatchSnapshot } from '../types/ghost';
-import { saveRecap } from './planStorage';
+import { saveRecap, loadRecap } from './planStorage';
+import { isQuickScorePlaceholder } from './round/recentShots';
 // Instant deterministic recap (pure, react-native-free) lives in recapSynth so it's
 // unit-testable; re-exported here for callers that already import from recapGenerator.
 export { synthesizeRecapFromRecord } from './recapSynth';
@@ -61,6 +62,45 @@ function shotsSummary(shots: ShotResult[]): string {
   }).join(', ');
 }
 
+// ─── Ended-round input ────────────────────────────────────────────────────────
+
+/**
+ * 2026-10-15 (review G3a) — WHAT A RECAP IS ABOUT, read from the round that was SAVED.
+ *
+ * The caddie tab's richer recap call (cage / arena / ghost / practice context) runs after endRound(),
+ * and built its round from useRoundStore.getState() — already reset: 'Unknown Course', no courseId,
+ * scores {}, shots [], courseHoles []. /api/recap answered 400 (no holes), and the canned
+ * "Round complete. Keep building." was saved under the SAME round id as the store's own good recap —
+ * whichever landed last won. The saved RoundRecord holds everything except the course's par table
+ * and the pre-round notes, which the caller snapshots before endRound().
+ */
+export function recapRoundFromRecord(
+  record: RoundRecord,
+  preEnd: { courseHoles: CourseHole[]; roundNotes?: string | null },
+) {
+  return {
+    courseName: record.courseName ?? 'Unknown Course',
+    courseId: record.courseId ?? null,
+    mode: record.mode,
+    startedAt: record.startedAt,
+    endedAt: record.endedAt,
+    totalScore: record.totalScore,
+    scoreVsPar: record.scoreVsPar,
+    scores: record.scores,
+    shots: record.shots,
+    courseHoles: preEnd.courseHoles,
+    preRoundNotes: preEnd.roundNotes || null,
+  };
+}
+
+const CANNED_OVERALL = 'Round complete. Keep building.';
+
+/** A recap with nothing in it: no hole rows, or the narrative never came back. */
+function isEmptyRecap(r: Pick<RoundRecap, 'hole_comparisons' | 'overall_kevin_summary'>): boolean {
+  const summary = (r.overall_kevin_summary ?? '').trim();
+  return (r.hole_comparisons?.length ?? 0) === 0 || !summary || summary === CANNED_OVERALL;
+}
+
 // ─── Main generator ───────────────────────────────────────────────────────────
 
 export async function generateRecap(
@@ -107,7 +147,12 @@ export async function generateRecap(
     postRoundFeelings?: { energy?: string; focus?: string; vibe?: string; weather?: string } | null;
   },
 ): Promise<RoundRecap> {
-  const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, shots, courseHoles } = round;
+  const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, courseHoles } = round;
+  // 2026-10-15 (review G3a) — quick-score placeholders (`qs-<hole>-<i>`) are a typed total spread into
+  // one row per stroke, nothing hit and nothing known. Narrated as shots they read "shot 1: unknown,
+  // shot 2: unknown…" to the recap model and padded every hole's shot list. recapSynth already skips
+  // them; this is the other recap writer.
+  const shots = round.shots.filter((s) => !isQuickScorePlaceholder(s));
 
   // FIX M8 — compute Kevin adherence rate from shots that have a rec.
   const recShots = shots.filter(s => s.kevin_adhered != null);
@@ -143,7 +188,7 @@ export async function generateRecap(
 
   // Call /api/recap for Kevin summaries
   let holeSummaries: { hole_number: number; summary: string }[] = [];
-  let overallSummary = 'Round complete. Keep building.';
+  let overallSummary = CANNED_OVERALL;
 
   try {
     const controller = new AbortController();
@@ -213,6 +258,19 @@ export async function generateRecap(
     overall_kevin_summary: overallSummary,
     ghost_match: round.ghostSnapshot ?? null,
   };
+
+  /**
+   * 2026-10-15 (review G3a) — TWO generators write this round's recap (the store's, and the caddie
+   * tab's richer one), and the slower one wins. An empty or canned recap — the API failed, or the
+   * caller had no holes — never replaces one that has the round in it.
+   */
+  if (isEmptyRecap(recap)) {
+    const existing = await loadRecap(roundId).catch(() => null);
+    if (existing && !isEmptyRecap(existing)) {
+      console.log('[recap] kept the existing recap for round', roundId, '— the new one came back empty');
+      return existing;
+    }
+  }
 
   await saveRecap(roundId, recap);
   console.log('[recap] saved for round', roundId, 'at', courseName);

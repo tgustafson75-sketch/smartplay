@@ -23,7 +23,7 @@ import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill
 import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
 import { computeLivePace, paceLine, formatClock } from '../../services/paceOfPlay';
-import type { ShotLocation, ShotResult } from '../../store/roundStore';
+import type { ShotLocation, ShotResult, CourseHole } from '../../store/roundStore';
 import { useRestReadoutStore } from '../../store/restReadoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useVoiceHintsStore } from '../../store/voiceHintsStore';
@@ -51,7 +51,7 @@ import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { isSmartMotionActive, isSmartMotionRecording, emitSmartMotionCommand, emitDrillConfig, subscribeSmartMotionVoiceEvent, subscribeSmartMotionUtterance } from '../../services/smartMotionRecordBus';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse } from '../../services/golfCourseApi';
-import { generateRecap } from '../../services/recapGenerator';
+import { generateRecap, recapRoundFromRecord } from '../../services/recapGenerator';
 import { buildFullPracticeContext } from '../../services/tutorialContext';
 import { generatePatternInsights } from '../../services/patternDetection';
 import { useGhostStore } from '../../store/ghostStore';
@@ -126,6 +126,7 @@ import type { RulesDecision } from '../../types/penalty';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { buildRoundEndSummary } from '../../services/roundEndSummary';
 import { holePar, holeData as resolvedHoleData } from '../../services/smartFinderService';
+import { parForHole } from '../../services/holeParLookup';
 import { useTranslation } from 'react-i18next';
 import { noMapLine } from '../../services/roundStartLines';
 
@@ -1282,6 +1283,15 @@ export default function CaddieTab() {
    * wrong number for a missing one. What has to be recorded is whether the player ANSWERED.
    */
   const [puttsTouched, setPuttsTouched] = useState(false);
+  /**
+   * 2026-10-15 (review G3a) — THE HOLE THIS CARD IS SCORING, stamped when it opens.
+   *
+   * The strip and the cockpit stamp the hole at tap time; this card read `currentHole` at the moment
+   * Log Score was pressed. GPS advancing the hole while the card sat open put the score on the NEXT
+   * hole, let the auto-advance jump another one, or ended the round on the wrong hole's number.
+   * null = card closed (fall back to the live hole).
+   */
+  const [scoreCardHole, setScoreCardHole] = useState<number | null>(null);
 
   /**
    * 2026-09-17 — SEEDED FROM THE PROFILE, which is what "Default round mode" was always supposed to
@@ -1470,7 +1480,9 @@ export default function CaddieTab() {
     const line = "Let's take the trouble out of play for a bit — I'll give you the club that covers it, and we'll pick our spot to be aggressive again.";
     setCaddieResponse(line);
     const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
-    if (ve && !voiceChannelBusy()) {
+    // 2026-10-15 (review G3a) — and not over the tab's own turn: a tap-path reply still 'thinking'
+    // was overwritten with 'proactive', and the answer queued behind this line.
+    if (ve && !voiceChannelBusy() && !tabTurnActive(voiceStateRef.current)) {
       setVoiceState('proactive');
       speak(line, vg, lang, apiUrl).catch(() => {}).finally(() => setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev)));
     }
@@ -2126,12 +2138,20 @@ export default function CaddieTab() {
         router.push('/(tabs)/swinglab' as never);
         break;
       case 'log_score': {
+        // 2026-10-15 (review G3a) — no round, no score: the service dispatcher has had this guard
+        // since 08-09; a log_score racing endRound wrote a stray score into the reset store here.
+        if (!useRoundStore.getState().isRoundActive) break;
         // Phase BJ — Kevin's structured args now persist instead of just
         // opening the modal. `hole` is optional; default to the lowest UNSCORED hole at/behind
         // currentHole (on-course audit C2 — GPS/auto-advance move currentHole off the hole being
         // reported). Explicit hole still wins.
-        const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
-        const targetHole = (action as { hole?: number }).hole ?? voiceScoreHole(useRoundStore.getState());
+        const { voiceScoreHole, roundHoleForSpoken } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+        // 2026-10-15 (review G3a) — a spoken hole is the number on the sign: on a twice-around second
+        // loop (round hole 12) "five on hole 3" means round hole 12, not the front-nine 3.
+        const askedHole = (action as { hole?: number }).hole;
+        const targetHole = typeof askedHole === 'number' && Number.isFinite(askedHole)
+          ? roundHoleForSpoken(useRoundStore.getState(), Math.round(askedHole))
+          : voiceScoreHole(useRoundStore.getState());
         const score = (action as { score: number }).score;
         if (typeof score === 'number' && Number.isFinite(score)) {
           const rounded = Math.round(score);
@@ -2660,7 +2680,8 @@ export default function CaddieTab() {
 
   // Auto-prefill score when shot card opens if shots already logged
   useEffect(() => {
-    if (!showShotCard) return;
+    if (!showShotCard) { setScoreCardHole(null); return; }
+    setScoreCardHole(currentHole); // the stepper belongs to the hole the card opened on
     const suggested = computeHoleScore(currentHole);
     if (suggested != null) setHoleScore(suggested);
   }, [showShotCard]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2816,8 +2837,10 @@ export default function CaddieTab() {
     // analysis; without the pre-reset snapshot it always returned the
     // "0 holes" fallback.
     scores: Record<number, number>;
-    courseHoles: { hole: number; par: number }[];
+    courseHoles: CourseHole[];
     activeCourse: string | null;
+    // 2026-10-15 (review G3a) — the recap's pre-round focus; endRound() resets it to ''.
+    roundNotes?: string;
   }, roundId?: string) => {
     const total = snapshot?.total ?? getTotalScore();
     const vspar = snapshot?.vspar ?? getScoreVsPar();
@@ -2942,13 +2965,19 @@ export default function CaddieTab() {
     // 2026-06-21 — Use the roundId passed by the caller (captured BEFORE
     // endRound() set currentRoundId → null). Reading it from the live store
     // here always returned null, so generateRecap() never fired.
-    const storeState = useRoundStore.getState();
-    if (roundId) {
+    // 2026-10-15 (review G3a) — the round this recap is about comes from the SAVED record plus the
+    // pre-endRound snapshot. The live store is already reset here (see recapRoundFromRecord).
+    const endedRecord = roundId ? useRoundStore.getState().roundHistory.find(r => r.id === roundId) : undefined;
+    if (roundId && endedRecord) {
       setRecapLoading(true);
-      const patternInsights = generatePatternInsights(storeState.shots, {
-        currentRoundMode: storeState.mode,
-        scores: storeState.scores,
-        courseHoles: storeState.courseHoles,
+      const recapRound = recapRoundFromRecord(endedRecord, {
+        courseHoles: snapshot?.courseHoles ?? [],
+        roundNotes: snapshot?.roundNotes ?? null,
+      });
+      const patternInsights = generatePatternInsights(recapRound.shots, {
+        currentRoundMode: recapRound.mode,
+        scores: recapRound.scores,
+        courseHoles: recapRound.courseHoles,
         handicap: usePlayerProfileStore.getState().handicap,
         dominantMiss: usePlayerProfileStore.getState().dominantMiss as 'left' | 'right' | 'straight' | null,
       });
@@ -3005,16 +3034,7 @@ export default function CaddieTab() {
         };
       })();
       generateRecap(roundId, {
-        courseName: storeState.activeCourse ?? 'Unknown Course',
-        courseId: storeState.activeCourseId,
-        mode: storeState.mode,
-        startedAt: storeState.roundStartTime ?? Date.now(),
-        endedAt: Date.now(),
-        totalScore: total,
-        scoreVsPar: vspar,
-        scores: storeState.scores,
-        shots: storeState.shots,
-        courseHoles: storeState.courseHoles,
+        ...recapRound,
         patternInsights: patternInsights.insights,
         playerName: usePlayerProfileStore.getState().firstName || usePlayerProfileStore.getState().name || 'the player',
         apiUrl,
@@ -3022,7 +3042,6 @@ export default function CaddieTab() {
         // ghost store is in-memory only and deactivation clears all hole results.
         ghostSnapshot: useGhostStore.getState().getSnapshot(),
         cageContext,
-        preRoundNotes: storeState.roundNotes || null,
         arenaContext,
         // Phase BR Component 9 — active tutorial practice context.
         // buildFullPracticeContext returns null when no tutorials are
@@ -3094,15 +3113,44 @@ export default function CaddieTab() {
       return;
     }
     // In-flight lock — drop a concurrent duplicate call (two effects firing on the same entry) so
-    // the round isn't started twice. Cleared right after startRound() below; the 5s failsafe guards
-    // against an unexpected throw leaving the lock stuck. A deliberate later start re-acquires freely.
+    // the round isn't started twice. A deliberate later start re-acquires freely.
+    // 2026-10-15 (review G3a) — HELD FOR THE LOOKUP, NOT FOR A TIMER. It was released by a 5s
+    // timeout, and the course-card lookup alone can take 12s (golfCourseApi's detail fetch), so a
+    // second Start tap on a slow signal slipped through and replaced the first round — counted twice.
+    // Now every exit before startRound() releases it, and startRound() releases it in a finally.
     if (startRoundInFlightRef.current) {
       console.log('[startRound] already in flight — dropping duplicate call');
       return;
     }
     startRoundInFlightRef.current = true;
-    setTimeout(() => { startRoundInFlightRef.current = false; }, 5000);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+    /**
+     * 2026-10-15 (review G3a) — LOCATION IS ANSWERED BEFORE THE ROUND EXISTS.
+     *
+     * roundStore.startRound asks for location in a fire-and-forget block and discards the round on a
+     * denial — but this function had already counted it (incrementRounds), activated a ghost and
+     * pushed /round/briefing by then, so a briefing was spoken for a round that no longer existed and
+     * roundsTogether went up by one. Asking here first (an already-granted answer returns at once,
+     * and the store's own request then does too) means a denied start never starts.
+     */
+    try {
+      const Location = await import('expo-location');
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) {
+        console.log('[startRound] location permission denied — round not started');
+        startRoundInFlightRef.current = false;
+        setShowRoundSetup(false);
+        try {
+          (require('../../store/toastStore') as typeof import('../../store/toastStore')).useToastStore.getState().show(
+            'Location off — enable Location in Settings, then tap Start Round again.',
+          );
+        } catch { /* non-fatal */ }
+        return;
+      }
+    } catch {
+      // The permission API itself failed — roundStore.startRound's own request still decides.
+    }
     // FIX B5 — snapshot selectedTee and transportMode from store at call time so
     // the values reflect the user's current selection rather than ambient state
     // that may change between the time the opts were built and startRound fires.
@@ -3139,7 +3187,9 @@ export default function CaddieTab() {
      * branch; the local one never set the course's location, so surveyed rounds started without it.
      */
     courseId = picked.id;
-    courseName = picked.name;
+    // 2026-10-15 (review G3a) — never an empty name: this overwrote the 'Unknown Course' fallback
+    // above, and an empty activeCourse reads as a phantom to the boot guard (app/_layout.tsx).
+    courseName = picked.name || 'Unknown Course';
     try {
       const { loadCourseCard } = require('../../services/courseCard') as typeof import('../../services/courseCard');
       const card = await loadCourseCard(picked.id, { name: picked.name });
@@ -3188,25 +3238,37 @@ export default function CaddieTab() {
       console.log('[startRound] no holes loaded for', courseName, '— starting empty; geometry fetch will populate async');
     }
 
-    startRound(courseName, holes, {
-      nineHole: opts.nineHole,
-      startHole: opts.startHole ?? 1,
-      isCompetition: opts.isCompetition,
-      notes: opts.notes,
-      goal: null,
-      courseId,
-      courseLocation,
-      mode: opts.mode,
-      // FIX B5 — pass snapshotted tee/transport so startRound never falls back to ambient store.
-      selectedTee: selectedTeeSnapshot,
-      transportMode: transportModeSnapshot,
-      // 2026-08-08 (verification wave) — stamp the flag HERE, the one place that knows the 18 holes are a
-      // 9-hole course doubled. The geometry wrap / hole reconciliation / course-book consumers read this
-      // instead of guessing from hole counts (guesses were dead or wrong for non-bundled courses).
-      twiceAround,
-    });
-    // Round is started — release the in-flight lock so a deliberate later new-round start proceeds.
-    startRoundInFlightRef.current = false;
+    try {
+      startRound(courseName, holes, {
+        nineHole: opts.nineHole,
+        startHole: opts.startHole ?? 1,
+        isCompetition: opts.isCompetition,
+        notes: opts.notes,
+        goal: null,
+        courseId,
+        courseLocation,
+        mode: opts.mode,
+        // FIX B5 — pass snapshotted tee/transport so startRound never falls back to ambient store.
+        selectedTee: selectedTeeSnapshot,
+        transportMode: transportModeSnapshot,
+        // 2026-08-08 (verification wave) — stamp the flag HERE, the one place that knows the 18 holes are a
+        // 9-hole course doubled. The geometry wrap / hole reconciliation / course-book consumers read this
+        // instead of guessing from hole counts (guesses were dead or wrong for non-bundled courses).
+        twiceAround,
+      });
+    } finally {
+      // Round is started (or startRound threw) — release the in-flight lock so a deliberate later
+      // new-round start proceeds.
+      startRoundInFlightRef.current = false;
+    }
+    // 2026-10-15 (review G3a) — the round THIS call started. Anything answering later (the map
+    // lookup below) speaks only while it is still the round in play — not after End Round, and not
+    // into the next round.
+    const launchedRoundId = useRoundStore.getState().currentRoundId;
+    const stillThisRound = () => {
+      const st = useRoundStore.getState();
+      return st.isRoundActive && st.currentRoundId === launchedRoundId;
+    };
     // 2026-08-09 (download-engine wiring) — every round start runs the download ENGINE fire-and-forget:
     // it orchestrates the full prefetch chain and marks the course available offline in
     // downloadedCoursesStore (idempotent — an already-downloaded course returns instantly). This keeps
@@ -3276,7 +3338,7 @@ export default function CaddieTab() {
            */
           const mappedGreens = mappedHoleCount(geom);
           const hasMapping = mappedGreens > 0;
-          if (isApiCourse) {
+          if (isApiCourse && stillThisRound()) {
             if (hasMapping && startedWithoutHoles) {
               setCaddieResponse(`Got the map for ${courseLabel} — GPS distances are live now.`);
             } else if (!hasMapping) {
@@ -3285,7 +3347,7 @@ export default function CaddieTab() {
           }
         } catch (err) {
           console.log('[caddie] geometry fetch failed (non-fatal):', err);
-          if (isApiCourse) {
+          if (isApiCourse && stillThisRound()) {
             setCaddieResponse(noMapLine(courseLabel, startedWithoutHoles));
           }
         }
@@ -3429,11 +3491,20 @@ export default function CaddieTab() {
   // that the round is done.
   const handleLogHole = async () => {
     if (holeScore === 0) return;
-    // Snapshot BEFORE logScore overwrites scores[currentHole] so editing an
-    // already-scored hole doesn't double-count the mental-state coach.
-    // Mirrors the once-per-hole guard at the voice score-log sites.
-    
-    logScore(currentHole, holeScore);
+    // 2026-10-15 (review G3a) — the hole the card opened on, never the hole GPS moved to since.
+    const loggedHole = scoreCardHole ?? currentHole;
+    // Par of THAT hole, read BEFORE logScore: a first score auto-advances the round synchronously
+    // (autoHoleAdvance), after which getCurrentPar() answers for the next hole — a birdie 2 on a par 3,
+    // judged against the par 5 that follows, was called an eagle.
+    const par = parForHole(useRoundStore.getState().courseHoles, loggedHole);
+
+    /**
+     * 2026-10-15 (review G3a) — one press, one mutation: with putts answered, score and putts go in
+     * through roundStore.logScoreWithPutts so "scratch that" undoes both (logScore then logPutts was
+     * two mutations — undo took back only the putts).
+     */
+    if (puttsTouched) useRoundStore.getState().logScoreWithPutts(loggedHole, holeScore, holePutts);
+    else logScore(loggedHole, holeScore);
     /**
      * 2026-09-17 — ONLY WHEN THE PLAYER ACTUALLY SAID SO.
      *
@@ -3448,10 +3519,8 @@ export default function CaddieTab() {
      * "• Add putts" nag never appeared either, because 0 counts as recorded — so there was no way
      * back. Frozen into holeStats at endRound and fed to the dashboard and the caddie forever.
      */
-    if (puttsTouched) logPutts(currentHole, holePutts);
-    useGhostStore.getState().updateHole(currentHole, holeScore);
+    useGhostStore.getState().updateHole(loggedHole, holeScore);
 
-    const par = getCurrentPar();
     // 2026-06-04 — Bundled-aware end-of-round detection so 9-hole
     // executive courses (Echo Hills, Mariners Point) end at 9, not 18.
     // 2026-08-06 (tester Matt Abid) — a 9-hole round ends at roundStartHole + 8 (front: 9, back: 18).
@@ -3463,7 +3532,7 @@ export default function CaddieTab() {
 // value was discarded — my "forget the last three" fix did nothing on the paths Tim actually uses.
 // It also passed `par ?? 4`, which made a par on a par-5 read as a bogey.
 
-    if (currentHole >= maxHole) {
+    if (loggedHole >= maxHole) {
       clearShotPending();
       // Snapshot the score state BEFORE endRound() resets it. The summary
       // copy ("Short round" / "Even par" / etc.) is driven by these values;
@@ -3479,6 +3548,7 @@ export default function CaddieTab() {
         scores: { ...preRound.scores },
         courseHoles: [...preRound.courseHoles],
         activeCourse: preRound.activeCourse,
+        roundNotes: preRound.roundNotes,
       };
       // 2026-06-21 — Capture roundId and navigate to recap (HIGH-9 audit fix).
       // FIX M15 — route through feelings screen first so player can log
@@ -3523,7 +3593,7 @@ export default function CaddieTab() {
     let scoreContext = '';
     if (scoreVsParSoFar != null && scoreVsParSoFar <= -3) {
       scoreContext =
-        " You're " + Math.abs(scoreVsParSoFar) + ' under through ' + currentHole + '.';
+        " You're " + Math.abs(scoreVsParSoFar) + ' under through ' + loggedHole + '.';
     }
 
     const transition = scoreWord + contextLine + scoreContext;
@@ -4659,7 +4729,11 @@ export default function CaddieTab() {
             <View style={styles.handle} />
             <View style={styles.sheetTitleRow}>
               <Text style={styles.sheetTitle}>
-                {'Hole ' + currentHole + (currentPar ? ' · Par ' + currentPar : '')}
+                {(() => {
+                  const h = scoreCardHole ?? currentHole;
+                  const p = scoreCardHole != null ? parForHole(courseHoles, scoreCardHole) : currentPar;
+                  return 'Hole ' + h + (p ? ' · Par ' + p : '');
+                })()}
               </Text>
             </View>
             <ScrollView
@@ -4800,6 +4874,7 @@ export default function CaddieTab() {
                     scores: { ...preRound.scores },
                     courseHoles: [...preRound.courseHoles],
                     activeCourse: preRound.activeCourse,
+                    roundNotes: preRound.roundNotes,
                   };
                   // 2026-06-12 (Tim) — ending from the Caddie tab spoke a line but never
                   // opened the recap screen (only play.tsx did), so a round — partial or

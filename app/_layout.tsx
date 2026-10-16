@@ -1200,18 +1200,27 @@ function AppNavigator() {
   useEffect(() => whenRoundStoreHydrated(() => {
     const s = useRoundStore.getState();
     if (!s.isRoundActive) return;
-    const missingMarkers = !s.currentRoundId || !s.activeCourse || !s.roundStartTime;
+    /**
+     * 2026-10-15 (review G3a) — A ROUND WITH SCORES IS NEVER A PHANTOM.
+     *
+     * An empty course name ('' is falsy) marked a live, scored round as a phantom and discarded it on
+     * the next cold start. A round with an id, a start time and scores is real whatever its name; one
+     * missing its id or start time but holding scores is FINALIZED into history (endRound tolerates
+     * both), never discarded. Only a round with no scores to lose can be thrown away.
+     */
+    const hasScores = Object.values(s.scores ?? {}).some((sc) => (sc ?? 0) > 0);
+    const brokenIdentity = !s.currentRoundId || !s.roundStartTime;
+    const missingMarkers = brokenIdentity || (!s.activeCourse && !hasScores);
     const tooOld = !!s.roundStartTime && (Date.now() - s.roundStartTime) > 8 * 60 * 60 * 1000;
     if (missingMarkers || tooOld) {
       // 2026-07-08 (pre-release sweep — data loss is the worst failure) — a round that is
       // stale ONLY because it's been open >8h but otherwise has valid markers AND logged
       // scores is a real, long-paused round (start in the morning, phone dies, resume that
       // evening), not a phantom. FINALIZE it into history instead of discarding, so the
-      // player never loses a round's worth of scoring. Truly broken phantoms (missing
-      // currentRoundId / course / startTime), and aged rounds with no scores, still discard.
-      const hasScores = Object.values(s.scores ?? {}).some((sc) => (sc ?? 0) > 0);
-      if (tooOld && !missingMarkers && hasScores) {
-        console.log('[boot-guard] finalizing aged in-progress round with scores instead of discarding', {
+      // player never loses a round's worth of scoring. (10-15: any round with scores is finalized —
+      // aged or with a broken id/start time. Only rounds with no scores discard.)
+      if (hasScores) {
+        console.log('[boot-guard] finalizing in-progress round with scores instead of discarding', {
           currentRoundId: s.currentRoundId,
           ageHours: s.roundStartTime ? (Date.now() - s.roundStartTime) / 3_600_000 : null,
         });

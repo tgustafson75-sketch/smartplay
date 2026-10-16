@@ -659,6 +659,18 @@ async function getCourseInner(course_id: string): Promise<Course | null> {
     if (course.id && course.tees.length > 0) {
       await writeCachedCourse(course);
     }
+    /**
+     * 2026-10-15 (review G3a) — A FRESH ANSWER WITH NO TEES DOES NOT BEAT A CARD WE HAVE.
+     *
+     * A 200 that normalises to no tees (a thin or reshaped record) was returned over a stale cached
+     * card that had them — and courseCard reads no tees as "nothing to play", so the round started
+     * with no holes at a course this phone already knew. Same rule as the error exits above: the
+     * stale card stands until a usable one replaces it.
+     */
+    if (course.tees.length === 0 && cached && (cached.tees?.length ?? 0) > 0) {
+      console.log('[golfcourseapi] fresh detail has no tees — keeping the cached card:', course_id);
+      return cached;
+    }
     return course;
   } catch (e) {
     console.error('[golfcourseapi] getCourse exception:', e);

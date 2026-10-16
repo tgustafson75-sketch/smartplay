@@ -24,6 +24,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useToastStore } from '../../store/toastStore';
 import { buildRoundEndSummary } from '../roundEndSummary';
 import { getApiBaseUrl } from '../apiBase';
+import { flushPendingScores } from './pendingScoreFlush';
 
 export type EndRoundPromptResult = 'no_active_round' | 'prompted';
 
@@ -45,6 +46,9 @@ export function promptEndRound(): EndRoundPromptResult {
         text: 'Save & end',
         onPress: async () => {
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+          // 2026-10-15 (review G3a) — a strip score still settling is part of this round. endRound()
+          // flushes it, but only AFTER this snapshot — the spoken summary missed the last hole.
+          flushPendingScores();
           // Snapshot BEFORE endRound() resets scores/courseHoles/activeCourse.
           const preRound = useRoundStore.getState();
           const snapshotScores = { ...preRound.scores };
