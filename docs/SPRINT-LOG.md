@@ -5479,4 +5479,5 @@ not seed a coarse/cached fix · SmartVision shows the resolver's number when GPS
 - Native (parked): Kokoro offline voice; Apple Watch yardage queue (`updateApplicationContext`); watch apps showing live/est/unit flags.
 - `sendToBrain` follow-up loop still a second brain transport (failure line fixed; not folded into askCaddie).
 - Dead duplicate `useCaddieTabMic.processAudioUri`/`speakDeadEnd` (unreachable; pinned by two sim guards).
+- (later, 10-16) Swing-review fixes hardened through two more review rounds (S1e–S1k): waggle/stray-frame no longer hijacks impact or the arc anchor; real swings not rejected; Issue chip is per-review; heard-strike one answer. Sweep vs pre-10-15 code: no case worse. Gates: jest 627/6922, sim 1077/1077.
 
