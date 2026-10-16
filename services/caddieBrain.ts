@@ -61,6 +61,9 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
   // A turn the player asked for raises the paywall; a proactive one (is_proactive) stays silent.
   if (!mayTalkToCaddie({ userInitiated: !opts.overrides?.is_proactive })) return null;
   const { timeoutMs, skipTts, signal, ...extras } = opts;
+  // 2026-10-16 (voice seam review) — an 'abort' listener never fires for a signal that is ALREADY
+  // aborted, so a shushed earbud turn's retry ran a full, billed brain call. Already cancelled: no call.
+  if (signal?.aborted) return null;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -78,6 +81,9 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
       body: JSON.stringify(body),
     });
     if (!res.ok) return null;
+    // 2026-10-16 (voice seam review) — any answer from our server (even the 200-with-error below) proves
+    // the phone is online: retire a cached "no internet" verdict so the failure line cannot say it.
+    try { (require('../store/connectivityStore') as typeof import('../store/connectivityStore')).reportOnline(); } catch { /* advisory */ }
     // 2026-09-28 — a real answer is the best proof the brain is awake; it refreshes the warmth the
     // budgets read (and spares the next heartbeat a redundant warmup). (A 200 failure below still
     // proves the function is warm — warmth is about the Lambda, not the model.)

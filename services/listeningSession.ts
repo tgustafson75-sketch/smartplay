@@ -1662,7 +1662,7 @@ async function openSession() {
            * answers on the retry. So the retry stays and the SECOND CADDIE goes: the same call,
            * the same payload, the same history, once more. [[no-half-fixes-enforce-every-surface]]
            */
-          if (!chatSpoken) try {
+          if (!chatSpoken && live()) try { // a shushed turn does not retry (voice seam review)
             const retry = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
             if (retry.toolActions?.length) {
               const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');

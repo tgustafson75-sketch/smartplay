@@ -66,6 +66,7 @@ import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWa
 import { probeReachability, isProvenOffline } from '../services/reachability';
 import { CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 import { tabBypassKind } from '../services/tabVoiceBypass';
+import { isNotACommand } from '../services/utteranceIsCommand';
 import { createMeterTracker } from '../services/micStanddown';
 
 // ─── CONSTANTS ────────────────────────────
@@ -389,6 +390,14 @@ function includesAny(text: string, phrases: string[]): boolean {
 function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_tool' | 'quick_round'; parameters: Record<string, unknown> } | null {
   const cleaned = normalizeForMatch(transcript);
   if (!cleaned) return null;
+  /**
+   * 2026-10-16 (voice seam review) — this runs on EVERY caddie-tab turn, before the bypasses, the
+   * router and the brain, and matched substrings with no question guard: "What should I hit here?"
+   * opened TightLie, openToolHandler then declined (no explicit verb → route_to_brain), and the turn
+   * went idle in SILENCE — on the most common in-round question. A question or a story is never a
+   * shortcut; it goes to the caddie (services/utteranceIsCommand, the same guard as the precheck).
+   */
+  if (isNotACommand(transcript)) return null;
 
   const familyHomeCourse = primaryHomeCourseName(usePlayerProfileStore.getState().homeCourses).trim();
 
@@ -405,12 +414,15 @@ function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_t
     { tool_name: 'scorecard', aliases: ['scorecard', 'score card', 'scores', 'show the scorecard'] },
     { tool_name: 'dashboard', aliases: ['dashboard', 'stats', 'overview', 'home stats'] },
     { tool_name: 'settings', aliases: ['settings', 'preferences', 'voice settings', 'audio settings'] },
-    { tool_name: 'coach_mode', aliases: ['coach mode', 'coachmode', 'coach', 'watch my student', 'record their swing'] },
+    // 2026-10-16 — bare 'coach' removed: "My coach told me to stay down" opened Coach Mode for "told".
+    { tool_name: 'coach_mode', aliases: ['coach mode', 'coachmode', 'watch my student', 'record their swing'] },
     { tool_name: 'cage_mode', aliases: ['cage mode', 'cagemode', 'start cage session'] },
     { tool_name: 'library', aliases: ['player library', 'swing library', 'library', 'show my swings', 'my swings', 'show best shots', 'show my best shots', 'best shots'] },
     { tool_name: 'smartmotion', aliases: ['smart motion', 'smartmotion', 'record my swing', 'capture my swing', 'down the line', 'face on'] },
     { tool_name: 'issue_log', aliases: ['issue log', 'bug log', 'log an issue', 'send issue log', 'email issue log'] },
-    { tool_name: 'tightlie', aliases: ['tightlie', 'tight lie', 'open tightlie', 'check my lie', 'what should i hit'] },
+    // 2026-10-16 — 'what should i hit' removed: it is a strategy question for the caddie (api/voice-intent
+    // says so), never a TightLie open.
+    { tool_name: 'tightlie', aliases: ['tightlie', 'tight lie', 'open tightlie', 'check my lie'] },
   ];
 
   for (const matcher of toolMatchers) {
@@ -431,7 +443,9 @@ function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_t
     }
   }
 
-  if (includesAny(cleaned, ['quick round', 'start a round', 'start round', "let's play", 'let us play', 'play a quick round', 'start another round', 'another round', 'start a quick round'])) {
+  // 2026-10-16 — bare "let's play" / "another round" removed: "let's play it safe" and "I don't want another
+  // round like that" started a quick round at the home course.
+  if (includesAny(cleaned, ['quick round', 'start a round', 'start round', "let's play a round", "let's play 9", "let's play 18", 'play a quick round', 'start another round', 'start a quick round'])) {
     const holeCount = /\b9[- ]?hole\b|\blet's play 9\b|\bplay 9\b/.test(cleaned) ? 9 : 18;
     const courseMatch = transcript.match(/\b(?:at|on|for)\s+(.+?)(?:\s+with\s+|\s+today\b|\s+now\b|\s*$)/i);
     const courseHint = courseMatch?.[1]?.trim() || familyHomeCourse;
@@ -1647,6 +1661,17 @@ export const useVoiceCaddie = ({
         } catch { /* non-fatal */ }
         console.log('[voice] transcribe failed — offline path:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs, 'getOk', getOk, 'getMs', getMs);
         logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs, getOk, getMs, cdnOk, cdnMs });
+        /**
+         * 2026-10-16 (voice seam review) — a mic the app opened ITSELF that nobody answered (a no-speech
+         * stand-down transcribed with quietIfEmpty) has nothing to fail at. Before the stand-down change it
+         * was discarded silently; it must not now buzz, speak a failure line or re-prompt on-device.
+         */
+        if (opts?.quietIfEmpty) {
+          logVoiceSilentFail('standdown_transcribe_failed_quiet', { reason: name });
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
         try { Vibration.vibrate(120); } catch {}
 
         const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
@@ -2109,6 +2134,32 @@ export const useVoiceCaddie = ({
             follow_up_question: null,
             language,
           } as VoiceIntent, appContext);
+          // The handler declined (no explicit verb → route_to_brain) and has nothing to say or open:
+          // the turn belongs to the caddie — fall through to the normal path instead of ending in silence.
+          const declined = (result as { route_to_brain?: boolean }).route_to_brain === true && !result.voice_response && !result.tool_action;
+          if (!declined) {
+            if (result.voice_response) {
+              onResponseReceived(result.voice_response);
+              recordKevinTurn(result.voice_response);
+              wrappedOnVoiceStateChange('speaking');
+              await speakResponse(result.voice_response);
+            }
+            if (result.tool_action) onToolAction?.(result.tool_action);
+            wrappedOnVoiceStateChange('idle');
+            isProcessingRef.current = false;
+            return;
+          }
+        }
+
+        if (shortcut.intent_type === 'quick_round') {
+          const result = await quickRoundHandler.execute({
+            intent_type: 'quick_round',
+            raw_text: transcript,
+            parameters: shortcut.parameters,
+            confidence: 'high',
+            follow_up_question: null,
+            language,
+          } as VoiceIntent, appContext);
           if (result.voice_response) {
             onResponseReceived(result.voice_response);
             recordKevinTurn(result.voice_response);
@@ -2116,33 +2167,14 @@ export const useVoiceCaddie = ({
             await speakResponse(result.voice_response);
           }
           if (result.tool_action) onToolAction?.(result.tool_action);
+          const replyEndsWithQuestion = endsAsQuestion(result.voice_response);
+          if (replyEndsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
+            await runFollowUpListenLoop();
+          }
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
         }
-
-        const result = await quickRoundHandler.execute({
-          intent_type: 'quick_round',
-          raw_text: transcript,
-          parameters: shortcut.parameters,
-          confidence: 'high',
-          follow_up_question: null,
-          language,
-        } as VoiceIntent, appContext);
-        if (result.voice_response) {
-          onResponseReceived(result.voice_response);
-          recordKevinTurn(result.voice_response);
-          wrappedOnVoiceStateChange('speaking');
-          await speakResponse(result.voice_response);
-        }
-        if (result.tool_action) onToolAction?.(result.tool_action);
-        const replyEndsWithQuestion = endsAsQuestion(result.voice_response);
-        if (replyEndsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
-          await runFollowUpListenLoop();
-        }
-        wrappedOnVoiceStateChange('idle');
-        isProcessingRef.current = false;
-        return;
       }
 
       /**
@@ -2519,6 +2551,12 @@ export const useVoiceCaddie = ({
       // so repeated cellular weak-signal stretches degrade /api/transcribe
       // and short-circuit subsequent attempts.
       recordVoiceEndpointFailure('transcribe');
+      // 2026-10-16 (voice seam review) — the unanswered self-opened mic stays silent here too.
+      if (opts?.quietIfEmpty) {
+        logVoiceSilentFail('standdown_transcribe_failed_quiet', { reason: message.slice(0, 80) });
+        wrappedOnVoiceStateChange('idle');
+        return;
+      }
       // 2026-06-19 (Tim — driving in sporadic cellular, "doesn't respond or anything")
       // — these are the dead-zone failures (transcribe aborted / fetch failed). SPEAK
       // them through device TTS (zero-signal capable) so the caddie isn't a silent void;
