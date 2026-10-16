@@ -6621,13 +6621,15 @@ check('Brain failure falls back to a real local answer (not a snag prompt)',
       (idx) => /deliverBrainReply\(/.test(ls.slice(idx, idx + 1400)),
     );
     // Exactly ONE owner of the local fallback in this file — the point of the collapse.
-    const oneOwner = (ls.match(/answerOffline\(/g) ?? []).length === 1;
+    // 2026-10-15 — that owner is now the shared rule 1 (caddieFailureReply.localAnswer, which also drops
+    // "no data" replies), so this file calls it once and answerOffline not at all.
+    const oneOwner = (ls.match(/\.localAnswer\(/g) ?? []).length === 1 && !/answerOffline\(/.test(ls);
     // And that owner tries the device BEFORE the apology.
     const deviceBeforeApology =
-      ls.indexOf('answerOffline') > 0 &&
-      ls.indexOf('answerOffline') < ls.indexOf('speakHonestFailure(lang');
+      ls.indexOf('.localAnswer(utterance') > 0 &&
+      ls.indexOf('.localAnswer(utterance') < ls.indexOf('speakHonestFailure(lang');
     if (!everyCallDelivers) console.log('   a brain call on this path does not route through the shared deliverer');
-    if (!oneOwner) console.log(`   ${(ls.match(/answerOffline\(/g) ?? []).length} owners of the local fallback — expected exactly 1`);
+    if (!oneOwner) console.log(`   ${(ls.match(/\.localAnswer\(/g) ?? []).length} owners of the local fallback — expected exactly 1`);
     return (
       everyCallDelivers &&
       oneOwner &&
@@ -15092,8 +15094,8 @@ check('LOCK: the one delivery contract is TOTAL — no combination ends a turn i
       /logVoiceSilentFail\('brain_reply_not_spoken'/.test(body);
     // 2 — an empty reply reaches for the device (GPS / bag / green) BEFORE it apologises.
     const triesDeviceFirst =
-      body.indexOf('answerOffline') > 0 &&
-      body.indexOf('answerOffline') < body.indexOf('speakHonestFailure');
+      body.indexOf('.localAnswer(utterance') > 0 &&
+      body.indexOf('.localAnswer(utterance') < body.indexOf('speakHonestFailure');
     // 3 — the last path standing always delivers something AND always logs. `delivered` must be
     //     computed from both the spoken and the captioned attempt, so a muted player still counts.
     const lastResortAlwaysLands =
