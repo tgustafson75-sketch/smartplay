@@ -85,12 +85,30 @@ const MAX_TOP_TO_IMPACT_MS = 700;
 const MIN_IMPACT_TO_FINISH_MS = 250;
 /** The finish is found inside this much time after impact — the club coming down later is not it. */
 const FINISH_SEARCH_MS = 900;
+/** A spike needs both neighbours this close to be called noise (coarse locate samples are never judged). */
+const SPIKE_GAP_MS = 250;
+/** After impact the hands climb at once; a "climb" that only starts this long after the trough is not a follow-through. */
+const FOLLOW_THROUGH_STARTS_MS = 500;
 
 function heightAnchors(pts: MotionSample[]): SwingAnchors | null {
   // Address height: the LOWEST hands among the first samples (image y grows downward). A median let a
   // window that opens on the takeaway lift the baseline, and "address" then landed mid-takeaway.
   const baseY = Math.max(...pts.slice(0, 3).map((p) => p.y));
-  const h = pts.map((p) => baseY - p.y);   // image y grows downward: positive = hands higher than address
+  const raw = pts.map((p) => baseY - p.y);   // image y grows downward: positive = hands higher than address
+  /**
+   * 2026-10-16 (re-review) — ONE JITTERY SAMPLE IS NOT A TOP. A single raised-hands sample standing far
+   * above BOTH close neighbours (< SPIKE_GAP_MS each side) is tracker noise — a body does not go up and
+   * come back down in two frames — so it reads as its higher neighbour. Without this, one jitter frame
+   * during Lily's address (47 of 54 positions) or at 3870's 5.8s became "the top", and its one-gap fall
+   * the fastest descent of the clip. Only positive spikes: the trough at impact IS brief.
+   */
+  const amp0 = Math.max(...raw);
+  const h = raw.map((v, i) => {
+    if (i === 0 || i === raw.length - 1) return v;
+    if (pts[i].tMs - pts[i - 1].tMs >= SPIKE_GAP_MS || pts[i + 1].tMs - pts[i].tMs >= SPIKE_GAP_MS) return v;
+    const nb = Math.max(raw[i - 1], raw[i + 1]);
+    return v - nb > 0.35 * amp0 ? nb : v;
+  });
   const amp = Math.max(...h);
   if (!(amp >= 0.05)) return null;
   /**
@@ -131,7 +149,19 @@ function heightAnchors(pts: MotionSample[]): SwingAnchors | null {
     let end = peak;
     for (let i = peak + 1; inFinish(i); i++) if (h[peak] - h[i] <= 0.1 * amp) end = i;
     const downMs = pts[impact].tMs - pts[top].tMs;
-    if (downMs <= MAX_TOP_TO_IMPACT_MS && pts[end].tMs - pts[impact].tMs >= MIN_IMPACT_TO_FINISH_MS) {
+    // 2026-10-16 (re-review) — the SHORTEST downswing these samples allow (the sample after the top to the
+    // sample before impact): the real one may sit in an unsampled gap, and a 709ms OBSERVED gap rejected
+    // Lily's real swing that the old read placed within 18ms.
+    const minDownMs = Math.max(0, (impact - 1 > top ? pts[impact - 1].tMs : pts[impact].tMs) - (top + 1 < impact ? pts[top + 1].tMs : pts[top].tMs));
+    // The follow-through starts AT impact: the hands climb straight back up (sample before the climb to
+    // impact inside FOLLOW_THROUGH_STARTS_MS). A stray raised sample followed by a long rest at address and
+    // then the real backswing is not a top, an impact and a finish.
+    const climbsAtOnce = pts[climb - 1].tMs - pts[impact].tMs <= FOLLOW_THROUGH_STARTS_MS;
+    // A window that ends within MIN_IMPACT_TO_FINISH_MS of impact cannot show a follow-through; it is not
+    // held against the swing.
+    const windowEndsSoon = pts[pts.length - 1].tMs - pts[impact].tMs < MIN_IMPACT_TO_FINISH_MS;
+    if (minDownMs <= MAX_TOP_TO_IMPACT_MS && climbsAtOnce
+      && (windowEndsSoon || pts[end].tMs - pts[impact].tMs >= MIN_IMPACT_TO_FINISH_MS)) {
       const rate = (h[top] - h[impact]) / Math.max(1, downMs);
       if (!best || rate > best.rate) best = { top, impact, end, rate };
     }
