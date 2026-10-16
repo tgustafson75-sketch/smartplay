@@ -37,7 +37,7 @@
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
 import { FIXED_OFFLINE_REPLIES_EN } from './localStatusResponder';
-import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_SAVED_OFFLINE, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { _allCaddieTemplates } from '../constants/dialogTemplates/caddieTemplates';
 import { _allCoachTemplates } from '../constants/dialogTemplates/coachTemplates';
 import { _allPsychologistTemplates } from '../constants/dialogTemplates/psychologistTemplates';
@@ -110,6 +110,8 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
    */
   ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `notice_connection_${language}`, language, text: CADDIE_NOTICE_CONNECTION[language] })),
   ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `notice_on_us_${language}`, language, text: CADDIE_NOTICE_ON_US[language] })),
+  // Review G2 (finding 8) — spoken only when PROVEN offline, so it must exist as a recording.
+  ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `notice_saved_offline_${language}`, language, text: CADDIE_NOTICE_SAVED_OFFLINE[language] })),
   ...FIXED_OFFLINE_REPLIES_EN.map(({ slug, text }) => ({ slug, language: 'en' as const, text })),
 ];
 

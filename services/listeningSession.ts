@@ -2,7 +2,7 @@ import { Vibration } from 'react-native';
 
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
-import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, isCapturing, isExternalMicActive, type CaptureBail, type CaptureResult } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, isCapturing, isExternalMicActive, isSpeaking, isSpeakingUserInitiated, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
 import { noteTurnState, noteTurnIntent, noteTurnClosing, noteTurnActed } from './voice/turnAnswerWatch';
 import { adviceIsStillWorthSaying, captureShotEpoch, currentTurnEpoch } from './adviceFreshness';
@@ -179,6 +179,24 @@ let autoReopenChain = 0;
 /** The last line the caddie spoke before this turn opened — lets us tell "new question" from stale. */
 let spokenLineAtOpen: string | null = null;
 
+/**
+ * 2026-10-15 (review G2) — WHICH SESSION OWNS THE TURN.
+ *
+ * `state` is module-global, and a turn is many awaits long (capture, classify, a cold brain call of
+ * up to 48s, speech). A player who shushes a slow turn, taps again and asks again has TWO turns in
+ * flight: when the old brain call finally lands, the old turn wrote 'idle' over the new session's
+ * 'listening' — the new capture then returned into a state it no longer recognised and the question
+ * was dropped (still billed) — or the old answer was spoken during the new turn.
+ *
+ * Every openSession takes a serial; every close bumps it. A turn checks it after each await and
+ * before every state write or speak, so a turn the player closed, or one a newer session replaced,
+ * can no longer touch anything. The same bump IS the closed-by-user flag: a turn closed mid-reply
+ * never reaches the auto-reopen tail, so a shush is not answered by the mic opening again.
+ */
+let sessionSerial = 0;
+/** Aborts the in-flight brain request of the live turn when the session is closed. */
+let turnAbort: AbortController | null = null;
+
 // Uses the SHARED endsAsQuestion — a naive endsWith('?') is false for "What's on your mind today?
 // Take your time.", which is the exact shape Tim reported. See services/voice/endsAsQuestion.ts.
 export function isSessionInFlight(): boolean {
@@ -306,9 +324,8 @@ async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, f
      * reason.
      */
     const text = kind === 'gotit' ? pickCue(GOTIT_CUES) : pickOpener();
-    const s = useSettingsStore.getState();
-    const gender: 'male' | 'female' = s.voiceGender === 'female' ? 'female' : 'male';
-    const persona = (s.caddiePersonality ?? 'kevin') as string;
+    // Review G2 (finding 7) — the active caddie and its gender: the same pair the clips are warmed under.
+    const { persona, gender } = (require('./voiceService') as typeof import('./voiceService')).activeVoice();
     const cache = await import('./offlineVoiceCache');
     const uri = text ? cache.resolveCachedOfflineClipUri(text, gender, persona) : null;
     if (uri) { await playLocalFile(uri, undefined, { userInitiated: true }); return; }
@@ -759,6 +776,12 @@ async function deliverBrainReply(opts: {
    */
   requireResponding: boolean;
   /**
+   * 2026-10-15 (review G2) — false once the session that started this turn was closed or replaced.
+   * Such a turn never speaks (a newer turn may be 'responding' right now), and if the brain gave
+   * nothing it owes the player nothing either: they ended it. Omitted by the typed / watch path.
+   */
+  isCurrent?: () => boolean;
+  /**
    * 2026-09-05 — the shot the player was standing over when this turn STARTED, and the tools the
    * turn ended up calling. Together they answer "is this advice still about the shot he is facing?"
    * Both optional: a caller that passes neither behaves exactly as before.
@@ -770,7 +793,8 @@ async function deliverBrainReply(opts: {
   const lang: 'en' | 'es' | 'zh' = (['en', 'es', 'zh'] as const).includes(opts.language as never)
     ? (opts.language as 'en' | 'es' | 'zh')
     : 'en';
-  const maySpeak = (): boolean => ttsAllowed && (!requireResponding || getSessionState() === 'responding');
+  const current = (): boolean => opts.isCurrent?.() ?? true;
+  const maySpeak = (): boolean => ttsAllowed && current() && (!requireResponding || getSessionState() === 'responding');
   const caption = (line: string, ms: number): boolean => {
     try { flashCaption?.(line, ms); return true; } catch { return false; }
   };
@@ -786,6 +810,12 @@ async function deliverBrainReply(opts: {
     const block = takeCaddiePaywallBlock();
     if (block && !block.deferred) return;
     if (block?.deferred) text = CADDIE_PAYWALL_DEFERRED_LINE;
+  }
+  // A turn the player closed (or a newer session replaced) with no answer in hand: nothing is owed —
+  // no local answer, no failure line over whatever they are doing now.
+  if (!text && !current()) {
+    logVoiceDiag('brain_reply_after_close', { source: site, sessionState: getSessionState() });
+    return;
   }
 
   // 1 — The caddie answered. Say it.
@@ -869,7 +899,25 @@ async function deliverBrainReply(opts: {
 }
 
 async function openSession() {
-  setSessionStateMirror('opening');
+  // Review G2 — this session's serial. live() is false once a close or a newer session replaced it;
+  // setMine / mine are the only way this turn writes or reads the shared state from here on.
+  const mySerial = ++sessionSerial;
+  const live = (): boolean => mySerial === sessionSerial;
+  const setMine = (next: SessionState): void => { if (live()) setSessionStateMirror(next); };
+  const mine = (s: SessionState): boolean => live() && getSessionState() === s;
+  turnAbort = new AbortController();
+  const brainSignal = turnAbort.signal;
+  setMine('opening');
+  /**
+   * Review G2 (finding 6) — a tap is the player starting to talk. If the caddie is mid-way through
+   * something it started ON ITS OWN (a proactive line, a briefing), the go-ahead cue below would
+   * queue behind it and the mic would wait for the end of a speech nobody asked for. A real caddie
+   * stops and listens. Speech the player asked for (an answer still playing) is left alone — the
+   * unchanged behaviour, so the cue follows it rather than cutting off a reply they wanted.
+   */
+  if (isSpeaking() && !isSpeakingUserInitiated()) {
+    await stopSpeaking('screen:services-listeningsession').catch(() => {});
+  }
   // Snapshot what the caddie had last said, so the end-of-turn check below can tell a question the
   // caddie just ASKED from a stale line left over from an earlier turn.
   spokenLineAtOpen = getLastSpokenLine();
@@ -965,7 +1013,7 @@ async function openSession() {
     // The tap path was holding a capture the player had ALREADY spoken into, so this tap is the
     // endpoint of that utterance, not the start of a new one — it is now being transcribed and
     // answered. Opening a second turn on top would talk over the reply to the player's own words.
-    setSessionStateMirror('idle');
+    setMine('idle');
     return;
   }
 
@@ -978,6 +1026,7 @@ async function openSession() {
   // cancel-during-earcon never opens the mic at all.
   // 2026-08-11 — the guard now checks 'opening', since that is the state we hold through the cue.
   if (state !== 'opening') return;
+  if (!live()) return; // a newer session opened while the cue played — it owns the mic now
 
   // The cue has finished and capture begins on the next line — this is the first honest moment to
   // claim we are listening, so the strip, the halo and the tap-again endpoint all arm here.
@@ -1049,7 +1098,7 @@ async function openSession() {
    * A capture that genuinely heard nothing is NOT retried; re-opening the mic on a user who simply
    * didn't speak is exactly the hot-mic behavior the standdown fix removed.
    */
-  if (shouldRetryCapture(capture.bail) && (state as SessionState) === 'listening') {
+  if (shouldRetryCapture(capture.bail) && (state as SessionState) === 'listening' && live()) {
     console.log(`[path4:voice] capture_retry after bail=${capture.bail}`);
     logVoiceSilentFail('listen_capture_retry', { source: 'listeningSession', bail: capture.bail });
     if (capture.bail === 'mic_busy') await releaseExternalMic().catch(() => false);
@@ -1063,6 +1112,9 @@ async function openSession() {
   const captureCancelled = (state as SessionState) !== 'listening' || !utterance || !utterance.trim();
   console.log(`[path4:voice] capture_done text_len=${utterance?.trim().length ?? 0} cancelled=${captureCancelled}`);
   if ((state as SessionState) !== 'listening') return;
+  // Review G2 — 'listening' may be a NEWER session's (closed, re-tapped, listening again). Its
+  // capture is still running; this one's result must not answer, notice, or idle on top of it.
+  if (!live()) return;
 
   if (!utterance || !utterance.trim()) {
     /**
@@ -1142,7 +1194,7 @@ async function openSession() {
         }
       }
     } catch { /* notice is best-effort */ }
-    setSessionStateMirror('idle');
+    setMine('idle');
     return;
   }
   const t_capture_end = Date.now();
@@ -1168,7 +1220,7 @@ async function openSession() {
   } catch { /* ack is best-effort — never blocks the turn */ }
 
   // Phase 3 — classify + respond
-  setSessionStateMirror('thinking');
+  setMine('thinking');
   // Phase P — TTFA instrumentation. t0 = capture end.
   const t0 = Date.now();
   try {
@@ -1183,15 +1235,15 @@ async function openSession() {
     const courseResolved = resolvePendingCourseUtterance(utterance);
     if (courseResolved) {
       const resolveAllowed = settings.voiceEnabled;
-      if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
-      if (resolveAllowed && getSessionState() === 'responding') {
+      if (mine('thinking')) setSessionStateMirror('responding');
+      if (resolveAllowed && mine('responding')) {
         await stopSpeaking('screen:services-listeningsession').catch(() => {});
-        if (getSessionState() === 'responding') {
+        if (mine('responding')) {
           await speak(courseResolved.confirmLine, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] course-resolve speak failed', e));
         }
       }
-      setSessionStateMirror('idle');
+      endTurn(mySerial);
       return;
     }
 
@@ -1228,13 +1280,13 @@ async function openSession() {
     {
       const answered = tryAnswerOpenQuestion(utterance);
       if (answered) {
-        if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
-        if (settings.voiceEnabled) {
+        if (mine('thinking')) setSessionStateMirror('responding');
+        if (settings.voiceEnabled && mine('responding')) {
           await stopSpeaking('screen:services-listeningsession').catch(() => {});
           await speak(answered.line, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] putt-answer speak failed', e));
         }
-        setSessionStateMirror('idle');
+        endTurn(mySerial);
         return;
       }
     }
@@ -1306,36 +1358,39 @@ async function openSession() {
        * reached — that is a failure being handled honestly, not a second caddie answering first.
        */
 
-      const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-        // 2026-05-21 — Fix Q: pass active persona so the classifier's
-        // follow-up question (if any) is styled in the user's selected
-        // caddie's voice, not the voiceGender-derived Kevin/Serena default.
-        body: JSON.stringify({
-          text: utterance,
-          voiceGender: settings.voiceGender ?? 'male',
-          // 2026-08-09 (pass-2 P3) — active per-pillar persona for consistent clarifier styling.
-          persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
-          ...customCaddieFields(),
-        }),
-      }, intentTimeout());
-      if (parseRes.ok) markEndpointWarmed('/api/voice-intent');
-      if (!parseRes.ok) {
-        // 2026-07-06 (voice-lifecycle audit #8a) — this was a SILENT return: the user
-        // heard the opener, spoke, and got dead air. Speak the honest failure line
-        // (same treatment the diagnostic + small-talk branches already have).
-        // 2026-07-06 (voice-parity F4) — this branch runs BEFORE the state moves to
-        // 'responding' (that happens at line ~534, after a SUCCESSFUL parse). At a
-        // parse FAILURE the state is still 'thinking' (set at openSession), so the
-        // old `=== 'responding'` guard was never true → the honest line never fired
-        // (the exact dead-air this block was added to fix). Check the state actually
-        // set here so the failure line speaks.
-        if (ttsAllowed && getSessionState() === 'thinking') {
-          await speakHonestFailure(settings.language, settings.voiceGender, apiUrl).catch(() => {});
-        }
-        setSessionStateMirror('idle');
-        return;
+      /**
+       * Review G2 (finding 5, 2026-10-15) — A CLASSIFIER FAILURE IS NOT THE END OF THE TURN.
+       *
+       * A non-ok /api/voice-intent spoke the failure notice and idled; a throw or timeout fell into the
+       * outer catch, which skipped even the local answer. Either way the question never reached the
+       * brain. The classifier's job is TOOL ROUTING — a question does not need it — so its failure
+       * means exactly "no tool intent": synthesise a conversational intent and carry on to the brain,
+       * which owns the local answer and the honest line if it fails too. Same rule the typed / watch
+       * path adopted on 08-26.
+       */
+      let parseRes: Response | null = null;
+      try {
+        parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
+          // 2026-05-21 — Fix Q: pass active persona so the classifier's
+          // follow-up question (if any) is styled in the user's selected
+          // caddie's voice, not the voiceGender-derived Kevin/Serena default.
+          body: JSON.stringify({
+            text: utterance,
+            voiceGender: settings.voiceGender ?? 'male',
+            // 2026-08-09 (pass-2 P3) — active per-pillar persona for consistent clarifier styling.
+            persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
+            ...customCaddieFields(),
+          }),
+        }, intentTimeout());
+      } catch (e) {
+        console.log('[listeningSession] classifier threw — routing to the brain as a plain question', e);
+      }
+      if (parseRes?.ok) markEndpointWarmed('/api/voice-intent');
+      const classifierFailed = !parseRes || !parseRes.ok;
+      if (classifierFailed) {
+        logVoiceDiag('classifier_failed_to_brain', { source: 'listeningSession', status: parseRes?.status ?? null });
       }
       /**
        * 2026-08-20 (JSON-cast audit) — VALIDATE, don't assert.
@@ -1355,15 +1410,17 @@ async function openSession() {
        * courseToHoles yesterday): a cast asserting network data into a shape the compiler then
        * believes. Casting is not parsing.
        */
-      const parsedIntent = await parseRes.json() as Partial<VoiceIntent> | null;
+      const parsedIntent = classifierFailed ? null : await parseRes!.json().catch(() => null) as Partial<VoiceIntent> | null;
       const knownType = typeof parsedIntent?.intent_type === 'string' && parsedIntent.intent_type.length > 0;
-      if (!knownType) {
+      if (!knownType && !classifierFailed) {
         console.log('[path4:voice] classifier returned an unrecognisable shape — treating as unknown');
         logVoiceSilentFail('intent_shape_invalid', { source: 'listeningSession', got: Object.keys(parsedIntent ?? {}).slice(0, 6).join(',') });
       }
-      intent = (knownType
-        ? parsedIntent
-        : { ...(parsedIntent ?? {}), intent_type: 'unknown', confidence: 'low' }) as VoiceIntent;
+      intent = (classifierFailed
+        ? { intent_type: 'conversational', confidence: 'low', raw_text: utterance }
+        : knownType
+          ? parsedIntent
+          : { ...(parsedIntent ?? {}), intent_type: 'unknown', confidence: 'low' }) as VoiceIntent;
       // 2026-08-08 (2-week audit V2 — earbud "open settings" dead-ended). The cloud classifier returns
       // NO raw_text (the VoiceIntent typing masked it), and the 08-07 EXPLICIT_OPEN gate in
       // openToolHandler reads intent.raw_text to find the open/show verb — so every classifier-routed
@@ -1381,6 +1438,7 @@ async function openSession() {
     console.log(`[path4:voice] intent=${intent.intent_type} topic=${(intent.parameters?.query_topic as string | undefined) ?? 'none'}`);
     noteTurnIntent(intent.intent_type);
     if ((state as SessionState) !== 'thinking') return;
+    if (!live()) return;
 
     setSessionStateMirror('responding');
 
@@ -1401,14 +1459,14 @@ async function openSession() {
     const DISRUPTIVE_OPEN_INTENTS = new Set(['open_tool', 'media_capture', 'navigate']);
     if (DISRUPTIVE_OPEN_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
       await stopSpeaking('screen:services-listeningsession').catch(() => {});
-      if (ttsAllowed && getSessionState() === 'responding') {
+      if (ttsAllowed && mine('responding')) {
         await speak(
           'Want me to open that? Just say it again and I will.',
           settings.voiceGender, intent.language ?? settings.language, apiUrl,
           { userInitiated: true },
         ).catch(() => {});
       }
-      setSessionStateMirror('idle');
+      endTurn(mySerial);
       return;
     }
 
@@ -1480,6 +1538,8 @@ async function openSession() {
           language: settingsStore.language ?? 'en',
           timeoutMs: kevinTimeout(),
           overrides: { register: 'coach', inRoundDiagnostic: true },
+          // Review G2 — a shush aborts the Sonnet read instead of letting it finish (and bill) unheard.
+          signal: brainSignal,
         });
         // The card renders the reasoning and re-plays it without re-querying Sonnet, so it is
         // pushed whether or not the line was spoken aloud — a muted player still gets the read.
@@ -1501,14 +1561,16 @@ async function openSession() {
           ttsAllowed,
           site: 'listeningSession.in_round_diagnostic',
           requireResponding: true,
+          isCurrent: live,
         });
       } catch (e) {
         console.log('[listeningSession] in_round_diagnostic failed', e);
-        if (ttsAllowed && getSessionState() === 'responding') {
+        if (ttsAllowed && mine('responding')) {
           await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
         }
       }
-      setSessionStateMirror('idle');
+      // Review G2 (finding 1) — through the shared tail: the coach asking back reopens the mic.
+      endTurn(mySerial);
       return;
     }
 
@@ -1520,14 +1582,14 @@ async function openSession() {
     // and the magic moment was gone. Now: if intent has a clarifying
     // follow_up_question, speak that. Otherwise route the raw utterance
     // to /api/kevin for a conversational reply.
-    if (!voiceCommandRouter.getHandler(intent.intent_type) && (state as SessionState) === 'responding') {
+    if (!voiceCommandRouter.getHandler(intent.intent_type) && mine('responding')) {
       const responseAllowed = settings.voiceEnabled;
       await fillerP;
       if (responseAllowed) {
         if (intent.follow_up_question) {
-          if (getSessionState() === 'responding') {
+          if (mine('responding')) {
             await stopSpeaking('screen:services-listeningsession').catch(() => {});
-            if (getSessionState() === 'responding') {
+            if (mine('responding')) {
               await speak(intent.follow_up_question, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true })
                 .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
             }
@@ -1575,6 +1637,7 @@ async function openSession() {
                 apiUrl,
                 ttsAllowed: responseAllowed,
                 site: 'listeningSession.conversational',
+                isCurrent: live,
                 requireResponding: true,
               });
               chatSpoken = true;
@@ -1614,6 +1677,7 @@ async function openSession() {
                 apiUrl,
                 ttsAllowed: responseAllowed,
                 site: 'listeningSession.conversational_retry',
+                isCurrent: live,
                 requireResponding: true,
               });
               chatSpoken = true;
@@ -1636,12 +1700,15 @@ async function openSession() {
               apiUrl,
               ttsAllowed: responseAllowed,
               site: 'listeningSession.conversational_exhausted',
+              isCurrent: live,
               requireResponding: true,
             });
           }
         }
       }
-      setSessionStateMirror('idle');
+      // Review G2 (finding 1) — through the shared tail: "What's on your mind today?" and every
+      // clarifying follow_up_question reopen the mic for the answer.
+      endTurn(mySerial);
       return;
     }
 
@@ -1661,7 +1728,7 @@ async function openSession() {
       await fillerP;
 
       if (ttsAllowed) {
-        for (let i = 0; i < 2 && !resultReady && (state as SessionState) === 'responding'; i++) {
+        for (let i = 0; i < 2 && !resultReady && mine('responding'); i++) {
           // 2026-08-06 (Tim — earcon only, no words): on a long wait (e.g. a ~13s vision read) play the same
           // soft earcon again as a subtle "still working" pulse instead of a spoken extension filler
           // ("Still working through this..."). Spaced so it's a gentle beat, not a rattle; the loop re-checks
@@ -1700,6 +1767,7 @@ async function openSession() {
             apiUrl,
             ttsAllowed: responseAllowed,
             site: 'listeningSession.route_to_brain',
+            isCurrent: live,
             requireResponding: true,
           });
         } catch (e) {
@@ -1719,10 +1787,12 @@ async function openSession() {
             apiUrl,
             ttsAllowed: responseAllowed,
             site: 'listeningSession.route_to_brain_catch',
+            isCurrent: live,
             requireResponding: true,
           }).catch((e2) => console.log('[listeningSession] route_to_brain recovery failed', e2));
         }
-        setSessionStateMirror('idle');
+        // Review G2 (finding 1) — through the shared tail, so a deferred read that asks back listens.
+        endTurn(mySerial);
         return;
       }
       if (result.voice_response && responseAllowed) {
@@ -1739,9 +1809,14 @@ async function openSession() {
         // Cancel any in-flight / queued filler so the real response
         // doesn't queue behind a long conversational bridge — Tim's
         // "generic-then-relevant" disconnect on the 2nd question.
+        // Review G2 — a stale turn must not stop the NEWER turn's speech either: check first.
+        if (!mine('responding')) {
+          endTurn(mySerial);
+          return;
+        }
         await stopSpeaking('screen:services-listeningsession').catch(() => {});
-        if (getSessionState() !== 'responding') {
-          setSessionStateMirror('idle');
+        if (!mine('responding')) {
+          endTurn(mySerial);
           return;
         }
         // 2026-05-24 — Prefer the classifier-detected utterance language
@@ -1771,7 +1846,7 @@ async function openSession() {
         // normal ack. Only speak the failure line when the handler actually
         // FAILED (success === false) — an intentional silent-success stays
         // silent, matching the text/watch path which guards on voice_response.
-        if (!result.tool_action && result.success === false && getSessionState() === 'responding') {
+        if (!result.tool_action && result.success === false && mine('responding')) {
           await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
         }
       }
@@ -1805,7 +1880,7 @@ async function openSession() {
     try {
       const settingsFresh = useSettingsStore.getState();
       // Route no longer gates speech — see the "Voice on Phone Speaker" retirement note above.
-      if (settingsFresh.voiceEnabled && getSessionState() !== 'idle') {
+      if (settingsFresh.voiceEnabled && live() && getSessionState() !== 'idle') {
         await speakHonestFailure(
           settingsFresh.language,
           settingsFresh.voiceGender,
@@ -1815,6 +1890,25 @@ async function openSession() {
     } catch (innerErr) { console.log('[listeningSession] outer-catch fallback failed', innerErr); }
   }
 
+  endTurn(mySerial);
+}
+
+/**
+ * The end of every turn that got as far as an answer — the ONE place a caddie's question reopens
+ * the mic.
+ *
+ * Review G2 (finding 1, 2026-10-15) — this tail was inline at the bottom of openSession, and the
+ * three branches a BRAIN reply comes back through (conversational — including every clarifying
+ * follow_up_question — route_to_brain and in_round_diagnostic) each did their own
+ * `setSessionStateMirror('idle'); return;` above it. So the case the tail was written for — the
+ * caddie asking "What's on your mind today?" — never reached it. Every branch now ends here.
+ *
+ * A turn whose session was closed (a shush, the dormancy watchdog) or replaced by a newer one ends
+ * with NOTHING here: no 'idle' written over the newer session, and no reopen after the player
+ * deliberately closed it (finding 3).
+ */
+function endTurn(serial: number): void {
+  if (serial !== sessionSerial) return;
   setSessionStateMirror('idle');
 
   // 2026-08-11 (Tim — "she ends with something like 'what's on your mind today', but doesn't
@@ -1863,6 +1957,11 @@ export function forceCloseSession(): void {
 function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
   console.log(`[path4:voice] close (reason=${reason})`);
   noteTurnClosing(reason);
+  // Review G2 — the turn in flight belongs to a session that no longer exists: retire its serial so
+  // it can neither write state nor speak nor reopen, and abort its brain request.
+  sessionSerial += 1;
+  try { turnAbort?.abort(); } catch { /* aborting must never throw */ }
+  turnAbort = null;
   // Phase BM — always stopSpeaking (drops the isSpeaking() guard). The guard
   // missed the gap between speechId++ and Sound.createAsync returning where
   // currentSound is still null but a TTS fetch is in-flight; a session-close
@@ -1933,18 +2032,25 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     // silently died offline. Try the LOCAL precheck first, like both other paths.
     let intent = precheckLocalIntent(text);
     if (!intent) {
-      const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-        body: JSON.stringify({
-          text,
-          voiceGender: settings.voiceGender ?? 'male',
-          // 2026-08-09 (pass-2 P3) — active per-pillar persona for consistent clarifier styling.
-          persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
-          ...customCaddieFields(),
-        }),
-      }, intentTimeout());
-      if (parseRes.ok) markEndpointWarmed('/api/voice-intent');
+      // Review G2 (finding 5) — a THROW (timeout, no route) is the same "no tool intent" as a non-ok:
+      // it used to fall to the outer catch below, a console.log, and the player got nothing at all.
+      let parseRes: Response | null = null;
+      try {
+        parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
+          body: JSON.stringify({
+            text,
+            voiceGender: settings.voiceGender ?? 'male',
+            // 2026-08-09 (pass-2 P3) — active per-pillar persona for consistent clarifier styling.
+            persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
+            ...customCaddieFields(),
+          }),
+        }, intentTimeout());
+      } catch (e) {
+        console.log('[handsFree-route] classifier threw — routing to the brain as a plain question', e);
+      }
+      if (parseRes?.ok) markEndpointWarmed('/api/voice-intent');
       /**
        * 2026-08-26 — A CLASSIFIER FAILURE IS NOT THE END OF THE TURN.
        *
@@ -1960,10 +2066,10 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
        * state, and only then says an honest failure line. Falling into it is a strict improvement
        * over silence and reuses the tested path rather than inventing a second one.
        */
-      if (!parseRes.ok) {
+      if (parseRes && !parseRes.ok) {
         console.log(`[handsFree-route] classifier non-ok ${parseRes.status} — routing to the brain as a plain question`);
       }
-      intent = parseRes.ok ? await parseRes.json() : null;
+      intent = parseRes?.ok ? await parseRes.json().catch(() => null) : null;
       if (!intent) {
         intent = { intent_type: 'conversational', confidence: 'low', raw_text: text } as VoiceIntent;
       }

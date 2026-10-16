@@ -2837,7 +2837,11 @@ check('Voice: persona switch never leaks the old voice for a turn (live-persona 
     const v = read('services/voiceService.ts');
     const g = read('services/caddieGender.ts');
     return (
-      /persona = require\('\.\.\/store\/settingsStore'\)\.useSettingsStore\.getState\(\)\.caddiePersonality/.test(v) &&
+      // 2026-10-15 (review G2, finding 7) — the LIVE persona is now the ACTIVE per-pillar caddie the
+      // brain speaks as (activeVoice → caddieResolver.getActiveCaddie), not the global pick. Same
+      // invariant — read live at speak time — one owner further along.
+      /persona = activeVoice\(\)\.persona;/.test(v) &&
+      /getActiveCaddie\(\)/.test(v.slice(v.indexOf('export function activeVoice'))) &&
       // derived from the live persona, in one place
       /effectiveGender = cg\.genderForPersona\(persona\)/.test(v) &&
       /gender: effectiveGender/.test(v) &&
@@ -11922,7 +11926,9 @@ check('LOCK: the caddie claims the mic BEFORE it promises to listen (no cue over
     // Order is the whole point: handover → cue → capture. Anything else re-opens the bug.
     const ordered = iHandover > -1 && iCue > iHandover && iCapture > iCue;
     // A handover that SUBMITTED a real utterance must stand this turn down, not talk over the reply.
-    const standsDown = /handover === 'submitted'[\s\S]{0,400}?setSessionStateMirror\('idle'\);[\s\S]{0,40}?return;/.test(open);
+    // 2026-10-15 (review G2) — setMine is setSessionStateMirror gated on this session still owning
+    // the turn (a newer session's state is never overwritten); the stand-down is the same.
+    const standsDown = /handover === 'submitted'[\s\S]{0,400}?(?:setSessionStateMirror|setMine)\('idle'\);[\s\S]{0,40}?return;/.test(open);
     return ordered && standsDown;
   })(),
   'handover runs before the go-ahead cue and before capture; a submitted utterance stands the new turn down');
@@ -11975,7 +11981,8 @@ check('LOCK: a mic that never opened is retried, not reported as a failure to he
     // Ported from useVoiceCaddie's restartFresh — and BOUNDED: only the two hardware bails, one
     // retry, and never for a capture that simply heard nothing (that would re-open a hot mic).
     const cb = read('services/voice/captureBail.ts');
-    const retries = /if \(shouldRetryCapture\(capture\.bail\) && \(state as SessionState\) === 'listening'\)/.test(ls) &&
+    // 2026-10-15 (review G2) — `&& live()`: only the session that owns the turn retries.
+    const retries = /if \(shouldRetryCapture\(capture\.bail\) && \(state as SessionState\) === 'listening'(?: && live\(\))?\)/.test(ls) &&
       /return bail === 'mic_busy' \|\| bail === 'error';/.test(cb);
     const reclaims = /if \(capture\.bail === 'mic_busy'\) await releaseExternalMic\(\)/.test(ls);
     const bounded = (ls.match(/capture = await runCapture\(\);/g) ?? []).length === 1;

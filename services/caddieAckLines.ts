@@ -66,6 +66,19 @@ export const CADDIE_NOTICE_OFFLINE: Record<'en' | 'es' | 'zh', string> = {
   zh: '我现在连不上网——你的码数和记分仍然可用。',
 };
 
+/**
+ * Review G2 (finding 8, 2026-10-15) — the caddie-tab mic kept the player's words because the phone is
+ * PROVEN offline (services/reachability). Said only on that proof: the note is later handed to the brain
+ * as "captured with no signal", so saying it — and saving it — after OUR failure was false twice.
+ * Lives here so offlineVoiceCache records it in the caddie's own voice: it is, by definition, spoken
+ * offline, where a line without a recording is silence.
+ */
+export const CADDIE_NOTICE_SAVED_OFFLINE: Record<'en' | 'es' | 'zh', string> = {
+  en: "I can't get online right now, but I saved what you said. I'll pick it back up once we're connected.",
+  es: 'Ahora mismo no tengo conexión, pero guardé lo que dijiste. Lo retomo en cuanto nos conectemos.',
+  zh: '我现在连不上网，但我记下了你说的话。连上网后我会接着处理。',
+};
+
 export const ACK_PHRASES: Record<'en' | 'es' | 'zh', string[]> = {
   en: ['Okay, got it.', 'Got it.', 'Alright.', 'Sure thing.', 'On it.', 'Copy that.', 'You got it.', 'Let me take a look.', 'Right, one sec.', 'Gotcha.'],
   es: ['Vale, entendido.', 'Entendido.', 'Muy bien.', 'Claro.', 'En ello.', 'Déjame ver.', 'Un momento.'],

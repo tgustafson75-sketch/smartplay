@@ -49,11 +49,20 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
     if (get().isOnline) set({ isOnline: false });
   },
   reportOnline: () => {
+    // Review G2 (finding 9) — a request just worked, so a cached "no internet" verdict is false now.
+    invalidateCachedOfflineVerdict();
     if (get().consecutiveFailures !== 0 || !get().isOnline) {
       set({ consecutiveFailures: 0, isOnline: true });
     }
   },
 }));
+
+/** Lazy require, same reason as verifyOffline below. Never throws. */
+function invalidateCachedOfflineVerdict(): void {
+  try {
+    (require('../services/reachability') as typeof import('../services/reachability')).invalidateOfflineVerdict();
+  } catch { /* the cache simply ages out */ }
+}
 
 /** True only when the probe proved there is no internet. Lazy require: the store must not pull the
  *  service graph in at import time. */

@@ -23,6 +23,8 @@ function setup(opts: { duringAsk: (clock: typeof import('../../services/userTurn
     speakDeviceNotice: jest.fn(async () => undefined),
     isCapturing: jest.fn(() => opts.micLive()),
     isExternalMicActive: jest.fn(() => false),
+    // 2026-10-15 (review G2) — the hook now reads it to tell a shushed reply from a finished one.
+    getStopGeneration: jest.fn(() => 0),
   };
   jest.resetModules();
   jest.doMock('react', () => ({

@@ -1345,6 +1345,12 @@ export const stopSpeaking = async (why: StopAttribution = 'stop'): Promise<void>
 };
 
 export const isSpeaking = (): boolean => currentSound !== null;
+/**
+ * Review G2 (finding 3) — bumped by every stopSpeaking(). A caller snapshots it before playing a reply
+ * and compares after: a change means the reply was cut off (the player shushed it, or a mic opened over
+ * it), so the caller must not answer the cut-off by reopening the mic.
+ */
+export const getStopGeneration = (): number => speakGeneration;
 
 /**
  * 2026-08-12 (Tim — "First time talking to Caddie is still a fail months later… I really believe it
@@ -1435,15 +1441,37 @@ async function deviceSpeakFallback(
 }
 
 /**
+ * Review G2 (finding 7, 2026-10-15) — WHO IS SPEAKING. ONE answer for the voice and the brain.
+ *
+ * The brain's payload names the ACTIVE per-pillar caddie (caddieResolver.getActiveCaddie, sent by
+ * caddieRequestBody), while speak(), the cached-clip lookup and the clip warm all read the global
+ * `caddiePersonality`. With Serena on the Round pillar and Kevin as the global pick, the brain wrote
+ * Serena's reply and the phone read it in Kevin's voice — two caddies in one turn. Gender comes from
+ * the persona (caddieGender), never from the `voiceGender` mirror, so the pair always agrees.
+ */
+export function activeVoice(): { persona: string; gender: 'male' | 'female' } {
+  let persona = 'kevin';
+  try {
+    persona = (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie() ?? 'kevin';
+  } catch {
+    try { persona = (require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? 'kevin') as string; } catch { /* default */ }
+  }
+  let gender: 'male' | 'female' = 'male';
+  try { gender = (require('./caddieGender') as typeof import('./caddieGender')).genderForPersona(persona); } catch { /* default */ }
+  return { persona, gender };
+}
+
+/**
  * Play `text` from the persona's cached real-voice clips if it is one (offlineVoiceCache). True when it
  * played. Keyed by the CURRENT persona so a caddie switch never plays the previous caddie's clip.
  * Never throws; a miss or a failed play is false and the caller stays silent.
  */
-async function playCachedPersonaClip(text: string, gender: 'male' | 'female', where: { inQueue: boolean }): Promise<boolean> {
+async function playCachedPersonaClip(text: string, _callerGender: 'male' | 'female', where: { inQueue: boolean }): Promise<boolean> {
   try {
     const cache = await import('./offlineVoiceCache');
-    let persona = 'kevin';
-    try { persona = (require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? 'kevin') as string; } catch { /* default */ }
+    // Review G2 (finding 7) — the caddie the brain is speaking as, and THAT caddie's gender: the
+    // clips are warmed under exactly this pair (prewarmOfflineVoiceClips), so lookup must use it too.
+    const { persona, gender } = activeVoice();
     const uri = cache.resolveCachedOfflineClipUri(text, gender, persona);
     if (!uri) return false;
     // In the queue → the un-queued body (see playLocalFileNow's 09-28 deadlock note); outside → queued.
@@ -1498,11 +1526,18 @@ export async function speakDeviceNotice(
  */
 export async function prewarmOfflineVoiceClips(): Promise<void> {
   try {
+    /**
+     * Review G2 (finding 7) — every caddie who can be the one speaking: the per-pillar assignments
+     * (the active caddie is one of them, by construction) plus the global pick. With one caddie on
+     * every pillar — the default — this is a single persona, exactly as before.
+     */
     const s = require('../store/settingsStore').useSettingsStore.getState();
-    const gender: 'male' | 'female' = s.voiceGender === 'female' ? 'female' : 'male';
-    const persona = (s.caddiePersonality ?? 'kevin') as string;
+    const cg = require('./caddieGender') as typeof import('./caddieGender');
+    const personas = new Set<string>([activeVoice().persona]);
+    for (const p of Object.values((s.caddieAssignments ?? {}) as Record<string, string | undefined>)) if (p) personas.add(p);
+    if (s.caddiePersonality) personas.add(s.caddiePersonality as string);
     const cache = await import('./offlineVoiceCache');
-    await cache.ensureOfflineClipsCached(gender, persona);
+    for (const persona of personas) await cache.ensureOfflineClipsCached(cg.genderForPersona(persona), persona);
   } catch { /* additive — a cold cache just means device TTS until the next warm */ }
 }
 
@@ -2061,7 +2096,10 @@ export const speak = async (
   // built-in personas → the server's persona map wins.
   let customVoice: string | null = null;
   try {
-    persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
+    // Review G2 (finding 7) — the ACTIVE caddie, the one the brain's reply was written as
+    // (caddieRequestBody sends getActiveCaddie()). The global pick spoke a per-pillar Serena's words
+    // in Kevin's voice.
+    persona = activeVoice().persona;
     /**
      * 2026-08-31 (§22c) — this ladder WAS the second of three disagreeing owners of caddie gender.
      * It is now the same call every other writer makes, so the pronoun on screen, the device-TTS

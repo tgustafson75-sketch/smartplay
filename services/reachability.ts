@@ -88,6 +88,21 @@ const CACHE_MS = 20_000;
 
 let last: Reachability | null = null;
 let inFlight: Promise<Reachability> | null = null;
+/** The verdict last written to the issue log — a probe that agrees with it is not news. */
+let lastLoggedVerdict: NetVerdict | null = null;
+
+/**
+ * Review G2 (finding 9, 2026-10-15) — A SUCCESS RETIRES "NO INTERNET".
+ *
+ * A cached verdict held for CACHE_MS no matter what happened next, so a turn that failed right after a
+ * call that had just WORKED was still told "I can't get online" for up to 20s — the exact false blame
+ * this module exists to remove. Any of our requests succeeding (connectivityStore.reportOnline) proves
+ * the phone is online; a cached offline / captive verdict is dropped then, and the next failure asks
+ * again. 'slow' and 'internet_ok' stand: one success does not make a weak link fast.
+ */
+export function invalidateOfflineVerdict(): void {
+  if (last && isProvenOffline(last.verdict)) last = null;
+}
 
 export function lastReachability(): Reachability | null {
   return last;
@@ -192,6 +207,11 @@ export function unreachableMessage(verdict: NetVerdict, what: string, action: 's
 }
 
 function logVerdict(r: Reachability, outcomes: ControlOutcome[]): void {
+  // Review G2 (finding 10) — only a CHANGE of verdict is news. The offline banner re-probes on a timer
+  // all through a dead zone; logging each identical 'offline' filled the issue log and evicted real
+  // reports before signal came back to send them.
+  if (r.verdict === lastLoggedVerdict) return;
+  lastLoggedVerdict = r.verdict;
   try {
     const controls = outcomes.map((o) => `${o.name}:${o.kind}:${o.ms}ms`).join(' ');
     require('../store/issueLogStore').useIssueLogStore.getState()
@@ -203,4 +223,5 @@ function logVerdict(r: Reachability, outcomes: ControlOutcome[]): void {
 export function _resetReachabilityForTests(): void {
   last = null;
   inFlight = null;
+  lastLoggedVerdict = null;
 }

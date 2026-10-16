@@ -163,6 +163,29 @@ interface IssueLogState {
 }
 
 const MAX_ENTRIES = 100;
+/**
+ * Review G2 (finding 10, 2026-10-15) — DIAGNOSTICS MUST NOT EVICT REPORTS.
+ *
+ * One 100-entry FIFO held everything. 'reachability' was logged on every fresh probe (and the offline
+ * banner polls all through an offline stretch), 'caddie_failure_reply' on every failed turn — so two
+ * or three hours without signal pushed out the unsent REPORTABLE entries before signal came back to
+ * send them: the record of what went wrong was erased by the record of looking. The noise kinds
+ * (never mailed — see issueLogExport's REPORTABLE_KINDS) now share their own smaller budget, and the
+ * 100 is for everything else.
+ */
+const MAX_NOISE_ENTRIES = 60;
+const NOISE_KINDS: ReadonlySet<IssueLogKind> = new Set<IssueLogKind>(['diag', 'boot', 'voice_turn', 'sim_round']);
+/** Newest-first list → kept list: up to MAX_ENTRIES of real entries and MAX_NOISE_ENTRIES of noise. */
+export function capEntries(list: IssueLogEntry[]): IssueLogEntry[] {
+  let real = 0;
+  let noise = 0;
+  const out: IssueLogEntry[] = [];
+  for (const e of list) {
+    if (e.kind && NOISE_KINDS.has(e.kind)) { if (noise < MAX_NOISE_ENTRIES) { noise += 1; out.push(e); } }
+    else if (real < MAX_ENTRIES) { real += 1; out.push(e); }
+  }
+  return out;
+}
 
 /** 2026-07-30 (issue-log audit SEV-2) — schedule the consented auto-send after a FAILURE is
  *  recorded, so a tester's crash/voice/GPS/analysis error reaches /api/issue-report WITHOUT
@@ -223,7 +246,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           kind: 'user',
           context,
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
         console.log('[issueLog] new entry:', trimmed.slice(0, 80));
         // 2026-07-23 — consented auto-send of USER-reported issues (not diagnostic traces).
         scheduleAutoSend();
@@ -247,7 +270,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           details,
           context,
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
         console.log('[issueLog] voice event:', summary);
         scheduleAutoSend(); // voice_error / voice_silent_fail / transcribe_error are all real failures
       },
@@ -288,7 +311,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           details,
           context,
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
         console.log('[issueLog] gps event:', summary);
         scheduleAutoSend();
       },
@@ -312,7 +335,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           details,
           context,
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
       },
       addAppEvent: (stage, details, kind = 'analysis_error') => {
         // Self-context snapshot via lazy requires (mirrors addGpsEvent) so
@@ -351,7 +374,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           details,
           context,
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
         console.log('[issueLog] app event:', summary);
         // Real failures (analysis_error/app_error) auto-send; sim_round is an owner-only trace → skip.
         if (kind !== 'sim_round') scheduleAutoSend();
@@ -366,7 +389,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           details: { ...details, problem },
           context: selfContext('analysis'),
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
         console.log('[issueLog] analysis trace:', entry.text);
         if (problem) scheduleAutoSend();
       },
@@ -389,7 +412,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           details: { transcript: t, response: reply || null, ...(meta ?? {}) },
           context: selfContext('caddie'),
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
       },
       addUserIssue: (text) => {
         const trimmed = text.trim();
@@ -402,7 +425,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           timestamp: Date.now(), text: trimmed, kind: 'user', context: selfContext('caddie'),
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
         console.log('[issueLog] user issue (voice):', trimmed.slice(0, 80));
         scheduleAutoSend();
       },
@@ -414,7 +437,7 @@ export const useIssueLogStore = create<IssueLogState>()(
           timestamp: Date.now(), text: summary, kind: 'voice_miss', stage: missType, details,
           context: selfContext('voice'),
         };
-        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        set(s => ({ entries: capEntries([entry, ...s.entries]) }));
         console.log('[issueLog] voice miss:', summary);
         scheduleAutoSend();
       },

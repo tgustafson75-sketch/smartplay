@@ -19,10 +19,10 @@ import { useSettingsStore } from '../store/settingsStore';
 import { askCaddie } from '../services/caddieBrain';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
-import { speak, isCapturing, isExternalMicActive } from '../services/voiceService';
+import { speak, isCapturing, isExternalMicActive, getStopGeneration } from '../services/voiceService';
 import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { devLog } from '../services/devLog';
-import { CADDIE_NOTICE_DIDNT_CATCH } from '../services/caddieAckLines';
+import { CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_SAVED_OFFLINE } from '../services/caddieAckLines';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
 import { noteUserTurn, getUserTurnEpoch } from '../services/userTurnClock';
 import { noteCaddieTurn } from '../services/funnelEvents';
@@ -148,6 +148,20 @@ export function useCaddieTabMic({
     // its own path, and the event fires once per install either way.
     noteCaddieTurn('typed');
     const turnEpoch = getUserTurnEpoch();
+    /**
+     * 2026-09-29 (review) — a NEWER turn is really there: one queued behind this one, or a mic live
+     * right now. The epoch alone also moves for taps that never became a turn. Review G2 (finding 4,
+     * 10-15): one predicate for every line this turn may speak — the failure lines below wait up to
+     * 35s plus an internet check, and used to play over a new recording with no check at all.
+     */
+    const supersededByNewerTurn = (): boolean =>
+      getUserTurnEpoch() !== turnEpoch && (pendingTurnRef.current !== null || isCapturing() || isExternalMicActive());
+    /** Show the line, say nothing, leave the state to the newer turn (see onSuperseded). */
+    const yieldLine = (line: string): void => {
+      devLog('[caddie] line superseded by a newer turn — caption only');
+      try { onKevinSpoke?.(line); } catch { /* non-fatal */ }
+      onSuperseded?.();
+    };
 
     // 2026-07-06 (Tim — "less predictive, more narrative to build a database") —
     // capture the user's spoken turn to the conversation log NOW, before any tool
@@ -226,6 +240,7 @@ export function useCaddieTabMic({
         const block = takeCaddiePaywallBlock();
         if (block) {
           if (block.deferred) {
+            if (supersededByNewerTurn()) { yieldLine(CADDIE_PAYWALL_DEFERRED_LINE); return; }
             const s0 = useSettingsStore.getState();
             onVoiceStateChange?.('speaking');
             onKevinSpoke?.(CADDIE_PAYWALL_DEFERRED_LINE);
@@ -249,6 +264,7 @@ export function useCaddieTabMic({
         const failure = await import('../services/caddieFailureReply');
         const local = failure.localAnswer(transcript, lang);
         if (local) {
+          if (supersededByNewerTurn()) { yieldLine(local); return; }
           onVoiceStateChange?.('speaking');
           onKevinSpoke?.(local);
           if (settings.voiceEnabled) {
@@ -257,14 +273,22 @@ export function useCaddieTabMic({
           onVoiceStateChange?.('idle');
           return;
         }
+        /**
+         * Review G2 (finding 8, 10-15) — keep the words as an OFFLINE note only when the phone is PROVEN
+         * offline. The note is handed back to the brain as "captured with no signal", and the old code
+         * saved (and announced saving) every failed transcript, including the many failures that were
+         * ours on a working connection. Otherwise the verdict line says what is true.
+         */
+        const reply = await failure.caddieFailureReply({ heard: null, language: lang });
         let captured = false;
-        try {
-          const { captureOfflineStatement } = await import('../services/voiceLogService');
-          captured = captureOfflineStatement(transcript);
-        } catch { /* capture is best-effort */ }
-        const line = captured
-          ? "I didn't get that through just now, but I saved what you said. I'll pick it back up in a second."
-          : (await failure.caddieFailureReply({ heard: null, language: lang })).text;
+        if (reply.verdict && (await import('../services/reachability')).isProvenOffline(reply.verdict)) {
+          try {
+            const { captureOfflineStatement } = await import('../services/voiceLogService');
+            captured = captureOfflineStatement(transcript);
+          } catch { /* capture is best-effort */ }
+        }
+        const line = captured ? CADDIE_NOTICE_SAVED_OFFLINE[lang] : reply.text;
+        if (supersededByNewerTurn()) { yieldLine(line); return; }
         onVoiceStateChange?.('speaking');
         onKevinSpoke?.(line);
         const { speakDeviceNotice } = await import('../services/voiceService');
@@ -303,7 +327,7 @@ export function useCaddieTabMic({
        * mic that is live right now. The epoch alone also moves for taps that never became a turn, and
        * then the answer the player was waiting for went unspoken.
        */
-      if (getUserTurnEpoch() !== turnEpoch && (pendingTurnRef.current !== null || isCapturing() || isExternalMicActive())) {
+      if (supersededByNewerTurn()) {
         devLog('[caddie] reply superseded by a newer turn — caption only');
         // 2026-09-29 (review) — this return used to leave the tab on the 'thinking' set above: the avatar
         // stuck, VAD (idle-only) off, every proactive line dropped. A queued turn re-sets its own state
@@ -312,6 +336,8 @@ export function useCaddieTabMic({
         return;
       }
       onVoiceStateChange?.('speaking');
+      // Review G2 (finding 3) — snapshot so a shush during the reply is visible after it.
+      const stopGenAtReply = getStopGeneration();
       try {
         const settings = useSettingsStore.getState();
         /**
@@ -334,7 +360,15 @@ export function useCaddieTabMic({
       // Auto-listen: always in continuous mode; on any question otherwise.
       // 2026-09-29 (review) — a queued question answers next; opening the mic here would put its reply
       // on top of a live recording.
-      if (text.trim() && onReadyToListen && pendingTurnRef.current === null) {
+      /**
+       * Review G2 (finding 3, 10-15) — and never after the player SHUSHED the reply. A tap during the
+       * answer stops it (useVoiceCaddie.handleMicPress → stopSpeaking), the await above resolves, and
+       * this used to see a reply ending in "?" and open the mic straight back up on the player who had
+       * just told it to stop. Any stop during the reply means it was cut off; a cut-off question was
+       * not asked.
+       */
+      const replyWasCutOff = getStopGeneration() !== stopGenAtReply;
+      if (text.trim() && onReadyToListen && pendingTurnRef.current === null && !replyWasCutOff) {
         const { continuousConversationMode } = useSettingsStore.getState();
         const isQuestion = endsAsQuestion(text);
         // 2026-06-30 (Tim) — a sign-off ("I'm good, thanks" / "that's all") must END the
