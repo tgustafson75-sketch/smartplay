@@ -40,6 +40,7 @@ import type { ThemeColors } from '../../theme/tokens';
 // Type-only (erased at compile — no runtime dep on the heavy pose/analysis modules).
 import type { SwingAnalysis } from '../../services/poseDetection';
 import type { SwingBiomechanics } from '../../services/poseAnalysisApi';
+import { SWAY_STRENGTH_MAX, SWAY_NEEDS_WORK_MIN, WEIGHT_SHIFT_SOLID_MIN } from '../../services/swing/poseSwingRead';
 import { useTranslation } from 'react-i18next';
 
 // 2026-06-12 — acoustic status badges (Tim's set) for the pickup card header.
@@ -345,10 +346,15 @@ export function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics 
   // just because the AI named no fault. Weight already gated on bio.weightShiftPct; sway/tilt/posture now
   // match: if the underlying metric wasn't measured, the tone is neutral ("—"), not a baseless green. A named
   // fault still wins (it's a real signal even when the scalar is null).
+  // 2026-10-16 (Lily's DTL clip: "Sway: Good" above "Hip stability 111%") — the tile graded the presence
+  // of hipSlideRatio / head drift, never the sway number the breakdown prints. It now grades swayNorm with
+  // the breakdown's own thresholds (poseSwingRead); no sway measurement (e.g. from down the line) = "—".
+  const sw = bio?.swayNorm ?? null;
   const sway: SmTone = n ? 'neutral'
-    : fault === 'sway' || fault === 'head_movement' ? 'bad'
-    : (bio?.hipSlideRatio == null && bio?.headDriftPxNorm == null) ? 'neutral'
-    : 'good';
+    : fault === 'sway' ? 'bad'
+    : sw == null ? 'neutral'
+    : sw <= SWAY_STRENGTH_MAX ? 'good'
+    : sw > SWAY_NEEDS_WORK_MIN ? 'bad' : 'warn';
   const tilt: SmTone = n ? 'neutral'
     : fault === 'reverse_pivot' || fault === 'plane_too_flat' || fault === 'plane_too_steep' ? 'warn'
     : bio?.shoulderTiltDeg == null ? 'neutral'
@@ -362,7 +368,8 @@ export function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics 
   const weight: SmTone = n ? 'neutral'
     : fault === 'reverse_pivot' ? 'bad'
     : bio?.weightShiftPct == null ? 'neutral'
-    : bio.weightShiftPct < 30 ? 'warn' : 'good';
+    // 2026-10-16 — the breakdown's grade (poseSwingRead), not a third threshold of its own (was < 30).
+    : bio.weightShiftPct < WEIGHT_SHIFT_SOLID_MIN ? 'warn' : 'good';
   // 2026-06-30 (audit C5/C7) — surface the MEASURED number on each tile. "~" marks a
   // low-confidence read (metric_confidence < 0.5). Sway has no intuitive scalar (head-drift
   // is normalized pixels), so it stays qualitative — honest, no fabricated number.

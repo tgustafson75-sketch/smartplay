@@ -1080,7 +1080,8 @@ check('Analysis self-corrects a mislabeled camera angle (geometry beats the togg
     const pa = read('services/poseAnalysisApi.ts');
     return (
       /else if \(angle === 'down_the_line' \|\| angle === 'face_on'\)/.test(pa) &&
-      /const inferred = inferCameraAngle\(frames\);/.test(pa) &&
+      // 2026-10-16 — judged on the frames MEASURED to be at address (atAddress), not placed labels.
+      /const inferred = inferCameraAngle\(frames, atAddress\);/.test(pa) &&
       /if \(inferred && inferred !== angle\) angle = inferred;/.test(pa)
     );
   })(),
@@ -3295,7 +3296,7 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
     const resolver = read('services/swingerHandedness.ts');
     return (
       // computeBiomechanics infers the angle when the caller passes none.
-      /if \(angle == null\) \{\s*\n\s*angle = inferCameraAngle\(frames\);/.test(pose) &&
+      /if \(angle == null\) \{\s*\n\s*angle = inferCameraAngle\(frames, atAddress\);/.test(pose) &&
       // the detector keys off shoulder-width vs torso-height and is conservative
       // (only asserts DTL/face-on at unambiguous ratios, else null = compute as-is).
       /maxRatio < 0\.35\) return 'down_the_line'/.test(infer) &&
@@ -7819,7 +7820,8 @@ check('Pose/biomech pipeline is angle-aware (DTL vs FO)',
     // the screen hands over nothing, and the engine's inference path is reachable.
     // 2026-10-05 — SmartMotion saves no angle on the swing, so the body read passes null and infers it.
     !/angleOverride:/.test(smSrc) && /s\.upload\?\.angleOverride \?\? null/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
-    /angle = inferCameraAngle\(frames\);/.test(poseApiSrc) &&
+    // 2026-10-16 — on the frames measured to be at address (atAddress), see poseAnalysisApi.
+    /angle = inferCameraAngle\(frames, atAddress\);/.test(poseApiSrc) &&
     // ...and a confident disagreement still overrides an explicitly-supplied label (uploads, coach
     // lesson), which is the invariant that made the toggle redundant in the first place.
     /if \(inferred && inferred !== angle\) angle = inferred;/.test(poseApiSrc),
@@ -16769,7 +16771,8 @@ check(
   check(
     'ANGLE: a labelled swing is judged on the setup side, never on its finish',
     /const setupSide = frames\.filter\(\(f\) => f\.position === 'P1_address' \|\| f\.position === 'P2_takeaway'\);/.test(infer) &&
-      /const pool = setupSide\.length >= 2 \? setupSide : frames\.some\(\(f\) => f\.position\) \? setupSide : frames;/.test(infer) &&
+      // 2026-10-16 — measured address frames (poseMotion anchors), when the caller has them, come first.
+      /const pool = atAddress && atAddress\.length > 0 \? atAddress\s*\n\s*: setupSide\.length >= 2 \? setupSide : frames\.some\(\(f\) => f\.position\) \? setupSide : frames;/.test(infer) &&
       /for \(const f of pool\)/.test(infer),
     'address is the only moment the two angles are unambiguous; every later position rotates and stops discriminating',
   );
@@ -16782,7 +16785,7 @@ check(
   // reads the discriminating moment, and it is the reason this guard names both files.
   check(
     'ANGLE: biomechanics still self-corrects from the frames, and glasses_pov is never overridden',
-    /if \(angle == null\) \{[\s\S]{0,120}?angle = inferCameraAngle\(frames\);[\s\S]{0,60}?\} else if \(angle === 'down_the_line' \|\| angle === 'face_on'\) \{/.test(readCode('services/poseAnalysisApi.ts')),
+    /if \(angle == null\) \{[\s\S]{0,120}?angle = inferCameraAngle\(frames, atAddress\);[\s\S]{0,60}?\} else if \(angle === 'down_the_line' \|\| angle === 'face_on'\) \{/.test(readCode('services/poseAnalysisApi.ts')),
     'a first-person source the frames cannot reveal is never inferred away',
   );
 }

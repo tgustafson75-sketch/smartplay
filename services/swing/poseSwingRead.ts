@@ -164,6 +164,16 @@ function bandRead(
  * a null measurement → the dimension is omitted (not guessed), and a fault is asserted only when a
  * real measurement clears a threshold.
  */
+/**
+ * 2026-10-16 — the grades for sway and weight shift, shared with the Body Analysis tiles
+ * (SmartMotionHud.deriveBodyItems). The tile read a different field with a different rule, so one
+ * swing showed "Sway: Good" above "Hip stability 111%"; both now grade the same number the same way.
+ */
+export const SWAY_STRENGTH_MAX = 0.15;
+export const SWAY_NEEDS_WORK_MIN = 0.22;
+export const WEIGHT_SHIFT_STRENGTH_MIN = 12;
+export const WEIGHT_SHIFT_SOLID_MIN = 4;
+
 export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTempo | null): PoseSwingRead {
   const dims: DimensionRead[] = [];
   const faults: PoseFault[] = [];
@@ -199,8 +209,8 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
   if (bio?.weightShiftPct != null) {
     const w = bio.weightShiftPct;
     const display = `${w > 0 ? '+' : ''}${Math.round(w)}%`;
-    if (w >= 12) dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: 'strength', note: `${display} onto your lead side at impact — you're driving through the ball.` });
-    else if (w >= 4) dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: 'solid', note: `${display} forward — moving in the right direction; a touch more drive adds compression.` });
+    if (w >= WEIGHT_SHIFT_STRENGTH_MIN) dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: 'strength', note: `${display} onto your lead side at impact — you're driving through the ball.` });
+    else if (w >= WEIGHT_SHIFT_SOLID_MIN) dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: 'solid', note: `${display} forward — moving in the right direction; a touch more drive adds compression.` });
     else {
       dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: w < -4 ? 'needs_work' : 'watch', note: `${display} — your weight is hanging back through impact instead of driving forward.` });
       if (trust(conf.weightShift)) faults.push(fault('reverse_pivot', 'Weight hanging back', sev(w < -8 ? 2 : w < 0 ? 1 : 0), `Weight shift ${display} at impact — you're not getting onto your lead side (power + strike suffer).`));
@@ -225,9 +235,9 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
   if (bio?.swayNorm != null) {
     const v = bio.swayNorm;
     const display = `${Math.round(v * 100)}%`;
-    if (v <= 0.15) dims.push({ key: 'sway', label: 'Hip stability', display, verdict: 'strength', note: `Hips stayed stacked over the ball (${display} drift) — a centered turn around a post.` });
+    if (v <= SWAY_STRENGTH_MAX) dims.push({ key: 'sway', label: 'Hip stability', display, verdict: 'strength', note: `Hips stayed stacked over the ball (${display} drift) — a centered turn around a post.` });
     else {
-      dims.push({ key: 'sway', label: 'Hip stability', display, verdict: v > 0.22 ? 'needs_work' : 'watch', note: `Your hips slid ${display} of shoulder-width off the ball in the backswing.` });
+      dims.push({ key: 'sway', label: 'Hip stability', display, verdict: v > SWAY_NEEDS_WORK_MIN ? 'needs_work' : 'watch', note: `Your hips slid ${display} of shoulder-width off the ball in the backswing.` });
       if (trust(conf.sway)) faults.push(fault('sway', 'Sway off the ball', sev(v > 0.28 ? 2 : v > 0.20 ? 1 : 0), `Hips slid ${display} of shoulder-width off the ball — swaying laterally instead of turning around a centered post.`));
     }
   }

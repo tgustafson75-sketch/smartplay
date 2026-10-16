@@ -105,11 +105,20 @@ describe('SmartMotion metric coverage, per camera angle', () => {
   });
 
   it('every angle still reports the metrics that do not depend on it', () => {
-    // Spine angle, head drift, arm angles, sway and finish are read from the same projection at any
-    // angle, so nulling them would be losing data we legitimately have.
+    // Spine angle is read from the same projection at any angle, so nulling it would be losing data
+    // we legitimately have. 2026-10-16 (Lily's DTL clip, "Hip stability 111%") — head drift, sway and
+    // the finish weight turned out NOT to be angle-free: each is divided by the shoulder line or the
+    // stance, which from behind collapse to almost nothing. Face-on keeps them; DTL refuses them (below).
     for (const a of ['face_on', 'down_the_line'] as const) {
-      const have = populated(a);
-      for (const m of ['spineAngleDeltaDeg', 'headDriftPxNorm']) expect(have).toContain(m);
+      expect(populated(a)).toContain('spineAngleDeltaDeg');
+    }
+    for (const m of ['headDriftPxNorm', 'swayNorm', 'finishWeightPct', 'leadArmTopDeg']) expect(populated('face_on')).toContain(m);
+  });
+
+  it('DOWN-THE-LINE refuses the reads divided by a collapsed width, and the far-side lead arm', () => {
+    const have = populated('down_the_line');
+    for (const m of ['headDriftPxNorm', 'swayNorm', 'finishWeightPct', 'leadArmTopDeg', 'leadArmImpactDeg']) {
+      expect(have).not.toContain(m);
     }
   });
 });

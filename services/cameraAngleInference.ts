@@ -25,7 +25,17 @@ function kp(frame: PoseFrame, name: string): Keypoint | null {
  * return null (compute as-is, status quo). Never returns glasses_pov (a first-person
  * source the frames can't reveal — that stays an explicit caller flag).
  */
-export function inferCameraAngle(frames: PoseFrame[]): 'face_on' | 'down_the_line' | null {
+export function inferCameraAngle(
+  frames: PoseFrame[],
+  /**
+   * 2026-10-16 (Lily's 4075, tagged DTL, scored face-on) — frames MEASURED to be at address (before the
+   * hands start back; poseMotion's anchors). The P1/P2 labels are placed at fixed offsets or window
+   * fractions, and on her clip P2_takeaway landed in the backswing, where the shoulders already open to
+   * the camera (ratio 1.03) — so a DTL swing read "face_on" and overruled the player's own tag. When the
+   * caller has these, they are the pool.
+   */
+  atAddress?: PoseFrame[] | null,
+): 'face_on' | 'down_the_line' | null {
   /**
    * 2026-09-01 (Tim — "the club arc shows up sporadically and mostly incorrect… it may get the
    * direction right, but it looks like it's behind the user. I think our down-the-line versus
@@ -64,7 +74,10 @@ export function inferCameraAngle(frames: PoseFrame[]): 'face_on' | 'down_the_lin
    * all at address anyway, so they fall through unchanged.
    */
   const setupSide = frames.filter((f) => f.position === 'P1_address' || f.position === 'P2_takeaway');
-  const pool = setupSide.length >= 2 ? setupSide : frames.some((f) => f.position) ? setupSide : frames;
+  // Measured address frames are the whole pool when given, even one (then too few to judge: null, and
+  // the caller's label stands) — never topped up with a placed label from the backswing.
+  const pool = atAddress && atAddress.length > 0 ? atAddress
+    : setupSide.length >= 2 ? setupSide : frames.some((f) => f.position) ? setupSide : frames;
 
   let maxRatio = 0;
   let sampled = 0;

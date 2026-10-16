@@ -23,6 +23,7 @@ import * as VideoThumbnails from '../utils/videoThumbnail';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from './apiBase';
 import { inferCameraAngle } from './cameraAngleInference';
+import { anchorsFromPoseFrames } from './swing/poseMotion';
 import { rejectImplausible } from './swing/biomechPlausibility';
 import { roiFromBodyBounds } from './swing/clubPath';
 
@@ -634,21 +635,45 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
   // when the read is UNAMBIGUOUS) — and if it confidently DISAGREES, self-correct to the
   // frames. A null/ambiguous inference keeps the user's label. glasses_pov (a first-person
   // source the frames can't reveal) is never overridden — inference can't produce it.
+  /**
+   * 2026-10-16 (Lily's 4075, DTL) — THE PHASES THE HANDS SAY, not where the sampler put its labels.
+   * P1/P4/P10 are placed at fixed offsets from an impact time (or at fractions of a window), so "lead
+   * arm at the top" and "the finish" were read off whatever frame sat there. When the frames' own
+   * motion yields the swing's anchors (poseMotion — the same ones the stage buttons seek to), each
+   * phase reads the frame nearest its anchor. A strike label still times impact when it agrees.
+   */
+  const motion = anchorsFromPoseFrames(frames);
+  const nearest = (ms: number): PoseFrame | undefined => {
+    let best: PoseFrame | undefined;
+    for (const f of frames) if (!best || Math.abs(f.timestampMs - ms) < Math.abs(best.timestampMs - ms)) best = f;
+    return best && Math.abs(best.timestampMs - ms) <= 200 ? best : undefined;
+  };
+  const phaseFrame = (key: PoseFrame['position'], anchorMs: number | undefined): PoseFrame | undefined => {
+    const label = frames.find(f => f.position === key);
+    if (anchorMs == null) return label;
+    if (key === 'P6_impact' && label?.positionSource === 'strike' && Math.abs(label.timestampMs - anchorMs) <= 150) return label;
+    return nearest(anchorMs) ?? label;
+  };
+  // Address-side frames for the angle read: measured to be before the takeaway, plus the P1 label when it
+  // sits before the top. Never P2_takeaway: placed at a fixed offset, on 4075 it landed in the backswing.
+  const atAddress = motion
+    ? frames.filter(f => f.timestampMs <= motion.startMs || (f.position === 'P1_address' && f.timestampMs < motion.topMs))
+    : null;
   if (angle == null) {
-    angle = inferCameraAngle(frames);
+    angle = inferCameraAngle(frames, atAddress);
   } else if (angle === 'down_the_line' || angle === 'face_on') {
-    const inferred = inferCameraAngle(frames);
+    const inferred = inferCameraAngle(frames, atAddress);
     if (inferred && inferred !== angle) angle = inferred;
   }
-  const address = robustAnchor(frames, frames.find(f => f.position === 'P1_address'));
-  const top = robustAnchor(frames, frames.find(f => f.position === 'P4_top'));
+  const address = robustAnchor(frames, phaseFrame('P1_address', motion?.startMs));
+  const top = robustAnchor(frames, phaseFrame('P4_top', motion?.topMs));
   // 2026-08-06 (analysis audit) — impact sits in the FASTEST motion of the swing; a 90ms keypoint borrow
   // there can composite in a hip/ankle from a materially different body position and skew weightShift /
   // spineAngle. Address + top are at/near the transition (near-zero velocity), so their wider window only
   // denoises. Tighten impact's window (~one frame each side at 30fps) so it still rejects a single bad
   // frame without teleporting a joint across fast motion.
-  const impact = robustAnchor(frames, frames.find(f => f.position === 'P6_impact'), 45);
-  const finish = robustAnchor(frames, frames.find(f => f.position === 'P10_finish'));
+  const impact = robustAnchor(frames, phaseFrame('P6_impact', motion?.impactMs), 45);
+  const finish = robustAnchor(frames, phaseFrame('P10_finish', motion?.endMs));
 
   // 2026-08-09 (elite fault engine — Tim: "lead arm bent, trail chicken winged, finish correct or not.
   // Missing a lot my eyes see plainly"). The engine measured hips/shoulders/spine but NEVER the ARMS —
@@ -877,6 +902,33 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     // behind; they were slipping through and printing confident wrong numbers.
     sequencingScore = null;
     hipSlideRatio = null;
+    // 2026-10-16 (Lily's 4075: "Hip stability 111%", "Finish -60%", "Lead arm 137°/100°") — sway and the
+    // finish weight are the same lateral-x reads as the weight shift, divided by an edge-on shoulder
+    // line and stacked ankles: not measurable from behind. The lead arm is on the far side of the body,
+    // foreshortened toward the camera — its projected elbow angle is not the arm's.
+    swayNorm = null;
+    finishWeightPct = null;
+    leadArmTopDeg = null;
+    leadArmImpactDeg = null;
+  }
+  /**
+   * 2026-10-16 — THE GEOMETRY ITSELF, whatever the label says. On Lily's DTL clip the angle read
+   * ambiguous at address (shoulder line 0.4-0.55 of torso height), and an ambiguous angle gated
+   * nothing, so a lateral distance divided by a shoulder line 0.03 of the frame wide printed "111% of
+   * shoulder-width". A read normalised by a width needs that width to be there: the shoulder line
+   * clearly broad (the face-on edge, 0.6 of torso height) for sway, the feet clearly apart (0.5) for
+   * the weight reads.
+   */
+  if (address) {
+    const ls = getKp(address, 'left_shoulder'); const rs = getKp(address, 'right_shoulder');
+    const lh = getKp(address, 'left_hip'); const rh = getKp(address, 'right_hip');
+    const la = getKp(address, 'left_ankle'); const ra = getKp(address, 'right_ankle');
+    const torso = ls && rs && lh && rh ? Math.abs((lh.y + rh.y) / 2 - (ls.y + rs.y) / 2) : 0;
+    if (torso > 0) {
+      // Head drift is divided by the same shoulder line, so it goes with it.
+      if (ls && rs && Math.abs(rs.x - ls.x) / torso < 0.6) { swayNorm = null; headDriftPxNorm = null; }
+      if (!la || !ra || Math.abs(ra.x - la.x) / torso < 0.5) { weightShiftPct = null; finishWeightPct = null; }
+    }
   }
   // 2026-07-07 (biomech audit #3) — the tilt gate was INVERTED from the geometry:
   // from FACE-ON the projected shoulder tilt inflates toward 90° as the turn grows
@@ -891,6 +943,8 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     hipTurnDeg = null;
     shoulderTurnDeg = null;
     weightShiftPct = null;
+    swayNorm = null;
+    finishWeightPct = null;
     sequencingScore = null;
     hipSlideRatio = null;
     shoulderTiltDeg = null;

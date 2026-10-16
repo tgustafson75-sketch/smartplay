@@ -351,6 +351,9 @@ export async function searchSimilarSwings(
     // in a "most similar" ranking — skip it rather than coerce null to 0
     // (which would rank it as the worst possible match, a fabricated 0%).
     if (cmp.overall_match == null) continue;
+    // 2026-10-16 (Lily's DTL swing: "Tour-median driver 0% match", marked BEST) — 0% is not a similarity;
+    // a reference that matches on nothing is not a "closest reference" and is not offered as one.
+    if (cmp.overall_match <= 0) continue;
     if (filter?.minMatch != null && cmp.overall_match < filter.minMatch) continue;
     matches.push({
       reference: ref,

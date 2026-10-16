@@ -63,8 +63,12 @@ export const BIOMECH_BANDS: Record<string, readonly [number, number]> = {
    */
   leadArmTopDeg: [90, 180],
   leadArmImpactDeg: [90, 180],
-  /** Hip lateral translation as a fraction of shoulder width. */
-  swayNorm: [0, 1.5],
+  /**
+   * Hip lateral translation as a fraction of shoulder width. 2026-10-16 — was [0, 1.5], which passed
+   * Lily's "111%". A severe sway is ~0.3-0.4 of shoulder width; hips sliding more than half a shoulder
+   * width off the ball in a backswing is a mis-tracked hip or a collapsed divisor, not a swing.
+   */
+  swayNorm: [0, 0.6],
 };
 
 /** True when `value` is a real measurement for `metric`. Unknown metrics pass — the gate never

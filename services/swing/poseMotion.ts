@@ -70,7 +70,7 @@ export function deriveSwingAnchors(samples: MotionSample[]): SwingAnchors | null
  * The height of the hands is far more robust than their speed, and it reads the same from either
  * camera: they start low (address), rise to the top, come back down to about where they started
  * (impact), and rise again (finish). So:
- *   address  the hands' height in the first samples (the window opens before the takeaway);
+ *   address  the hands' lowest height in the first samples (the window opens before the takeaway);
  *   top      the highest point of the FIRST rise (hands at least 60% of the swing's height);
  *   impact   the lowest point of the descent that follows, before the hands climb again;
  *   finish   the top of the next climb — the first apex after impact, not a later wave of the club;
@@ -79,7 +79,9 @@ export function deriveSwingAnchors(samples: MotionSample[]): SwingAnchors | null
  * and the speed read answers as before.
  */
 function heightAnchors(pts: MotionSample[]): SwingAnchors | null {
-  const baseY = median(pts.slice(0, 3).map((p) => p.y));
+  // Address height: the LOWEST hands among the first samples (image y grows downward). A median let a
+  // window that opens on the takeaway lift the baseline, and "address" then landed mid-takeaway.
+  const baseY = Math.max(...pts.slice(0, 3).map((p) => p.y));
   const h = pts.map((p) => baseY - p.y);   // image y grows downward: positive = hands higher than address
   const amp = Math.max(...h);
   if (!(amp >= 0.05)) return null;
