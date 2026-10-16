@@ -97,6 +97,23 @@ function windowAndImpact(shot: SwingShot): { window: { startMs: number; endMs: n
   return { window, impactMs };
 }
 
+/**
+ * 2026-10-16 (re-review) — IS THIS IMPACT A HEARD STRIKE? One answer for the body read and both review
+ * screens. The screens used to say "heard" for any audio_transient shot, while the body read also asked
+ * that the impact it was given BE the heard offset — so after "Analyze this moment" (a user impact stored
+ * as locatedImpactSec on a cage shot) the body read trusted the hands and the Impact button trusted the
+ * strike label. Heard = an audio_transient shot whose impact is the heard offset (±50ms).
+ */
+export function impactIsHeard(shot: Pick<SwingShot, 'detectionMethod' | 'detectionOffsetSeconds'>, impactMs: number | null): boolean {
+  return impactMs != null && shot.detectionMethod === 'audio_transient'
+    && typeof shot.detectionOffsetSeconds === 'number' && Math.abs(shot.detectionOffsetSeconds * 1000 - impactMs) <= 50;
+}
+
+/** The shot's impact (what the body read is given when it has a window) is a heard strike. */
+export function shotImpactHeard(shot: SwingShot | null | undefined): boolean {
+  return !!shot && impactIsHeard(shot, windowAndImpact(shot).impactMs);
+}
+
 async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechanics | null> {
   // One decoder: the swing's read pulls its key frames first.
   await whenStageSettled(swingRunKey(input.sessionId), 'read', signal);
@@ -131,8 +148,7 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
   const poseMod = await import('../../poseAnalysisApi');
   // 2026-10-16 — is that impact a HEARD strike (frame-exact) or a located one? The body read trusts only
   // a heard one over the hands' own motion.
-  const impactHeard = impactMs != null && shot.detectionMethod === 'audio_transient'
-    && typeof shot.detectionOffsetSeconds === 'number' && Math.abs(shot.detectionOffsetSeconds * 1000 - impactMs) <= 50;
+  const impactHeard = impactIsHeard(shot, impactMs);
   const biomech = await poseMod.analyzeSwingFromVideo(
     uri, durMs, s.upload?.angleOverride ?? null, probed > 0, window, impactMs, swingerForSession(s).handedness,
     0, () => signal.aborted,   // a superseded / cancelled body read stops decoding, not just writing

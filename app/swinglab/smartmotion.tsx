@@ -93,7 +93,7 @@ import { startMeteredRecording, type MeteringHandle } from '../../services/swing
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
-import { requestShotDetail, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
+import { requestShotDetail, shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
 import { CONTACT_ISSUE_IDS, mishitFromFeel, noLaunchIssue } from '../../services/swing/contactVerdict';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
@@ -4691,7 +4691,7 @@ export default function SmartMotion() {
    */
   const reviewFaultId = analysis?.primary_fault ?? analysis?.detected_issue ?? null;
   const reviewAnchors = useMemo(() => anchorsFromPoseFrames(poseFrames), [poseFrames]);
-  const reviewHeardStrike = cageSession?.shots[selectedSwing]?.detectionMethod === 'audio_transient';
+  const reviewHeardStrike = shotImpactHeard(cageSession?.shots[selectedSwing]);   // the body read's own answer
   /** Where each stage chip / scrubber tick seeks — the one rule both review screens use (poseMotion). */
   const reviewStageTimes = useMemo(
     () => swingStageTimesMs(poseFrames, { heardStrike: reviewHeardStrike, anchors: reviewAnchors }),

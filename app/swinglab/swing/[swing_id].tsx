@@ -38,7 +38,7 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { requestShotDetail, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { requestShotDetail, shotImpactHeard, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
 // 2026-09-20 — this screen HAS pose frames (activeBiomech.frames) and was still asking the model
 // to find a ~6px clubhead in a full downscaled frame. See services/swing/bodyBounds.
 import { readClubPath } from '../../../services/swing/clubPathRead';
@@ -663,7 +663,7 @@ export default function SwingDetail() {
   // 2026-10-16 — WHERE they seek is services/swing/poseMotion.swingStageTimesMs, shared with SmartMotion:
   // the stages measured from this read's motion first (a frame label placed at a fixed offset from a
   // located impact is not a measurement), a heard strike for Impact, a label only where motion said nothing.
-  const heardStrike = shot?.detectionMethod === 'audio_transient';
+  const heardStrike = shotImpactHeard(shot);   // the body read's own answer (shotDetail)
   const swingStageChips = useMemo(
     () => swingStageTimesMs(poseFrames, { heardStrike, anchors: motionAnchors }),
     [poseFrames, motionAnchors, heardStrike],

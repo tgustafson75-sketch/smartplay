@@ -61,7 +61,8 @@ describe('the Impact button and the impact numbers name one instant', () => {
 
   it('the swing run tells the body read whether its impact was heard', () => {
     const sd = fs.readFileSync(path.join(__dirname, '../../services/swing/orchestrator/shotDetail.ts'), 'utf8');
-    expect(sd).toMatch(/const impactHeard = impactMs != null && shot\.detectionMethod === 'audio_transient'/);
+    // 2026-10-16 (re-review) — through the one shared answer (impactIsHeard), which the screens use too.
+    expect(sd).toMatch(/const impactHeard = impactIsHeard\(shot, impactMs\);/);
     expect(sd).toMatch(/0, \(\) => signal\.aborted,[^\n]*\n\s*impactHeard,/);
   });
 });
