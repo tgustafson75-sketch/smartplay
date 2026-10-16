@@ -117,12 +117,83 @@ export function getCachedWeatherEvenIfStale(
 ): WeatherSnapshot | null {
   const key = bucketKey(location);
   const entry = cache.get(key);
-  if (!entry) {
-    lazyHydrate(key);
-    return null;
+  if (entry && Date.now() - entry.cached_at <= STALE_BUT_USABLE_MS) return entry.snapshot;
+  if (!entry) lazyHydrate(key);
+  /**
+   * 2026-10-15 (offline audit gap #2) — the bucket is ~100m, keyed by the player's CURRENT fix, so
+   * walking to the next tee missed a reading taken five minutes earlier on the same course, and every
+   * offline reader (plays-like, the club call, the brain's context) lost the wind. Weather does not
+   * change across a golf course; a reading within SAME_AREA_M and the same 30 minutes is the same
+   * weather. The age limit is unchanged — this widens WHERE, never WHEN.
+   */
+  hydrateAllOnce();
+  return nearestEntry(location, STALE_BUT_USABLE_MS)?.snapshot ?? null;
+}
+
+/** ~1.5 km: one golf course. The weather API's own resolution is coarser than this. */
+const SAME_AREA_M = 1500;
+/** The oldest reading the offline wind answer will give, and only with its age said out loud. */
+const OFFLINE_WIND_MAX_MS = 3 * 60 * 60 * 1000;
+
+function metresBetween(a: ShotLocation, b: { lat: number; lng: number }): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function nearestEntry(location: ShotLocation, maxAgeMs: number): CacheEntry | null {
+  let best: { entry: CacheEntry; m: number } | null = null;
+  const now = Date.now();
+  for (const [k, entry] of cache) {
+    if (now - entry.cached_at > maxAgeMs) continue;
+    const [lat, lng] = k.split(',').map(Number);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const m = metresBetween(location, { lat, lng });
+    if (m <= SAME_AREA_M && (!best || m < best.m || (m === best.m && entry.cached_at > best.entry.cached_at))) best = { entry, m };
   }
-  if (Date.now() - entry.cached_at > STALE_BUT_USABLE_MS) return null;
-  return entry.snapshot;
+  return best?.entry ?? null;
+}
+
+/**
+ * 2026-10-15 — every persisted reading, loaded once. lazyHydrate only loads the EXACT bucket asked
+ * for, so after a cold start with no signal a reading from the next tee box was on disk and invisible.
+ */
+let hydratedAll = false;
+function hydrateAllOnce(): void {
+  if (hydratedAll) return;
+  hydratedAll = true;
+  void (async () => {
+    try {
+      const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(STORAGE_PREFIX));
+      for (const full of keys) {
+        const key = full.slice(STORAGE_PREFIX.length);
+        if (cache.has(key)) continue;
+        const entry = await readPersisted(key);
+        if (entry && !cache.has(key)) cache.set(key, entry);
+      }
+    } catch { /* best-effort: a miss just means no wind reading */ }
+  })();
+}
+
+/**
+ * 2026-10-15 — the last wind reading on this course, up to 3 hours old, for the offline WIND ANSWER
+ * ONLY — and only when the phone is PROVEN offline (the connectivity banner is raised only on proof,
+ * services/reachability). Returned with its age so the reply says how old it is. Deliberately NOT used
+ * for plays-like or the club call: an hour-old wind folded silently into a yardage would be a number
+ * presented as current that is not.
+ */
+export function lastKnownWindOffline(location: ShotLocation): { snapshot: WeatherSnapshot; ageMinutes: number } | null {
+  const fresh = getCachedWeatherEvenIfStale(location);
+  if (fresh) return { snapshot: fresh, ageMinutes: 0 };
+  let offline = false;
+  try { offline = require('../store/connectivityStore').useConnectivityStore.getState().isOnline === false; } catch { /* treat as online */ }
+  if (!offline) return null;
+  const entry = nearestEntry(location, OFFLINE_WIND_MAX_MS);
+  if (!entry) return null;
+  return { snapshot: entry.snapshot, ageMinutes: Math.round((Date.now() - entry.cached_at) / 60_000) };
 }
 
 /**
@@ -164,4 +235,5 @@ export async function fetchWeatherAt(location: ShotLocation): Promise<WeatherSna
  */
 export function _clearWeatherCache(): void {
   cache.clear();
+  hydratedAll = false;
 }

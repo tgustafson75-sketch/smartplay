@@ -48,7 +48,7 @@ import { bagDistances } from './shotStrategy';
 // is pure/offline-safe; cached weather feeds the wind factor. [[smartfinder-unified-brain-read]]
 import { decideShot } from './caddieDecision';
 import { getEffectiveDominantMiss } from './effectiveMiss';
-import { getCachedWeatherEvenIfStale } from './weatherService';
+import { getCachedWeatherEvenIfStale, lastKnownWindOffline } from './weatherService';
 import { playsLikeDistance } from '../utils/playsLike';
 // 2026-06-14 (Tim — course book) — STATIC per-hole knowledge (note/description/
 // hazards) anchored into the CNS, so "what's this hole / what do I watch for" answers
@@ -182,6 +182,8 @@ const L: Record<LocalReplyLanguage, {
   windCalm: (mph: number) => string;
   windRelative: (mph: number, desc: string) => string;
   windPlain: (mph: number) => string;
+  /** Suffix for a wind reading older than 30 minutes (offline only). */
+  windAsOf: (minutes: number) => string;
   windInto: string; windHelp: string; windL2R: string; windR2L: string;
   noWind: string;
   reachYes: (plays: number, club: string, carry: number) => string;
@@ -231,6 +233,7 @@ const L: Record<LocalReplyLanguage, {
     windCalm: (mph) => mph <= 1 ? 'Dead calm right now.' : `Pretty calm — ${mph} mile an hour.`,
     windRelative: (mph, desc) => `${mph} miles an hour, ${desc}.`,
     windPlain: (mph) => `${mph} miles an hour.`,
+    windAsOf: (m) => ` That's my last reading, from ${m} minutes ago.`,
     windInto: 'into your face', windHelp: 'at your back',
     windL2R: 'a left-to-right cross', windR2L: 'a right-to-left cross',
     noWind: "I don't have a wind reading right now.",
@@ -286,6 +289,7 @@ const L: Record<LocalReplyLanguage, {
     windCalm: (mph) => mph <= 1 ? 'Sin viento ahora mismo.' : `Bastante calmo — ${mph} millas por hora.`,
     windRelative: (mph, desc) => `${mph} millas por hora, ${desc}.`,
     windPlain: (mph) => `${mph} millas por hora.`,
+    windAsOf: (m) => ` Es mi última lectura, de hace ${m} minutos.`,
     windInto: 'de frente', windHelp: 'a favor',
     windL2R: 'cruzado de izquierda a derecha', windR2L: 'cruzado de derecha a izquierda',
     noWind: 'No tengo lectura de viento ahora mismo.',
@@ -341,6 +345,7 @@ const L: Record<LocalReplyLanguage, {
     windCalm: (mph) => mph <= 1 ? '现在几乎无风。' : `比较平静——每小时${mph}英里。`,
     windRelative: (mph, desc) => `每小时${mph}英里，${desc}。`,
     windPlain: (mph) => `每小时${mph}英里。`,
+    windAsOf: (m) => `这是我${m}分钟前的最后读数。`,
     windInto: '迎风', windHelp: '顺风',
     windL2R: '从左到右的侧风', windR2L: '从右到左的侧风',
     noWind: '现在没有风力读数。',
@@ -820,13 +825,17 @@ function windReply(lang: LocalReplyLanguage): LocalReplyResult {
   if (!fix || typeof fix.lat !== 'number' || typeof fix.lng !== 'number') {
     return { text: L[lang].noWind, queryType: 'wind' };
   }
-  const weather = getCachedWeatherEvenIfStale({ lat: fix.lat, lng: fix.lng });
-  if (!weather) {
+  // 2026-10-15 — offline, the last reading on this course (up to 3h) answers, with its age said.
+  const known = lastKnownWindOffline({ lat: fix.lat, lng: fix.lng });
+  if (!known) {
     return { text: L[lang].noWind, queryType: 'wind' };
   }
+  const weather = known.snapshot;
+  const asOf = known.ageMinutes > 30 ? L[lang].windAsOf(known.ageMinutes) : '';
   const mph = Math.round(weather.wind_speed_mph ?? 0);
   if (mph < 3) {
-    return { text: L[lang].windCalm(mph), queryType: 'wind' };
+    // "Dead calm right now" would claim the present; an old reading says its speed and its age.
+    return { text: asOf ? L[lang].windPlain(mph) + asOf : L[lang].windCalm(mph), queryType: 'wind' };
   }
   // Relative to the shot, when we can derive a bearing to the green.
   const round = useRoundStore.getState();
@@ -841,10 +850,10 @@ function windReply(lang: LocalReplyLanguage): LocalReplyResult {
       const desc = Math.abs(along) >= Math.abs(cross)
         ? (along < 0 ? L[lang].windInto : L[lang].windHelp)
         : (cross > 0 ? L[lang].windL2R : L[lang].windR2L);
-      return { text: L[lang].windRelative(mph, desc), queryType: 'wind' };
+      return { text: L[lang].windRelative(mph, desc) + asOf, queryType: 'wind' };
     }
   }
-  return { text: L[lang].windPlain(mph), queryType: 'wind' };
+  return { text: L[lang].windPlain(mph) + asOf, queryType: 'wind' };
 }
 
 // Offline caddie Tier 1 — LAST SHOT recall, straight from the logged round state
