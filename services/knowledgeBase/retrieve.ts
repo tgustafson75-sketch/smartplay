@@ -97,16 +97,20 @@ function scoreEntry(entry: KBEntry, q: string, qWords: Set<string>): number {
   let score = 0;
 
   // Whole-phrase alias containment — the strongest, most intentional signal.
+  // 2026-10-15 — the phrase must START a word. Plain substring matching let the alias "stance" match
+  // inside "distance", so "cold weather distance" (offline) answered with a posture tip. A suffix is
+  // still allowed, so "putt" keeps matching "putting" and "bunker" matches "bunkers".
+  const qb = ' ' + q;
   for (const alias of entry.aliases) {
     const na = norm(alias);
-    if (na.length >= 3 && q.includes(na)) {
+    if (na.length >= 3 && qb.includes(' ' + na)) {
       score += 10 + Math.min(na.length, 20) / 10;
     }
   }
 
   // Topic phrase containment.
   const nt = norm(entry.topic);
-  if (nt.length >= 3 && q.includes(nt)) score += 8;
+  if (nt.length >= 3 && qb.includes(' ' + nt)) score += 8;
 
   // Module token present as a discrete word.
   const moduleWord = entry.module.replace(/_/g, ' ');

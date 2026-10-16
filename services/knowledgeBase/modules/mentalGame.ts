@@ -78,7 +78,7 @@ export const MENTAL_GAME: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'first-tee nerves',
-    aliases: ['im so nervous on the first tee', 'first tee jitters', 'people are watching me tee off', 'i tighten up on the first hole', 'opening tee shot nerves', 'im scared', 'i get scared over the ball'],
+    aliases: ['nervous on the first tee', 'first tee nerves', 'im so nervous on the first tee', 'first tee jitters', 'people are watching me tee off', 'i tighten up on the first hole', 'opening tee shot nerves', 'im scared', 'i get scared over the ball'],
     principle:
       'First-tee nerves are normal — even pros feel them — and they are energy, not a warning. Accept the buzz instead of fighting it, take a breath, trust your routine, and pick a smaller target than usual. Aim for a committed, in-play tee shot, not a perfect one; the nerves fade once you are moving.',
     appSignals: ['none'],

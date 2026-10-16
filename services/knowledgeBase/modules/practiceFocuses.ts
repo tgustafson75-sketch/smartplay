@@ -102,7 +102,7 @@ export const PRACTICE_FOCUSES_KB: KBEntry[] = [
     layer: 'practice',
     module: MODULE,
     topic: 'putting focus — start line + speed',
-    aliases: ['work on putting', 'putting focus', 'practice putting', 'dial in my putting', 'putting stroke', 'lag putting', 'start line putting'],
+    aliases: ['putt better', 'better putter', 'work on putting', 'putting focus', 'practice putting', 'dial in my putting', 'putting stroke', 'lag putting', 'start line putting'],
     principle:
       'The putting focus trains start line and speed control with the putter, changing the distance often instead of the same putt on repeat. Filmed face-on (the putt view). The read is contact + start line — honest about what the phone can see from face-on, not green-read or break.',
     appSignals: ['contact', 'start_direction'],

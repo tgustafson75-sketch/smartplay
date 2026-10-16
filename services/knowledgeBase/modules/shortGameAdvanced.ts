@@ -164,7 +164,7 @@ export const SHORT_GAME_ADVANCED: KBEntry[] = [
     layer: 'short_game',
     module: MODULE,
     topic: 'flop / high-soft shot — how',
-    aliases: [
+    aliases: ['high soft pitch', 'high soft shot', 
       'how to hit a flop',
       'how do i hit a flop shot',
       'flop shot technique',
@@ -295,7 +295,7 @@ export const SHORT_GAME_ADVANCED: KBEntry[] = [
     layer: 'short_game',
     module: MODULE,
     topic: 'greenside bunker — buried / fried-egg lie',
-    aliases: [
+    aliases: ['plugged lie', 'plugged in the bunker', 
       'buried lie bunker',
       'fried egg bunker',
       'plugged in the sand',

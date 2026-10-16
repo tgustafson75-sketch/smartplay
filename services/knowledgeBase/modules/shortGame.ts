@@ -84,7 +84,7 @@ export const SHORT_GAME: KBEntry[] = [
     layer: 'short_game',
     module: MODULE,
     topic: 'greenside bunker — sand as energy transfer',
-    aliases: ['bunker shot', 'greenside bunker', 'sand shot', 'how to hit out of a bunker', 'i leave it in the bunker', 'splash shot'],
+    aliases: ['out of a bunker', 'out of the bunker', 'out of the sand', 'bunker shot', 'greenside bunker', 'sand shot', 'how to hit out of a bunker', 'i leave it in the bunker', 'splash shot'],
     principle:
       'In a greenside bunker you don’t hit the ball — you hit the SAND, and the cushion of sand throws the ball out. Open the face, enter the sand a couple inches behind the ball, and let the bounce splash through. Speed plus sand, not a steep dig at the ball.',
     appSignals: ['none'],

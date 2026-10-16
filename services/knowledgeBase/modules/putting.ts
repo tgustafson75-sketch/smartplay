@@ -19,7 +19,7 @@ export const PUTTING: KBEntry[] = [
     layer: 'putting',
     module: MODULE,
     topic: 'green reading — slope',
-    aliases: [
+    aliases: ['read this putt', 'read a putt', 'read the putt', 
       'how do i read this green',
       'read the green',
       'green reading',

@@ -80,7 +80,7 @@ export const SETUP: KBEntry[] = [
     layer: 'setup',
     module: MODULE,
     topic: 'distance from ball',
-    aliases: ['distance from the ball', 'how far do i stand from the ball', 'too close to the ball', 'too far from the ball', 'reaching for the ball'],
+    aliases: ['how far should i stand', 'stand from the ball', 'distance from the ball', 'how far do i stand from the ball', 'too close to the ball', 'too far from the ball', 'reaching for the ball'],
     principle:
       'Stand so the arms hang naturally with about a hand-width between the hands and the body. Too close crowds the arms and steepens the swing (toe contact); too far makes you reach and lunge (heel/shank). Let posture set the distance, not the reach.',
     appSignals: ['none'],

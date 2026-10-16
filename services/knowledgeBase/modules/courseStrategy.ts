@@ -114,7 +114,7 @@ export const COURSE_STRATEGY: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'par-4 strategy — position over distance',
-    aliases: [
+    aliases: ['dogleg', 
       'how to play a par 4',
       'par 4 strategy',
       'should i lay back off the tee on a par 4',
@@ -220,7 +220,7 @@ export const COURSE_STRATEGY: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'recovery — the smart escape',
-    aliases: [
+    aliases: ['punch shot under', 'under the trees', 'punch out', 
       'best way out of trouble',
       'how to escape the rough',
       'whats my escape route',
@@ -263,7 +263,7 @@ export const COURSE_STRATEGY: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'scoring strategy by handicap',
-    aliases: [
+    aliases: ['course management', 
       'how should i play for my handicap',
       'realistic strategy for my level',
       'bogey golfer strategy',

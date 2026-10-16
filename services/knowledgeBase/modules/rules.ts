@@ -24,7 +24,7 @@ export const RULES: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'free relief (cart path, casual water, ground under repair)',
-    aliases: ['do i get relief from the cart path', 'my ball is on the cart path', 'casual water relief', 'standing in a puddle', 'ground under repair', 'is this a free drop', 'free drop'],
+    aliases: ['cart path relief', 'cart path', 'do i get relief from the cart path', 'my ball is on the cart path', 'casual water relief', 'standing in a puddle', 'ground under repair', 'is this a free drop', 'free drop'],
     principle:
       'You generally get FREE relief (no penalty) when an immovable obstruction like a paved cart path, temporary/casual water, or a marked ground-under-repair area interferes with your ball, stance, or swing. You find the nearest spot of full relief that is no closer to the hole and drop within a club-length of it. For the exact nearest-point-of-relief procedure and drop area, check the rulebook.',
     appSignals: ['none'],
@@ -54,7 +54,7 @@ export const RULES: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'penalty areas (water / red & yellow)',
-    aliases: ['i hit it in the water', 'water hazard what do i do', 'red stakes', 'yellow stakes', 'penalty area relief', 'in the hazard', 'ball in the creek'],
+    aliases: ['ball is in the water', 'in the water', 'i hit it in the water', 'water hazard what do i do', 'red stakes', 'yellow stakes', 'penalty area relief', 'in the hazard', 'ball in the creek'],
     principle:
       'A ball in a penalty area (water and other marked areas) costs ONE penalty stroke to take relief. You can always replay from where you last hit, or drop back-on-the-line keeping the entry point between you and the hole. Red-marked areas add a lateral option near where the ball last crossed the edge; yellow does not. You may also just play it as it lies if you can. For the exact reference points and drop, check the rule.',
     appSignals: ['none'],
@@ -69,7 +69,7 @@ export const RULES: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'out of bounds + lost ball (stroke and distance)',
-    aliases: ['i hit it out of bounds now what', 'white stakes', 'ob', 'lost ball rule', 'i cant find my ball', 'stroke and distance'],
+    aliases: ['out of bounds', 'i hit it out of bounds now what', 'white stakes', 'ob', 'lost ball rule', 'i cant find my ball', 'stroke and distance'],
     principle:
       'Out of bounds (white stakes/lines) and a ball you cannot find are both handled by STROKE AND DISTANCE: add one penalty stroke and play again from where you last hit (so it effectively costs you the shot plus the distance). A ball is only OB when ALL of it is past the boundary. You normally get about three minutes to search before it is lost. Check the rule for the exact search time and procedure.',
     appSignals: ['none'],
@@ -99,7 +99,7 @@ export const RULES: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'unplayable lie (your three options)',
-    aliases: ['my ball is unplayable', 'stuck under a bush', 'against a tree', 'in the trees what do i do', 'can i declare unplayable', 'unplayable lie options'],
+    aliases: ['unplayable lie', 'unplayable', 'my ball is unplayable', 'stuck under a bush', 'against a tree', 'in the trees what do i do', 'can i declare unplayable', 'unplayable lie options'],
     principle:
       'You alone may call your ball unplayable almost anywhere on the course, and it costs ONE penalty stroke. You then pick one of three options: replay from your last spot; drop back-on-the-line behind the ball keeping it between you and the hole; or drop within two club-lengths of the ball, no closer to the hole. For the exact reference points and drop, check the rule.',
     appSignals: ['none'],
@@ -114,7 +114,7 @@ export const RULES: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'provisional ball',
-    aliases: ['should i hit a provisional', 'how do i play a provisional', 'might be lost or ob', 'hit another one just in case', 'provisional ball rule'],
+    aliases: ['provisional', 'should i hit a provisional', 'how do i play a provisional', 'might be lost or ob', 'hit another one just in case', 'provisional ball rule'],
     principle:
       'If your ball might be lost outside a penalty area or out of bounds, play a PROVISIONAL before walking forward — it saves the long walk back if the first is gone. You must announce it clearly (say the word "provisional") before hitting. If you find the original in play, you keep it and pick up the provisional. Check the rule for when the provisional becomes the ball in play.',
     appSignals: ['none'],

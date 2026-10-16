@@ -27,7 +27,7 @@ export const CONDITIONS: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'into the wind — club up, swing easy',
-    aliases: [
+    aliases: ['into the wind', 
       'how much does wind affect my shot',
       'playing into the wind',
       'into a headwind what club',
@@ -174,7 +174,7 @@ export const CONDITIONS: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'temperature and altitude on distance',
-    aliases: [
+    aliases: ['cold weather', 'in the cold', 
       'does cold weather affect distance',
       'how much shorter in the cold',
       'playing at altitude',
@@ -195,7 +195,7 @@ export const CONDITIONS: KBEntry[] = [
     layer: 'course_mgmt',
     module: MODULE,
     topic: 'firm vs wet conditions',
-    aliases: [
+    aliases: ['in the rain', 'rain', 'wet grass', 
       'playing in the wet',
       'soft course vs firm course',
       'will the ball roll out',
