@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import fixture from '../fixtures/locate-3870-wrists.json';
 import { poseImpactFromFrames, clubArcAnchor, POSE_ANCHOR_TOLERANCE_MS } from '../../services/swing/clubPathWindow';
-import { deriveSwingAnchors } from '../../services/swing/poseMotion';
+import { deriveSwingAnchors, swingStageTimesMs } from '../../services/swing/poseMotion';
 import type { PoseFrame } from '../../services/poseAnalysisApi';
 
 const root = path.join(__dirname, '..', '..');
@@ -66,54 +66,65 @@ describe('the wrist may inform timing', () => {
   it('the screen uses that rule, and its chips still read the motion anchors', () => {
     // 2026-10-05 — the arc's impact anchor is decided by the one runner, through the shared rule.
     expect(fs.readFileSync(path.join(root, 'services/swing/clubPathWindow.ts'), 'utf8')).toMatch(/poseImpactMs: poseImpactFromFrames\(input\.frames\)/);
-    expect(screen).toMatch(/return deriveSwingAnchors\(samples\);/);
-    const memo = screen.slice(screen.indexOf('const motionAnchors'), screen.indexOf('const motionAnchors') + 1400);
-    expect(memo).toMatch(/tMs: fr\.timestampMs, x: c\.x, y: c\.y/);
-    expect(screen).toMatch(/motionAnchors\?\.topMs/);
+    // 2026-10-16 — the wrists → anchors step moved into poseMotion.anchorsFromPoseFrames, shared with
+    // SmartMotion's review; the screen's chips read those anchors through swingStageTimesMs.
+    expect(screen).toMatch(/const motionAnchors = useMemo\(\(\) => anchorsFromPoseFrames\(poseFrames\), \[poseFrames\]\);/);
+    expect(screen).toMatch(/swingStageTimesMs\(poseFrames, \{ heardStrike, anchors: motionAnchors \}\)/);
+    const pm = fs.readFileSync(path.join(root, 'services/swing/poseMotion.ts'), 'utf8');
+    const fn = pm.slice(pm.indexOf('export function anchorsFromPoseFrames'), pm.indexOf('export function anchorsFromPoseFrames') + 600);
+    expect(fn).toMatch(/samples\.push\(\{ tMs: fr\.timestampMs, x: c\.x, y: c\.y \}\)/);
+    expect(fn).toMatch(/return deriveSwingAnchors\(samples\);/);
   });
 });
 
 describe('the swing-position chips always find their points', () => {
+  // 2026-10-16 — the chip rule moved out of the screen into poseMotion.swingStageTimesMs (both review
+  // screens call it). Tested by BEHAVIOUR on Tim's real 3870 wrists instead of the screen's source shape.
   it('THE REPORT (Tim, on a coach app that gets this right): a chip no longer needs a LABEL', () => {
     // They used to render only for positions the pose pipeline had tagged, so on a swing it did not
     // tag — most of them, once the network locate aborts to a whole-clip fallback — the buttons were
     // missing or covered two of four stages.
-    expect(screen).toMatch(/P1_address: motionAnchors\?\.startMs/);
-    expect(screen).toMatch(/P4_top: motionAnchors\?\.topMs/);
-    expect(screen).toMatch(/P6_impact: motionAnchors\?\.impactMs/);
-    expect(screen).toMatch(/P10_finish: motionAnchors\?\.endMs/);
+    const chips = swingStageTimesMs(tim);
+    expect(chips.map((c) => c.key)).toEqual(['P1_address', 'P4_top', 'P6_impact', 'P10_finish']);
   });
 
-  it('a LABELLED frame still wins — the pipeline’s own answer outranks the derivation', () => {
-    const chips = screen.slice(screen.indexOf('const swingStageChips'), screen.indexOf('const swingStageChips') + 2600);
-    expect(chips.indexOf('poseFrames.find')).toBeLessThan(chips.indexOf('derived[s.pos]'));
+  it('the MEASURED motion wins over a placed label; only a heard strike outranks it, for Impact', () => {
+    // Until 10-16 any non-estimated label won. But on a strike-anchored read only P6 sits on the strike;
+    // P1/P4/P10 are fixed offsets from it — and that impact is often the locate's, not a heard one
+    // (Lily's 4075: the buttons landed on her standing after the swing). Same intent — the best
+    // measurement of the instant wins — with the offsets no longer mistaken for measurements.
+    const derived = deriveSwingAnchors((fixture.samples as number[][]).map(([t, x, y]) => ({ tMs: t, x, y })))!;
+    const labelled = tim.map((f, i) => (i === 1 ? { ...f, position: 'P1_address', positionSource: 'strike' } as PoseFrame
+      : i === 3 ? { ...f, position: 'P6_impact', positionSource: 'strike' } as PoseFrame : f));
+    const at = (c: ReturnType<typeof swingStageTimesMs>, k: string) => c.find((x) => x.key === k)?.ms;
+    expect(at(swingStageTimesMs(labelled), 'P1_address')).toBe(derived.startMs);
+    expect(at(swingStageTimesMs(labelled), 'P6_impact')).toBe(derived.impactMs);
+    expect(at(swingStageTimesMs(labelled, { heardStrike: true }), 'P6_impact')).toBe(labelled[3].timestampMs);
   });
 
   it('a stage with neither a label nor an anchor is omitted, never faked', () => {
-    const chips = screen.slice(screen.indexOf('const swingStageChips'), screen.indexOf('const swingStageChips') + 2600);
-    // 2026-10-04 — a measured label, else the motion-derived point, else an estimated label; else omitted.
-    expect(chips).toMatch(/if \(labelIsMeasured\) return \{ label: s\.label, ms: f!\.timestampMs \};/);
-    expect(chips).toMatch(/if \(typeof d === 'number' && Number\.isFinite\(d\)\) return \{ label: s\.label, ms: d \};/);
-    expect(chips).toMatch(/return f && Number\.isFinite\(f\.timestampMs\) \? \{ label: s\.label, ms: f\.timestampMs \} : null;/);
-    expect(chips).toMatch(/f\.positionSource !== 'estimated'/);
-    expect(chips).toMatch(/\.filter\(\(c\): c is \{ label: string; ms: number \} => c != null\)/);
+    expect(swingStageTimesMs([])).toEqual([]);
+    const two = [frameAt(0, 0.5, 0.6, { position: 'P4_top', positionSource: 'estimated' }), frameAt(100, 0.5, 0.6)];
+    expect(swingStageTimesMs(two).map((c) => c.key)).toEqual(['P4_top']);
   });
 
   it('both consumers share ONE anchor computation, so they name the same instant', () => {
     expect(screen).toMatch(/const motionAnchors = useMemo\(/);
-    expect((screen.match(/deriveSwingAnchors\(/g) ?? []).length).toBe(1);
+    expect((screen.match(/anchorsFromPoseFrames\(/g) ?? []).length).toBe(1);
+    expect(screen).not.toMatch(/deriveSwingAnchors\(/);
   });
 });
 
 describe('the wrist may NEVER become geometry', () => {
   it('THE PROHIBITION: wrist data is used in exactly one place — the anchor derivation', () => {
-    const uses = [...screen.matchAll(/wristCentroid\(/g)];
+    // 2026-10-16 — that one place is now poseMotion.anchorsFromPoseFrames; the screen touches no wrist.
+    expect([...screen.matchAll(/wristCentroid\(/g)].length).toBe(0);
+    const pm = fs.readFileSync(path.join(root, 'services/swing/poseMotion.ts'), 'utf8');
+    const uses = [...pm.matchAll(/wristCentroid\(fr\)/g)];
     expect(uses.length).toBe(1);
-    const memoStart = screen.indexOf('const motionAnchors = useMemo(');
-    const memoEnd = screen.indexOf('}, [poseFrames]);', memoStart);
-    expect(memoStart).toBeGreaterThan(-1);
-    expect(uses[0].index!).toBeGreaterThan(memoStart);
-    expect(uses[0].index!).toBeLessThan(memoEnd);
+    const fnStart = pm.indexOf('export function anchorsFromPoseFrames');
+    expect(uses[0].index!).toBeGreaterThan(fnStart);
+    expect(uses[0].index!).toBeLessThan(pm.indexOf('return deriveSwingAnchors(samples);', fnStart));
   });
 
   it('the arc is never set from pose, wrist or motion data', () => {

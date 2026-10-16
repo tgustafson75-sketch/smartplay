@@ -9,7 +9,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { liveDistanceUnit, toDisplayDistance, unitLabel } from '../../../services/distanceUnits';
-import { wristCentroid, deriveSwingAnchors } from '../../../services/swing/poseMotion';
+import { anchorsFromPoseFrames, swingStageTimesMs } from '../../../services/swing/poseMotion';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Animated, Alert, Image, Modal,
@@ -640,65 +640,24 @@ export default function SwingDetail() {
    * actually finding those points successfully — whatever they're doing, we need to get right").
    *
    * THE POSITIONS DERIVED FROM MOTION, not from labels. deriveSwingAnchors reads start / top /
-   * impact / end off the hand-speed signal: impact is the fastest moment, top is where the hands are
-   * highest and the speed valleys, address and finish are the low-motion settles either side. Pure,
+   * impact / end off the hands' motion (since 10-16 their HEIGHT first — address low, top the first
+   * apex, impact the trough after it, finish the next apex — the speed read only as a fallback). Pure,
    * unit-tested, no audio, no network, and it ALWAYS returns a structure for a recorded swing.
    *
    * Shared by the impact anchor below and the jump-to-stage chips, so both name the same instant.
    * Still TIMING ONLY — these seek the video to a millisecond and never produce a drawn point.
    */
-  const motionAnchors = useMemo(() => {
-    const samples = poseFrames
-      .map((fr) => {
-        const c = wristCentroid(fr);
-        return c && Number.isFinite(fr.timestampMs) ? { tMs: fr.timestampMs, x: c.x, y: c.y } : null;
-      })
-      .filter((v): v is { tMs: number; x: number; y: number } => v !== null);
-    return deriveSwingAnchors(samples);
-  }, [poseFrames]);
+  const motionAnchors = useMemo(() => anchorsFromPoseFrames(poseFrames), [poseFrames]);
 
-  // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — the pose pipeline already
-  // labels the key swing positions (address/top/impact/finish) on the frames; the SmartMotion review
-  // has jump-to-stage chips but the library detail didn't. Surface them here too, reusing scrubTo.
-  // Additive — no change to the analysis; the chips just seek the video to the labeled frame.
-  const swingStageChips = useMemo(() => {
-    const STAGES: { pos: string; label: string }[] = [
-      { pos: 'P1_address', label: 'Address' }, { pos: 'P4_top', label: 'Top' },
-      { pos: 'P6_impact', label: 'Impact' }, { pos: 'P10_finish', label: 'Finish' },
-    ];
-    /**
-     * 2026-09-01 — THE CHIPS NO LONGER DEPEND ON A LABEL EXISTING.
-     *
-     * They used to render only for positions the pose pipeline had tagged, so on any swing it did
-     * not tag — which is most of them when the network locate aborts and the analysis falls back to
-     * the whole clip — the buttons simply were not there, or were there for two of four stages.
-     * That is the "we've not been very good at finding those points" Tim watched another app get
-     * right.
-     *
-     * A labelled frame still wins: it is the pipeline's own considered answer. Otherwise the stage
-     * comes from the motion anchors, which exist for every recorded swing. Both are measurements of
-     * the same instant, so they carry the same label — nothing here is a guess dressed as a reading.
-     */
-    const derived: Record<string, number | undefined> = {
-      P1_address: motionAnchors?.startMs,
-      P4_top: motionAnchors?.topMs,
-      P6_impact: motionAnchors?.impactMs,
-      P10_finish: motionAnchors?.endMs,
-    };
-    return STAGES
-      .map((s) => {
-        const f = poseFrames.find((p) => p.position === s.pos);
-        const d = derived[s.pos];
-        // 2026-10-04 (emulator, Tim's 3870 clip: the Impact chip landed on the follow-through) — a label
-        // the sampler PLACED at a fixed fraction of the window ('estimated') is not a measurement; the
-        // position derived from the wrists' motion is. A label anchored on a real strike still wins.
-        const labelIsMeasured = f && Number.isFinite(f.timestampMs) && f.positionSource !== 'estimated';
-        if (labelIsMeasured) return { label: s.label, ms: f!.timestampMs };
-        if (typeof d === 'number' && Number.isFinite(d)) return { label: s.label, ms: d };
-        return f && Number.isFinite(f.timestampMs) ? { label: s.label, ms: f.timestampMs } : null;
-      })
-      .filter((c): c is { label: string; ms: number } => c != null);
-  }, [poseFrames, motionAnchors]);
+  // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — jump-to-stage chips, reusing scrubTo.
+  // 2026-10-16 — WHERE they seek is services/swing/poseMotion.swingStageTimesMs, shared with SmartMotion:
+  // the stages measured from this read's motion first (a frame label placed at a fixed offset from a
+  // located impact is not a measurement), a heard strike for Impact, a label only where motion said nothing.
+  const heardStrike = shot?.detectionMethod === 'audio_transient';
+  const swingStageChips = useMemo(
+    () => swingStageTimesMs(poseFrames, { heardStrike, anchors: motionAnchors }),
+    [poseFrames, motionAnchors, heardStrike],
+  );
 
   // 2026-07-10 (Tim — "swing arc not corrected") — the swing LIBRARY drew only the
   // wrist-proxy trace; the REAL detected clubhead arc was wired in SmartMotion but

@@ -9710,7 +9710,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
         /const windowed = seg && seg\.endMs > seg\.startMs && \(dur === 0 \|\| seg\.endMs < dur - 250\)/.test(sm) &&
         /loopSeekGuardRef\.current/.test(sm) &&
         // phase scrub pauses then awaits the seek so it holds on the phase frame
-        /try \{ await v\?\.pauseAsync\(\); \} catch[\s\S]{0,80}try \{ await v\?\.setPositionAsync\(f\.timestampMs\); \}/.test(sm)
+        // (2026-10-16 — it seeks to the shared stage time, poseMotion.swingStageTimesMs, frame-exact)
+        /try \{ await v\?\.pauseAsync\(\); \} catch[\s\S]{0,80}try \{ await v\?\.setPositionAsync\(f\.ms, \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\); \}/.test(sm)
       );
     })(),
     'review playback opens on the actual swing (not the bend-to-place-the-ball setup frame), the loop stays windowed to the swing instead of replaying the whole clip, and seeks are awaited so they land — the "won\'t play / replaced the whole video" report');

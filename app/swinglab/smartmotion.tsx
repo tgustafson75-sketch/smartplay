@@ -51,6 +51,7 @@ import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
 import { calloutAtBottom, faultCaption, faultMomentFor } from '../../services/swing/faultSpotlight';
+import { anchorsFromPoseFrames, swingStageTimesMs, type SwingStageKey } from '../../services/swing/poseMotion';
 import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
 import ReviewScrubber, { ScrubMoment } from '../../components/swinglab/ReviewScrubber';
@@ -4689,13 +4690,19 @@ export default function SmartMotion() {
    * Hooks, so above the permission gate (see the 08-09 note above).
    */
   const reviewFaultId = analysis?.primary_fault ?? analysis?.detected_issue ?? null;
+  const reviewAnchors = useMemo(() => anchorsFromPoseFrames(poseFrames), [poseFrames]);
+  const reviewHeardStrike = cageSession?.shots[selectedSwing]?.detectionMethod === 'audio_transient';
+  /** Where each stage chip / scrubber tick seeks — the one rule both review screens use (poseMotion). */
+  const reviewStageTimes = useMemo(
+    () => swingStageTimesMs(poseFrames, { heardStrike: reviewHeardStrike, anchors: reviewAnchors }),
+    [poseFrames, reviewHeardStrike, reviewAnchors],
+  );
   const reviewFaultMoment = useMemo(() => {
     const seg = segments[selectedSwing];
     const sh = cageSession?.shots[selectedSwing];
-    // A label the sampler PLACED ('estimated') is not a measurement (the library's 10-04 rule) — no anchor.
-    const at = (pos: string) => poseFrames?.find((f) => f.position === pos && f.positionSource !== 'estimated')?.timestampMs;
-    const top = at('P4_top'), impact = at('P6_impact'), end = at('P10_finish');
-    const anchors = top != null && impact != null && end != null ? { startMs: at('P1_address') ?? top, topMs: top, impactMs: impact, endMs: end } : null;
+    // 2026-10-16 — the anchors MEASURED from this read's motion (poseMotion), as the library uses: a label
+    // the sampler placed, at a window fraction or a fixed offset from impact, is not a measurement.
+    const anchors = reviewAnchors;
     const ts = sh?.detected_issue_timestamps_sec ?? [];
     // The stored frame times the fault only when it is the same fault this swing's read named.
     const shotFault = sh?.perShotAnalysis?.primary_fault ?? sh?.perShotAnalysis?.detected_issue ?? null;
@@ -4706,7 +4713,7 @@ export default function SmartMotion() {
       windowStartSec: seg && seg.endMs > seg.startMs ? seg.startMs / 1000 : 0,
       windowEndSec: seg && seg.endMs > seg.startMs ? seg.endMs / 1000 : Number.MAX_SAFE_INTEGER,
     });
-  }, [segments, selectedSwing, cageSession?.shots, poseFrames, reviewFaultId]);
+  }, [segments, selectedSwing, cageSession?.shots, reviewAnchors, reviewFaultId]);
   const reviewFaultSecRef = useRef<number | null>(null);
   const reviewIssuePausedRef = useRef(false);
   const reviewLastPosRef = useRef(-1);
@@ -4911,21 +4918,21 @@ export default function SmartMotion() {
     );
 
   // ── pause / scrub to a swing position (skeleton attached) ──
-  const seekToPosition = async (pos: NonNullable<PoseFrame['position']>) => {
-    const f = poseFrames?.find((p) => p.position === pos);
+  const seekToPosition = async (pos: SwingStageKey) => {
+    const f = reviewStageTimes.find((p) => p.key === pos);
     if (f) {
       const v = videoRef.current;
       // 2026-06-14 (Tim) — pause FIRST, then await the seek, so the frame lands
       // and holds on the requested phase (un-awaited seek+pause raced: pause could
       // fire before the seek, drifting off the phase frame).
       try { await v?.pauseAsync(); } catch { /* ignore */ }
-      try { await v?.setPositionAsync(f.timestampMs); } catch { /* ignore */ }
+      try { await v?.setPositionAsync(f.ms, { toleranceMillisBefore: 0, toleranceMillisAfter: 0 }); } catch { /* ignore */ }
       // keep declarative state in sync with the imperative pause, or shouldPlay
       // desyncs and the next Play tap becomes a no-op (the "won't play" bug).
       setVideoPaused(true);
     }
   };
-  const P_SCRUB: { key: NonNullable<PoseFrame['position']>; label: string }[] = [
+  const P_SCRUB: { key: SwingStageKey; label: string }[] = [
     { key: 'P1_address', label: 'Address' },
     { key: 'P4_top', label: 'Top' },
     { key: 'P6_impact', label: 'Impact' },
@@ -4938,12 +4945,7 @@ export default function SmartMotion() {
   // Detected swing phases as scrubber ticks (so you can scrub BY time point).
   const scrubMoments: ScrubMoment[] = [
     ...(poseReady
-      ? P_SCRUB
-          .map((p) => {
-            const f = poseFrames?.find((x) => x.position === p.key);
-            return f ? { ms: f.timestampMs, label: p.label } : null;
-          })
-          .filter((m): m is ScrubMoment => m != null)
+      ? reviewStageTimes.map((m) => ({ ms: m.ms, label: m.label }))
       : []),
     // 2026-10-10 — the fault, as a tick on the same scrubber.
     ...(reviewFaultMoment ? [{ ms: Math.round(reviewFaultMoment.sec * 1000), label: t('swinglab_swing.swing_detail.jump_to_issue') }] : []),

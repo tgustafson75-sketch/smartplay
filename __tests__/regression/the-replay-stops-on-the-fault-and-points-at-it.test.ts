@@ -158,7 +158,11 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
     expect(sm).toMatch(/setPositionAsync\(Math\.round\(f \* 1000\), \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\)/);
   });
   it('a placed (estimated) pose label is not a timing anchor; the read frame only for the same fault', () => {
-    expect(sm).toMatch(/f\.position === pos && f\.positionSource !== 'estimated'/);
+    // 2026-10-16 — same intent, stronger: the anchors are MEASURED from this read's motion
+    // (poseMotion.anchorsFromPoseFrames, as the library uses). A placed label — a window fraction OR a
+    // fixed offset from a located impact ('strike') — times nothing.
+    expect(sm).toMatch(/const reviewAnchors = useMemo\(\(\) => anchorsFromPoseFrames\(poseFrames\), \[poseFrames\]\);/);
+    expect(sm).toMatch(/const anchors = reviewAnchors;/);
     expect(sm).toMatch(/!!reviewFaultId && shotFault === reviewFaultId && ts\.length <= 2 \? ts : \[\]/);
   });
   it('the ring mounts the overlay without the skeleton, and needs the highlight setting', () => {
@@ -169,7 +173,7 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
   it('the fault hooks sit above the permission gate (the 08-09 "more hooks" crash)', () => {
     const gate = sm.indexOf('if (!camPerm) {');
     expect(gate).toBeGreaterThan(-1);
-    for (const h of ['const reviewFaultMoment = useMemo(', 'const jumpToReviewIssue = useCallback(', 'const [reviewAtIssue, setReviewAtIssue] = useState(']) {
+    for (const h of ['const reviewAnchors = useMemo(', 'const reviewStageTimes = useMemo(', 'const reviewFaultMoment = useMemo(', 'const jumpToReviewIssue = useCallback(', 'const [reviewAtIssue, setReviewAtIssue] = useState(']) {
       const at = sm.indexOf(h);
       expect(at).toBeGreaterThan(-1);
       expect(at).toBeLessThan(gate);
