@@ -78,6 +78,14 @@ export function deriveSwingAnchors(samples: MotionSample[]): SwingAnchors | null
  * Returns null where that shape is not there (a window that opens mid-swing, a player standing still),
  * and the speed read answers as before.
  */
+/** A downswing is fast: top to impact inside this. A practice swing, a waggle or a stray raised-hands
+ *  sample before the real swing is not (Tim's 3870: one raised sample at 3.0s made "impact" 5.5s). */
+const MAX_TOP_TO_IMPACT_MS = 700;
+/** A real impact has a follow-through after it. */
+const MIN_IMPACT_TO_FINISH_MS = 250;
+/** The finish is found inside this much time after impact — the club coming down later is not it. */
+const FINISH_SEARCH_MS = 900;
+
 function heightAnchors(pts: MotionSample[]): SwingAnchors | null {
   // Address height: the LOWEST hands among the first samples (image y grows downward). A median let a
   // window that opens on the takeaway lift the baseline, and "address" then landed mid-takeaway.
@@ -85,30 +93,54 @@ function heightAnchors(pts: MotionSample[]): SwingAnchors | null {
   const h = pts.map((p) => baseY - p.y);   // image y grows downward: positive = hands higher than address
   const amp = Math.max(...h);
   if (!(amp >= 0.05)) return null;
-  // The first rise: first sample past 60% of the swing's height.
-  let rise = -1;
-  for (let i = 1; i < h.length; i++) if (h[i] >= 0.6 * amp) { rise = i; break; }
-  if (rise < 1) return null;
-  // Top and impact together: the highest point of that rise, then the lowest point after it, found
-  // once the hands have come down from the top (by 35% of the swing's height) AND climbed back up from
-  // the trough (by 25%). Relative drops, not fixed heights: ~150ms apart, the sample nearest impact can
-  // sit well above address height (the hands pass the ball in a few milliseconds).
-  let top = rise;
-  let impact = rise;
-  let climb = -1;
-  for (let i = rise; i < h.length; i++) {
-    const descended = h[top] - h[impact] >= 0.35 * amp;
-    if (!descended && h[i] > h[top]) { top = i; impact = i; continue; }
-    if (h[i] < h[impact]) { impact = i; continue; }
-    if (descended && h[i] - h[impact] >= 0.25 * amp) { climb = i; break; }
+  /**
+   * 2026-10-16 (adversarial review, on Tim's real 3870 wrists) — EVERY rise is a candidate, and the swing
+   * is the one that behaves like a swing. Taking the FIRST rise past 60% let one raised-hands sample at
+   * 3.0s (a waggle, aiming, a practice swing) become "the top" and the lowest point in the 2.5s after it
+   * "impact" — and the locate, the stored strike label and the club-arc anchor all followed it. A
+   * candidate counts only with a downswing-fast top → impact and a follow-through after impact; among
+   * those, the fastest descent wins (a practice swing is slower than the real one).
+   */
+  let best: { top: number; impact: number; end: number; rate: number } | null = null;
+  let from = 1;
+  while (from < h.length) {
+    let rise = -1;
+    for (let i = from; i < h.length; i++) if (h[i] >= 0.6 * amp) { rise = i; break; }
+    if (rise < 0) break;
+    // Top and impact together: the highest point of that rise, then the lowest point after it, found
+    // once the hands have come down from the top (by 35% of the swing's height) AND climbed back up from
+    // the trough (by 25%). Relative drops, not fixed heights: ~150ms apart, the sample nearest impact can
+    // sit well above address height (the hands pass the ball in a few milliseconds).
+    let top = rise;
+    let impact = rise;
+    let climb = -1;
+    for (let i = rise; i < h.length; i++) {
+      const descended = h[top] - h[impact] >= 0.35 * amp;
+      if (!descended && h[i] > h[top]) { top = i; impact = i; continue; }
+      if (h[i] < h[impact]) { impact = i; continue; }
+      if (descended && h[i] - h[impact] >= 0.25 * amp) { climb = i; break; }
+    }
+    if (climb < 0) break;
+    // Finish: the highest the hands get within FINISH_SEARCH_MS of impact, HELD — the last sample in that
+    // span still within 10% of the swing's height of the peak (a single jittery wrist neither ends nor
+    // starts it), not the first dip after the climb (which put 3870's finish 100ms after impact and
+    // Lily's 220ms early).
+    const inFinish = (i: number) => i < h.length && pts[i].tMs - pts[impact].tMs <= FINISH_SEARCH_MS;
+    let peak = climb;
+    for (let i = climb; inFinish(i); i++) if (h[i] > h[peak]) peak = i;
+    let end = peak;
+    for (let i = peak + 1; inFinish(i); i++) if (h[peak] - h[i] <= 0.1 * amp) end = i;
+    const downMs = pts[impact].tMs - pts[top].tMs;
+    if (downMs <= MAX_TOP_TO_IMPACT_MS && pts[end].tMs - pts[impact].tMs >= MIN_IMPACT_TO_FINISH_MS) {
+      const rate = (h[top] - h[impact]) / Math.max(1, downMs);
+      if (!best || rate > best.rate) best = { top, impact, end, rate };
+    }
+    // Next candidate: the next rise after this one's top.
+    from = top + 1;
+    while (from < h.length && h[from] >= 0.6 * amp) from++;
   }
-  if (climb < 0) return null;
-  // Finish: the apex of that climb — stop once the hands have clearly come down from it.
-  let end = climb;
-  for (let i = climb; i < h.length; i++) {
-    if (h[i] > h[end]) end = i;
-    else if (h[end] - h[i] > 0.15 * amp) break;
-  }
+  if (!best) return null;
+  const { top, impact, end } = best;
   // Start: the last sample before the top that is still at address height.
   let start = 0;
   for (let i = top - 1; i >= 0; i--) {
