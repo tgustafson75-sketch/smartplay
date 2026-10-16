@@ -1247,7 +1247,9 @@ function AppNavigator() {
   // simulated fixes, not real GPS). Runs once at boot — a fresh round started later starts its own GPS.
   useEffect(() => whenRoundStoreHydrated(() => {
     const s = useRoundStore.getState();
-    if (!s.isRoundActive || s.isSimRound || !s.currentRoundId || !s.activeCourse) return;
+    // 2026-10-16 (seam review) — the same rule as the boot guard above, which now KEEPS a scored round
+    // with a blank course name: requiring activeCourse here resumed such a round with no GPS at all.
+    if (!s.isRoundActive || s.isSimRound || !s.currentRoundId) return;
     void (async () => {
       try {
         const { startGpsManager } = await import('../services/gpsManager');

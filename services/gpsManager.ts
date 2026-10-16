@@ -1150,7 +1150,21 @@ export async function forceRefreshGps(): Promise<GpsFix | null> {
 /** True while a watch exists only because an off-round forceRefreshGps started it. */
 let refreshOwnsWatch = false;
 
-export async function startGpsManager(): Promise<void> {
+/**
+ * 2026-10-16 (seam review) — ONE start in flight. Two callers (the round start and the shot-detection
+ * subscriber) can both pass `if (subscription) return` before startWatchInternal has awaited its
+ * permission check and watchPositionAsync; the second watch overwrote the first, which was never
+ * removed — double fix intake and a native watch that outlived stopGpsManager (the "Fix N" Samsung
+ * race). Now concurrent callers share the same start.
+ */
+let startInFlight: Promise<void> | null = null;
+export function startGpsManager(): Promise<void> {
+  if (startInFlight) return startInFlight;
+  startInFlight = startGpsManagerInner().finally(() => { startInFlight = null; });
+  return startInFlight;
+}
+
+async function startGpsManagerInner(): Promise<void> {
   if (subscription && refreshOwnsWatch) {
     // A refresh's watch is running — adopt it rather than return with no manager around it.
     refreshOwnsWatch = false;

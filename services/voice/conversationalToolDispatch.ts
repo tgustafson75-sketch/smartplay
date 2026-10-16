@@ -247,7 +247,10 @@ function dispatchOne(a: AnyAction): void {
       break;
     }
     case 'state_yardage': {
-      const y = typeof a.yards === 'number' ? Math.round(a.yards) : NaN;
+      // 2026-10-16 (seam review) — the tool passes the number as SPOKEN (api/_brainTools); a metres player's
+      // "142" is 142 m. One converter for spoken distances (stateYardageHandler.spokenDistanceToYards).
+      const { spokenDistanceToYards } = require('../intents/stateYardageHandler') as typeof import('../intents/stateYardageHandler');
+      const y = typeof a.yards === 'number' ? Math.round(spokenDistanceToYards(a.yards, '')) : NaN;
       // He paced or measured it. It beats our GPS estimate, which is why the store marks the source.
       if (Number.isFinite(y) && y > 0 && y < 900) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setUserStatedYardage(y, 'user');
       break;
@@ -592,7 +595,8 @@ function dispatchOne(a: AnyAction): void {
       const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
       if (typeof a.club === 'string' && a.club.trim()) round.setClub(a.club.trim());
       if (typeof a.distance_yards === 'number' && a.distance_yards > 0 && a.distance_yards <= 700) {
-        round.setUserStatedYardage(Math.round(a.distance_yards), 'user');
+        const { spokenDistanceToYards } = require('../intents/stateYardageHandler') as typeof import('../intents/stateYardageHandler');
+        round.setUserStatedYardage(Math.round(spokenDistanceToYards(a.distance_yards, '')), 'user');
       }
       const bits = [
         a.club?.trim() || null,

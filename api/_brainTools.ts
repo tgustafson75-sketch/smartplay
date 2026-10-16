@@ -190,7 +190,7 @@ export const BRAIN_TOOLS: AiToolDef[] = [
       type: 'object',
       properties: {
         club:           { type: 'string', description: 'Club they plan to hit (e.g. "5 wood", "7 iron").' },
-        distance_yards: { type: 'number', description: 'Yardage they stated (e.g. "210 yards to go" -> 210).' },
+        distance_yards: { type: 'number', description: 'The distance number EXACTLY as they said it, in whatever unit they use (e.g. "210 to go" -> 210). Do not convert — the app knows their unit.' },
         shot_number:    { type: 'number', description: 'Which shot on the hole (e.g. "my second shot" -> 2).' },
         hole:           { type: 'number', description: 'Hole number IF they named one.' },
         target:         { type: 'string', description: 'What they are aiming at IF mentioned (e.g. "the green", "lay up short of the water").' },
@@ -285,7 +285,7 @@ export const BRAIN_TOOLS: AiToolDef[] = [
     description: 'The player tells you the distance they have — "I\'m 150 out", "about 172 to the pin", "we\'ve got 90 in". Record it as the working number for this shot: it is measured or paced by them and BEATS the GPS estimate. Call it as well as answering. If the SAME sentence also asks what to hit or what the play is ("I\'m 150 out, what should I hit"), that is a shot question too — give the club out loud AND call recommend_club. Logging their number is not an answer to their question, and a silent turn reads as being ignored.',
     parameters: {
       type: 'object',
-      properties: { yards: { type: 'integer', description: 'The distance they stated, in yards. NOT a wedge loft — "the 60" / "my 56" are CLUBS and belong to club_change.' } },
+      properties: { yards: { type: 'integer', description: 'The distance number EXACTLY as they stated it, in whatever unit they use ("I\'m 142" -> 142). Do not convert — the app knows their unit. NOT a wedge loft — "the 60" / "my 56" are CLUBS and belong to club_change.' } },
       required: ['yards'],
     },
   },

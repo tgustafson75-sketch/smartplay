@@ -316,7 +316,10 @@ export type RiskMode = 'safe' | 'normal' | 'aggressive';
 export type LastMutation =
   | { kind: 'score'; hole: number; prevScore: number; prevCurrentHole: number; at: number;
       /** Set when the same utterance also stated putts (logScoreWithPutts): undo restores both. */
-      putts?: { prevPutts: number | undefined } }
+      putts?: { prevPutts: number | undefined };
+      /** The hole's last shot if it was still OPEN (no end_location) before the write — the score's
+       *  auto-advance closes it at the green, and undo must reopen it (2026-10-16 seam review). */
+      openShotId?: string }
   | { kind: 'putts'; hole: number; prevPutts: number | undefined; at: number }
   | { kind: 'shot'; shotId: string; hole: number; at: number };
 
@@ -1140,7 +1143,11 @@ export { voiceScoreHole, voicePuttsHole } from './voiceScoringHole';
 export function roundHoleForSpoken(
   s: { twiceAround?: boolean; currentHole: number }, spoken: number,
 ): number {
-  return s.twiceAround === true && s.currentHole >= 10 && spoken >= 1 && spoken <= 9 ? spoken + 9 : spoken;
+  if (s.twiceAround !== true || s.currentHole < 10 || spoken < 1 || spoken > 9) return spoken;
+  // 2026-10-16 (seam review) — only when the second-loop hole is where he is (or the next one): just
+  // onto the second loop at round hole 10, "five on nine" means the hole he just walked off (9), not
+  // 18, which he has not played yet.
+  return spoken + 9 <= s.currentHole + 1 ? spoken + 9 : spoken;
 }
 
 export const useRoundStore = create<RoundState>()(
@@ -3330,7 +3337,14 @@ export const useRoundStore = create<RoundState>()(
         console.log(`[path6:scorecard] score_write hole=${hole} score=${score} prev=${prevScore} kind=${prevScore > 0 ? 'correction' : 'first'}`);
         // 2026-07-25 — capture the undo snapshot BEFORE the write + any auto-advance, so
         // "scratch that" restores both the prior score and the hole we were on.
-        set({ lastMutation: { kind: 'score', hole, prevScore, prevCurrentHole: get().currentHole, at: Date.now() } });
+        const openShotId = (() => {
+          const sh = get().shots;
+          for (let i = sh.length - 1; i >= 0; i--) {
+            if (sh[i].hole === hole) return sh[i].end_location ? undefined : (sh[i].id ?? undefined);
+          }
+          return undefined;
+        })();
+        set({ lastMutation: { kind: 'score', hole, prevScore, prevCurrentHole: get().currentHole, at: Date.now(), ...(openShotId ? { openShotId } : {}) } });
         set(s => {
           const shots = stalePlaceholdersRemoved(s.shots, hole, score);
           return shots ? { scores: { ...s.scores, [hole]: score }, shots } : { scores: { ...s.scores, [hole]: score } };
@@ -3808,7 +3822,15 @@ export const useRoundStore = create<RoundState>()(
               puttsPatch = { putts };
             }
             // Placeholders written for the undone score go with it.
-            const shots = stalePlaceholdersRemoved(s.shots, snap.hole, snap.prevScore > 0 ? snap.prevScore : 0);
+            let shots = stalePlaceholdersRemoved(s.shots, snap.hole, snap.prevScore > 0 ? snap.prevScore : 0);
+            // 2026-10-16 (seam review) — the score's auto-advance closed the hole's open last shot at the
+            // green; the hole is unfinished again, so reopen it or the next shot measures from the green.
+            if (snap.openShotId) {
+              const base = shots ?? s.shots;
+              if (base.some((x) => x.id === snap.openShotId && x.end_location)) {
+                shots = base.map((x) => (x.id === snap.openShotId ? { ...x, end_location: undefined } : x));
+              }
+            }
             return { scores, ...puttsPatch, ...(shots ? { shots } : {}), currentHole: snap.prevCurrentHole };
           });
           // Keep the ghost match in step with the reverted score.

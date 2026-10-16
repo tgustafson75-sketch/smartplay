@@ -2264,7 +2264,9 @@ export default function CaddieTab() {
         const rs = useRoundStore.getState();
         if (typeof p.club === 'string' && p.club.trim()) rs.setClub(p.club.trim());
         if (typeof p.distance_yards === 'number' && p.distance_yards > 0 && p.distance_yards <= 700) {
-          rs.setUserStatedYardage(Math.round(p.distance_yards), 'user');
+          // 2026-10-16 (seam review) — spoken, in the player's unit (api/_brainTools plan_shot).
+          const { spokenDistanceToYards } = require('../../services/intents/stateYardageHandler') as typeof import('../../services/intents/stateYardageHandler');
+          rs.setUserStatedYardage(Math.round(spokenDistanceToYards(p.distance_yards, '')), 'user');
         }
         try {
           const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
@@ -2579,7 +2581,8 @@ export default function CaddieTab() {
       direction,
       shape: null,
       club: club ?? null,
-      hole: currentHole,
+      // 2026-10-16 (seam review) — the sheet belongs to the hole it opened on, like its score stepper.
+      hole: scoreCardHole ?? currentHole,
       timestamp: Date.now(),
       acousticContact: null,
       outcome: resolution.outcome,
@@ -2624,7 +2627,7 @@ export default function CaddieTab() {
     if (resolution.kevin_voice_line && voiceEnabled) {
       speak(resolution.kevin_voice_line, voiceGender, language, apiUrl).catch(() => {});
     }
-  }, [currentHole, club, logShot, clearShotPending, voiceEnabled, voiceGender, language, apiUrl]);
+  }, [currentHole, scoreCardHole, club, logShot, clearShotPending, voiceEnabled, voiceGender, language, apiUrl]);
 
   const handleDirectionTap = useCallback((direction: ShotResult['direction']) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -2674,8 +2677,8 @@ export default function CaddieTab() {
   }, [pendingDirection, pendingOutcomeForRules, commitShot]);
 
   const currentHoleShots = useMemo(
-    () => shots.filter(s => s.hole === currentHole),
-    [shots, currentHole],
+    () => shots.filter(s => s.hole === (scoreCardHole ?? currentHole)),
+    [shots, currentHole, scoreCardHole],
   );
 
   // Auto-prefill score when shot card opens if shots already logged
@@ -3095,6 +3098,7 @@ export default function CaddieTab() {
   // start (it's cleared as soon as the round is started, with a failsafe timeout for safety). This
   // is defense-in-depth: no live caller currently triggers the double path, but it's cheap to close.
   const startRoundInFlightRef = useRef(false);
+  const startRoundLockAtRef = useRef(0);
   const runStartRound = useCallback(async (
     picked: PickedCourse,
     opts: {
@@ -3123,6 +3127,21 @@ export default function CaddieTab() {
       return;
     }
     startRoundInFlightRef.current = true;
+    /**
+     * 2026-10-16 (seam review) — a FAILSAFE, sized past the slowest legitimate start. With the 5s timer
+     * gone, a permission dialog that never resolves (an Android activity recreated mid-dialog — a Fold
+     * folding or unfolding) or a throw in the lookup would hold the lock forever and silently drop
+     * every later Start tap until a restart. The lookup itself is bounded well under this (~12-24s),
+     * so this cannot re-open the double-start window the lock exists to close.
+     */
+    const lockAt = Date.now();
+    startRoundLockAtRef.current = lockAt;
+    setTimeout(() => {
+      if (startRoundInFlightRef.current && startRoundLockAtRef.current === lockAt) {
+        console.log('[startRound] lock failsafe released after 60s');
+        startRoundInFlightRef.current = false;
+      }
+    }, 60_000);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     /**
@@ -3198,7 +3217,7 @@ export default function CaddieTab() {
         // The card's id: a database course that IS a surveyed course comes back as its surveyed card
         // (services/courseCard surveyedTwinOf), and the round must run on that id's map.
         courseId = card.courseId;
-        courseName = card.name;
+        courseName = card.name || courseName; // never overwrite the 'Unknown Course' fallback with ''
         if (card.location) courseLocation = card.location;
       }
     } catch {

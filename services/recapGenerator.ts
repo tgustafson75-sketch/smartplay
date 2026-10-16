@@ -87,7 +87,8 @@ export function recapRoundFromRecord(
     totalScore: record.totalScore,
     scoreVsPar: record.scoreVsPar,
     scores: record.scores,
-    shots: record.shots,
+    // 2026-10-16 (seam review) — placeholders are not shots; pattern insights read these directly.
+    shots: record.shots.filter((x) => !isQuickScorePlaceholder(x)),
     courseHoles: preEnd.courseHoles,
     preRoundNotes: preEnd.roundNotes || null,
   };
