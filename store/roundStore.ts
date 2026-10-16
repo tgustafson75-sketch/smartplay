@@ -1769,14 +1769,24 @@ export const useRoundStore = create<RoundState>()(
              * no disclosure step to film.
              *
              * Declining skips the request entirely rather than asking anyway. The round is
-             * unaffected either way: foreground GPS is already running by this point, and on Android
-             * the foreground-service notification keeps the subsystem warm.
-             * See services/backgroundLocationDisclosure.ts.
+             * unaffected either way, and on Android the foreground-service notification keeps the
+             * subsystem warm. See services/backgroundLocationDisclosure.ts.
+             *
+             * 2026-10-16 (GPS sweep) — "foreground GPS is already running by this point" was FALSE:
+             * startGpsManager ran only AFTER this await. On Android 11+ the background request sends
+             * the player to system Settings, so no GPS ran until they came back — every round for
+             * anyone without "Always". GPS starts first now; background tracking is re-armed once
+             * "Always" may have been granted.
              */
+            const { startGpsManager } = await import('../services/gpsManager');
+            if (!get().isRoundActive) return; // ended/discarded while permission was asked above
+            await startGpsManager();
             try {
               const { ensureBackgroundLocationDisclosure } = await import('../services/backgroundLocationDisclosure');
               if (await ensureBackgroundLocationDisclosure()) {
                 await Location.requestBackgroundPermissionsAsync();
+                const { startBackgroundLocation } = await import('../services/backgroundLocationTask');
+                if (get().isRoundActive) await startBackgroundLocation(); // idempotent; no-op without "Always"
               }
               // 2026-10-14 (Tim) — if location is still below "Always", the features that need it are off:
               // say which, once (services/featureNeedsSetting). The round plays either way.
@@ -1788,8 +1798,6 @@ export const useRoundStore = create<RoundState>()(
             } catch (e) {
               console.log('[roundStore] background permission request skipped:', e);
             }
-            const { startGpsManager } = await import('../services/gpsManager');
-            await startGpsManager();
             // 2026-06-23 (audit FIX B) — shot detection is NOT started here.
             // The gated subscriber in app/_layout.tsx owns it: it respects
             // the user's autoShotDetection setting and calls configure({cartMode})
