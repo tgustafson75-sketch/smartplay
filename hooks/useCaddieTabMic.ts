@@ -22,6 +22,7 @@ import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak, isCapturing, isExternalMicActive } from '../services/voiceService';
 import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { devLog } from '../services/devLog';
+import { CADDIE_NOTICE_DIDNT_CATCH } from '../services/caddieAckLines';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
 import { noteUserTurn, getUserTurnEpoch } from '../services/userTurnClock';
 import { noteCaddieTurn } from '../services/funnelEvents';
@@ -238,6 +239,23 @@ export function useCaddieTabMic({
         const settings = useSettingsStore.getState();
         const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
         onVoiceStateChange?.('speaking');
+        /**
+         * 2026-10-15 (offline audit gap #4) — this surface said "I saved what you said" even when the
+         * phone could answer the question itself ("what does this play like" with GPS, bag and green
+         * all on the device), while the earbud path answered it. Same shared owner as every other
+         * failure path now: a question answerable from REAL local data is answered; anything else falls
+         * through to the capture below, with the verdict-based line when nothing was captured.
+         */
+        const failure = await import('../services/caddieFailureReply');
+        const reply = await failure.caddieFailureReply({ heard: transcript, language: lang });
+        if (reply.source === 'local_answer') {
+          onKevinSpoke?.(reply.text);
+          if (settings.voiceEnabled) {
+            await speak(reply.text, settings.voiceGender, lang, getApiBaseUrl(), { userInitiated: true }).catch(() => undefined);
+          }
+          onVoiceStateChange?.('idle');
+          return;
+        }
         let captured = false;
         try {
           const { captureOfflineStatement } = await import('../services/voiceLogService');
@@ -245,7 +263,7 @@ export function useCaddieTabMic({
         } catch { /* capture is best-effort */ }
         const line = captured
           ? "I didn't get that through just now, but I saved what you said. I'll pick it back up in a second."
-          : "I lost you for a second there — say that again.";
+          : reply.text;
         onKevinSpoke?.(line);
         const { speakDeviceNotice } = await import('../services/voiceService');
         await speakDeviceNotice(line, lang, settings.voiceGender).catch(() => {});
@@ -382,20 +400,28 @@ export function useCaddieTabMic({
       (require('../services/voiceErrorLog') as typeof import('../services/voiceErrorLog'))
         .logVoiceSilentFail('pipecat_degrade', { reason, path: 'pipecat_audio' });
     } catch { /* never throw from a failure path */ }
-    let line = "Let's stay on this one — what are you working with?";
-    try {
-      const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
-      const lang = useSettingsStore.getState().language;
-      const langSafe = (['en', 'es', 'zh'] as const).includes(lang as 'en' | 'es' | 'zh')
-        ? (lang as 'en' | 'es' | 'zh') : 'en';
-      line = responder.deadEndLine(langSafe);
-    } catch { /* keep the neutral fallback */ }
-    try { onKevinSpoke?.(line); } catch { /* non-fatal */ }
-    try {
-      const s = useSettingsStore.getState();
-      if (s.voiceEnabled) void speak(line, s.voiceGender, s.language, getApiBaseUrl(), { userInitiated: true });
-    } catch { /* speech is best-effort; the text is already out */ }
-    onVoiceStateChange?.('idle');
+    /**
+     * 2026-10-15 — the shared failure owner (services/caddieFailureReply) picks the line on evidence:
+     * ours → owned, slow → said, PROVEN offline → the shot in front of them or the truth. This used to
+     * be deadEndLine(), whose off-round answer was "Good moment to sharpen your tempo" — offered after a
+     * failed transcribe as if it answered the question. No transcript here, so nothing to answer.
+     */
+    void (async () => {
+      let line = "Let's stay on this one — what are you working with?";
+      try {
+        const failure = require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply');
+        // An empty transcript is not a network failure: the upload worked and nothing was heard.
+        line = reason === 'empty_transcript'
+          ? CADDIE_NOTICE_DIDNT_CATCH
+          : (await failure.caddieFailureReply({ heard: null, language: useSettingsStore.getState().language })).text;
+      } catch { /* keep the neutral fallback */ }
+      try { onKevinSpoke?.(line); } catch { /* non-fatal */ }
+      try {
+        const s = useSettingsStore.getState();
+        if (s.voiceEnabled) void speak(line, s.voiceGender, s.language, getApiBaseUrl(), { userInitiated: true });
+      } catch { /* speech is best-effort; the text is already out */ }
+      onVoiceStateChange?.('idle');
+    })();
   }, [onKevinSpoke, onVoiceStateChange]);
 
   const processAudioUri = useCallback(async (

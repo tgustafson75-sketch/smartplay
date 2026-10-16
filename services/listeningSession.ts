@@ -14,7 +14,7 @@ import { noteUserTurn } from './userTurnClock';
 import { noteCaddieTurn } from './funnelEvents';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from './featureAccess';
 import { getDialog } from './dialogEngine';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -28,7 +28,7 @@ import { precheckLocalIntent } from './localIntentPrecheck';
 import { resolvePendingCourseUtterance } from './pendingDisambiguation';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
-import { getApiBaseUrl, isEndpointWarmed, markEndpointWarmed, getConnectionEvidence } from './apiBase';
+import { getApiBaseUrl, isEndpointWarmed, markEndpointWarmed } from './apiBase';
 import { tryAnswerOpenQuestion } from './pendingPuttAsk';
 import { isFlagEnabled } from '../store/flagStore';
 // 2026-08-06 (Tim — "no more pre-canned speech; use a subtle earcon, no words" during the think gap). The
@@ -638,18 +638,19 @@ function pickOpener(): string {
 // because the tap path needs the SAME lines: its aborted-transcribe branch was speaking "Didn't
 // catch that" for what is plainly a connection failure. Two copies of a line is two chances to fix
 // only one of them.
-const FAILURE_FALLBACK: Record<string, string> = CADDIE_NOTICE_CONNECTION;
-/** Connection is provably fine — own the failure instead of blaming their signal. */
-const FAILURE_ON_US: Record<string, string> = CADDIE_NOTICE_ON_US;
 /** 2026-08-17 — the mic-failed line for a language, from the one shared source (see caddieAckLines). */
 function micTroubleFor(lang: 'en' | 'es' | 'zh'): string {
   return CADDIE_NOTICE_MIC_TROUBLE[lang] ?? CADDIE_NOTICE_MIC_TROUBLE.en;
 }
 
+/**
+ * 2026-10-15 — the honest notice is chosen on EVIDENCE (services/caddieFailureReply → reachability):
+ * our failure → owned; measured-slow → "trouble connecting"; proven no internet → what still works.
+ * This picked "I'm having trouble connecting" whenever our host had not answered recently — which is
+ * also exactly what a cold or broken backend looks like on full signal.
+ */
 function failureFallbackFor(lang: string | null | undefined): string {
-  const key = (lang ?? 'en').toLowerCase().slice(0, 2);
-  const pool = getConnectionEvidence().provenRecently ? FAILURE_ON_US : FAILURE_FALLBACK;
-  return pool[key] ?? pool.en;
+  return (require('./caddieFailureReply') as typeof import('./caddieFailureReply')).failureNoticeSync(lang);
 }
 
 /**
@@ -682,7 +683,7 @@ export async function speakHonestFailure(
   voiceGender: 'male' | 'female',
   apiUrl: string,
 ): Promise<void> {
-  const msg = failureFallbackFor(language);
+  const msg = await (require('./caddieFailureReply') as typeof import('./caddieFailureReply')).failureNotice(language);
   try { Vibration.vibrate(120); } catch {}
   try { await stopSpeaking('screen:services-listeningsession').catch(() => {}); } catch {}
   try {

@@ -62,8 +62,9 @@ import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
 import { generatePatternInsights } from '../services/patternDetection';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail, logVoiceDiag, noteVoiceTurnStarted } from '../services/voiceErrorLog';
-import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWarmed, getConnectionEvidence } from '../services/apiBase';
-import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
+import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
+import { probeReachability, isProvenOffline } from '../services/reachability';
+import { CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -168,13 +169,6 @@ const VOICE_TOTAL_BUDGET_MS = 35000;
  * seconds" into an answer.
  */
 const HEDGE_AFTER_MS = 2_500;
-/**
- * 2026-08-21 — how many VERIFIED consecutive cloud failures before the app is allowed to suggest a
- * degraded mode. Tim's rule: assume the signal is there, because it almost always is, and a player
- * with no signal is not opening the app anyway. One failed turn proves nothing; three in a row on a
- * phone that is otherwise working is a real pattern. Any success resets it to zero.
- */
-const CLOUD_FAILURES_BEFORE_OFFER = 3;
 // 2026-07-25 (Tim — "first ask errors EVERY time; warmup still broken at the start") — the transcribe
 // step is cold-aware (22s) but the BRAIN step used a fixed 30s. The FIRST turn after launch is cold on
 // BOTH the Lambda (10-15s) AND the provider SDK init (8-12s) AND then runs tool rounds — that can exceed
@@ -610,13 +604,6 @@ export const useVoiceCaddie = ({
   // 2026-06-06 — Silence-VAD polling timer for handleMicPress.
   // Cleared in clearAutoStop() alongside autoStopTimer.
   const silenceVadTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  /**
-   * 2026-08-21 — consecutive VERIFIED cloud failures this session. Gates any suggestion of a
-   * degraded mode: the default assumption is that the signal is there, so one bad turn earns
-   * nothing. Reset by ANY success, because a single good turn proves the network was never the
-   * problem — which is exactly what happened to Tim, whose second attempt worked fine.
-   */
-  const consecutiveCloudFailuresRef = useRef(0);
   // 2026-06-06 — User interrupted caddie mid-speech by tapping. Set in
   // handleMicPress's isSpeaking() branch; checked by processAudioUri
   // (and intent-router success branch) after awaiting speak so the
@@ -1782,111 +1769,50 @@ export const useVoiceCaddie = ({
         const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
           ? (language as 'en' | 'es' | 'zh') : 'en';
 
-        // 2026-06-29 (Tim) — SEAMLESS DEGRADE: no error banners, no "tap to type".
-        // When we can't reach the brain, the caddie speaks to what it ALWAYS has
-        // locally — the shot in front of you (yardage + club), or off-course the
-        // practice tools — never "I can't reach the network". True by construction;
-        // natural, not an error state. (Pace/timing/listen-loop untouched.)
         /**
-         * 2026-08-21 (Tim) — "not continue to tap into [the local brain] and break things."
+         * 2026-10-15 — ONE decision, made on evidence (services/caddieFailureReply + reachability).
          *
-         * This used to return deadEndLine(), which off-round is "Good moment to sharpen your tempo
-         * or short game" — offered through device TTS as though it answered the question actually
-         * asked. Tim has quoted that line back at me twice as the sound of the app failing.
+         * This used to read the Local Mode flag three ways: which line to say (an offer to switch on a
+         * toggle that no longer exists, or "Good moment to sharpen your tempo"), whether to toast
+         * "turn on Local Mode in Settings", and whether to drop into on-device listening. Quiet
+         * presence sets that flag, so Quiet players got the 07-24 re-listen loop on any blip, and
+         * everyone else got a lesser caddie on a failure that was ours.
          *
-         * cloudFailureLine keeps the genuinely useful local read WHILE ON A ROUND (a measured
-         * yardage, a club from his own logged bag) and, off a round with nothing real to say,
-         * replaces invented small talk with the truth plus an offer to turn Local Mode on.
+         * Now: on-device listening runs ONLY when the phone is PROVEN offline (no host that is not ours
+         * answered). A cold-start blip on good signal probes as internet_ok, so the first-minute loop
+         * cannot come back; the line is the shared failure reply, which owns a failure that was ours.
          */
-        const localModeOn = (() => { try { return useSettingsStore.getState().localMode === true; } catch { return false; } })();
-        const deadEnd = (): string => {
-          try {
-            const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
-            return responder.cloudFailureLine(langSafe, localModeOn);
-          } catch {
-            return "Let's stay on this one — what are you working with?";
-          }
-        };
-        /**
-         * 2026-08-21 (Tim, and he is right) — "you have all these easy slides right into error modes
-         * that don't exist. Nobody's gonna even try to use the app when they have no signal. The
-         * signal's gonna be there, period. No gating on failure. Only after you get verified,
-         * double-checked, VERIFIED failure does it even attempt any other mode."
-         *
-         * I shipped this offer an hour before he hit it, and it fired on ONE failed turn — on a
-         * phone with full signal. That is the failure mode he is describing: the app deciding it is
-         * offline because a single request did not land, and inviting him into a lesser mode he
-         * never needed.
-         *
-         * The correct default assumption is THE SIGNAL IS THERE. A failed turn is a failed turn, not
-         * evidence of an outage. So this now requires REPEATED verified failure within one session
-         * before it will even mention Local Mode — and a single success anywhere resets it, because
-         * one good turn proves the network was never the problem.
-         */
-        const offerLocalMode = () => {
-          if (localModeOn) return;
-          consecutiveCloudFailuresRef.current += 1;
-          if (consecutiveCloudFailuresRef.current < CLOUD_FAILURES_BEFORE_OFFER) return;
-          try {
-            (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState()
-              .show('Signal trouble — turn on Local Mode in Settings to keep going without it.');
-          } catch { /* toast is additive */ }
-        };
-
-        // Host UP but the upload failed twice — a transient blip. Stay natural and
-        // ground in the shot rather than flag the network.
-        if (pingOk) {
-          const line = deadEnd();
+        const say = (line: string) => {
           onResponseReceived(line);
-          offerLocalMode();
           if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
-          return;
-        }
-
-        // Host UNREACHABLE. Phase B — the on-device (LOCAL) STT path. 2026-07-24 (Tim — field log:
-        // this was overtaking the first minute of warmup) — GATE it behind the Local Mode toggle. A
-        // brief cold-boot network blip was dropping every user into on-device STT ("Say that again for
-        // me?" → re-listen → local answer), a clashing error-state loop, even for players who never
-        // opted into Local Mode. Now: only ONLINE-first players (localMode off) skip straight to the
-        // seamless deadEnd line; the on-device re-prompt path runs only when the user has turned Local
-        // Mode ON (they've explicitly chosen the offline caddie). [[offline-caddie-plan]]
-        // (localModeOn is resolved once above — the on-device STT path reads the same value.)
-        try {
-          const stt = require('../services/onDeviceSTT') as typeof import('../services/onDeviceSTT');
-          if (localModeOn && stt.isOnDeviceSTTReady()) {
-            const prompt = "Say that again for me?";
-            onResponseReceived(prompt);
-            if (voiceEnabled) await speakDeviceNotice(prompt, language, voiceGender).catch(() => {});
-            wrappedOnVoiceStateChange('listening');
-            const heard = await stt.recognizeOnceOnDevice(langSafe, { timeoutMs: 9000 });
-            wrappedOnVoiceStateChange('thinking');
-            if (heard) {
-              const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
-              const ans = offline.answerOffline(heard, langSafe);
-              const reply = ans?.text ?? deadEnd();
-              logVoiceSilentFail('ondevice_stt_hit', { source: ans?.source ?? 'none', detail: ans?.detail ?? null, transcriptHead: heard.slice(0, 60) });
-              onResponseReceived(reply);
-              if (voiceEnabled) void speakDeviceNotice(reply, language, voiceGender).catch(() => {});
-              wrappedOnVoiceStateChange('idle');
-              isProcessingRef.current = false;
-              return;
+        };
+        const failure = require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply');
+        const net = (await probeReachability()).verdict;
+        if (isProvenOffline(net)) {
+          try {
+            const stt = require('../services/onDeviceSTT') as typeof import('../services/onDeviceSTT');
+            if (stt.isOnDeviceSTTReady()) {
+              const prompt = 'Say that again for me?';
+              onResponseReceived(prompt);
+              if (voiceEnabled) await speakDeviceNotice(prompt, language, voiceGender).catch(() => {});
+              wrappedOnVoiceStateChange('listening');
+              const heard = await stt.recognizeOnceOnDevice(langSafe, { timeoutMs: 9000 });
+              wrappedOnVoiceStateChange('thinking');
+              if (heard) {
+                const reply = await failure.caddieFailureReply({ heard, language: langSafe });
+                logVoiceSilentFail('ondevice_stt_hit', { source: reply.source, transcriptHead: heard.slice(0, 60) });
+                say(reply.text);
+                return;
+              }
+              logVoiceSilentFail('ondevice_stt_empty', {});
             }
-            logVoiceSilentFail('ondevice_stt_empty', {});
-            // heard nothing → fall through to the typed fallback
+          } catch (e) {
+            console.log('[voice] on-device STT path threw (non-fatal):', e);
           }
-        } catch (e) {
-          console.log('[voice] on-device STT path threw (non-fatal):', e);
         }
-
-        // No on-device STT, or it heard nothing → ground in the shot in front of
-        // you (or, off-course, the practice tools). No "tap to type" banner.
-        const line = deadEnd();
-        onResponseReceived(line);
-        if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
-        wrappedOnVoiceStateChange('idle');
-        isProcessingRef.current = false;
+        say((await failure.caddieFailureReply({ heard: null, language: langSafe })).text);
       };
 
       // Cold-boot patience: a longer budget on the first unwarmed turn so it lands a real cloud
@@ -2155,9 +2081,6 @@ export const useVoiceCaddie = ({
       // A successful cloud transcribe proves the connection is warm — flip the flag so the NEXT
       // turn takes the 12s fast path even if the background warm ping hadn't landed yet.
       markEndpointWarmed('/api/transcribe');
-      // A turn landed — whatever went wrong before was not the network. Clear the failure streak so
-      // a later blip cannot accumulate onto it and trip a degraded-mode offer.
-      consecutiveCloudFailuresRef.current = 0;
 
       devLog('[voice] transcript:', transcript);
 
@@ -2709,9 +2632,11 @@ export const useVoiceCaddie = ({
          * mic's "Didn't catch that" over a mic that never opened; fixed at both surfaces from the
          * one shared source. Still device TTS — this branch exists for dead zones.
          */
-        const line = getConnectionEvidence().provenRecently
-          ? (CADDIE_NOTICE_ON_US[language] ?? CADDIE_NOTICE_ON_US.en)
-          : (CADDIE_NOTICE_CONNECTION[language] ?? CADDIE_NOTICE_CONNECTION.en);
+        // 2026-10-15 — the line comes from the shared failure owner (verdict-based) instead of the
+        // last-success heuristic. We hold the recording but not its words, so there is no question to
+        // answer locally — heard: null.
+        const line = (await (require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply'))
+          .caddieFailureReply({ heard: null, language })).text;
         onResponseReceived(line);
         if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
       } else {

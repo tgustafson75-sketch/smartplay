@@ -621,16 +621,6 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
   return { text: L[lang].yardageMiddle(yards), queryType };
 }
 
-// 2026-06-29 (Tim) — deadEndLine: the graceful, in-character fallback for when we
-// have NEITHER the cloud brain NOR a confident local knowledge answer. Instead of
-// an error ("I can't reach the network"), the caddie speaks to what it ALWAYS has
-// locally: the shot in front of you (composed distance + club), or — off the
-// course — the practice tools. True by construction; never a guess, never a banner.
-// See [[self-growing-agent-architecture]].
-// Exported so the offline VOICE cache (services/offlineVoiceCache.ts) pre-renders the SAME fixed
-// off-course line in the persona voice — single source of truth, no drift.
-// 2026-08-06 (Tim — "revert 'we're off the course right now…'; it reads robotic"). A real caddie doesn't
-// announce your location back to you. Ground straight in what's useful — tempo/short game — and stay present.
 /**
  * 2026-10-15 (offline audit) — the English replies whose wording NEVER changes, so they can be recorded
  * ahead of time in the caddie's own voice (services/offlineVoiceCache) and heard offline. Taken from the
@@ -649,69 +639,26 @@ export const FIXED_OFFLINE_REPLIES_EN: { slug: string; text: string }[] = [
   { slug: 'reply_no_round', text: L.en.noRound },
 ];
 
-export const DEAD_END_PRACTICE: Record<LocalReplyLanguage, string> = {
-  en: "Good moment to sharpen your tempo or short game — I'm right here whenever you want to dig in.",
-  es: 'Buen momento para pulir tu tempo o tu juego corto: aquí estoy cuando quieras ponerte a ello.',
-  zh: '正适合打磨你的节奏或短杆——想练的时候我随时都在。',
-};
-
 /**
- * 2026-08-21 (Tim) — "shouldn't we hide local mode behind a toggle? Then if it goes weak, it prompts
- * the user… we want to continue to populate the local brain, but not continue to tap into it and
- * break things."
+ * 2026-10-15 — the shot in front of the player, from what the phone measures (GPS, green, their own
+ * logged bag), or null off a round / with nothing measured. Spoken by services/caddieFailureReply ONLY
+ * when the phone is PROVEN offline and the question could not be answered.
  *
- * He is describing the exact moment he keeps hearing: the cloud turn fails, and instead of saying
- * so, the caddie answers with DEAD_END_PRACTICE — "Good moment to sharpen your tempo or short game"
- * — through device TTS. A cheerful non-sequitur in a robot voice, offered as if it were an answer to
- * whatever he actually asked. That is worse than silence, because it reads as the app being broken
- * AND slightly stupid.
- *
- * The distinction that matters: ON A ROUND the local brain has something REAL to say — a measured
- * yardage, a club from the player's own logged bag. That is the caddie helping with what it knows,
- * and it stays. OFF a round it has nothing, so it invents a topic. That is the part to stop.
- *
- * So when the cloud cannot be reached and Local Mode is OFF, we say so plainly and OFFER the toggle
- * rather than quietly acting as a lesser caddie the player never asked for.
- * [[caddie-failsafe-no-walls]] — still no wall, still a graceful answer. Just an honest one.
+ * Replaces three retired pieces: DEAD_END_PRACTICE ("Good moment to sharpen your tempo…", the line
+ * Tim quoted back twice as the sound of the app failing), CLOUD_UNREACHABLE_OFFER ("Want me to switch
+ * on Local Mode?" — a toggle removed 09-13, so a dead end), and cloudFailureLine / deadEndLine, which
+ * chose between them from the Local Mode flag. Failure wording now has one owner.
  */
-export const CLOUD_UNREACHABLE_OFFER: Record<LocalReplyLanguage, string> = {
-  en: "I couldn't reach my brain just then. Want me to switch on Local Mode? I'll keep working from your own numbers until the signal's back.",
-  es: 'No pude conectar con mi cerebro en este momento. ¿Activo el Modo Local? Seguiré usando tus propios números hasta que vuelva la señal.',
-  zh: '我刚才连不上我的大脑。要我开启本地模式吗？在信号恢复前，我会用你自己的数据继续帮你。',
-};
-
-/**
- * The line for a failed cloud turn. On a round this stays a real, useful local read; off a round it
- * becomes an honest offer instead of invented small talk.
- */
-export function cloudFailureLine(language: LocalReplyLanguage = 'en', localModeOn = false): string {
+export function roundReadLine(language: LocalReplyLanguage = 'en'): string | null {
   const lang = (['en', 'es', 'zh'] as const).includes(language) ? language : 'en';
   const round = useRoundStore.getState();
-  if (round.isRoundActive) {
-    // Genuinely useful and locally derived — the shot in front of them.
-    const read = composedReadReply(lang);
-    if (read?.text) return read.text;
-    const club = clubCallReply(lang);
-    if (club?.text) return club.text;
-    if (round.currentHole != null) return L[lang].holeIs(round.currentHole);
-  }
-  // Off-round with nothing real to say. If they already chose Local Mode, the practice nudge is a
-  // fair thing for an offline caddie to offer. If they did NOT choose it, do not pretend.
-  return localModeOn ? DEAD_END_PRACTICE[lang] : CLOUD_UNREACHABLE_OFFER[lang];
-}
-
-export function deadEndLine(language: LocalReplyLanguage = 'en'): string {
-  const lang = (['en', 'es', 'zh'] as const).includes(language) ? language : 'en';
-  const round = useRoundStore.getState();
-  if (round.isRoundActive) {
-    // The shot in front of you — the one thing we always have locally.
-    const read = composedReadReply(lang);
-    if (read?.text) return read.text;
-    const club = clubCallReply(lang);
-    if (club?.text) return club.text;
-    if (round.currentHole != null) return L[lang].holeIs(round.currentHole);
-  }
-  return DEAD_END_PRACTICE[lang];
+  if (!round.isRoundActive) return null;
+  const read = composedReadReply(lang);
+  if (read?.text) return read.text;
+  const club = clubCallReply(lang);
+  if (club?.text) return club.text;
+  if (round.currentHole != null) return L[lang].holeIs(round.currentHole);
+  return null;
 }
 
 // Offline caddie Tier 1 — CALL A CLUB. Distance from the same GPS/green path the

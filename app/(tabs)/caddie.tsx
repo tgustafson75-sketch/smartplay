@@ -3981,21 +3981,10 @@ export default function CaddieTab() {
             it. Pull it up flush with the back chevron (both anchored at the top of topNav) so it sits in
             the true upper-right corner, clear of the data — matching the corner pill on every other tab. */}
         <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 6, marginTop: 0 }}>
-          {/* 2026-05-30 — Fix FY: Local Mode indicator. Subtle leaf
-              next to the Tools pill when localMode is ON. Honest "you
-              are here" — NOT a warning, NOT an error state. Tap routes
-              to Settings so the user can toggle off without hunting. */}
-          {localMode && (
-            <TouchableOpacity
-              onPress={() => router.push('/settings' as never)}
-              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel={t('caddie.accessibility_label.local_mode_is_on_tap')}
-              style={[styles.navBtn, { paddingHorizontal: 4 }]}
-            >
-              <Ionicons name="leaf-outline" size={20} color="#00C896" />
-            </TouchableOpacity>
-          )}
+          {/* 2026-10-15 — the Local Mode leaf is gone. The toggle it pointed at was removed on 09-13; the
+              flag is now set only by Quiet presence, so the leaf told every Quiet player "Local Mode is
+              on" for a mode that no longer exists. Offline is decided per turn on evidence
+              (services/reachability), not shown as a mode. */}
           {/* Tool ••• — ALWAYS visible in upper right (Tim: "Make sure
               tools pill is ALWAYS in upper right"). At L4 the green-arrow
               dropdown also contains a Tools entry as a convenience, but

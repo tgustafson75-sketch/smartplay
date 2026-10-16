@@ -2322,15 +2322,20 @@ check('Final QA: co-located courses ask which nine; search matches bundled cours
 // 2026-07-24 (Tim field log — "I only want local mode if local toggle is on; its clashing error state
 // overtakes the first minute of warmup"). A cold-boot network blip was dropping EVERY user into the
 // on-device (LOCAL) STT re-prompt loop ("Say that again for me?") regardless of the Local Mode toggle.
-check('Voice: on-device (local) STT fallback is gated behind the Local Mode toggle',
+// 2026-10-15 — the gate moved from the Local Mode flag (which Quiet presence now sets, so Quiet players
+// got the loop) to PROOF: services/reachability says no host that is not ours answered. A cold-boot blip
+// on good signal probes as internet_ok, so the loop cannot return for anyone.
+check('Voice: on-device (local) STT fallback runs only when the phone is PROVEN offline',
   (() => {
-    const v = read('hooks/useVoiceCaddie.ts');
+    const v = readCode('hooks/useVoiceCaddie.ts');
+    const fn = v.slice(v.indexOf('const failTranscribeOffline = async'), v.indexOf('const failTranscribeOffline = async') + 4000);
     return (
-      /const localModeOn = \(\(\) => \{ try \{ return useSettingsStore\.getState\(\)\.localMode === true;/.test(v) &&
-      /if \(localModeOn && stt\.isOnDeviceSTTReady\(\)\)/.test(v)
+      /const net = \(await probeReachability\(\)\)\.verdict;\s*if \(isProvenOffline\(net\)\) \{[\s\S]{0,200}?if \(stt\.isOnDeviceSTTReady\(\)\)/.test(fn) &&
+      !/localMode/.test(fn) &&
+      !/Local Mode in Settings/.test(v)
     );
   })(),
-  'a player who has NOT turned on Local Mode no longer gets dropped into the on-device STT re-prompt loop on a cold-boot network blip — they degrade straight to the seamless "stay on this shot" line; on-device STT runs only when Local Mode is explicitly ON');
+  'on-device STT re-prompt runs only on a proven-offline verdict, never on a blip and never because of the Quiet/Local Mode flag; the dead "turn on Local Mode" toast is gone');
 
 check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe)',
   // 2026-06-13 — "this is what the caddie brain is for." composeShotRead fuses
@@ -4882,7 +4887,9 @@ check('Voice: dead-zone failures SPEAK via device TTS (not just a silent text bu
       /await deviceSpeakFallback\(text, language, currentSpeechId, gender, \{ clipAlreadyTried: true \}\);/.test(vs) &&
       !/claimSpeechId\('device_notice'\)/.test(vs) &&
       /if \(voiceEnabled\) void speakDeviceNotice\(/.test(vc) &&
-      /(can't reach|not reaching|lost) the network/i.test(vc) // refreshed: message reworded (Phase A offline-degrade); feature intact
+      // 2026-10-15 — was a prose match on a comment; now the behaviour: the dead-zone exits speak the
+      // shared verdict-based failure reply (services/caddieFailureReply), in code, not comments.
+      (readCode('hooks/useVoiceCaddie.ts').match(/caddieFailureReply\(\{ heard(: null)?, language/g) ?? []).length >= 3
     );
   })(),
   'transcribe/network failures speak an honest signal notice via device TTS (offline), not a silent bubble');
@@ -13276,7 +13283,7 @@ check('LOCK: BOTH audio paths are cold-aware and neither can fail silently',
       && /markEndpointWarmed\('\/api\/transcribe'\)/.test(tap);
     // Every pipecat failure route degrades into a spoken+shown local line instead of going mute.
     const degrades = /const speakDeadEnd = useCallback/.test(pipe)
-      && /responder\.deadEndLine\(langSafe\)/.test(pipe)
+      && /caddieFailureReply\(\{ heard: null, language: useSettingsStore\.getState\(\)\.language \}\)/.test(pipe)
       && /onKevinSpoke\?\.\(line\)/.test(pipe);           // the TEXT, not just audio
     const allFailuresCovered = /speakDeadEnd\(`transcribe_\$\{transcribeRes\.status\}`\)/.test(pipe)
       && /speakDeadEnd\('empty_transcript'\)/.test(pipe)

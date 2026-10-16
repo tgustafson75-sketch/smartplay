@@ -31,13 +31,13 @@
  * deviceSpeakFallback) then stay silent with the answer on screen. A cold cache
  * (brand-new install, never online) simply behaves like today until the first online warm.
  *
- * DYNAMIC offline lines (live yardage/club reads from deadEndLine) are intentionally NOT here — they
+ * DYNAMIC offline lines (live yardage/club reads from roundReadLine) are intentionally NOT here — they
  * carry real numbers and can't be pre-rendered as whole lines; they are silent (caption only).
  */
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
-import { DEAD_END_PRACTICE, FIXED_OFFLINE_REPLIES_EN } from './localStatusResponder';
-import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { FIXED_OFFLINE_REPLIES_EN } from './localStatusResponder';
+import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { _allCaddieTemplates } from '../constants/dialogTemplates/caddieTemplates';
 import { _allCoachTemplates } from '../constants/dialogTemplates/coachTemplates';
 import { _allPsychologistTemplates } from '../constants/dialogTemplates/psychologistTemplates';
@@ -86,7 +86,6 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   ...LISTEN_CUES.idle.map((text, i) => ({ slug: `listen_idle_${i}`, language: 'en' as const, text })),
   ...LISTEN_CUES.round.filter(t => !LISTEN_CUES.idle.includes(t)).map((text, i) => ({ slug: `listen_round_${i}`, language: 'en' as const, text })),
   ...GOTIT_CUES.filter(t => !ACK_PHRASES.en.includes(t)).map((text, i) => ({ slug: `gotit_${i}`, language: 'en' as const, text })),
-  // Off-course practice nudge — the one FIXED deadEndLine branch (the others are dynamic reads).
   /**
    * 2026-08-23 — the EARBUD OPENERS, in every role.
    *
@@ -100,9 +99,9 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   ..._allCaddieTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_caddie_${i}`, language: 'en' as const, text })),
   ..._allCoachTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_coach_${i}`, language: 'en' as const, text })),
   ..._allPsychologistTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_psych_${i}`, language: 'en' as const, text })),
-  { slug: 'off_course_en', language: 'en', text: DEAD_END_PRACTICE.en },
-  { slug: 'off_course_es', language: 'es', text: DEAD_END_PRACTICE.es },
-  { slug: 'off_course_zh', language: 'zh', text: DEAD_END_PRACTICE.zh },
+  // 2026-10-15 — the off-course practice nudge (DEAD_END_PRACTICE) is retired: no path speaks it, and
+  // the warm pass's sweep deletes its old recordings. Its replacement, the proven-offline notice:
+  ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `notice_offline_${language}`, language, text: CADDIE_NOTICE_OFFLINE[language] })),
   /**
    * 2026-10-15 (offline audit) — lines spoken offline that were never recorded, so they went silent:
    * the two honest-failure notices (speakHonestFailure / the voice hook's failure caption) and the

@@ -21,7 +21,6 @@
 import fs from 'fs';
 import path from 'path';
 import { OFFLINE_LINES } from '../../services/offlineVoiceCache';
-import { DEAD_END_PRACTICE } from '../../services/localStatusResponder';
 
 const src = fs.readFileSync(path.join(__dirname, '../../services/offlineVoiceCache.ts'), 'utf8');
 
@@ -49,10 +48,12 @@ describe('a cached clip is identified by its WORDS, not just its slug', () => {
 });
 
 describe('the line Tim was hearing is genuinely gone from the code', () => {
-  it('the off-course line is the reverted, non-robotic wording', () => {
-    expect(DEAD_END_PRACTICE.en).toBe(
-      "Good moment to sharpen your tempo or short game — I'm right here whenever you want to dig in.",
-    );
+  // 2026-10-15 — the off-course nudge that replaced it ("Good moment to sharpen your tempo…") is
+  // retired too: Tim quoted it back twice as the sound of the app failing. Neither may be recorded.
+  it('the retired practice nudge is no longer recorded or exported', () => {
+    for (const l of OFFLINE_LINES) expect(l.text).not.toMatch(/sharpen your tempo/i);
+    expect(OFFLINE_LINES.find(l => l.slug.startsWith('off_course_'))).toBeUndefined();
+    expect((require('../../services/localStatusResponder') as Record<string, unknown>).DEAD_END_PRACTICE).toBeUndefined();
   });
 
   it('nothing anywhere still says "off the course right now"', () => {
@@ -61,12 +62,9 @@ describe('the line Tim was hearing is genuinely gone from the code', () => {
     }
   });
 
-  it('the offline cache still sources its text from the single definition', () => {
-    // If the cache ever hard-coded its own copy, the two could drift and this returns.
-    // 2026-10-15 — the import now also brings FIXED_OFFLINE_REPLIES_EN from the same single source.
-    expect(src).toMatch(/import \{ DEAD_END_PRACTICE[^}]*\} from '\.\/localStatusResponder'/);
-    const offCourse = OFFLINE_LINES.find(l => l.slug === 'off_course_en');
-    expect(offCourse?.text).toBe(DEAD_END_PRACTICE.en);
+  it('the offline cache still sources its replies from the single definition', () => {
+    // If the cache ever hard-coded its own copy, the two could drift and a stale recording returns.
+    expect(src).toMatch(/import \{ FIXED_OFFLINE_REPLIES_EN \} from '\.\/localStatusResponder'/);
   });
 });
 
@@ -82,11 +80,11 @@ describe('the fingerprint actually distinguishes text', () => {
 
   it('changing the wording changes the fingerprint', () => {
     expect(fp("We're off the course right now — good time to sharpen up."))
-      .not.toBe(fp(DEAD_END_PRACTICE.en));
+      .not.toBe(fp("Good moment to sharpen your tempo or short game — I'm right here whenever you want to dig in."));
   });
 
   it('is stable for identical text, and ignores incidental whitespace/case', () => {
-    expect(fp(DEAD_END_PRACTICE.en)).toBe(fp(DEAD_END_PRACTICE.en));
+    expect(fp(OFFLINE_LINES[0].text)).toBe(fp(OFFLINE_LINES[0].text));
     expect(fp('  Two   Putts ')).toBe(fp('two putts'));
   });
 

@@ -112,21 +112,23 @@ describe('error states do not blame a connection that is provably fine', () => {
   it('picks the failure line from evidence, not reflex', () => {
     // Was: one line, "I'm having trouble connecting", spoken for EVERY failure in the module —
     // handler throw, empty brain reply, slow turn — while Tim had five bars.
-    expect(ls).toContain('getConnectionEvidence().provenRecently ? FAILURE_ON_US : FAILURE_FALLBACK');
+    // 2026-10-15 — the evidence is now a reachability verdict (hosts that are not ours), owned by
+    // services/caddieFailureReply; behaviour is pinned in a-turn-failure-says-what-is-true.
+    expect(ls).toContain('failureNoticeSync(lang)');
+    expect(ls).toContain(").failureNotice(language)");
   });
 
   // 2026-08-17 — the wording moved to services/caddieAckLines so the TAP path can speak the same
   // lines: its aborted-transcribe branch was saying "Didn't catch that" for a connection failure.
   // Assert the shared source, and that this module still routes through it.
-  it('owns the failure when the host answered seconds ago', () => {
-    expect(ls).toContain('FAILURE_ON_US');
-    expect(ls).toContain('CADDIE_NOTICE_ON_US');
+  it('owns the failure when the internet is fine', () => {
+    expect(read('services/caddieFailureReply.ts')).toContain("if (verdict === 'internet_ok') return CADDIE_NOTICE_ON_US[lang];");
     expect(CADDIE_NOTICE_ON_US.en).toContain('That one got away from me');
   });
 
   it('keeps a connection message for when the connection really is the problem', () => {
     expect(CADDIE_NOTICE_CONNECTION.en).toContain("I'm having trouble connecting");
-    expect(ls).toContain('CADDIE_NOTICE_CONNECTION');
+    expect(read('services/caddieFailureReply.ts')).toContain("if (verdict === 'slow') return CADDIE_NOTICE_CONNECTION[lang];");
   });
 
   it('covers every language the connection line had', () => {
@@ -141,8 +143,8 @@ describe('error states do not blame a connection that is provably fine', () => {
     // again?", which sends the player to repeat a sentence we already recorded successfully.
     const v = read('hooks/useVoiceCaddie.ts');
     const abortBranch = v.slice(v.indexOf("source: 'process_audio_abort'"), v.indexOf("logVoiceError('process_audio'"));
-    expect(abortBranch).toContain('CADDIE_NOTICE_CONNECTION');
-    expect(abortBranch).toContain('getConnectionEvidence().provenRecently');
+    // 2026-10-15 — the line now comes from the shared, verdict-based failure owner.
+    expect(abortBranch).toContain('.caddieFailureReply({ heard: null, language })');
     // The spoken line must no longer be the didn't-hear-you one (prose mentioning it is fine —
     // this looks at what is actually assigned to `line`).
     expect(abortBranch).not.toMatch(/const line = "Didn't catch that/);

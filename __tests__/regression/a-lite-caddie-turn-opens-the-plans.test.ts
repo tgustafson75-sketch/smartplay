@@ -100,11 +100,15 @@ describe('every entry path consults the block instead of speaking a failure', ()
   const code = (rel: string) => fs.readFileSync(path.join(__dirname, '../..', rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
-  it('the Caddie-tab mic (useCaddieTabMic), before its "lost you" line', () => {
+  it('the Caddie-tab mic (useCaddieTabMic), before its failure reply or local answer', () => {
+    // 2026-10-15 — the "lost you" line became the shared failure owner (services/caddieFailureReply),
+    // which can also answer locally; a plan decline must still be consulted before either.
     const src = code('hooks/useCaddieTabMic.ts');
     const at = src.indexOf('if (!turn) {');
+    const reply = src.indexOf('caddieFailureReply(', at);
     expect(src.indexOf('takeCaddiePaywallBlock()', at)).toBeGreaterThan(at);
-    expect(src.indexOf('takeCaddiePaywallBlock()', at)).toBeLessThan(src.indexOf('lost you', at));
+    expect(reply).toBeGreaterThan(at);
+    expect(src.indexOf('takeCaddiePaywallBlock()', at)).toBeLessThan(reply);
   });
 
   it('the earbud / typed / watch path (listeningSession.deliverBrainReply), before any failure line', () => {

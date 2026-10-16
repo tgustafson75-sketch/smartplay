@@ -55,6 +55,17 @@ export const CADDIE_NOTICE_ON_US: Record<'en' | 'es' | 'zh', string> = {
   zh: '这句我没跟上——再说一次好吗？',
 };
 
+/**
+ * 2026-10-15 — the phone PROVABLY has no internet (services/reachability: no host that is not ours
+ * answered). Says what still works rather than "try again", because trying again offline fails again.
+ * Only ever chosen on that proof — never on a single failed call.
+ */
+export const CADDIE_NOTICE_OFFLINE: Record<'en' | 'es' | 'zh', string> = {
+  en: "I can't get online right now — your yardages and score still work.",
+  es: 'Ahora mismo no tengo conexión — tus distancias y tu tarjeta siguen funcionando.',
+  zh: '我现在连不上网——你的码数和记分仍然可用。',
+};
+
 export const ACK_PHRASES: Record<'en' | 'es' | 'zh', string[]> = {
   en: ['Okay, got it.', 'Got it.', 'Alright.', 'Sure thing.', 'On it.', 'Copy that.', 'You got it.', 'Let me take a look.', 'Right, one sec.', 'Gotcha.'],
   es: ['Vale, entendido.', 'Entendido.', 'Muy bien.', 'Claro.', 'En ello.', 'Déjame ver.', 'Un momento.'],
