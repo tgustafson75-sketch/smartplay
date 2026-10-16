@@ -81,6 +81,7 @@ import type { PoseEstimate } from '../../../services/poseEstimator';
 import type { SwingComparison } from '../../../services/swingComparisonEngine';
 import { getApiBaseUrl } from '../../../services/apiBase';
 import { titleForUpload } from '../../../services/swing/swingTitle';
+import { swingClock, swingClockSec } from '../../../services/swing/swingClock';
 import { useTranslation } from 'react-i18next';
 import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
 
@@ -2731,21 +2732,27 @@ export default function SwingDetail() {
             via the auto-narrate effect; video is always muted. */}
 
         {/* Issue timestamp anchors */}
-        {issueTimestamps.length > 0 && session.primary_issue && (
+        {/* 2026-10-16 — ONE fault time: the moment the replay stops on (faultMoment), on the transport's
+            swing clock (services/swing/swingClock). It printed the raw stored read time in absolute clip
+            seconds, while the stop could be the phase anchor and the deck counted from the window start. */}
+        {(faultMoment || issueTimestamps.length > 0) && session.primary_issue && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.fault_moment')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-              {issueTimestamps.map((ts, i) => (
+              {(faultMoment ? [faultMoment.sec] : issueTimestamps).map((ts, i) => (
                 <TouchableOpacity
                   key={i}
-                  onPress={() => (faultMoment && Math.abs(ts - faultMoment.sec) < 0.01 ? jumpToIssue() : void scrubTo(ts))}
+                  onPress={() => (faultMoment ? jumpToIssue() : void scrubTo(ts))}
                   style={[styles.tsPill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}
                 >
-                  <Text style={[styles.tsText, { color: colors.accent }]}>{Math.floor(ts / 60)}:{Math.floor(ts % 60).toString().padStart(2, '0')}</Text>
+                  <Text style={[styles.tsText, { color: colors.accent }]}>{swingClock(ts, winStartSec)}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <Text style={[styles.tsHint, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.the_frame_the_diagnosis_was')}</Text>
+            {/* The hint names the read's frame — true only when the stop IS that frame. */}
+            {(!faultMoment || faultMoment.source === 'read') && (
+              <Text style={[styles.tsHint, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.the_frame_the_diagnosis_was')}</Text>
+            )}
           </View>
         )}
 
@@ -2849,7 +2856,7 @@ export default function SwingDetail() {
                 onPress={onAnalyzeAtPosition}
                 disabled={reanalyzing}
               >
-                <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.analyze_the_swing_at_0', { pad_start: Math.floor(position).toString().padStart(2, '0') })}</Text>
+                <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.analyze_the_swing_at_0', { pad_start: Math.floor(swingClockSec(position, winStartSec)).toString().padStart(2, '0') })}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -2870,10 +2877,10 @@ export default function SwingDetail() {
                 disabled={analyzeInFlightRef.current}
                 style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start', opacity: analyzeInFlightRef.current ? 0.5 : 1 }]}
                 accessibilityRole="button"
-                accessibilityLabel={`Analyze the swing at ${Math.floor(position)} seconds`}
+                accessibilityLabel={`Analyze the swing at ${Math.floor(swingClockSec(position, winStartSec))} seconds`}
               >
                 <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
-                <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.analyze_the_swing_at_0', { pad_start: Math.floor(position).toString().padStart(2, '0') })}</Text>
+                <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.analyze_the_swing_at_0', { pad_start: Math.floor(swingClockSec(position, winStartSec)).toString().padStart(2, '0') })}</Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -2960,9 +2967,15 @@ export default function SwingDetail() {
                           )}
                         </View>
                         <Text style={[styles.shotMeta, { color: colors.text_muted }]} numberOfLines={1}>
-                          {`${formatMmSs(start)}`}
-                          {conf ? ` · ${conf} conf` : ''}
-                          {s.detectionMethod ? ` · ${s.detectionMethod === 'audio_transient' ? 'auto' : 'manual'}` : ''}
+                          {/* 2026-10-16 — one swing: its fault moment on the swing clock (the window start
+                              printed here read as a third fault time). Several: where each swing starts. */}
+                          {[
+                            session.shots.length === 1
+                              ? (faultMoment ? swingClock(faultMoment.sec, winStartSec) : null)
+                              : formatMmSs(start),
+                            conf ? `${conf} conf` : null,
+                            s.detectionMethod ? (s.detectionMethod === 'audio_transient' ? 'auto' : 'manual') : null,
+                          ].filter(Boolean).join(' · ')}
                         </Text>
                         {observation && (
                           <Text style={[styles.shotObservation, { color: colors.text_muted }]} numberOfLines={2}>
@@ -3621,7 +3634,7 @@ export default function SwingDetail() {
               <Text style={[styles.detailLine, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.tag', { tag: session.upload.tag })}</Text>
             ) : null}
             {duration != null ? (
-              <Text style={[styles.detailLine, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.duration_s_position_s', { duration: duration.toFixed(1), position: position.toFixed(1) })}</Text>
+              <Text style={[styles.detailLine, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.duration_s_position_s', { duration: winSpanSec.toFixed(1), position: swingClockSec(position, winStartSec).toFixed(1) })}</Text>
             ) : null}
           </View>
         )}
