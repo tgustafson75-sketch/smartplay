@@ -18,12 +18,13 @@
  *   1. user_stated  — Tier 3 voice anchor (roundStore.userStatedYardage)
  *                     when same hole and <5 min old. The player explicitly
  *                     fed the system a number; respect it.
- *   2. gps_live     — Tier 1, live GPS + green coords, whenever accuracy is
- *                     ≤15m and gpsManager still holds the fix. The default in
- *                     clean conditions. Staleness is gpsManager's call, not
+ *   2. gps_live     — Tier 1, live GPS + green coords, whenever gpsManager
+ *                     still holds a fix (it rejects worse than 90m). LIVE only
+ *                     at ≤15m; the weak band is kept at low confidence, not
+ *                     live (2026-10-15). Staleness is gpsManager's call, not
  *                     ours — see the note on `gpsHealthy` below.
  *   3. static_card  — Tier 2, bundled courseHoles.distance (tee→green
- *                     scorecard yardage). Used when GPS soft OR mid-warm-up.
+ *                     scorecard yardage). Used when there is no fix / no green.
  *                     Only valid from the tee — gets stale once player walks.
  *   4. none         — No usable source. UI renders "—", Kevin hedges.
  *
@@ -231,10 +232,21 @@ function resolveYardageInner(
    * `isSimulatedActive()` special-case existed — it was only ever there to bypass this gate for
    * simulated fixes, whose timestamps never tick (2026-07-30).
    */
+  /**
+   * 2026-10-15 (review #3) — the WEAK band (15-90 m) stays on the GPS tier.
+   *
+   * It used to be excluded here, which dropped the player to the static card: the full tee→green
+   * scorecard number. "410 STATIC" with the player 160 out — and caddieRequestBody clubbed for 410
+   * while voice "how far" (a raw haversine) said 162. A weak fix is ~15-90 m of uncertainty on the
+   * RIGHT number; the card is hundreds of yards wrong once he has left the tee. So the measured number
+   * stands, labelled honestly: confidence 'low', live false (badged LAST FIX, never LIVE), and a reason
+   * that says the signal is weak. The card is only for when there is no fix at all. gpsManager already
+   * rejects anything worse than 90 m, so nothing coarser reaches this.
+   */
   const gpsHealthy =
     fix != null &&
-    quality.level !== 'weak' &&
     quality.level !== 'none';
+  const gpsWeak = quality.level === 'weak';
 
   // 2026-07-01 (audit) — accept BOTH 'ok' AND 'estimated'. 'estimated' is the
   // tee-relative GPS estimate (green data not available yet — the Wachusett case).
@@ -246,17 +258,20 @@ function resolveYardageInner(
     const y = getGreenYardagesSync(hole);
     if (y && y.middle != null && (y.reason === 'ok' || y.reason === 'estimated')) {
       const estimated = y.reason === 'estimated';
+      const derivedGreen = y.green_source === 'derived';
       return {
         value: y.middle,
         front: y.front ?? null,
         back: y.back ?? null,
         source: 'gps_live',
-        confidence: estimated ? 'low' : 'med',
+        confidence: estimated || derivedGreen ? 'low' : 'med',
         reason: estimated
           ? 'GPS estimate from the tee — mark the green for exact yardage.'
-          : 'Using your marked position.',
+          : derivedGreen
+            ? 'Using your marked position to an estimated green (not surveyed) — approximate.'
+            : 'Using your marked position.',
         asOf: fix.timestamp,
-        is_fallback: estimated,
+        is_fallback: estimated || derivedGreen,
         live: false,
       };
     }
@@ -266,20 +281,34 @@ function resolveYardageInner(
     const y = getGreenYardagesSync(hole);
     if (y && y.middle != null && (y.reason === 'ok' || y.reason === 'estimated')) {
       const estimated = y.reason === 'estimated';
+      /**
+       * 2026-10-15 (review #7) — a real GPS distance to an AI-ESTIMATED green (api/hole-scan) is an
+       * estimate, not a measurement. It came back as reason 'ok' and was badged LIVE, "GPS clean", at
+       * high confidence, so the brain was told to state it flatly. Treated like the tee estimate: EST
+       * badge (is_fallback), never live, low confidence, and the reason says what it is.
+       */
+      const derivedGreen = y.green_source === 'derived';
+      const degraded = !!fix.degraded;
       return {
         value: y.middle,
         front: y.front ?? null,
         back: y.back ?? null,
         source: 'gps_live',
-        confidence: estimated || fix.degraded ? (fix.degraded ? 'low' : 'med') : (quality.level === 'strong' ? 'high' : 'med'),
+        confidence: degraded || gpsWeak || derivedGreen ? 'low'
+          : estimated ? 'med'
+          : (quality.level === 'strong' ? 'high' : 'med'),
         reason: estimated
           ? 'GPS estimate from the tee — no green data yet.'
-          : fix.degraded
+          : degraded
             ? `Last GPS fix ${Math.round(fixAge / 1000)}s ago — signal is weak; this is where you were.`
-            : (quality.level === 'strong' ? 'GPS clean.' : 'GPS okay.'),
+            : derivedGreen
+              ? 'GPS to an estimated green position (not surveyed) — approximate.'
+              : gpsWeak
+                ? `GPS signal is weak (±${Math.round(accuracy ?? 0)}m) — treat this as approximate.`
+                : (quality.level === 'strong' ? 'GPS clean.' : 'GPS okay.'),
         asOf: fix.timestamp,
-        is_fallback: estimated,
-        live: !estimated && !fix.degraded,
+        is_fallback: estimated || derivedGreen,
+        live: !estimated && !degraded && !gpsWeak && !derivedGreen,
       };
     }
   }

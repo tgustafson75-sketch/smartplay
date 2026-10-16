@@ -57,7 +57,10 @@ describe('a blank wrist says why, in the log Tim actually sends', () => {
     expect(body).toMatch(/reportedWatchReasons\.has\(reason\)/);
     expect(body).toMatch(/reportedWatchReasons\.add\(reason\)/);
     // A successful delivery must clear it, or one early drop silences the rest of the round.
-    expect(bridge).toMatch(/markWatchAlive\(\);\s*reportedWatchReasons\.clear\(\);/);
+    // 2026-10-15 (review #6) — the wrist is now sent an explicit CLEAR when there is nothing to show,
+    // and that delivery must not reset the set it just reported into (it would re-file every tick).
+    // Same intent: a delivered REAL yardage clears it.
+    expect(bridge).toMatch(/markWatchAlive\(\);\s*if \(!empty\) reportedWatchReasons\.clear\(\);/);
   });
 
   it('a quiet phone between rounds files nothing', () => {

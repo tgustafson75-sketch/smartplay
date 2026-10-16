@@ -25,6 +25,7 @@
 
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
+import { fromDisplayDistance, liveDistanceUnit, type DistanceUnit } from '../distanceUnits';
 
 type StatedSource = 'user' | 'rangefinder' | 'golfshot' | 'other';
 
@@ -47,6 +48,23 @@ function extractYardage(raw: string, paramYards: unknown): number | null {
   const n = parseInt(m[1], 10);
   if (!Number.isFinite(n) || n < 10 || n > 400) return null;
   return n;
+}
+
+/**
+ * 2026-10-15 (review #5) — a SPOKEN distance is in the player's unit, and the store is in yards.
+ *
+ * "I'm 142" from a metres player was stored as 142 YARDS, shown back as 130 m, and — as a fresh
+ * user-stated number at high confidence — overrode GPS for five minutes. The number is converted at
+ * the moment of entry, per services/distanceUnits' contract. An explicit unit in the words wins
+ * ("142 yards" from a metres player is yards); otherwise the setting decides.
+ */
+export function spokenDistanceToYards(spoken: number, raw: string): number {
+  const t = String(raw ?? '').toLowerCase();
+  const unit: DistanceUnit =
+    /\b(yards?|yds?)\b/.test(t) ? 'yards'
+    : /\b(met(re|er)s?)\b|\d\s?m\b/.test(t) ? 'meters'
+    : liveDistanceUnit();
+  return Math.round(fromDisplayDistance(spoken, unit) ?? spoken);
 }
 
 /**
@@ -132,7 +150,8 @@ export const stateYardageHandler: IntentHandler = {
         ? (intent.parameters.source as StatedSource)
         : inferSource(raw);
 
-    round.setUserStatedYardage(yards, source);
+    // `yards` is the number as SPOKEN; the store holds yards (see spokenDistanceToYards).
+    round.setUserStatedYardage(spokenDistanceToYards(yards, raw), source);
 
     // Build a natural ack that reflects what the user said.
     const sourceLabel =

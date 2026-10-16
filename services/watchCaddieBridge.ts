@@ -31,6 +31,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useWatchStore } from '../store/watchStore';
 import { acquireWatchDataLayer, releaseWatchDataLayer } from './watchDataLayer';
 import { devLog } from './devLog';
+import { liveDistanceUnit, toDisplayDistance } from './distanceUnits';
 
 // 2026-07-29 (Tim — "don't see if the app is saying watch connected, but they work perfectly").
 // The native module only emits onWatchConnection when it RECEIVES the watch's launch-time
@@ -204,18 +205,32 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
     // stated correction never reached the watch at all.
     const r = resolveYardage(round.currentHole);
     const fmb = resolvedToFmb(r);
+    /**
+     * 2026-10-15 (review #5) — the watch apps DISPLAY THE INTEGERS THEY ARE SENT, with no unit
+     * (wear-os-app MainActivity.handleCaddie, targets/watch SmartPlayWatchApp.apply). Yards went out
+     * raw, so a metres player read yards on the wrist and metres on the phone. Pre-converted here to
+     * the player's unit, and `unit` rides along explicitly for any watch build that learns to show it.
+     */
+    const unit = liveDistanceUnit();
     const y = {
-      front: fmb?.front ?? null, middle: fmb?.middle ?? null, back: fmb?.back ?? null,
+      front: toDisplayDistance(fmb?.front ?? null, unit),
+      middle: toDisplayDistance(fmb?.middle ?? null, unit),
+      back: toDisplayDistance(fmb?.back ?? null, unit),
       hole_number: round.currentHole, reason: fmb?.reason ?? 'no_hole',
     };
-    if (y.middle == null && y.front == null && y.back == null) {
+    const empty = y.middle == null && y.front == null && y.back == null;
+    if (empty) {
       // nothing honest to show — carry the funnel's OWN reason (no_fix / no_hole / no_green_coords)
       // rather than restating that the numbers were absent.
       traceWatch('yardage_skip', { reason: y.reason ?? 'no_yardage', hole: y.hole_number ?? null });
       // Not 'no_active_round': that one is the normal state of the app between rounds, and logging
       // it would file an issue every 18 seconds for a phone sitting on a worktop.
       reportWatchBlocked(y.reason ?? 'no_yardage', { hole: y.hole_number ?? null });
-      return;
+      /**
+       * 2026-10-15 (review #6) — and then SAY SO to the wrist. This used to return without sending,
+       * so on a new hole with nothing to show the watch kept the PREVIOUS hole's number. An explicit
+       * clear for THIS hole: both watch apps render null numbers as "—" beside "HOLE n".
+       */
     }
     /**
      * 2026-09-10 — the fix-driven sends are the ones that must be cheap.
@@ -227,16 +242,28 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
      * disconnected. So the heartbeat cadence is exactly what main already shipped, and the live push
      * adds a message only when the yardage actually changed.
      */
+    const live = !empty && r.live === true;
+    const key = `${y.hole_number}|${y.front ?? ''}|${y.middle ?? ''}|${y.back ?? ''}|${unit}|${live ? 'L' : r.source}`;
     if (opts?.onlyIfChanged) {
-      const nextKey = `${y.hole_number}|${y.front ?? ''}|${y.middle ?? ''}|${y.back ?? ''}`;
-      if (nextKey === lastYardageSent) return;
+      if (key === lastYardageSent) return;
     }
+    /**
+     * 2026-10-15 (review #6) — WHERE THE NUMBER CAME FROM goes with it. The wrist showed a STATIC card
+     * number or a tee estimate as the same big hero number as a live read. `live` is the resolver's
+     * one answer to "is this measured right now"; `source` / `estimate` say what it is otherwise.
+     * Today's watch binaries ignore unknown keys; showing the flag needs a native watch release.
+     */
     const payload = {
       kind: 'yardage' as const,
       hole: y.hole_number,
       front: y.front,
       middle: y.middle,
       back: y.back,
+      unit,
+      live,
+      source: empty ? 'none' : r.source,
+      estimate: !empty && r.is_fallback,
+      confidence: r.confidence,
     };
     const delivered = await NativeMod.sendToWatch(CADDIE_PATH, JSON.stringify(payload));
     if (delivered === false) {
@@ -265,8 +292,9 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
     // A delivered outbound message proves the round trip just as well as an inbound one does, and
     // the watch app may have been running before we started listening for its `hello`.
     markWatchAlive();
-    // Delivered — so a later drop is a NEW fact and gets to report itself again.
-    reportedWatchReasons.clear();
+    // Delivered — so a later drop is a NEW fact and gets to report itself again. Not on a clear:
+    // that send follows a reportWatchBlocked, and resetting here would re-file it every 18 s.
+    if (!empty) reportedWatchReasons.clear();
     /**
      * 2026-09-09 (triple-check, my own trace from earlier today) — SUCCESS IS TRACED ON CHANGE ONLY.
      *
@@ -279,9 +307,8 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
      * FAILURES still trace every single time — they are rare, and each one is the answer. Success
      * traces when the numbers change, which is what "the yardage is updating" actually looks like.
      */
-    const sentKey = `${y.hole_number}|${y.front ?? ''}|${y.middle ?? ''}|${y.back ?? ''}`;
-    if (sentKey !== lastYardageSent) {
-      lastYardageSent = sentKey;
+    if (key !== lastYardageSent) {
+      lastYardageSent = key;
       traceWatch('yardage_sent', { hole: y.hole_number ?? null, middle: y.middle ?? null });
     }
   } catch (e) {

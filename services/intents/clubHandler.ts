@@ -18,6 +18,7 @@ import { parseSpokenClub, clubLabel } from '../clubRecognition';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { isSmartMotionActive, emitSmartMotionCommand } from '../smartMotionRecordBus';
 import { track } from '../analytics';
+import { spokenDistanceToYards } from './stateYardageHandler';
 
 function noActiveSession(): IntentResult {
   return {
@@ -162,8 +163,10 @@ export const clubChangeHandler: IntentHandler = {
       // — capture a stated yardage in the SAME utterance ("... from 215") so the caddie
       // registers the whole plan (club AND distance), not just the club. setUserStatedYardage
       // is the same call the brain's plan_shot uses (conversationalToolDispatch).
-      const statedYds = parseStatedYardage(String(intent.raw_text ?? phrase));
-      if (statedYds != null) round.setUserStatedYardage(statedYds, 'user');
+      const statedRaw = String(intent.raw_text ?? phrase);
+      const stated = parseStatedYardage(statedRaw);
+      // 2026-10-15 (review #5) — "from 140" is in the player's unit; the store is yards.
+      if (stated != null) round.setUserStatedYardage(spokenDistanceToYards(stated, statedRaw), 'user');
       track('club_switched', { club_id: parsed.club_id, club_type: parsed.club_type, source: 'voice' });
       // 2026-08-07 (Tim — "I say 'I'm gonna hit a 5 wood off this tee' and it just says 'got it, 5 wood'
       // with NO correlation to anything. It's already on a tee box — it should populate yardage, wind, the

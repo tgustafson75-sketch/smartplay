@@ -145,7 +145,8 @@ describe('every line the caddie has, he is asked for', () => {
   it('the live owners that replaced them still say the thing', () => {
     // If these regress, the removals above become real losses rather than de-duplication.
     const h = code('services/intents/queryStatusHandler.ts');
-    expect(h).toMatch(/\$\{value\} to the \$\{which\}/);                       // distance_to_front/back/pin
+    // 2026-10-15 (review #5) — the number is now spoken in the player's unit (toDisplayDistance).
+    expect(h).toMatch(/\$\{toDisplayDistance\(value, unit\) \?\? value\}\$\{unit === 'meters' \? ' metres' : ''\} to the \$\{which\}/); // distance_to_front/back/pin
     expect(h).toMatch(/miles per hour out of the/);                              // wind_callout
     expect(h).toMatch(/I don.{0,3}t have green coordinates for the \$\{which\}/); // a SPECIFIC refusal
     expect(code('services/caddieAckLines.ts')).toMatch(/Got it\./);              // shot_logged_ack

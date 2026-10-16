@@ -106,7 +106,9 @@ describe('the watch tracks the fix, not just a timer', () => {
     // Data Layer traffic on a wrist battery for numbers that did not move.
     expect(bridge).toMatch(/subscribeFixChange\(\(\) => \{ void pushYardageToWatch\(\{ onlyIfChanged: true \}\); \}\)/);
     expect(bridge).toMatch(/if \(opts\?\.onlyIfChanged\)/);
-    expect(bridge).toMatch(/if \(nextKey === lastYardageSent\) return;/);
+    // 2026-10-15 (review #5/#6) — renamed from nextKey: one key, which now also carries the unit and
+    // live/source so a badge change is not swallowed. Same intent: only the fix-driven send is gated.
+    expect(bridge).toMatch(/if \(opts\?\.onlyIfChanged\) \{\s*if \(key === lastYardageSent\) return;/);
   });
 
   it('leaves the heartbeat sends unconditional, so standing still never reads as disconnected', () => {

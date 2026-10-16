@@ -82,7 +82,18 @@ export function liveShotReadInputs(known: CallerKnown): ShotReadInputs {
 
   const filled: ShotReadInputs = {
     rawYards: known.rawYards,
-    shotBearingDeg: known.shotBearingDeg ?? null,
+    /**
+     * 2026-10-15 (review #4) — this was `known.shotBearingDeg ?? null`, so every caller that did not
+     * bring its own bearing got none — caddieRequestBody's decideShot({ rawYards }) among them. With no
+     * bearing cnsShotRead cannot resolve the wind into head/tail/cross, so the brain's shotRead.club and
+     * playsLikeYards ignored the wind while weather.playsLike in the SAME payload had it. The one owner
+     * of the shot line already exists; fill it here so every surface gets it.
+     */
+    shotBearingDeg: safe(() => {
+      if (hole == null) return null;
+      const wr = require('./windRelative') as typeof import('./windRelative');
+      return wr.shotBearingDeg(hole);
+    }, null),
 
     /**
      * SmartVision passed `weather: null` outright, so the one screen that reads the WHOLE hole aloud

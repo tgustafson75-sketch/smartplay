@@ -67,6 +67,12 @@ export type GreenYardages = {
   back: number | null;
   hole_number: number;
   reason: GreenYardagesReason;
+  /**
+   * 2026-10-15 (review #7) — which green-coords tier produced an 'ok' yardage. 'derived' is the
+   * AI-estimated green (api/hole-scan): a real GPS distance to a GUESSED point. The resolver used to
+   * see only reason 'ok' and badge it LIVE, "GPS clean", with the brain told to state it flatly.
+   */
+  green_source?: ResolvedGreen['source'];
 };
 
 // 2026-05-27 — Fix ET: added 'stale' level so the GPS chip can tell
@@ -811,6 +817,7 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
     back: back ? Math.round(haversineYards(fix.location, back)) : null,
     hole_number: hole,
     reason: 'ok' as const,
+    green_source: source,
   });
   // 2026-06-01 — Fix GF.2: log the raw computed yardage BEFORE the
   // sanity clamp checks it. This entry captures the bad >800y value
@@ -899,6 +906,7 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
     back: back ? Math.round(haversineYards(syncFix.location, back)) : null,
     hole_number: hole,
     reason: 'ok' as const,
+    green_source: source,
   });
   logYardageCalc(hole, syncFix, { front, middle, back }, yards, source);
   // 2026-07-08 — same hole-yardage-bounded clamp as the async path above (+100 slack). See note.

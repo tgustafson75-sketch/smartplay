@@ -133,7 +133,9 @@ describe('the yardage trace does not evict the evidence', () => {
     // roundTrace is a 2000-row ring buffer; an 18s tick would have spent ~900 rows of a 4.5h round
     // on "nothing wrong", pushing out the GPS/voice/shot rows that diagnose something.
     const caddie = code('services/watchCaddieBridge.ts');
-    expect(caddie).toContain('if (sentKey !== lastYardageSent)');
+    // 2026-10-15 (review #5/#6) — one change key now (it also carries unit + live/source, so a badge
+    // change re-sends); renamed from sentKey. Same intent: the success trace is gated on change.
+    expect(caddie).toMatch(/if \(key !== lastYardageSent\) \{\s*lastYardageSent = key;\s*traceWatch\('yardage_sent'/);
     expect(caddie).toContain("lastYardageSent = '';");
     // the failure paths stay unconditional
     expect(caddie).toContain("traceWatch('yardage_undelivered'");

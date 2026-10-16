@@ -140,6 +140,18 @@ const SMOOTHING_WINDOW = 5;
 // several ticks — Tim noticed this when signal came back). 30s is well beyond the normal
 // walking (10s) / stationary (20s) tick cadence, so it never fires in steady state.
 const SMOOTHING_GAP_MS = 30_000;
+/**
+ * 2026-10-15 (review, ROUND-BREAKING) — the smoother only belongs to a player standing still.
+ *
+ * A 5-sample weighted mean trails a MOVING player by about two intervals: ~10 m behind a cart at 1 Hz,
+ * ~28 m behind a walker on the 10 s cadence (~31 yds long to the green). So when a fix says the player
+ * is moving — the OS's doppler speed on a decent fix, or the raw point sitting further from the smoothed
+ * one than its own accuracy can explain — the history is dropped and the raw fix is the answer. Jitter
+ * while standing stays inside 2x accuracy and keeps being averaged.
+ */
+const MOVING_SPEED_MPS = 1;
+const MOVING_DRIFT_ACCURACY_MULT = 2;
+const MOVING_DRIFT_MIN_ACC_M = 4;
 
 // Phase 400-followup — if no fix has arrived for this long while the watch
 // is supposedly running, assume the OS killed the subscription during
@@ -295,6 +307,7 @@ function armStaleHardTimer(): void {
             } catch { /* best-effort */ }
           }
           lastFix = null;
+          lastRawFix = null;
 
           /**
            * 2026-08-11 (Tim's field log: gps_error stale_hard_clear, sinceMs 300000 — and on the
@@ -357,6 +370,17 @@ let batterySaverFloor: GpsMode | null = null;
 // Phase 107 / B3 — rolling buffer of accepted fixes. Mark resets it
 // (Mark wants the raw current position, not a smoothed history).
 let smoothingBuffer: GpsFix[] = [];
+/**
+ * 2026-10-15 (review, ROUND-BREAKING) — the outlier gates' reference is the last accepted RAW fix.
+ *
+ * They used to compare each new raw fix against lastFix, which is the SMOOTHED position and lags a
+ * moving player by about two intervals — so the implied speed they saw was ~3x the real one. A cart at
+ * 5 m/s on the 1 Hz cadence read as ~15 m/s and was rejected as a teleport (9 of 120 fixes accepted,
+ * the readout up to 423 m behind); once the lag passed 300 m the absolute gate rejected everything for
+ * 90 s. Raw against raw measures the speed the player is actually moving at. null = no reference (a
+ * refresh just asked for a clean start, or nothing has been accepted yet) — the next fix is not gated.
+ */
+let lastRawFix: GpsFix | null = null;
 // Phase 107 / B2 — track outlier counts for telemetry.
 let outliersDiscarded = 0;
 // 2026-06-06 — Timestamp of the most recent setMarkedFix call. While
@@ -455,12 +479,13 @@ function processFix(raw: GpsFix): boolean {
   const userMarkBypassActive = userMarkedAt > 0 && (Date.now() - userMarkedAt) < USER_MARK_OUTLIER_BYPASS_MS;
   // (2) Discard a jump that implies an impossible SPEED. See OUTLIER_MAX_IMPLIED_MPS — this was a
   //     fixed 5s window, which no poll mode outside `active` can satisfy.
-  if (!userMarkBypassActive && lastFix) {
-    const dtMs = raw.timestamp - lastFix.timestamp;
+  //     Measured against the last accepted RAW fix, never the smoothed lastFix (see lastRawFix).
+  if (!userMarkBypassActive && lastRawFix) {
+    const dtMs = raw.timestamp - lastRawFix.timestamp;
     // A non-positive gap is a duplicate or out-of-order delivery; dividing by it is meaningless, and
     // the absolute gate below still covers a genuine teleport.
     if (dtMs > 0) {
-      const jump = haversineMeters(lastFix, raw);
+      const jump = haversineMeters(lastRawFix, raw);
       const impliedMps = jump / (dtMs / 1000);
       if (impliedMps > OUTLIER_MAX_IMPLIED_MPS) {
         outliersDiscarded++;
@@ -480,11 +505,11 @@ function processFix(raw: GpsFix): boolean {
   // lastFix never updates, position freezes, yardages go wrong for ~5min. Past the window
   // the big jump is plausibly real travel across the gap, so accept it.
   const ABSOLUTE_JUMP_MAX_AGE_MS = 90_000;
-  if (!userMarkBypassActive && lastFix && (raw.timestamp - lastFix.timestamp) < ABSOLUTE_JUMP_MAX_AGE_MS) {
-    const absoluteJump = haversineMeters(lastFix, raw);
+  if (!userMarkBypassActive && lastRawFix && (raw.timestamp - lastRawFix.timestamp) < ABSOLUTE_JUMP_MAX_AGE_MS) {
+    const absoluteJump = haversineMeters(lastRawFix, raw);
     if (absoluteJump > OUTLIER_ABSOLUTE_JUMP_M) {
       outliersDiscarded++;
-      console.log(`[gps:outlier-rejected] absolute_jump_m=${absoluteJump.toFixed(1)} dt_ms=${raw.timestamp - lastFix.timestamp}`);
+      console.log(`[gps:outlier-rejected] absolute_jump_m=${absoluteJump.toFixed(1)} dt_ms=${raw.timestamp - lastRawFix.timestamp}`);
       return false;
     }
   }
@@ -505,6 +530,15 @@ function processFix(raw: GpsFix): boolean {
   if (lastBuffered && raw.timestamp - lastBuffered.timestamp > SMOOTHING_GAP_MS) {
     smoothingBuffer = [];
   }
+  // A moving player is not averaged with where he was (see MOVING_SPEED_MPS). The speed signal only
+  // counts on a decent fix — a weak fix's speed is as unreliable as its position — and the drift test
+  // scales with the fix's own accuracy, so an 80 m fix cannot trigger it by being 80 m off.
+  const rawAcc = raw.accuracy_m;
+  const speedSaysMoving = raw.speed != null && raw.speed > MOVING_SPEED_MPS
+    && rawAcc != null && rawAcc < WEAK_ACCURACY_M;
+  const driftSaysMoving = lastFix != null
+    && haversineMeters(lastFix, raw) > MOVING_DRIFT_ACCURACY_MULT * Math.max(rawAcc ?? 30, MOVING_DRIFT_MIN_ACC_M);
+  if (speedSaysMoving || driftSaysMoving) smoothingBuffer = [];
   smoothingBuffer.push(raw);
   if (smoothingBuffer.length > SMOOTHING_WINDOW) smoothingBuffer.shift();
   let wLat = 0, wLng = 0, wSum = 0;
@@ -548,6 +582,7 @@ function processFix(raw: GpsFix): boolean {
     lastMotionAt = Date.now();
   }
   lastFix = fix;
+  lastRawFix = raw;
   lastTickAt = Date.now();
   armStaleHardTimer();
   for (const cb of subscribers) {
@@ -637,6 +672,7 @@ export function setSimulatedFix(loc: { lat: number; lng: number }, accuracy_m = 
 export function clearSimulatedFix(): void {
   simulatedActive = false;
   lastFix = null;
+  lastRawFix = null;
   smoothingBuffer = [];
   clearStaleHardTimer();
 }
@@ -660,6 +696,16 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
   if (!isValidGolfCoord(lat, lng)) {
     console.log(`[gps:mark-rejected] invalid coord lat=${lat} lng=${lng}`);
     ownerSentinel('gps.setMarkedFix.invalidCoord', new Error(`lat=${lat} lng=${lng}`));
+    return;
+  }
+  /**
+   * 2026-10-15 (review #8) — a Mark with a REAL accuracy is a one-shot GPS read (positionMarkBus
+   * .forceMarkPosition), and it skipped the accuracy bar every live fix meets: a 150 m network fix
+   * became the stored position AND the gate reference. A tap-to-place (accuracy null) is the player
+   * saying where he is and is not a GPS reading, so it is unaffected.
+   */
+  if (accuracy_m != null && accuracy_m > OUTLIER_ACCURACY_M) {
+    console.log(`[gps:mark-rejected] accuracy_m=${accuracy_m.toFixed(1)} (>${OUTLIER_ACCURACY_M}) — keeping the current fix`);
     return;
   }
   lastFix = {
@@ -691,6 +737,8 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
     userMarkedAt = 0;
   }
   smoothingBuffer = [];
+  // The marked spot is where the player is now — it is the reference the next live fix is gated against.
+  lastRawFix = lastFix;
   lastTickAt = Date.now();
   // 2026-06-05 — arm the stale-clear so the user-marked position
   // doesn't hard-clear 60s later if no watch tick arrives. Mark is an
@@ -923,6 +971,9 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
       confidence: confidenceFromAccuracy(pos.coords.accuracy ?? null),
     };
     lastFix = fresh;
+    // He may have moved far while away — the pre-background history and gate reference are not his.
+    lastRawFix = fresh;
+    smoothingBuffer = [];
     lastTickAt = Date.now();
     // 2026-06-05 — arm stale-clear so a foreground-resume fix doesn't
     // hard-clear 60s later before the restarted watcher ticks.
@@ -1039,6 +1090,14 @@ export async function forceRefreshGps(): Promise<GpsFix | null> {
   // concurrent callers onto one in-flight refresh.
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async (): Promise<GpsFix | null> => {
+    /**
+     * 2026-10-15 (review #11) — off-round, there is no manager: no evaluateMode timer to cool the 1 Hz
+     * watch down, and nothing stops it until the NEXT round ends. Worse, startGpsManager returned early
+     * on seeing that subscription, so the next round started with no evaluateMode, no foreground
+     * recovery and no background task. A refresh that STARTED the watch owns it and stops it when done;
+     * startGpsManager adopts it if a round starts meanwhile.
+     */
+    const managerRunning = subscription != null || evalTimer != null;
     if (subscription) {
       try { subscription.remove(); } catch {}
       subscription = null;
@@ -1046,6 +1105,14 @@ export async function forceRefreshGps(): Promise<GpsFix | null> {
     mode = 'active';
     lastMotionAt = Date.now();
     lastTickAt = 0;
+    /**
+     * 2026-10-15 (review #1) — the player asked for a fresh position, so the old gate reference and
+     * history go. Keeping them is how a frozen reference kept rejecting perfect fixes and the player
+     * was told "Still searching for a strong GPS signal". lastFix stays for display until a fix lands.
+     */
+    lastRawFix = null;
+    smoothingBuffer = [];
+    refreshOwnsWatch = !managerRunning;
     await startWatchInternal();
     breadcrumb('manager_force_refresh');
 
@@ -1069,15 +1136,31 @@ export async function forceRefreshGps(): Promise<GpsFix | null> {
     return await refreshInFlight;
   } finally {
     refreshInFlight = null;
+    if (refreshOwnsWatch) {
+      refreshOwnsWatch = false;
+      if (subscription) {
+        try { subscription.remove(); } catch {}
+        subscription = null;
+      }
+      mode = 'walking';
+      breadcrumb('manager_force_refresh_released_watch');
+    }
   }
 }
+/** True while a watch exists only because an off-round forceRefreshGps started it. */
+let refreshOwnsWatch = false;
 
 export async function startGpsManager(): Promise<void> {
-  if (subscription) return;
-  mode = 'walking';
-  lastMotionAt = Date.now();
-  lastTickAt = 0;
-  await startWatchInternal();
+  if (subscription && refreshOwnsWatch) {
+    // A refresh's watch is running — adopt it rather than return with no manager around it.
+    refreshOwnsWatch = false;
+  } else {
+    if (subscription) return;
+    mode = 'walking';
+    lastMotionAt = Date.now();
+    lastTickAt = 0;
+    await startWatchInternal();
+  }
   if (!evalTimer) evalTimer = setInterval(evaluateMode, 5_000);
   if (!appStateSub) {
     appStateSub = AppState.addEventListener('change', (next) => {
@@ -1127,6 +1210,8 @@ export function stopGpsManager(): void {
   // Re-add app-boot-scoped consumers so they survive round teardown.
   for (const cb of persistentSubscribers) subscribers.add(cb);
   lastFix = null;
+  lastRawFix = null;
+  refreshOwnsWatch = false;
   clearStaleHardTimer();
   // 2026-05-20 — Day 1 / Fix 4: clear the simulator flag on
   // round-end so the next round starts with real GPS enabled by
@@ -1296,24 +1381,27 @@ export async function getOneShotFix(opts?: { maxAgeMs?: number }): Promise<GpsFi
       console.log(`[gps] one-shot returned invalid coord lat=${pos.coords.latitude} lng=${pos.coords.longitude}`);
       return lastFix;
     }
-    const fix: GpsFix = {
+    /**
+     * 2026-10-15 (review #8) — this wrote the raw one-shot straight into lastFix: no accuracy bar, no
+     * jump/speed gates, no smoothing, and NO subscriber fan-out — so the screens never heard of it
+     * while it became the outlier gates' reference. peekFix polls this every 3-4 s, and round start,
+     * refreshFix and the hard-clear restart all call it. A one-shot is a fix like any other: the same
+     * accuracy and freshness bar as the foreground one-shot, then the one ingest seam (processFix also
+     * arms the stale timer, which this used to do by hand).
+     */
+    const acc = pos.coords.accuracy ?? null;
+    if (acc == null || acc > OUTLIER_ACCURACY_M || Date.now() - pos.timestamp > 30_000) {
+      console.log(`[gps] one-shot not used (accuracy ${acc ?? '?'}m, age ${Date.now() - pos.timestamp}ms)`);
+      return lastFix;
+    }
+    processFix({
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
-      accuracy_m: pos.coords.accuracy ?? null,
+      accuracy_m: acc,
       speed: pos.coords.speed ?? null,
       timestamp: pos.timestamp,
-      // 2026-06-07 audit r5: one-shot reads (refreshFix path) are
-      // genuine live GPS — mark as 'live' so the type discriminator
-      // is consistent.
-      source: 'live',
-      confidence: confidenceFromAccuracy(pos.coords.accuracy ?? null),
-    };
-    lastFix = fix;
-    // 2026-06-05 — arm stale-clear so explicit one-shot reads (e.g.
-    // SmartFinder refreshFix) don't hard-clear 60s later before a
-    // watch tick lands.
-    armStaleHardTimer();
-    return fix;
+    });
+    return lastFix;
   } catch (err) {
     console.log('[gps] one-shot error:', err);
     return lastFix;
@@ -1363,6 +1451,20 @@ export async function recalibrateGps(): Promise<GpsFix | null> {
       breadcrumb('manager_recalibrate_invalid_coord');
       return null;
     }
+    // 2026-10-15 (review #8) — same accuracy bar as every other fix. A coarse seed is not a
+    // recalibration; start the watch and let a real fix arrive through processFix.
+    if (pos.coords.accuracy != null && pos.coords.accuracy > OUTLIER_ACCURACY_M) {
+      console.log(`[gps] recalibrate one-shot too coarse (${Math.round(pos.coords.accuracy)}m) — waiting for the watch`);
+      lastRawFix = null;
+      smoothingBuffer = [];
+      lastActiveBumpAt = Date.now();
+      lastBumpReason = 'recalibrate';
+      lastBumpAt = lastActiveBumpAt;
+      mode = 'active';
+      await startWatchInternal();
+      if (!evalTimer) evalTimer = setInterval(evaluateMode, 5_000);
+      return null;
+    }
     const fresh: GpsFix = {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
@@ -1373,6 +1475,8 @@ export async function recalibrateGps(): Promise<GpsFix | null> {
       confidence: confidenceFromAccuracy(pos.coords.accuracy ?? null),
     };
     lastFix = fresh;
+    lastRawFix = fresh;
+    smoothingBuffer = [];
     lastMotionAt = Date.now();
     // 2026-06-05 — arm stale-clear. Without it, a recalibrate that
     // happens just before backgrounding could hard-clear the fresh

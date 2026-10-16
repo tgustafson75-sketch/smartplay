@@ -9613,7 +9613,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   const hookSrc = read('hooks/useElevationDelta.ts');
   check('Elevation: useElevationDelta is safe — 0/flat until both points resolve, gridded deps',
     /useElevationDeltaStatus/.test(hookSrc) && /getPlaysLikeElevation\b/.test(hookSrc) && // refreshed: status hook + getPlaysLikeElevation
-      /setState\(\{ deltaFeet: 0, hasData: false \}\);\s*\n\s*return;/.test(hookSrc) &&
+      // 2026-10-15 (review #10) — the result is now stamped with its target, so the flat/no-data early
+      // return writes the NO_ELEVATION_DATA constant (= { deltaFeet: 0, hasData: false }). Same intent.
+      /setState\(\{ targetKey, value: NO_ELEVATION_DATA \}\);\s*\n\s*return;/.test(hookSrc) &&
+      /const NO_ELEVATION_DATA: ElevationDelta = \{ deltaFeet: 0, hasData: false \};/.test(hookSrc) &&
       /Math\.round\(v \* 1e4\)/.test(hookSrc),
     'safe to pass straight to playsLikeDistance — never blocks a yardage; deps gridded to the ~11m cache cell so GPS jitter does not thrash the effect');
 

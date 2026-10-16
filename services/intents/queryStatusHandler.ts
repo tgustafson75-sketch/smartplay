@@ -22,6 +22,7 @@ import { getOneShotFix } from '../gpsManager';
 // 2026-05-28 — Fix FE: presence helper so the no-fix branch fills the
 // silence with character-true patience instead of returning "—".
 import { presenceFill } from '../presenceCaddie';
+import { toDisplayDistance, liveDistanceUnit } from '../distanceUnits';
 
 // 2026-05-24 — Voice-language localization for distance_to_green
 // responses. Source of truth for `lang` is AppContext.language, which
@@ -41,17 +42,17 @@ const TTS_STRINGS = {
   en: {
     noGreen: "I don't have the green location for this hole — try marking it next time you pass through.",
     noGps: 'No GPS lock yet — give it a few seconds and try again.',
-    distance: (y: number) => `${y} yards to the middle of the green.`,
+    distance: (y: number, m = false) => `${y} ${m ? 'metres' : 'yards'} to the middle of the green.`,
   },
   es: {
     noGreen: 'No tengo la ubicación del green para este hoyo — intenta marcarla la próxima vez que pases.',
     noGps: 'Aún no tengo señal GPS — espera unos segundos e intenta otra vez.',
-    distance: (y: number) => `${y} yardas al centro del green.`,
+    distance: (y: number, m = false) => `${y} ${m ? 'metros' : 'yardas'} al centro del green.`,
   },
   zh: {
     noGreen: '这洞的果岭位置我还没有数据——下次经过时可以试试标记一下。',
     noGps: '还没有GPS信号——等几秒再试一次。',
-    distance: (y: number) => `到果岭中心${y}码。`,
+    distance: (y: number, m = false) => `到果岭中心${y}${m ? '米' : '码'}。`,
   },
 } as const;
 
@@ -1056,7 +1057,8 @@ export const queryStatusHandler: IntentHandler = {
         }
         return {
           success: true,
-          voice_response: t.distance(yds),
+          // 2026-10-15 (review #5) — spoken in the player's unit; `yds` stays yards for telemetry.
+          voice_response: t.distance(toDisplayDistance(yds, liveDistanceUnit()) ?? yds, liveDistanceUnit() === 'meters'),
           side_effects: [
             'query:distance_to_green',
             `gps_accuracy_m:${typeof fix.accuracy_m === 'number' ? Math.round(fix.accuracy_m) : 'unknown'}`,
@@ -1201,9 +1203,11 @@ export const queryStatusHandler: IntentHandler = {
             follow_up_needed: false,
           };
         }
+        // 2026-10-15 (review #5) — a bare number in yards, read to a metres player as if it were metres.
+        const unit = liveDistanceUnit();
         return {
           success: true,
-          voice_response: `${value} to the ${which}.`,
+          voice_response: `${toDisplayDistance(value, unit) ?? value}${unit === 'meters' ? ' metres' : ''} to the ${which}.`,
           side_effects: [`query:${topic}`],
           follow_up_needed: false,
         };

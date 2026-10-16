@@ -22,7 +22,7 @@
 import { getHoleGeometry } from './courseGeometryService';
 import { greenForHole, teeForHole } from './holeDetection';
 import { haversineYards } from '../utils/geoDistance';
-import { useRoundStore } from '../store/roundStore';
+import { useRoundStore, roundFirstHole, roundLastHole } from '../store/roundStore';
 import { getSustainedHeading } from './courseDataOrchestrator';
 import { getLastFix, type GpsFix } from './gpsManager';
 import { devLog } from './devLog';
@@ -93,9 +93,18 @@ export function reconcileCurrentHole(fix: GpsFix, force = false): ReconcileResul
   // API course id → isTwiceAround false → wrapped holes tied with their first-loop twins and the
   // backward gate blocked — Refresh-GPS dead on the second loop, the exact bug this code addresses.
   const isTwiceAround = total === 18 && currentHole >= 10 && round.twiceAround === true;
-  const startHole = isTwiceAround ? 10 : 1;
+  /**
+   * 2026-10-15 (review #9) — only the holes of THIS round. The loop scanned every course hole, so on a
+   * front-nine round Refresh GPS near the 10th tee (finished, walking past it to the car) scored 10 as
+   * the forward, unplayed best hole, setCurrentHole(10) — and setCurrentHole reads walking onto the
+   * 10th as "keep playing" and expanded the round to eighteen. That expansion is for a player who
+   * actually walks on (holeDetection's sustained-position advance), not for a "where am I?" tap.
+   * roundFirstHole/roundLastHole are the store's one owner of the round's range (back nine = 10..18).
+   */
+  const startHole = Math.max(isTwiceAround ? 10 : 1, roundFirstHole(round));
+  const endHole = Math.min(total, roundLastHole(round));
   const scores: HoleScore[] = [];
-  for (let h = startHole; h <= total; h++) {
+  for (let h = startHole; h <= endHole; h++) {
     /**
      * 2026-09-10 — this read the geometry CACHE directly and required BOTH a tee and a green from
      * it. On a golfcourseapi course the cache has no greens (courseToHoles writes zeros, and the
