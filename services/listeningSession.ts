@@ -1612,7 +1612,7 @@ async function openSession() {
           // setting with no UI setter that the v15 migration force-set, so the test could only ever
           // be true and the absent `else` was a legacy path nothing could reach. Unwrapped.
           try {
-            const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
+            const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
             // 2026-07-01 (re-audit — voice H2) — dispatch service-safe tool actions
             // (switch_caddie / navigate) the conversational brain returned; this
             // branch previously spoke the reply but dropped them.
@@ -1663,7 +1663,7 @@ async function openSession() {
            * the same payload, the same history, once more. [[no-half-fixes-enforce-every-surface]]
            */
           if (!chatSpoken) try {
-            const retry = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
+            const retry = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
             if (retry.toolActions?.length) {
               const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
               dispatchConversationalToolActions(retry.toolActions);
@@ -1753,7 +1753,7 @@ async function openSession() {
       // total brain miss (signal drop) fall back to the offline caddie (local club-call).
       if (result.route_to_brain) {
         try {
-          const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
+          const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
           if (r.toolActions?.length) {
             const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
             dispatchConversationalToolActions(r.toolActions);

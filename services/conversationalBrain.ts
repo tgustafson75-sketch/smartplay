@@ -69,7 +69,7 @@ export function clearConversationalHistory(): void { clearConversationHistory();
  * The one chokepoint every hands-free utterance passes through, which is why the stuck-player
  * check lives here.
  */
-export async function conversationalBrainTurn(utterance: string, opts?: { timeoutMs?: number }): Promise<BrainReply> {
+export async function conversationalBrainTurn(utterance: string, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<BrainReply> {
   /**
    * 2026-09-05 — stamp WHICH SHOT the player was standing over when this turn began, so the
    * delivery path can tell whether the answer still applies by the time it arrives. See
@@ -100,6 +100,9 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
     message: utterance,
     language: useSettingsStore.getState().language ?? 'en',
     timeoutMs,
+    // 2026-10-16 — the earbud session's turn signal: a shushed or superseded turn stops its brain call
+    // (it used to run to completion and bill, its answer dropped or captioned).
+    signal: opts?.signal,
   });
   if (!turn) return NO_ANSWER;
   return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
