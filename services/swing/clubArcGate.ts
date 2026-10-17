@@ -174,6 +174,47 @@ export function classifyArc(raw: readonly ArcPoint[]): { rejection: ArcRejection
  * own clips that tripped "scatter" on a clean arc. So a tracked arc keeps the gates that still mean
  * something (enough points, not a cluster) and not the one written for a different failure.
  */
+/**
+ * 2026-10-17 (Tim's range screenshot: a tracked arc zig-zagging out to the ball and back) — A CLUBHEAD
+ * CANNOT GO OUT AND COME STRAIGHT BACK.
+ *
+ * The tracker's Viterbi allows a big step between frames on purpose: through the downswing the head
+ * really does cross most of a body height in one frame. What it does not judge is a REVERSAL — out to
+ * somewhere else and back to where it was within a frame or two. The only place a real club turns round
+ * is the top, and it does that slowly and over a short distance. A fast out-and-back is the tracker
+ * latching onto something else that moved (the ball leaving, a shadow, the basket's edge) for a frame.
+ *
+ * Dropped: one or two points that jump at least REVERSAL_MIN_JUMP away from the point before AND back
+ * to near it (within REVERSAL_BACK_RATIO of the jump) inside REVERSAL_MAX_MS. Top → impact → finish is
+ * not that (Tim's 3870 / swing6b keep every point): the jump down to impact and the climb to the finish
+ * take far longer than two frames together, and the finish is nowhere near the top.
+ * Measured points only are removed — nothing is moved or invented.
+ */
+export const REVERSAL_MAX_MS = 110;
+export const REVERSAL_MIN_JUMP = 0.1;
+export const REVERSAL_BACK_RATIO = 0.35;
+
+export function dropImpossibleReversals<T extends ArcPoint & { tMs: number }>(raw: readonly T[]): T[] {
+  let pts = [...raw];
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let i = 1; i < pts.length - 1 && !changed; i++) {
+      for (const k of [1, 2]) {
+        const a = pts[i - 1], out = pts[i], b = pts[i + k - 1 + 1];
+        if (!b || b.tMs - a.tMs > REVERSAL_MAX_MS * (k === 1 ? 1 : 1.5)) continue;
+        const jump = Math.hypot(out.x - a.x, out.y - a.y);
+        const back = Math.hypot(b.x - pts[i + k - 1].x, b.y - pts[i + k - 1].y);
+        if (jump < REVERSAL_MIN_JUMP || back < REVERSAL_MIN_JUMP) continue;
+        if (Math.hypot(b.x - a.x, b.y - a.y) > REVERSAL_BACK_RATIO * Math.min(jump, back)) continue;
+        pts = [...pts.slice(0, i), ...pts.slice(i + k)];
+        changed = true;
+        break;
+      }
+    }
+  }
+  return pts;
+}
+
 export function classifyTrackedArc(raw: readonly ArcPoint[]): { rejection: ArcRejection | null; points: ArcPoint[] } {
   if (raw.length === 0) return { rejection: 'none', points: [] };
   const points = dedupeArcPoints(raw);

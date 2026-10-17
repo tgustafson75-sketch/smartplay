@@ -117,7 +117,9 @@ describe('the runner actually applies it', () => {
 
   it('calls the shared rule instead of keeping its own arithmetic', () => {
     expect(src).toMatch(/require\('\.\.\/clubPathWindow'\)/);
-    expect(src).toMatch(/const \{ startMs, endMs \} = narrowClubPathWindow\(rawStartMs, rawEndMs, anchorMs\)/);
+    expect(src).toMatch(/const narrowed = narrowClubPathWindow\(rawStartMs, rawEndMs, anchorMs\)/);
+    // 2026-10-17 — and then the one swing inside it (the-arc-is-one-swing).
+    expect(src).toMatch(/const \{ startMs, endMs, bounded \} = oneSwingArcWindow\(narrowed, frames, anchorMs, shotImpactHeard\(shot\)\)/);
     // No second copy of the numbers may reappear in the screen.
     expect(src).not.toMatch(/MAX_SWING_WINDOW_MS = 6000/);
     expect(src).not.toMatch(/PRE_MS = 2500/);

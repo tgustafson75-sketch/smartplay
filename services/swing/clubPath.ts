@@ -15,7 +15,7 @@
  */
 
 import * as VideoThumbnails from '../../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
-import { classifyArc, classifyTrackedArc } from './clubArcGate';
+import { classifyArc, classifyTrackedArc, dropImpossibleReversals } from './clubArcGate';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from '../apiBase';
@@ -494,8 +494,11 @@ async function trackedClubPath(
   const raw = r.points
     .filter((p) => p.t >= startMs - 120 && p.t <= endMs + 120 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
     .map((p) => ({ x: p.x, y: p.y, tMs: Math.max(0, p.t - startMs) }));
-  const { rejection, points } = classifyTrackedArc(raw);
-  trace('club track (on-device)', { frames: r.frames, seen: raw.length, kept: rejection ? 0 : points.length, rejected: rejection, ms: Date.now() - t0 });
+  // 2026-10-17 — a head that jumps out and straight back inside a frame or two is the tracker on something
+  // else (the ball leaving, a shadow): those points go before the gate counts what is left.
+  const continuous = dropImpossibleReversals(raw);
+  const { rejection, points } = classifyTrackedArc(continuous);
+  trace('club track (on-device)', { frames: r.frames, seen: raw.length, reversals: raw.length - continuous.length, kept: rejection ? 0 : points.length, rejected: rejection, ms: Date.now() - t0 });
   console.log('[clubTrack]', JSON.stringify({ frames: r.frames, seen: raw.length, rejection, ms: Date.now() - t0 }));
   return {
     points: rejection ? [] : (points as ClubPathPoint[]),

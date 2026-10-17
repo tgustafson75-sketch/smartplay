@@ -14,7 +14,7 @@
  * [[two-owners-is-the-root-cause]] [[break-test-every-guard-you-write]]
  */
 import { PRE_STRIKE_MS, POST_STRIKE_MS } from './swingSegmentation';
-import { wristCentroid, deriveSwingAnchors } from './poseMotion';
+import { wristCentroid, deriveSwingAnchors, anchorsFromPoseFrames, trustHeardStrike, isSwingSized } from './poseMotion';
 import type { PoseFrame } from '../poseAnalysisApi';
 
 /** Wider than any real swing (4,000ms segment + headroom for a slow, wide capture). */
@@ -214,4 +214,40 @@ export function clubArcAnchor(input: ClubArcAnchorInput & { heardToleranceMs?: n
   const anchorMs = clubArcAnchorMs(input);
   if (anchorMs == null) return { anchorMs: null, toleranceMs: 0 };
   return { anchorMs, toleranceMs: anchorIsHeard(input) ? (input.heardToleranceMs ?? 0) : POSE_ANCHOR_TOLERANCE_MS };
+}
+
+/**
+ * 2026-10-17 (Tim at the range: "some of the swing arcs get a little crazy"; one arc drew several
+ * overlapping loops) — THE ARC IS ONE SWING.
+ *
+ * The window handed to the tracker was the shot's stored segment — 2.5s before a located impact and 1.5s
+ * after (`windowMs=4000` in his trace) — and narrowClubPathWindow only touches a window over 6s. A
+ * practice swing, a waggle or the club coming down after the finish inside those four seconds was
+ * tracked as the same club, and drawn as more loops.
+ *
+ * The swing is already measured: the body read's hand-height anchors (poseMotion, S1e) put address and
+ * the held finish on its own frames. The arc window is that span, with a little room before address
+ * (the clubhead moves before the hands have risen far) and after the finish. Never wider than it was
+ * given, and left alone where that read cannot vouch for it: no anchors, not swing-sized, or an impact
+ * anchor (a heard strike, the pose impact) outside the swing the hands describe — two answers about
+ * where the swing is are not settled by picking one.
+ */
+export const ARC_BEFORE_ADDRESS_MS = 250;
+export const ARC_AFTER_FINISH_MS = 300;
+
+export function oneSwingArcWindow(
+  window: { startMs: number; endMs: number },
+  frames: readonly PoseFrame[] | null | undefined,
+  anchorMs: number | null,
+  heardStrike: boolean,
+): { startMs: number; endMs: number; bounded: boolean } {
+  const keep = { startMs: window.startMs, endMs: window.endMs, bounded: false };
+  if (!frames || frames.length < 5) return keep;
+  const a = trustHeardStrike(frames, anchorsFromPoseFrames(frames), heardStrike);
+  if (!a || !isSwingSized({ startMs: a.startMs, endMs: a.endMs, topMs: a.topMs, impactMs: a.impactMs })) return keep;
+  if (anchorMs != null && (anchorMs < a.topMs || anchorMs > a.endMs)) return keep;
+  const startMs = Math.max(window.startMs, a.startMs - ARC_BEFORE_ADDRESS_MS);
+  const endMs = Math.min(window.endMs, a.endMs + ARC_AFTER_FINISH_MS);
+  if (!(endMs - startMs >= 500)) return keep;
+  return { startMs, endMs, bounded: true };
 }

@@ -232,7 +232,7 @@ async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomec
     const dur = await pd.probeDurationMs(uri).catch(() => 0);
     if (dur > 0) rawEndMs = Math.min(rawEndMs, dur);
   }
-  const { clubArcAnchor, narrowClubPathWindow } = require('../clubPathWindow') as typeof import('../clubPathWindow');
+  const { clubArcAnchor, narrowClubPathWindow, oneSwingArcWindow } = require('../clubPathWindow') as typeof import('../clubPathWindow');
   const { anchorMs, toleranceMs } = clubArcAnchor({
     detectionMethod: shot.detectionMethod,
     detectionOffsetSeconds: shot.detectionOffsetSeconds,
@@ -240,10 +240,14 @@ async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomec
     rawStartMs,
     rawEndMs,
   });
-  const { startMs, endMs } = narrowClubPathWindow(rawStartMs, rawEndMs, anchorMs);
+  const narrowed = narrowClubPathWindow(rawStartMs, rawEndMs, anchorMs);
+  // 2026-10-17 — then the ONE swing inside it (address → finish on the body read's own frames): a practice
+  // swing or a waggle in the same four seconds is not tracked as the club.
+  const { startMs, endMs, bounded } = oneSwingArcWindow(narrowed, frames, anchorMs, shotImpactHeard(shot));
   (require('../../analysisTrace') as typeof import('../../analysisTrace')).traceStep('arc anchor', {
     shot: traceShotLabel(s, input.shotId), anchorMs: anchorMs != null ? Math.round(anchorMs) : null, toleranceMs,
     heard: shot.detectionMethod === 'audio_transient', windowMs: Math.round(endMs - startMs), pose: frames?.length ?? 0,
+    swing: bounded ? `${Math.round(startMs)}-${Math.round(endMs)}` : 'segment',
   }, { sessionId: input.sessionId });
   if (!(endMs > startMs) || signal.aborted) return null;
   const { detectClubPath } = await import('../clubPath');
