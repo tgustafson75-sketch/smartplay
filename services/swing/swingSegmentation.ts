@@ -295,3 +295,40 @@ export function correlateStrikesWithVideo(
   }
   return segmentsFromStrikes(pseudo, durationMs, opts);
 }
+
+/**
+ * 2026-10-17 (Tim at the range, SmartMotion live capture: "It's counting the practice swings sometimes as
+ * a swing") — A PRACTICE SWING HITS NOTHING.
+ *
+ * The range locator reads coarse frames ~2.5s apart, and in them a practice swing looks exactly like a
+ * swing, so it came back as one: counted, read (a paid read per swing) and reviewed. What a practice swing
+ * never has is a strike, and the microphone already listens for every one.
+ *
+ * The rule, conservative on purpose:
+ *   - The mic must first PROVE it hears this player: a confident (high / medium) strike near a swing the
+ *     camera found. A capture where nothing was heard (foam balls, metering off, a mic that heard nothing
+ *     over the range) proves nothing, and every swing is kept.
+ *   - With that proof, a camera swing with NO strike of any confidence within PRACTICE_STRIKE_NEAR_MS is a
+ *     practice swing. "Near" is the locator's own error (the same 1.5s the high-confidence recovery above
+ *     uses), not the 600ms strike-to-swing match: a real swing whose strike missed that match is still
+ *     heard here, and stays.
+ *   - A heard swing is never dropped, and neither is every swing: a capture never empties.
+ * The kept swings keep their windows. Those were cut at the shared boundary WITH the practice swing, which
+ * is what keeps the practice motion out of the real swing's window.
+ */
+export const PRACTICE_STRIKE_NEAR_MS = 1500;
+
+export function splitPracticeSwings(
+  segments: SwingSegment[],
+  strikes: readonly DetectedStrike[],
+  videoSwings: readonly { timeSec: number }[],
+): { swings: SwingSegment[]; practice: SwingSegment[] } {
+  const near = (tMs: number, pool: readonly DetectedStrike[]) => pool.some((k) => Math.abs(k.timeMs - tMs) <= PRACTICE_STRIKE_NEAR_MS);
+  const confident = strikes.filter((k) => k.confidence !== 'low');
+  const micHearsThisPlayer = videoSwings.some((v) => near(Math.round(v.timeSec * 1000), confident));
+  if (!micHearsThisPlayer) return { swings: segments, practice: [] };
+  const practice = segments.filter((s) => (s.peakDb ?? 0) === 0 && !s.synthesized && !near(s.strikeMs, strikes));
+  if (practice.length === 0 || practice.length === segments.length) return { swings: segments, practice: [] };
+  const swings = segments.filter((s) => !practice.includes(s)).map((s, i) => ({ ...s, index: i + 1 }));
+  return { swings, practice };
+}
