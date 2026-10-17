@@ -1109,7 +1109,7 @@ export default function SwingDetail() {
       const posSec = s.positionMillis / 1000;
       const hasCrop = winEndRef.current > winStartRef.current + 0.1 && winEndRef.current < (durationRef.current ?? 1e9) - 0.05;
       if (hasCrop && posSec >= winEndRef.current - 0.02) {
-        if (!tailLoopRef.current) { tailLoopRef.current = true; void videoRef.current?.setPositionAsync(winStartRef.current * 1000); }
+        if (!tailLoopRef.current) { tailLoopRef.current = true; void videoRef.current?.setPositionAsync(winStartRef.current * 1000)?.catch(() => undefined); }
       } else if (posSec < winEndRef.current - 0.15) {
         tailLoopRef.current = false;
       }
@@ -1158,8 +1158,11 @@ export default function SwingDetail() {
     // there fights the static-by-default behavior. Tap the frame to play.
     // 2026-10-10 — zero tolerance: a stage chip or the fault mark must land ON its frame (iOS defaults
     // to the nearest keyframe, up to a second off).
-    await videoRef.current?.setPositionAsync(sec * 1000, { toleranceMillisBefore: 0, toleranceMillisAfter: 0 });
-    await videoRef.current?.pauseAsync();
+    // 2026-10-17 (Sentry C) — a seek a newer tap interrupts rejects with "Seeking interrupted."; not an error.
+    try {
+      await videoRef.current?.setPositionAsync(sec * 1000, { toleranceMillisBefore: 0, toleranceMillisAfter: 0 });
+      await videoRef.current?.pauseAsync();
+    } catch { /* interrupted by a newer seek, or the player was released */ }
   };
 
   // 2026-07-30 (Tim — "the buttons for the swing points and the video points are not lining up" +
@@ -1408,9 +1411,10 @@ export default function SwingDetail() {
   const restartBoth = async () => {
     const lStart = leftShot?.clipStartSeconds ?? 0;
     const rStart = rightShot?.clipStartSeconds ?? 0;
+    // 2026-10-17 (Sentry C) — a seek interrupted by a newer one rejects with "Seeking interrupted."; not an error.
     await Promise.all([
-      leftCompareVideoRef.current?.setPositionAsync(lStart * 1000),
-      rightCompareVideoRef.current?.setPositionAsync(rStart * 1000),
+      leftCompareVideoRef.current?.setPositionAsync(lStart * 1000)?.catch(() => undefined),
+      rightCompareVideoRef.current?.setPositionAsync(rStart * 1000)?.catch(() => undefined),
     ]);
     await playBoth();
   };

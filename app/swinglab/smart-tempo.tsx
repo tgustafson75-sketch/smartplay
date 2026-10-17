@@ -281,7 +281,7 @@ export default function SmartTempoScreen() {
     // Replay-tempo loop: when we pass the marked impact, snap back to the marked backswing-start.
     const r = replayRef.current;
     if (r && s.isPlaying && posSec >= r.endSec) {
-      void videoRef.current?.setPositionAsync(r.startSec * 1000);
+      void videoRef.current?.setPositionAsync(r.startSec * 1000)?.catch(() => undefined); // an interrupted seek is not an error (Sentry C)
     }
   }, []);
   const onTempoVideoLoad = useCallback(async () => {

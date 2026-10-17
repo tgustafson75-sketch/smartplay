@@ -20,11 +20,11 @@ import { pickTeeSet } from '../../services/teeSelection';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, Alert, type ImageSourcePropType,
-  KeyboardAvoidingView, Platform, Linking,
+  KeyboardAvoidingView, Platform, Linking, AppState,
 } from 'react-native';
 import * as Location from 'expo-location';
 // Phase 407 — distance helper for course-locator GPS sort
-import { haversineYards } from '../../utils/geoDistance';
+import { haversineYards, haversineMeters } from '../../utils/geoDistance';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { isBelow, fitOneLine, ACTION_ROW_GRID_BELOW, COURSE_ROW_STACK_BELOW, AT_COURSE_CHOICES_WRAP_BELOW } from '../../utils/phoneLayout';
 import { withAlpha, bestOn } from '../../theme/tokens';
@@ -989,6 +989,34 @@ export default function PlayTab() {
       setSearchError(null);
     }, []),
   );
+
+  /**
+   * 2026-10-17 (field report, Fold3 — "local courses are not updating by user location") — position
+   * was acquired ONCE, at mount. The tab stays mounted while the app sits in the background for hours,
+   * so after driving to another course the nearby list still showed the old area until Refresh.
+   *
+   * On focus and on returning to the foreground: if the last read is over 10 minutes old, take the
+   * OS's last-known position — instant, no GPS spin-up, and only with permission ALREADY granted (no
+   * prompt; the 06-11 lazy-load rule stands). Moved more than 1 km → update, which re-runs discovery.
+   */
+  const lastPositionReadAtRef = useRef(0);
+  const refreshPositionIfMoved = useCallback(async () => {
+    if (Date.now() - lastPositionReadAtRef.current < 10 * 60 * 1000) return;
+    lastPositionReadAtRef.current = Date.now();
+    try {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (!perm.granted) return;
+      const last = await Location.getLastKnownPositionAsync({ maxAge: 10 * 60 * 1000 });
+      if (!last || !isValidGolfCoord(last.coords.latitude, last.coords.longitude)) return;
+      const next = { lat: last.coords.latitude, lng: last.coords.longitude };
+      setUserPosition((prev) => (!prev || haversineMeters(prev, next) > 1000 ? next : prev));
+    } catch { /* a cheap re-read is a bonus; the Refresh button still works */ }
+  }, []);
+  useFocusEffect(useCallback(() => { void refreshPositionIfMoved(); }, [refreshPositionIfMoved]));
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void refreshPositionIfMoved(); });
+    return () => sub.remove();
+  }, [refreshPositionIfMoved]);
 
   // 2026-06-11 (lazy-load) — GPS is NO LONGER auto-pulled on Play-tab focus.
   // Per "load resources only when needed," the default course is the user's

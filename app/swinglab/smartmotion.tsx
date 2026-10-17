@@ -6025,7 +6025,7 @@ export default function SmartMotion() {
               positionMs={playbackMs}
               durationMs={videoDurationMs}
               moments={scrubMoments}
-              onSeek={(ms) => { void videoRef.current?.setPositionAsync(ms); setPlaybackMs(ms); }}
+              onSeek={(ms) => { void videoRef.current?.setPositionAsync(ms)?.catch(() => undefined); setPlaybackMs(ms); }}
               onScrubStart={() => { setVideoPaused(true); void videoRef.current?.pauseAsync(); }}
             />
           ) : null}
