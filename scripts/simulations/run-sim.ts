@@ -9687,8 +9687,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
        * a cage / live multi-swing session never gets a single window forced on it.
        */
       const run = read('services/swing/orchestrator/uploadRun.ts');
-      const skipsCage = /if \(!s \|\| !shot\?\.clipUri \|\| s\.source !== 'uploaded_video'\) return false;/.test(run);
-      const locatesWindow = /const w = await findUploadSwingWindow\(shot\.clipUri, s\.upload\?\.duration_sec \?\? 0\);/.test(run) &&
+      // 2026-10-17 — a live single swing whose stored "window" is longer than a swing is located too (Tim's
+      // 60s capture read as 0-59.8s); a multi-swing live session still never gets one window forced on it.
+      const skipsCage = /if \(s\.source !== 'uploaded_video'\) \{\s*if \(s\.shots\.filter\(\(x\) => x\.clipUri\)\.length !== 1\) return false;/.test(run);
+      const locatesWindow = /const durSec = Math\.max\(s\.upload\?\.duration_sec \?\? 0, shot\.clipEndSeconds \?\? 0\);\s*const w = await findUploadSwingWindow\(shot\.clipUri, durSec\);/.test(run) &&
         /when: \(\{ input \}\) => needsWindow\(input\.sessionId\)/.test(run);
       // the old length cap must NOT come back — it is what refused a 26s single swing
       const noLengthCap = !/durationMs > 20_000/.test(swingDetailSrc2);

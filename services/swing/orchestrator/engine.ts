@@ -275,5 +275,10 @@ export function cancelRunsWithPrefix(prefix: string): void {
   }
 }
 
+/** The keys of every run still going. */
+export function liveRunKeys(): string[] {
+  return [...runs.entries()].filter(([, r]) => !r.snapshot().done).map(([k]) => k);
+}
+
 /** Test seam. */
 export function _clearRunsForTest(): void { runs.clear(); lastRun.clear(); }

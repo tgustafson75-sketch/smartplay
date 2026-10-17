@@ -11,9 +11,9 @@
  * Every caller of videoUpload.runPhaseKOnSession (the swing screen, Analyze-at-position, trim, the
  * practice overlay, ingest) comes through here, so they all get the same order and one run per swing.
  */
-import { cancelRunsWithPrefix, getOrStartRun, liveRun, whenStageSettled, type StageDef } from './engine';
+import { cancelRunsWithPrefix, getOrStartRun, liveRun, liveRunKeys, whenStageSettled, type StageDef } from './engine';
 import { useSwingSessionStore } from '../../../store/swingSessionStore';
-import { runShotDetail, shotRunKey, swingRunKey } from './shotDetail';
+import { retireSessionShotRuns, retirementOf, runShotDetail, shotRunKey, swingRunKey } from './shotDetail';
 import type { ReadExtras } from '../../videoUpload';
 
 /**
@@ -24,7 +24,8 @@ import type { ReadExtras } from '../../videoUpload';
  * else. `extras` carries what only a live capture knows (its measured tempo and strike, a drill's focus,
  * the per-swing callback that lets the pager show each swing as it lands).
  */
-type In = { sessionId: string; extras?: ReadExtras };
+/** `retired`: the session's retirement count when this run began (a newer capture retires its body read). */
+type In = { sessionId: string; extras?: ReadExtras; retired: number };
 type ReadResult = Awaited<ReturnType<typeof import('../../videoUpload')._runPhaseKRead>>;
 
 /** A single-swing upload this long or longer is a range session — the read carves its swings. */
@@ -46,15 +47,38 @@ function isPutt(id: string): boolean {
   } catch { return false; }
 }
 
+/**
+ * 2026-10-17 (Tim's range session: a 60s SmartMotion capture whose strike was never heard went to the
+ * read as `window=0.0-59.8s`, nine frames over a minute, and the body read sampled the same minute) —
+ * a stored window longer than one swing is not a window. A live capture's finder gives up after 15s
+ * and stores the whole clip; the run finds the swing in it before anything reads it.
+ */
+export const NO_SWING_FOUND = "I couldn't find a swing in this clip — scrub to your swing and tap Analyze the swing at that moment.";
+
+function storedWindowTooLong(shot: { clipStartSeconds?: number | null; clipEndSeconds?: number | null }): boolean {
+  const { MAX_SWING_WINDOW_SEC } = require('../poseMotion') as typeof import('../poseMotion');
+  return typeof shot.clipStartSeconds === 'number' && typeof shot.clipEndSeconds === 'number'
+    && shot.clipEndSeconds - shot.clipStartSeconds > MAX_SWING_WINDOW_SEC;
+}
+
+const noSwing = (outputs: Record<string, unknown>) => (outputs.window as { noSwing?: boolean } | undefined)?.noSwing === true;
+
 function needsWindow(id: string): boolean {
   if (isPutt(id)) return false;
   const s = session(id);
   const shot = s?.shots?.[0];
-  if (!s || !shot?.clipUri || s.source !== 'uploaded_video') return false;
+  if (!s || !shot?.clipUri) return false;
   // Only a window the PLAYER chose is kept; the finder's own answer is re-found on every analysis
   // (an automatic window that was wrong used to be re-read forever — Tim's 3870 clip, 10-04).
   if (shot.clipWindowSource === 'user' && shot.clipStartSeconds != null && shot.clipEndSeconds != null
     && shot.clipEndSeconds > shot.clipStartSeconds) return false;
+  // A live capture already windowed its swing — unless that "window" is longer than one swing.
+  // (or it stored none and the clip is longer than one: the practice overlay's no-detections fallback).
+  if (s.source !== 'uploaded_video') {
+    if (s.shots.filter((x) => x.clipUri).length !== 1) return false;
+    const { MAX_SWING_WINDOW_SEC } = require('../poseMotion') as typeof import('../poseMotion');
+    return storedWindowTooLong(shot) || (shot.clipStartSeconds == null && (s.upload?.duration_sec ?? 0) > MAX_SWING_WINDOW_SEC);
+  }
   const dur = s.upload?.duration_sec ?? 0;
   return dur > 0 && dur < MULTI_SWING_UPLOAD_SEC;
 }
@@ -75,9 +99,25 @@ function stages(): StageDef<In>[] {
         const shot = s?.shots?.[0];
         if (!s || !shot?.clipUri) return null;
         const { findUploadSwingWindow } = require('../analysisOrchestrator') as typeof import('../analysisOrchestrator');
-        const w = await findUploadSwingWindow(shot.clipUri, s.upload?.duration_sec ?? 0);
+        // A live capture carries no probed duration; its stored (whole-clip) window ends at the clip's end.
+        const durSec = Math.max(s.upload?.duration_sec ?? 0, shot.clipEndSeconds ?? 0);
+        const w = await findUploadSwingWindow(shot.clipUri, durSec);
         // Overran its budget or the run was replaced: the read has moved on without this window.
         if (signal.aborted) return null;
+        /**
+         * 2026-10-17 — nothing found in a clip long enough to hold a session: the middle of a minute is
+         * not a swing either. Said honestly (the settle stage), and nothing reads the clip — never 0–60s.
+         */
+        if (w.via === 'middle' && durSec >= MULTI_SWING_UPLOAD_SEC) {
+          const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
+          traceStep('no swing found in the clip — nothing is read', { clip_s: Math.round(durSec * 10) / 10 }, { sessionId: input.sessionId });
+          // The body read's answer too (computed, none): a screen showing this swing must not locate the
+          // same minute again, nor body-read it whole.
+          const { liveSessionStore } = require('./liveSessionStore') as typeof import('./liveSessionStore');
+          liveSessionStore(signal).setShotBiomechanics(input.sessionId, shot.id, null);
+          liveSessionStore(signal).setSessionBiomechanics(input.sessionId, null);
+          return { ...w, noSwing: true };
+        }
         useSwingSessionStore.getState().setShotClipBoundaries(input.sessionId, shot.id, w.startSec, w.endSec, w.impactSec, 'auto');
         runWindow.set(input.sessionId, windowKey(input.sessionId));   // the run's OWN window move is not a new request
         try {
@@ -109,6 +149,7 @@ function stages(): StageDef<In>[] {
         // backstop covers that serial worst case; an overrun here would discard swings already read.
         return Math.min(15 * 60_000, perSwing * swings + 100_000);
       },
+      when: ({ outputs }) => !noSwing(outputs),
       run: async ({ input, signal }) => {
         const vu = require('../../videoUpload') as typeof import('../../videoUpload');
         return vu._runPhaseKRead(input.sessionId, signal, input.extras);
@@ -124,12 +165,12 @@ function stages(): StageDef<In>[] {
       run: async ({ input, outputs }) => {
         // No read output = the read overran its budget or threw: that is a failed read too.
         const out = outputs.read as { readFailed?: string } | undefined;
-        const failed = out ? out.readFailed : "Analysis didn't finish — tap Analyze to try again.";
+        const failed = noSwing(outputs) ? NO_SWING_FOUND : out ? out.readFailed : "Analysis didn't finish — tap Analyze to try again.";
         if (!failed) return null;
         const st = session(input.sessionId)?.analysis_status;
         const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
         if (st === 'ok') {
-          traceStep('read failed → the body read stands as the verdict', { reason: failed.slice(0, 80) });
+          traceStep('read failed → the body read stands as the verdict', { reason: failed.slice(0, 80) }, { sessionId: input.sessionId });
           return 'body_read';
         }
         // A ball the camera saw never leave stands as the answer even if the body read itself failed.
@@ -138,7 +179,7 @@ function stages(): StageDef<In>[] {
           return 'no_launch';
         }
         useSwingSessionStore.getState().setSessionAnalysisStatus(input.sessionId, 'failed', failed);
-        traceStep('read failed and the body read found nothing → failed', { reason: failed.slice(0, 80) });
+        traceStep('read failed and the body read found nothing → failed', { reason: failed.slice(0, 80) }, { sessionId: input.sessionId });
         return 'failed';
       },
     },
@@ -149,7 +190,8 @@ function stages(): StageDef<In>[] {
       id: 'pose',
       after: ['read'],
       budgetMs: 130_000,
-      when: ({ input }) => !isPutt(input.sessionId),
+      // Not once a newer capture has retired this swing: its body read would decode through that one's.
+      when: ({ input, outputs }) => !isPutt(input.sessionId) && !noSwing(outputs) && retirementOf(input.sessionId) === input.retired,
       run: async ({ input, signal }) => {
         const shot0 = session(input.sessionId)?.shots.find((x) => x.clipUri);
         if (!shot0) return null;
@@ -184,7 +226,7 @@ function stages(): StageDef<In>[] {
               liveSessionStore(signal).setSessionAnalysis(input.sessionId, pi, null);
               liveSessionStore(signal).setSessionAnalysisStatus(input.sessionId, 'ok');
               const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
-              traceStep('body read named the verdict', { issue: pi.issue_id });
+              traceStep('body read named the verdict', { issue: pi.issue_id }, { sessionId: input.sessionId });
               // 2026-10-10 (bug sweep) — the caddie learns it too, exactly as from a full read (videoUpload
               // feeds the relationship engine there). It was shown on every screen and unknown to him.
               if (!signal.aborted) {
@@ -214,7 +256,7 @@ function stages(): StageDef<In>[] {
               } as import('../../../store/swingSessionStore').PrimaryIssue, null);
               liveSessionStore(signal).setSessionAnalysisStatus(input.sessionId, 'ok');
               const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
-              traceStep('body read measured the swing, no fault — ok', {});
+              traceStep('body read measured the swing, no fault — ok', {}, { sessionId: input.sessionId });
             }
           } catch { /* the settle stage reports the read's failure */ }
         }
@@ -256,6 +298,28 @@ function report(key: string, stage: string, error: string): void {
 }
 
 /**
+ * 2026-10-17 (Tim's range session, two captures two minutes apart: the first one's body read kept decoding
+ * until its 120s budget ran out, through the second's analysis) — a NEW live capture retires the body
+ * reads and arcs of the live captures before it (services/swing/orchestrator/shotDetail
+ * retireSessionShotRuns). Their READS are left to finish — a read is a network call, and cancelling it
+ * would strand that swing's status; the settle stage still answers for it. Uploads are not touched: an
+ * upload's body read is its fallback verdict, and the player did not move on from it by recording.
+ */
+function retireEarlierCaptures(sessionId: string): void {
+  const s = session(sessionId);
+  if (!s || s.source === 'uploaded_video') return;
+  const others = new Set<string>();
+  for (const k of liveRunKeys()) {
+    const m = /^(?:shot|swing):([^:]+)/.exec(k);
+    if (m && m[1] !== sessionId) others.add(m[1]);
+  }
+  for (const id of others) {
+    const o = session(id);
+    if (o && o.source !== 'uploaded_video') retireSessionShotRuns(id);
+  }
+}
+
+/**
  * Start (or join) this session's run and resolve with the READ's result as soon as the read settles —
  * the pose stage keeps going in the background, exactly as the old fire-and-forget tail did, but now
  * owned, ordered and budgeted.
@@ -277,6 +341,7 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
     runWindow.set(sessionId, windowOf());
     // A new analysis may have moved the window: the swing's shot runs (body + arc) start over.
     cancelRunsWithPrefix(`shot:${sessionId}:`);
+    retireEarlierCaptures(sessionId);
     // 2026-10-04 — one issue-log trace per run (services/analysisTrace; Owner Tools → Analysis).
     const traceId = `swing:${sessionId}:${Date.now()}`;
     const s = session(sessionId);
@@ -286,13 +351,13 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
       club: s?.club ?? null,
       putt: isPutt(sessionId),
       trimmed: s?.shots?.[0]?.clipStartSeconds != null,
-    });
+    }, { sessionId });
     return {
       stages: stages(),
-      input: { sessionId, extras },
+      input: { sessionId, extras, retired: retirementOf(sessionId) },
       hooks: {
         onStageFailed: report,
-        onStageDone: (_k, stage, st) => traceStep(`stage ${stage}: ${st.status}`, { ms: st.ms ?? null, error: st.error ?? null }),
+        onStageDone: (_k, stage, st) => traceStep(`stage ${stage}: ${st.status}`, { ms: st.ms ?? null, error: st.error ?? null }, { sessionId }),
       },
       onDone: () => {
         const fin = session(sessionId);
@@ -314,7 +379,7 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
         // No read output = the read overran or threw: say so, so a caller waits for the run to settle (the
         // body read may still answer) instead of reading a half-finished store.
         resolve((snap.outputs.read as ReadResult | undefined)
-          ?? { primary_issue: null, drill_recommendation: null, analyses: {}, ...(st === 'cancelled' ? {} : { readFailed: "Analysis didn't finish — tap Analyze to try again." }) });
+          ?? { primary_issue: null, drill_recommendation: null, analyses: {}, ...(st === 'cancelled' ? {} : { readFailed: noSwing(snap.outputs) ? NO_SWING_FOUND : "Analysis didn't finish — tap Analyze to try again." }) });
       }
     });
   });

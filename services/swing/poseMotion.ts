@@ -221,6 +221,32 @@ function speedAnchors(pts: MotionSample[]): SwingAnchors | null {
   return { startMs: pts[start].tMs, topMs: pts[top].tMs, impactMs: pts[pk].tMs, endMs: pts[end].tMs };
 }
 
+/**
+ * 2026-10-17 (Tim's range session, a 60s driver capture: the on-device locate answered top 17.4s, impact
+ * 42.4s — a 36-second "swing" — and the read, the body read and the verdict all followed it). The height
+ * read refuses that shape; the speed read below it, its fallback, had no sense of size at all.
+ *
+ * WHAT A LOCATED SWING CAN BE. Address to finish fits well inside 6s (the network locator's own window
+ * is 5.5s), and top to impact is a downswing — well under 1.5s even seen through coarse samples. A
+ * located window bigger than that is not a swing that was found; it is a locate that failed, and the
+ * callers treat it exactly like one.
+ */
+export const MAX_LOCATED_SWING_MS = 6_000;
+export const MAX_LOCATED_TOP_TO_IMPACT_MS = 1_500;
+/**
+ * A STORED swing window (a capture's segment, a located window with its padding) longer than this is not
+ * one swing: the same 8s below which a whole clip IS the swing (analysisOrchestrator).
+ */
+export const MAX_SWING_WINDOW_SEC = 8;
+
+/** Is this located window the size of a swing? `topMs` is checked when the locator measured one. */
+export function isSwingSized(w: { startMs: number; endMs: number; topMs?: number | null; impactMs?: number | null }): boolean {
+  if (!(Number.isFinite(w.startMs) && Number.isFinite(w.endMs) && w.endMs > w.startMs)) return false;
+  if (w.endMs - w.startMs > MAX_LOCATED_SWING_MS) return false;
+  if (typeof w.topMs === 'number' && typeof w.impactMs === 'number' && w.impactMs - w.topMs > MAX_LOCATED_TOP_TO_IMPACT_MS) return false;
+  return true;
+}
+
 /** The swing's anchors read off a body read's frames (their wrists), or null. */
 export function anchorsFromPoseFrames(frames: readonly PoseFrame[] | null | undefined): SwingAnchors | null {
   if (!frames?.length) return null;

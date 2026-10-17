@@ -24,6 +24,7 @@
 
 import { ON_DEVICE_LOCATE_MIN_CLIP_MS } from './analysisFrames';
 import { traceStep } from '../analysisTrace';
+import { isSwingSized, MAX_SWING_WINDOW_SEC } from './poseMotion';
 
 export type UploadSwingWindow = {
   startSec: number;
@@ -124,9 +125,9 @@ export async function findUploadSwingWindow(
   // Clamp to the LONGER of the stated duration and the one the motion pass measured: an upload's
   // metadata can under-report, and clamping to it threw away a correct window past the stated end.
   const measured = { durSec: 0 };
-  traceStep('find swing window', { clip_s: Math.round(durationSec * 10) / 10, network: opts.allowNetwork !== false });
+  traceStep('find swing window', { clip_s: Math.round(durationSec * 10) / 10, network: opts.allowNetwork !== false }, { clipUri });
   const w = clampWindow(await findUploadSwingWindowRaw(clipUri, durationSec, opts, measured), Math.max(0.5, durationSec, measured.durSec));
-  traceStep('window chosen', { via: w.via, start_s: Math.round(w.startSec * 100) / 100, end_s: Math.round(w.endSec * 100) / 100, impact_s: w.impactSec });
+  traceStep('window chosen', { via: w.via, start_s: Math.round(w.startSec * 100) / 100, end_s: Math.round(w.endSec * 100) / 100, impact_s: w.impactSec }, { clipUri });
   return w;
 }
 
@@ -164,7 +165,7 @@ async function findUploadSwingWindowRaw(
         const mdur = Math.max(dur, measured.durSec);
         const bursts = m.bursts ?? [];
         console.log('[window] motion pass', JSON.stringify({ window: m.window, bursts: bursts.length }));
-        traceStep('motion pass', { window: m.window ? `${m.window.startMs}-${m.window.endMs}ms` : null, bursts: bursts.length, measured_s: measured.durSec });
+        traceStep('motion pass', { window: m.window ? `${m.window.startMs}-${m.window.endMs}ms` : null, bursts: bursts.length, measured_s: measured.durSec }, { clipUri });
         // Short clips: the motion window is enough — no pose on the critical path at all.
         if (dur <= SHORT_CLIP_NO_LOCATE_SEC) {
           if (m.window && m.window.endMs > m.window.startMs) {
@@ -175,7 +176,7 @@ async function findUploadSwingWindowRaw(
         let swing: { startMs: number; endMs: number; peakMs: number } | null = null;
         if (bursts.length > 1) {
           swing = await pickSwingBurst(shared.uri, bursts);
-          traceStep('burst pick (pose: hands above shoulders)', { bursts: bursts.length, picked: swing ? `peak ${swing.peakMs}ms` : 'none confirmed' });
+          traceStep('burst pick (pose: hands above shoulders)', { bursts: bursts.length, picked: swing ? `peak ${swing.peakMs}ms` : 'none confirmed' }, { clipUri });
         }
         if (swing) {
           // Address (~1.8s before the fastest moment) through the finish (~1.5s after).
@@ -194,7 +195,10 @@ async function findUploadSwingWindowRaw(
          * several unconfirmed go to the on-device pose locate below, which finds this swing (impact
          * 6.84-7.04s against the 7.0s strike).
          */
-        if (bursts.length <= 1 && m.window && m.window.endMs > m.window.startMs) {
+        // 2026-10-17 — and only when it is the size of a swing: a long clip's motion window can be the
+        // whole session (a minute of a player moving in a cage), which is no window at all.
+        if (bursts.length <= 1 && m.window && m.window.endMs > m.window.startMs
+          && (m.window.endMs - m.window.startMs) / 1000 <= MAX_SWING_WINDOW_SEC) {
           return { startSec: m.window.startMs / 1000, endSec: Math.min(mdur, m.window.endMs / 1000), impactSec: null, via: 'motion' };
         }
         if (bursts.length > 1) console.log('[window] several bursts, none confirmed by pose — locating with pose instead of guessing the last one');
@@ -202,7 +206,7 @@ async function findUploadSwingWindowRaw(
     }
   } catch (e) {
     console.log('[window] motion pass failed', e instanceof Error ? e.message : String(e));
-    traceStep('motion pass failed', { error: e instanceof Error ? e.message : String(e) });
+    traceStep('motion pass failed', { error: e instanceof Error ? e.message : String(e) }, { clipUri });
   }
 
   // 2. Short clip: the clip is the swing — once the motion pass has had its look. Where there IS no
@@ -216,14 +220,15 @@ async function findUploadSwingWindowRaw(
   try {
     const { locateSwingWindowOnDevice } = require('./onDeviceLocate') as typeof import('./onDeviceLocate');
     const onDev = await locateSwingWindowOnDevice(clipUri, dur * 1000).catch(() => null);
-    if (onDev && onDev.endSec > onDev.startSec) {
+    if (onDev && isSwingSized({ startMs: onDev.startSec * 1000, endMs: onDev.endSec * 1000 })) {
       return { startSec: Math.max(0, onDev.startSec - 0.5), endSec: Math.min(dur, onDev.endSec + 0.5), impactSec: onDev.swingTimeSec, via: 'on_device', core: { startSec: onDev.startSec, endSec: onDev.endSec } };
     }
     if (dur <= SHORT_CLIP_NO_LOCATE_SEC) return { startSec: 0, endSec: dur, impactSec: null, via: 'whole_clip' };
     if (opts.allowNetwork === false) throw new Error('network locate not allowed here');
     const { locateSwingWindow } = require('../poseDetection') as typeof import('../poseDetection');
     const net = await locateSwingWindow(clipUri, dur * 1000, { onAbort: opts.onNetworkAbort });
-    if (net && net.endSec > net.startSec) {
+    // 2026-10-17 — the same size rule as the on-device locate: a window bigger than a swing is a miss.
+    if (net && isSwingSized({ startMs: net.startSec * 1000, endMs: net.endSec * 1000 })) {
       return { startSec: Math.max(0, net.startSec - 0.5), endSec: Math.min(dur, net.endSec + 0.5), impactSec: net.swingTimeSec, via: 'network', core: { startSec: net.startSec, endSec: net.endSec } };
     }
   } catch { /* fall through to the middle */ }

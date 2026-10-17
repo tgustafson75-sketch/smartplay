@@ -23,6 +23,13 @@
 type Step = { t: number; s: string };
 type Trace = {
   id: string;
+  /**
+   * 2026-10-17 (Tim's range session: a 3.8s capture's body read ran its 120s budget out after the NEXT
+   * capture had started, and the next session's report carried `pose frames … window=0-3832ms` and that
+   * budget failure as its own) — the swing this trace belongs to. "Every open trace" was safe only while
+   * one analysis ran at a time; a step that knows its swing now lands in that swing's trace alone.
+   */
+  sessionId: string | null;
   source: 'upload' | 'smartmotion';
   startedAt: number;
   meta: Record<string, unknown>;
@@ -57,22 +64,59 @@ function render(step: string, data?: Record<string, unknown> | null): string {
 }
 
 /** Open a trace for one analysis. Idempotent per id (a joined run does not restart its timeline). */
-export function beginAnalysisTrace(id: string, source: Trace['source'], meta: Record<string, unknown> = {}): void {
+export function beginAnalysisTrace(
+  id: string, source: Trace['source'], meta: Record<string, unknown> = {}, opts: { sessionId?: string | null } = {},
+): void {
   if (open.has(id)) return;
-  const tr: Trace = { id, source, startedAt: Date.now(), meta, steps: [], dropped: 0, endTimer: null, outcome: null, deadline: null };
+  const tr: Trace = { id, sessionId: opts.sessionId ?? null, source, startedAt: Date.now(), meta, steps: [], dropped: 0, endTimer: null, outcome: null, deadline: null };
   tr.deadline = setTimeout(() => {
     if (open.get(id) === tr) write(tr, { result: 'never_finished', problem: true });
   }, NEVER_FINISHED_MS);
   open.set(id, tr);
 }
 
-/** Add a step to every open trace. Never throws; cheap when nothing is open. */
-export function traceStep(step: string, data?: Record<string, unknown> | null): void {
+/** Who a step belongs to: a swing (session id), or the clip it read. */
+export type TraceScope = { sessionId?: string | null; clipUri?: string | null };
+
+const fileName = (u: string) => u.split('?')[0].split('/').pop() ?? u;
+
+/** The sessions whose shots hold this clip (by file name: a file:// prefix or a re-anchored directory is the same clip). */
+function sessionsOwningClip(clipUri: string): Set<string> {
+  const owners = new Set<string>();
+  try {
+    const { useSwingSessionStore } = require('../store/swingSessionStore') as typeof import('../store/swingSessionStore');
+    const name = fileName(clipUri);
+    for (const s of useSwingSessionStore.getState().sessionHistory) {
+      if (s.shots?.some((sh) => !!sh.clipUri && (sh.clipUri === clipUri || fileName(sh.clipUri) === name))) owners.add(s.id);
+    }
+  } catch { /* no store — the step is unattributed */ }
+  return owners;
+}
+
+/** The open traces a step goes to. */
+function targets(scope?: TraceScope): Trace[] {
+  const all = [...open.values()];
+  if (scope?.sessionId) return all.filter((tr) => tr.sessionId === scope.sessionId);
+  if (scope?.clipUri) {
+    const owners = sessionsOwningClip(scope.clipUri);
+    // A clip no swing owns yet (an upload before ingest) is unattributed; a clip a swing owns is that
+    // swing's — even when its trace has already closed (then the step goes nowhere, never to another).
+    if (owners.size > 0) return all.filter((tr) => tr.sessionId != null && owners.has(tr.sessionId));
+  }
+  return all;
+}
+
+/**
+ * Add a step to the open traces it belongs to: the swing's (`scope.sessionId`), the clip's owner's
+ * (`scope.clipUri`), or — for a breadcrumb that knows neither — every open trace. Never throws; cheap
+ * when nothing is open.
+ */
+export function traceStep(step: string, data?: Record<string, unknown> | null, scope?: TraceScope): void {
   if (open.size === 0) return;
   try {
     const now = Date.now();
     const s = render(step, data);
-    for (const tr of open.values()) {
+    for (const tr of targets(scope)) {
       if (tr.steps.length >= MAX_STEPS) { tr.dropped++; continue; }
       tr.steps.push({ t: now - tr.startedAt, s });
     }

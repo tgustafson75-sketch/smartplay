@@ -46,6 +46,35 @@ const liveArcLevel = new Map<string, number>();
 export const swingRunKey = (sessionId: string) => `swing:${sessionId}`;
 export const shotRunKey = (sessionId: string, shotId: string) => `shot:${sessionId}:${shotId}`;
 
+/**
+ * 2026-10-17 (Tim's range session: a 3.8s capture's body read was still decoding — and failed on its 120s
+ * budget — two minutes later, through the next capture's analysis) — a NEW capture RETIRES the body
+ * reads and arcs of the captures before it. Their shot runs are cancelled, and every request made for
+ * them BEFORE the retirement (a screen's retry of a cancelled run, a request waiting on that swing's read)
+ * goes quiet instead of starting them again. A request made afterwards (the player opens that swing in
+ * the library) runs as normal.
+ */
+const retiredAt = new Map<string, number>();
+let retireSeq = 0;
+/** The session's retirement count — a request or run remembers it, and stops when it changes. */
+export const retirementOf = (sessionId: string): number => retiredAt.get(sessionId) ?? 0;
+
+export function retireSessionShotRuns(sessionId: string): void {
+  retiredAt.set(sessionId, ++retireSeq);
+  const { cancelRunsWithPrefix } = require('./engine') as typeof import('./engine');
+  cancelRunsWithPrefix(`shot:${sessionId}:`);
+}
+
+/**
+ * A shot as a trace names it: its place in the swing and its id's unique part. Every live capture's shot
+ * id ENDS in `cage_shot`, so the old `id.slice(-6)` named every shot of every session `e_shot`.
+ */
+export function traceShotLabel(s: SwingSession | null | undefined, shotId: string): string {
+  const i = s?.shots.findIndex((x) => x.id === shotId) ?? -1;
+  const uniq = shotId.split('_')[1] ?? shotId.slice(0, 8);
+  return `${i + 1}:${uniq}`;
+}
+
 function lookup(sessionId: string, shotId: string): { s: SwingSession; shot: SwingShot; first: boolean } | null {
   const s = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sessionId);
   const shot = s?.shots.find((x) => x.id === shotId);
@@ -128,6 +157,17 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
   const probed = await pd.probeDurationMs(uri).catch(() => 0);
   const durMs = probed > 0 ? probed : Math.max((s.upload?.duration_sec ?? 0) * 1000, (shot.clipEndSeconds ?? 3) * 1000 + 500);
   let { window, impactMs } = windowAndImpact(shot);
+  const { MAX_SWING_WINDOW_SEC, isSwingSized } = require('../poseMotion') as typeof import('../poseMotion');
+  /**
+   * 2026-10-17 (Tim's range session: `pose frames · window=0-59817ms`, 97s of pose work spread over a
+   * minute, and the verdict read off it) — a stored window longer than one swing is not a window, unless
+   * the player chose it. It is located like a clip that has none.
+   */
+  if (window && shot.clipWindowSource !== 'user' && (window.endMs - window.startMs) / 1000 > MAX_SWING_WINDOW_SEC) {
+    traceStep('body read: stored window is longer than a swing — locating', { shot: traceShotLabel(s, input.shotId), windowMs: Math.round(window.endMs - window.startMs) }, { sessionId: input.sessionId });
+    window = null;
+    impactMs = null;
+  }
   // No window at all (an old upload): find the swing on the device, then on the network.
   if (!window && first && durMs > 0) {
     try {
@@ -137,13 +177,23 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
         loc = await locateSwingWindowOnDevice(uri, durMs);
       } catch { /* the network locate below */ }
       if (!loc && !signal.aborted) loc = await pd.locateSwingWindow(uri, durMs);
-      if (loc && loc.endSec > loc.startSec) {
+      if (loc && isSwingSized({ startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 })) {
         window = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };
         impactMs = loc.swingTimeSec * 1000;
       }
     } catch { /* whole clip */ }
   }
   if (signal.aborted) return null;
+  // Still no window, and the clip is longer than a swing: there is nothing honest to read. A whole-clip
+  // body read of a minute is frames spread across the walk-up, the waiting and the walk-off.
+  if (!window && durMs / 1000 > MAX_SWING_WINDOW_SEC) {
+    traceStep('body read: no swing found — not read', { shot: traceShotLabel(s, input.shotId), clip_s: Math.round(durMs / 100) / 10 }, { sessionId: input.sessionId });
+    // Computed, none — so a screen showing this shot does not locate the same minute again.
+    const noRead = liveSessionStore(signal);
+    noRead.setShotBiomechanics(input.sessionId, input.shotId, null);
+    if (first) noRead.setSessionBiomechanics(input.sessionId, null);
+    return null;
+  }
   const { swingerForSession } = require('../sessionSwinger') as typeof import('../sessionSwinger');
   const poseMod = await import('../../poseAnalysisApi');
   // 2026-10-16 — is that impact a HEARD strike (frame-exact) or a located one? The body read trusts only
@@ -157,7 +207,7 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
   const store = liveSessionStore(signal);
   store.setShotBiomechanics(input.sessionId, input.shotId, biomech);
   if (first) store.setSessionBiomechanics(input.sessionId, biomech);
-  traceStep('body read', { shot: input.shotId.slice(-6), frames: biomech?.frames.length ?? 0, windowed: !!window, impact: impactMs != null });
+  traceStep('body read', { shot: traceShotLabel(s, input.shotId), frames: biomech?.frames.length ?? 0, windowed: !!window, impact: impactMs != null }, { sessionId: input.sessionId });
   return biomech;
 }
 
@@ -192,9 +242,9 @@ async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomec
   });
   const { startMs, endMs } = narrowClubPathWindow(rawStartMs, rawEndMs, anchorMs);
   (require('../../analysisTrace') as typeof import('../../analysisTrace')).traceStep('arc anchor', {
-    shot: input.shotId.slice(-6), anchorMs: anchorMs != null ? Math.round(anchorMs) : null, toleranceMs,
+    shot: traceShotLabel(s, input.shotId), anchorMs: anchorMs != null ? Math.round(anchorMs) : null, toleranceMs,
     heard: shot.detectionMethod === 'audio_transient', windowMs: Math.round(endMs - startMs), pose: frames?.length ?? 0,
-  });
+  }, { sessionId: input.sessionId });
   if (!(endMs > startMs) || signal.aborted) return null;
   const { detectClubPath } = await import('../clubPath');
   const { bodyBoundsFromPose } = await import('../bodyBounds');
@@ -299,7 +349,8 @@ export function runShotDetail(sessionId: string, shotId: string, opts: { force?:
   // more: run again after it.
   const live = liveRun(key);
   if (live && !force && level > (liveArcLevel.get(key) ?? 2)) {
-    void live.done.then(() => { runShotDetail(sessionId, shotId, opts); });
+    const gen = retirementOf(sessionId);
+    void live.done.then(() => { if (retirementOf(sessionId) === gen) runShotDetail(sessionId, shotId, opts); });
     return live as AnalysisRun<In>;
   }
   // Joining a live run never lowers what it was asked for; a fresh run records its own level.
@@ -317,7 +368,7 @@ export function runShotDetail(sessionId: string, shotId: string, opts: { force?:
       onStageDone: (_k, stage, st) => {
         try {
           (require('../../analysisTrace') as typeof import('../../analysisTrace'))
-            .traceStep(`shot ${stage}: ${st.status}`, { ms: st.ms ?? null, error: st.error ?? null });
+            .traceStep(`shot ${stage}: ${st.status}`, { ms: st.ms ?? null, error: st.error ?? null }, { sessionId });
         } catch { /* observation */ }
       },
     },
@@ -332,10 +383,12 @@ export function runShotDetail(sessionId: string, shotId: string, opts: { force?:
 export function requestShotDetail(sessionId: string, shotId: string, opts: { arc?: ArcRequest } = {}): () => void {
   const hit = lookup(sessionId, shotId);
   if (!hit) return () => {};
+  // A later retirement of this swing (a new capture) silences everything this request deferred.
+  const gen = retirementOf(sessionId);
   const live = liveRun(swingRunKey(sessionId));
   if (hit.first && live) {
     let off = false;
-    void live.done.then(() => { if (!off) runShotDetail(sessionId, shotId, opts); });
+    void live.done.then(() => { if (!off && retirementOf(sessionId) === gen) runShotDetail(sessionId, shotId, opts); });
     return () => { off = true; };
   }
   let off = false;
@@ -343,14 +396,14 @@ export function requestShotDetail(sessionId: string, shotId: string, opts: { arc
   // otherwise be spent waiting (a 6-swing read outlasts it) and the body read fail without decoding.
   const readSt = live?.snapshot().stages.read?.status;
   if (live && (readSt === 'pending' || readSt === 'running')) {
-    void whenStageSettled(swingRunKey(sessionId), 'read').then(() => { if (!off) requestShotDetail(sessionId, shotId, opts); });
+    void whenStageSettled(swingRunKey(sessionId), 'read').then(() => { if (!off && retirementOf(sessionId) === gen) requestShotDetail(sessionId, shotId, opts); });
     return () => { off = true; };
   }
   const run = runShotDetail(sessionId, shotId, opts);
   // Cancelled by a NEW analysis of the swing (its window may have moved): the screen still shows this
   // shot, so ask again once that analysis lets it (requestShotDetail waits for its read).
   void run.done.then((snap) => {
-    if (!off && Object.values(snap.stages).some((st) => st.status === 'cancelled')) requestShotDetail(sessionId, shotId, opts);
+    if (!off && retirementOf(sessionId) === gen && Object.values(snap.stages).some((st) => st.status === 'cancelled')) requestShotDetail(sessionId, shotId, opts);
   });
   return () => { off = true; };
 }

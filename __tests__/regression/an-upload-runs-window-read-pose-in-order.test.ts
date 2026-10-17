@@ -34,7 +34,9 @@ jest.mock('../../services/videoUpload', () => ({
   resolveClipUri: async (u: string) => u,
 }));
 jest.mock('../../services/poseDetection', () => ({
-  probeDurationMs: async () => 9000,
+  // 2026-10-17 — a clip the body read may read whole (≤8s). A longer one with no window and no locate is
+  // not read at all now (a-long-capture-is-located-before-anything-reads-it); these pin the ORDER.
+  probeDurationMs: async () => 6000,
   locateSwingWindow: async () => null,
 }));
 jest.mock('../../services/swing/onDeviceLocate', () => ({ locateSwingWindowOnDevice: async () => null }));

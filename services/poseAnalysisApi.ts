@@ -1482,9 +1482,30 @@ export async function extractPoseFramesFromVideo(
   /** Anchors that only came back once we cropped to the player. A swing with several of these is
    *  telling you the subject is too small in frame — actionable coaching, not just a stat. */
   const zoomedPositions: string[] = [];
+  /**
+   * 2026-10-17 (Tim's range session: a 3.8s capture with nobody in shot — `pose_zero_frames ·
+   * no_pose_in_frame` — kept its body read going until the 120s budget killed it, through the next
+   * capture's analysis). Every empty frame falls through to the cloud proxy, so twenty-odd frames plus
+   * nudges of an empty tee box cost minutes. NOBODY IN FRAME is an answer: address, takeaway and top all
+   * empty (nudges included) — or, with the on-device engine answering, nothing at all for 15s — and the
+   * sweep stops. Until someone has been seen, only the anchors are asked (they span the swing; the extra
+   * frames between them only add density to a body already found). A swing with a body in it pays nothing
+   * for this: the first frame that reads ends the check.
+   */
+  const NOBODY_ANCHORS = 3;
+  const NOBODY_MS = 15_000;
+  let nativeEngine = false;
+  try { nativeEngine = (require('./mediaPipePoseService') as { isMediaPipeAvailable: () => boolean }).isMediaPipeAvailable(); } catch { /* cloud only */ }
+  const sweepStartedAt = Date.now();
+  let nobodyInFrame = false;
   try {
     for (const { key, timeMs, source } of sampleTimes) {
       if (shouldAbort?.()) { console.log('[pose] aborted between frames — playback active'); break; }
+      if (frames.length === 0 && (missedPositions.length >= NOBODY_ANCHORS || (nativeEngine && Date.now() - sweepStartedAt > NOBODY_MS))) {
+        nobodyInFrame = true;
+        break;
+      }
+      if (frames.length === 0 && missedPositions.length > 0 && !key) continue;   // nobody seen yet: anchors only
       let f = await poseAtTime(workUri, timeMs, key);
       /**
        * 2026-09-06 (Tim, from the field: "the body mechanics aren't staying on through the swing…
@@ -1557,6 +1578,11 @@ export async function extractPoseFramesFromVideo(
    *
    * This runs ONLY after the planned pass found nothing, so a normal swing pays nothing for it.
    */
+  if (nobodyInFrame) {
+    (require('./analysisTrace') as typeof import('./analysisTrace')).traceStep('pose: nobody in frame — stopped early', {
+      missed: missedPositions.join(',') || null, ms: Date.now() - sweepStartedAt,
+    }, { clipUri: videoUri });
+  }
   if (frames.length === 0 && !(window && window.endMs - window.startMs >= 500) && durationMs >= 2000) {
     const scanAt = [0.55, 0.7, 0.85, 0.95].map(f => Math.round(durationMs * f));
     let anchorMs: number | null = null;
@@ -1640,7 +1666,7 @@ export async function extractPoseFramesFromVideo(
   }
   if (frames.length > 0) lastFrameFailure = null;
   console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
-  (require('./analysisTrace') as typeof import('./analysisTrace')).traceStep('pose frames', { requested: sampleTimes.length, got: frames.length, window: window ? `${Math.round(window.startMs)}-${Math.round(window.endMs)}ms` : 'whole clip' });
+  (require('./analysisTrace') as typeof import('./analysisTrace')).traceStep('pose frames', { requested: sampleTimes.length, got: frames.length, window: window ? `${Math.round(window.startMs)}-${Math.round(window.endMs)}ms` : 'whole clip' }, { clipUri: videoUri });
   if (frames.length === 0) {
     // Asked for N frames and got none: the swing has no measured read at all. Console-only until now,
     // so a device failing EVERY extraction looked identical to a device that was never asked.
@@ -1665,6 +1691,7 @@ export async function extractPoseFramesFromVideo(
       durationMs: Math.round(durationMs),
       reason: lastFrameFailure ?? 'unknown',
       nativePose,
+      stoppedEarly: nobodyInFrame,
       // 2026-08-23 — these two separate "the file was not ready" from "the golfer was not in shot",
       // which reported identically before and sent every investigation down the wrong path.
       fileBytes,

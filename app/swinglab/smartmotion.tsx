@@ -2608,7 +2608,7 @@ export default function SmartMotion() {
           swings: segs.length || 1,
           window: segment ? `${(segment.startMs / 1000).toFixed(1)}-${(segment.endMs / 1000).toFixed(1)}s` : 'whole clip',
           strike: segment ? ((segment.peakDb ?? 0) !== 0 ? 'heard' : segment.synthesized ? 'guessed' : 'video') : null,
-        });
+        }, { sessionId: sid });
       } catch { /* observation */ }
       // When the read settles: every swing it read is filled from its outcome (a joined run's earlier reads
       // included), and any swing that never got a read stops waiting.

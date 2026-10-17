@@ -68,7 +68,8 @@ describe('it is tried BEFORE the network, and never replaces it', () => {
   });
 
   it('the network locate is still there, after the device came back empty', () => {
-    expect(finder).toMatch(/if \(onDev && onDev\.endSec > onDev\.startSec\) \{[\s\S]{0,300}?return[\s\S]{0,400}?await locateSwingWindow\(clipUri/);
+    // 2026-10-17 — the device answer must also be the size of a swing (poseMotion.isSwingSized).
+    expect(finder).toMatch(/if \(onDev && isSwingSized\(\{ startMs: onDev\.startSec \* 1000, endMs: onDev\.endSec \* 1000 \}\)\) \{[\s\S]{0,300}?return[\s\S]{0,400}?await locateSwingWindow\(clipUri/);
   });
 });
 

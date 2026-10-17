@@ -139,3 +139,31 @@ describe("Tim's 3870 clip: several bursts, none confirmed (2026-10-04, 'That did
   });
 });
 
+/**
+ * 2026-10-17 (Tim's 60s range capture: `window chosen · via=on_device start_s=11.90 end_s=47.92`) — a
+ * window bigger than a swing is a miss, from every locator: the same rule as the on-device locate.
+ */
+describe('the finder never answers a window bigger than a swing', () => {
+  it('a 36s network window on a 60s clip is a miss — the middle (nothing found), not "network"', async () => {
+    mockMotion.mockRejectedValue(new Error('engine gone'));
+    mockOnDevice.mockResolvedValue(null);
+    mockNetwork.mockResolvedValue({ startSec: 12.4, endSec: 47.42, swingTimeSec: 42.42 });
+    expect((await findUploadSwingWindow('file:///c.mp4', 59.8)).via).toBe('middle');
+  });
+
+  it('an on-device answer that size is a miss too', async () => {
+    mockMotion.mockRejectedValue(new Error('engine gone'));
+    mockOnDevice.mockResolvedValue({ startSec: 12.4, endSec: 47.42, swingTimeSec: 42.42 });
+    mockNetwork.mockResolvedValue(null);
+    expect((await findUploadSwingWindow('file:///c.mp4', 59.8)).via).toBe('middle');
+  });
+
+  it('a single motion burst spanning most of a long clip is not the swing — it goes to the locate', async () => {
+    mockMotion.mockResolvedValue({ durationMs: 59_817, window: { startMs: 2_000, endMs: 55_000, peakMs: 42_400 }, bursts: [] });
+    mockOnDevice.mockResolvedValue({ startSec: 41.6, endSec: 43.4, swingTimeSec: 42.4 });
+    const w = await findUploadSwingWindow('file:///c.mp4', 59.8);
+    expect(w.via).toBe('on_device');
+    expect(w.endSec - w.startSec).toBeLessThanOrEqual(8);
+  });
+});
+

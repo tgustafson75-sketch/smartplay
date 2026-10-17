@@ -46,7 +46,7 @@
  */
 import * as FileSystem from 'expo-file-system/legacy';
 import * as VideoThumbnails from '../../utils/videoThumbnail';
-import { wristCentroid, deriveSwingAnchors, type MotionSample } from './poseMotion';
+import { wristCentroid, deriveSwingAnchors, isSwingSized, type MotionSample } from './poseMotion';
 import { traceStep } from '../analysisTrace';
 /** Console + the open analysis trace (2026-10-04). */
 function locNote(...a: unknown[]): void {
@@ -283,6 +283,11 @@ export async function searchSwingWindow(
   locNote('[locate] on-device', { frames: samples.length, topMs: anchors.topMs, impactMs: anchors.impactMs });
   const { startMs, endMs, impactMs } = anchors;
   if (!(Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs)) return null;
+  // 2026-10-17 — a window bigger than a swing is a failed locate, never an answer (see isSwingSized).
+  if (!isSwingSized(anchors)) {
+    locNote('[locate] on-device rejected: not a swing', { windowMs: Math.round(endMs - startMs), topToImpactMs: Math.round(impactMs - anchors.topMs) });
+    return null;
+  }
 
   return {
     startSec: Math.max(0, startMs / 1000),
