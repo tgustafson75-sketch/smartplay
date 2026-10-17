@@ -804,6 +804,8 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     // SmartMotion are the WOW path; regression here is unacceptable.
     const USE_PARALLEL_PER_SHOT = true;
     const USE_PARALLEL_BATCH_SIZE = 3;
+    /** A first read slower than this means a weak link: the remaining swings are read one at a time. */
+    const FIRST_READ_SLOW_MS = 20_000;
 
     // Build the per-swing work item once so both sequential and
     // parallel paths share the same closure (zero behavior drift).
@@ -991,11 +993,26 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     };
 
     if (USE_PARALLEL_PER_SHOT && work.length > 1) {
-      // Batched parallel path. Each batch awaits Promise.allSettled
+      /**
+       * 2026-10-17 (Phase F1a — Tim at a range on a weak uplink: a 2-3 swing capture fired every read
+       * at once, ~500KB of frames each, and they starved each other — and the health probe ahead of
+       * them — until every one gave up). The FIRST swing is read alone, so the first verdict gets the
+       * whole link. Its own wall time is then the measured link: a fast first read means the rest can
+       * go three at a time as before; a slow one (or a 'slow' reachability verdict) reads the rest one
+       * at a time, so each still lands instead of all of them timing out together.
+       */
+      const firstT0 = Date.now();
+      await Promise.allSettled([runOne(work[0])]);   // settled, like a batch: one swing's throw never ends the others
+      const firstMs = Date.now() - firstT0;
+      const weakLink = firstMs > FIRST_READ_SLOW_MS
+        || (require('./reachability') as typeof import('./reachability')).lastReachability()?.verdict === 'slow';
+      const batchSize = weakLink ? 1 : USE_PARALLEL_BATCH_SIZE;
+      V6('STAGE 2-3 — first swing read alone', { first_ms: firstMs, weak_link: weakLink, batch_size: batchSize, total_work: work.length });
+      // Batched path. Each batch awaits Promise.allSettled
       // so a single failing swing doesn't abort the others — failures
       // are captured per-swing inside runOne via the r.kind branches.
-      for (let batchStart = 0; batchStart < work.length; batchStart += USE_PARALLEL_BATCH_SIZE) {
-        const batch = work.slice(batchStart, batchStart + USE_PARALLEL_BATCH_SIZE);
+      for (let batchStart = 1; batchStart < work.length && !signal?.aborted; batchStart += batchSize) {
+        const batch = work.slice(batchStart, batchStart + batchSize);
         V6('STAGE 2-3 — parallel batch start', {
           batch_start: batchStart,
           batch_size: batch.length,

@@ -29,6 +29,7 @@ import { probeSoundOptions } from './audioPlaybackOptions';
 import { recordSuccess, recordFailure } from './voiceCircuitBreaker';
 import { reportOnline, reportNetworkFailure } from '../store/connectivityStore';
 import { traceStep } from './analysisTrace';
+import { probeReachability, isProvenOffline, type NetVerdict } from './reachability';
 /**
  * Phase K — Pose detection client.
  *
@@ -228,6 +229,18 @@ const REQUEST_TIMEOUT_MS = 63_000;
  * read cannot reach the server, and the caller says so NOW instead of sending a payload into a 63s wait
  * that ends the same way (Tim's 5:01 AM read: a 63s hang, then a 55s fallback, then "failed").
  */
+/**
+ * 2026-10-17 (Phase F1a — Tim at a driving range, Fold3: nine sessions in 35 minutes every one ended
+ * `API unreachable twice — not sending the read` → no_network, while Vercel logged his phone's
+ * /api/health AND /api/swing-analysis returning 200 in that same window, late and bursty). The link
+ * was SLOW, not dead. Two 5s misses on OUR health probe prove only that our probe was slow; they say
+ * nothing about whether the phone is online — and that miss was VETOING the read.
+ *
+ * So the miss now asks the question it cannot answer itself: services/reachability probes hosts that
+ * are not ours. Only a PROVEN offline verdict (offline / captive) skips the read — fast and honest.
+ * internet_ok or slow SENDS it, with the full REQUEST_TIMEOUT_MS; the probes' aborts have already
+ * recycled any dead pooled socket, which was the only thing this check was for. Returns whether to send.
+ */
 async function clearDeadConnection(apiUrl: string): Promise<boolean> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const t0 = Date.now();
@@ -241,7 +254,15 @@ async function clearDeadConnection(apiUrl: string): Promise<boolean> {
       });
     }
   }
-  return false;
+  const t1 = Date.now();
+  const net = await probeReachability();
+  const send = !isProvenOffline(net.verdict);
+  V6(send
+    ? 'read 3 — API slow to answer, but the phone is online — sending the read with its full timeout'
+    : 'read 3 — phone proven offline — not sending the read', {
+    verdict: net.verdict, via: net.via, control_ms: net.controlMs, ms: Date.now() - t1,
+  });
+  return send;
 }
 // 2026-05-26 — Fix CO: tentative bumped 15s → 30s. Tim's swing
 // library upload was timing out the FALLBACK path too (primary 55s
@@ -799,7 +820,9 @@ const RETRY_BACKOFF_MS = 1_200;
 
 /** The slowest run that could still legitimately succeed. Consumed by the screen's hang guard. */
 // 2026-10-05 — the two /api/health pings before the POST (clearDeadConnection, 5s each).
-const CONNECTION_CHECK_CEILING_MS = 10_000;
+// 2026-10-17 (F1a) — plus the reachability probe a double miss now asks before vetoing the read:
+// 6s controls, or a fast fail + 1s + 6s retry (services/reachability).
+const CONNECTION_CHECK_CEILING_MS = 10_000 + 9_000;
 export const ANALYSIS_WORST_CASE_MS =
   DURATION_PROBE_CEILING_MS +
   CONNECTION_CHECK_CEILING_MS +
@@ -832,7 +855,7 @@ export const ANALYSIS_WORST_CASE_MS =
 function armDeadHostGuard(
   apiUrl: string,
   controller: AbortController,
-  onFired: (probes: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number }) => void,
+  onFired: (probes: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number; net: NetVerdict }) => void,
 ): { cancel: () => void } {
   let cancelled = false;
   const armedAt = Date.now();
@@ -874,9 +897,24 @@ function armDeadHostGuard(
     const probe3Ok = await probe(12_000);
     if (probe3Ok) return;
     if (cancelled) return;
-    // All three silent. Record the verdict BEFORE aborting, so the catch can name the cause
-    // rather than reporting a bare "Aborted" that proves nothing.
-    try { onFired({ probe1Ok, probe2Ok, probe3Ok, firedAfterMs: Date.now() - armedAt }); } catch { /* no-op */ }
+    /**
+     * 2026-10-17 (Phase F1a — Tim at a range: `range_locate_fallback · aborted · dead_host ·
+     * elapsed_ms 21093 · probe1Ok/2Ok/3Ok false` three times, while Vercel logged his phone's requests
+     * landing 200, late). Three silent probes to OUR origin still prove only that our origin was slow
+     * to this phone. Ask hosts that are not ours: only a PROVEN offline verdict aborts. On internet_ok
+     * or slow the request keeps its own ceiling — a slow link must still get its answer.
+     */
+    const net = (await probeReachability()).verdict;
+    if (cancelled) return;
+    if (!isProvenOffline(net)) {
+      V6('LOCATE — our host was silent to three probes but the phone is online — not aborting', {
+        verdict: net, after_ms: Date.now() - armedAt,
+      });
+      return;
+    }
+    // All three silent AND proven offline. Record the verdict BEFORE aborting, so the catch can name
+    // the cause rather than reporting a bare "Aborted" that proves nothing.
+    try { onFired({ probe1Ok, probe2Ok, probe3Ok, firedAfterMs: Date.now() - armedAt, net }); } catch { /* no-op */ }
     try { controller.abort(); } catch { /* no-op */ }
   })();
   return { cancel: () => { cancelled = true; } };
@@ -1023,7 +1061,7 @@ async function locateSwingWindowImpl(
    */
   const startedAt = Date.now();
   let abortCause: 'dead_host' | 'ceiling' | null = null;
-  let probeVerdict: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number } | null = null;
+  let probeVerdict: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number; net: NetVerdict } | null = null;
   try {
     // 2026-08-08 — dead-host guard (see armDeadHostGuard): a provably-dead network aborts in ~3-9s
     // instead of hanging the full 35s ceiling per swing.
@@ -1177,7 +1215,7 @@ async function locateSwingsImpl(
   // Tim's 7:30-7:34 PM aborts came from, so the ambiguity mattered here too.
   const rangeStartedAt = Date.now();
   let rangeAbortCause: 'dead_host' | 'ceiling' | null = null;
-  let rangeProbeVerdict: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number } | null = null;
+  let rangeProbeVerdict: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number; net: NetVerdict } | null = null;
   try {
     // 2026-08-08 — same dead-host guard as the single locate: flaky network degrades in ~3-9s, not 30s+.
     const rangeCtl = new AbortController();
@@ -1579,7 +1617,7 @@ export async function analyzeSwing(
       }
     };
     if (!(await clearDeadConnection(apiUrl))) {
-      V6('STAGE 3 — API unreachable twice — not sending the read', {});
+      V6('STAGE 3 — phone proven offline — not sending the read', {});
       recordFailure('swing-analysis', 'network');
       return { kind: 'no_network' };
     }

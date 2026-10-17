@@ -93,8 +93,8 @@ function stages(): StageDef<In>[] {
       after: ['window'],
       /**
        * 2026-10-05 — DERIVED from what this read has to do. One swing's worst case is poseDetection's
-       * ANALYSIS_WORST_CASE_MS; swings are read three at a time, so a range session needs one of those per
-       * batch (a fixed 160s cut off a 6-swing SmartMotion session mid-read), plus the transcript wait, the
+       * ANALYSIS_WORST_CASE_MS; a range session needs one of those per swing it may read serially (a fixed 160s
+       * cut off a 6-swing SmartMotion session mid-read), plus the transcript wait, the
        * range split's locate and the tentative fallback. A backstop — every call inside has its own timeout.
        */
       budgetMs: ({ input }) => {
@@ -105,7 +105,9 @@ function stages(): StageDef<In>[] {
           ? Math.ceil(dur / 6)                                   // split by the read: ~one swing per 6s at most
           : Math.max(1, s?.shots.filter((x) => x.clipUri).length ?? 1);
         const perSwing = Number.isFinite(one) && one > 0 ? one : 160_000;
-        return Math.min(15 * 60_000, perSwing * Math.ceil(swings / 3) + 100_000);
+        // 2026-10-17 (F1a) — on a weak link the read goes one swing at a time (videoUpload), so the
+        // backstop covers that serial worst case; an overrun here would discard swings already read.
+        return Math.min(15 * 60_000, perSwing * swings + 100_000);
       },
       run: async ({ input, signal }) => {
         const vu = require('../../videoUpload') as typeof import('../../videoUpload');

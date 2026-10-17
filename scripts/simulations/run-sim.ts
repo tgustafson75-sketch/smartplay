@@ -12221,7 +12221,8 @@ check('LOCK: the analysis hang guard is derived, and larger than the budgets it 
     const screen = readCode('app/swinglab/smartmotion.tsx');
     const pose = readCode('services/poseDetection.ts');
     // 2026-10-05 — the guard is THE run's read budget now, derived per batch of swings from the constant.
-    const derived = /perSwing \* Math\.ceil\(swings \/ 3\)/.test(readCode('services/swing/orchestrator/uploadRun.ts'))
+    // 2026-10-17 (F1a) — per SWING: a weak link reads the swings one at a time, so the budget is serial.
+    const derived = /perSwing \* swings \+/.test(readCode('services/swing/orchestrator/uploadRun.ts'))
       && /ANALYSIS_WORST_CASE_MS/.test(readCode('services/swing/orchestrator/uploadRun.ts'))
       && !/hangGuardMs\s*=\s*\d/.test(screen);
     const sums = /ANALYSIS_WORST_CASE_MS\s*=[\s\S]{0,320}?LOCATE_TIMEOUT_MS[\s\S]{0,320}?REQUEST_TIMEOUT_MS/.test(pose);
@@ -14474,10 +14475,12 @@ check('LOCK: an aborted swing locate SAYS WHO ABORTED IT',
     // 2026-09-01 — a THIRD, patient probe was added (the 09-01 dead_host false-aborts: the guard was
     // reading its own starvation by the request it guards). The invariant is unchanged — the guard
     // reports every probe it took — so this now requires all three rather than pinning two.
-    const guardReports = /onFired: \(probes: \{ probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number \}\) => void/.test(pd) &&
-      /onFired\(\{ probe1Ok, probe2Ok, probe3Ok, firedAfterMs: Date\.now\(\) - armedAt \}\)/.test(pd) &&
+    // 2026-10-17 (F1a) — and the reachability verdict it aborted on (only a proven offline one may).
+    const guardReports = /onFired: \(probes: \{ probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number; net: NetVerdict \}\) => void/.test(pd) &&
+      /onFired\(\{ probe1Ok, probe2Ok, probe3Ok, firedAfterMs: Date\.now\(\) - armedAt, net \}\)/.test(pd) &&
       // and it must actually WAIT on that third probe before aborting
-      /const probe3Ok = await probe\(12_000\);\s*\n\s*if \(probe3Ok\) return;/.test(pd);
+      /const probe3Ok = await probe\(12_000\);\s*\n\s*if \(probe3Ok\) return;/.test(pd) &&
+      /if \(!isProvenOffline\(net\)\) \{/.test(pd);
     // Both abort sites, on BOTH paths, stamp a cause.
     const causes = (pd.match(/abortCause = abortCause \?\? 'ceiling';/g) ?? []).length >= 1 &&
       (pd.match(/abortCause = abortCause \?\? 'dead_host';/g) ?? []).length >= 1 &&
