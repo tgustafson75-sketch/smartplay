@@ -4,7 +4,7 @@
  * and the earbud / text-box mic (voiceService). Behavioural: metering traces at 100ms, the way both
  * call sites feed it. Noise is a seeded pseudo-random walk, so the traces are fixed.
  */
-import { createEndpointer, NOISY_CAP_AFTER_SPEECH_MS, type EndReason } from '../../services/voice/endpointer';
+import { createEndpointer, type EndReason } from '../../services/voice/endpointer';
 
 const CFG = { shortMs: 1500, longMs: 2400, speechLongMs: 700 };
 
@@ -32,12 +32,14 @@ function wind(ms: number, lull: number, gust: number, r: () => number) {
 
 /** Run a trace; returns when (ms after the mic opened) and why it ended, or null at the end of the trace. */
 function run(trace: number[], hardCapMs = 18_000): { atMs: number; reason: EndReason | 'cap' } | null {
+  // Real clocks are never 0 (a reading at t=0 would read as "unset" inside the endpointer).
+  const T0 = 1_000_000;
   const ep = createEndpointer(CFG);
-  ep.markLoud(0);
+  ep.markLoud(T0);
   for (let i = 0; i < trace.length; i++) {
     const t = i * 100;
-    ep.push(trace[i], t);
-    const why = ep.shouldStop(t, 0);
+    ep.push(trace[i], T0 + t);
+    const why = ep.shouldStop(T0 + t, T0);
     if (why) return { atMs: t, reason: why };
     if (t >= hardCapMs) return { atMs: t, reason: 'cap' };
   }
@@ -87,12 +89,11 @@ describe('noise — the wind no longer holds the mic open', () => {
     expect(out.atMs).toBeLessThanOrEqual(3100 + 3500);
   });
 
-  it('wind as loud as the voice: the noisy cap ends it ~10s after he was first heard, never before he finished', () => {
+  it('wind as loud as the voice: never ended before he finished (the callers\' caps bound it, as before)', () => {
     const r = rng(6);
     const trace = [...wind(500, -25, -6, r), ...speech(2500, -8, -24, r), ...wind(16_000, -25, -6, r)];
-    const out = run(trace)!;
-    expect(out.atMs).toBeGreaterThan(3000);
-    expect(out.atMs).toBeLessThanOrEqual(NOISY_CAP_AFTER_SPEECH_MS + 600);
+    const out = run(trace);
+    expect(out === null || out.atMs > 3000).toBe(true);
   });
 
   it('in noise, a 1s pause mid-question does not cut the player off', () => {
@@ -113,15 +114,14 @@ describe('noise — the wind no longer holds the mic open', () => {
 
 /** Review of the first cut (10-17): the cases it got wrong. */
 describe('review cases — never cut off, never discard, never stuck open', () => {
-  it('a soft voice (-24) in steady wind (-35) is HEARD (transcribed, not discarded) and still bounded', () => {
+  it('a soft voice (-24) in steady wind (-35) is HEARD (transcribed, not discarded) and never cut off', () => {
     const r = rng(10);
     const trace = [...flat(500, -35, 2, r), ...speech(3000, -24, -35, r), ...flat(14_000, -35, 2, r)];
     const ep = createEndpointer(CFG);
     trace.slice(0, 20).forEach((m, i) => ep.push(m, i * 100));
     expect(ep.heardSpeech).toBe(true);
-    const out = run(trace)!;
-    expect(out.atMs).toBeGreaterThan(3500);
-    expect(out.atMs).toBeLessThanOrEqual(500 + NOISY_CAP_AFTER_SPEECH_MS + 200);
+    const out = run(trace);
+    expect(out === null || out.atMs > 3500).toBe(true);   // never cut; the callers' caps bound it
   });
 
   /**
@@ -200,3 +200,27 @@ describe('the Caddie tab ends on the same detector', () => {
     expect(src).not.toMatch(/MIC_SILENCE_DB_THRESHOLD|micLastLoudAt/);
   });
 });
+
+/**
+ * Final review (10-17), traces against the old code of each path: the new end must never come before
+ * the player finished. (sim helper: words at hi, hi-1, hi-2, then a dip to lo.)
+ */
+describe('final review — never before the player finished', () => {
+  const sp = (n: number, hi: number, lo: number) => Array.from({ length: n }, (_, i) => (i % 4 === 3 ? lo : hi - (i % 3)));
+  const rep = (n: number, v: number) => Array(n).fill(v) as number[];
+  const cases: [string, number[], number][] = [
+    ['talk at mic-open, 1s pause, more talk (quiet room)', [...sp(50, -18, -24), ...rep(10, -55), ...sp(50, -18, -24), ...rep(60, -55)], 11_000],
+    ['talk at mic-open with -34 dips, 1.2s pause', [...sp(40, -20, -34), ...rep(12, -55), ...sp(40, -20, -34), ...rep(60, -55)], 9_200],
+    ['-160 sentinel, then talk at mic-open and a pause', [-160, ...sp(50, -18, -24), ...rep(10, -55), ...sp(50, -18, -24), ...rep(60, -55)], 11_100],
+    ['a -10 click first, then talk, a pause, talk', [-10, ...rep(5, -55), ...sp(40, -25, -35), ...rep(12, -55), ...sp(40, -25, -35), ...rep(60, -55)], 9_800],
+    ['14s straight from mic-open in a quiet room', [...sp(140, -18, -24), ...rep(60, -55)], 14_000],
+    ['a 14s answer in steady wind (-35)', [...rep(10, -35), ...sp(140, -20, -30), ...rep(60, -35)], 15_000],
+    ['wind -36 with a -28 gust at 0.5s, talking 3-12s', [...rep(5, -36), ...rep(3, -28), ...rep(22, -36), ...sp(90, -18, -30), ...rep(60, -36)], 12_000],
+    ['wind -36 that drops to -55 while he talks softly', [...rep(10, -36), ...sp(40, -27, -45), ...sp(40, -27, -45).map((v) => v), ...rep(60, -55)], 9_000],
+  ];
+  it.each(cases)('%s', (_name, trace, talkEndsMs) => {
+    const out = run(trace);
+    expect(out === null || out.atMs >= talkEndsMs).toBe(true);
+  });
+});
+

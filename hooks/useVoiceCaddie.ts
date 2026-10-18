@@ -3186,7 +3186,7 @@ export const useVoiceCaddie = ({
           return;
         }
         // Adaptive endpoint (services/voice/endpointer): SHORT gap for a 1-2 word command, LONG once into
-        // a sentence; in noise, judged against the player's own voice level, and capped at NOISY_CAP_MS.
+        // a sentence; in noise, judged against the player's own voice level.
         const endWhy = ep.shouldStop(Date.now(), recordStartedAt);
         if (endWhy) {
           if (endWhy !== 'silence' || ep.snapshot().noisy) logVoiceDiag('capture_endpoint', { source: 'tap', reason: endWhy, ms: Date.now() - recordStartedAt, ...ep.snapshot() });
