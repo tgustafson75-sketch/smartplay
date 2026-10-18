@@ -70,13 +70,6 @@ const GROUPS: { title: string; tools: Tool[] }[] = [
     ],
   },
   {
-    // 2026-10-18 — the 3D hole engine (SmartBay repo), opened here so Tim can judge it on the phone.
-    title: 'LABS',
-    tools: [
-      { label: '3D Holes', sub: 'Real Palms #1 + build your own hole', route: '/owner-hole-lab', icon: 'golf-outline' },
-    ],
-  },
-  {
     title: 'CONTENT',
     tools: [
       { label: 'Reference Assets', sub: 'Train the trainer', route: '/author/reference-assets', icon: 'images-outline' },

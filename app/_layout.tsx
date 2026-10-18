@@ -217,8 +217,6 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // be gated at least as tightly as the tightest thing it reaches, at the ROUTE as well as the
   // render: a route is reachable by voice, deep link, or typing it.
   '/owner-console',
-  // 2026-10-18 — 3D Holes (the SmartBay hole engine in a WebView). Owner-only while Tim tests it.
-  '/owner-hole-lab',
   // 2026-09-23 — aggregate player usage (opted-in) + export to SmartManage. Owner-only.
   '/owner-usage',
   // 2026-07-10 (audit N1) — /owner-logs REMOVED from this gate. The Issue Log is an
@@ -1732,8 +1730,6 @@ function AppNavigator() {
             owner email inside the screen itself; non-owners see a
             polite placeholder. Reachable from Settings -> Owner Tools. */}
         <Stack.Screen name="owner-logs" options={{ headerShown: false }} />
-        {/* 2026-10-18 — 3D Holes owner test surface (WebView to SmartBay's /holes). */}
-        <Stack.Screen name="owner-hole-lab" options={{ headerShown: false }} />
         {/* 2026-05-23 — Owner-only voice-miss log. Same gating as
             owner-logs; surfaces transcripts of voice commands that
             failed to match a wired handler so Tim can review what
