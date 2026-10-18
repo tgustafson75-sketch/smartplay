@@ -92,7 +92,8 @@ import { deriveSwingTempo, type PoseFrame, type SwingBiomechanics, type SwingTem
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
-import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, splitPracticeSwings, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, splitPracticeSwings, PRE_STRIKE_MS, POST_STRIKE_MS, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { NO_SWING_FOUND } from '../../services/swing/orchestrator/uploadRun';
 import { requestShotDetail, shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
 import { CONTACT_ISSUE_IDS, mishitFromFeel, noLaunchIssue } from '../../services/swing/contactVerdict';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
@@ -2478,7 +2479,11 @@ export default function SmartMotion() {
    * live capture knows (measured tempo and strike, a drill's focus) travels with it as `extras`.
    */
   const runAnalysis = useCallback(
-    async (rawUri: string, segment?: SwingSegment, opts?: { reuseSessionId?: string | null }) => {
+    async (rawUri: string, segment?: SwingSegment, opts?: {
+      reuseSessionId?: string | null;
+      /** 2026-10-17 — the moment the player scrubbed to and asked for (Analyze the swing at…): a USER window. */
+      userMomentSec?: number;
+    }) => {
       setPhase('analyzing');
       // Hoisted so the finally can read the run token.
       let myRun = 0;
@@ -2515,7 +2520,9 @@ export default function SmartMotion() {
         const shots0 = store.sessionHistory.find((s) => s.id === sid)?.shots ?? [];
         if (shots0.length === 1 && segment && segment.endMs > segment.startMs) {
           const heard = (segment.peakDb ?? 0) !== 0 && !segment.synthesized;
-          store.setShotClipBoundaries(sid, shots0[0].id, segment.startMs / 1000, segment.endMs / 1000, heard ? segment.strikeMs / 1000 : undefined, 'auto');
+          const userMoment = typeof opts?.userMomentSec === 'number' ? opts.userMomentSec : null;
+          store.setShotClipBoundaries(sid, shots0[0].id, segment.startMs / 1000, segment.endMs / 1000,
+            userMoment ?? (heard ? segment.strikeMs / 1000 : undefined), userMoment != null ? 'user' : 'auto');
         }
       } else {
         ingestedSessionIdRef.current = null;
@@ -4447,6 +4454,24 @@ export default function SmartMotion() {
     // The swing already saved — re-read it, never ingest a duplicate into the library.
     void runAnalysis(clipUri, segmentsRef.current[0], { reuseSessionId: ingestedSessionIdRef.current });
   }, [clipUri, phase, runAnalysis]);
+
+  /**
+   * 2026-10-17 (review of F2a) — ANALYZE THE SWING AT THIS MOMENT, here too. A capture the run could not find
+   * a swing in says "scrub to your swing and tap Analyze the swing at that moment" — and this screen had no
+   * such button; its refresh re-read the same whole-clip segment and failed the same way. As in the library:
+   * the moment the player scrubbed to is their declared impact, the window is a swing around it
+   * (swingSegmentation PRE/POST), saved as the player's own ('user') so nothing re-finds it.
+   */
+  const analyzeAtMoment = useCallback(() => {
+    if (!clipUri || phase === 'analyzing' || !ingestedSessionIdRef.current || segmentsRef.current.length > 1) return;
+    const center = Math.max(0, Math.round(playbackMs));
+    const end = videoDurationMs && videoDurationMs > 0 ? Math.min(videoDurationMs, center + POST_STRIKE_MS) : center + POST_STRIKE_MS;
+    const seg: SwingSegment = { index: 1, strikeMs: center, startMs: Math.max(0, center - PRE_STRIKE_MS), endMs: end, confidence: 'low', peakDb: 0, confirmed: true };
+    segmentsRef.current = [seg];
+    setSegments([seg]);
+    setSelectedSwing(0);
+    void runAnalysis(clipUri, seg, { reuseSessionId: ingestedSessionIdRef.current, userMomentSec: center / 1000 });
+  }, [clipUri, phase, playbackMs, videoDurationMs, runAnalysis]);
 
   // 2026-06-11 — fire the queued periodic auto club scan once we're back in setup —
   // but NOT during the hands-free auto-record relaunch (pendingStartRef), so it can
@@ -6381,6 +6406,19 @@ export default function SmartMotion() {
           ].filter((v): v is string => !!v && v.trim().length > 0);
           if (tempo?.ratio != null) partial.push(`Tempo ${tempo.ratio.toFixed(1)} : 1 (backswing : downswing).`);
           if (partial.length === 0) {
+            // A capture with no swing found: the way out is the moment the player points at.
+            if (analysisError === NO_SWING_FOUND && segments.length <= 1) {
+              const sec = Math.floor(playbackMs / 1000);
+              return (
+                <View style={{ gap: 10 }}>
+                  <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError}</Text>
+                  <Text style={[styles.muted, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.no_swing_scrub_hint')}</Text>
+                  <TactilePressable onPress={analyzeAtMoment} disabled={!clipUri} style={[styles.momentBtn, { borderColor: colors.accent }]} accessibilityRole="button">
+                    <Text style={{ color: colors.accent, fontWeight: '700' }}>{t('swinglab_smartmotion.smart_motion.analyze_the_swing_at', { time: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })}</Text>
+                  </TactilePressable>
+                </View>
+              );
+            }
             return <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError ?? 'No analysis available for this swing.'}</Text>;
           }
           return (
@@ -6798,6 +6836,7 @@ const styles = StyleSheet.create({
   ctrlLabeled: { alignItems: 'center', gap: 2 },
   ctrlLabelText: { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   toolBtnBareActive: { backgroundColor: 'rgba(136,247,0,0.30)' },
+  momentBtn: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: 'rgba(136,247,0,0.12)' },
   toolIconFull: { width: 46, height: 46 },
   // 2026-06-13 (Tim) — single tools icon → labeled card. Collapsed = just this pill
   // (clears the right third); expanded = the card below over a dark scrim.

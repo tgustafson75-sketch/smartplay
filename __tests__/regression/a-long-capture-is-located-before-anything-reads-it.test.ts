@@ -124,3 +124,35 @@ describe('the body read never reads a stored window longer than a swing', () => 
     expect(mockPoseWindows).toEqual([{ startMs: 10_000, endMs: 22_000 }]);
   });
 });
+
+/**
+ * 2026-10-17 (review of F2a) — the no-swing message tells the player to "scrub to your swing and tap Analyze
+ * the swing at that moment", and SmartMotion's review had no such button: its refresh re-read the same
+ * whole-clip segment and failed again. The button now exists there, and the moment it sends is read.
+ */
+describe('the way out of "no swing found" is the moment the player points at', () => {
+  it('a user moment after a failed find is read as a swing around it — no second find, the body read names it', async () => {
+    mockFound = { via: 'middle', startSec: 27.4, endSec: 32.9, impactSec: null };
+    seedFieldCapture();
+    await runSwingAnalysis(s1().id, { angle: 'face_on' });
+    await tick(20);
+    expect(s1().analysis_error).toMatch(NO_SWING);
+    mockOrder.length = 0;
+    // what SmartMotion's analyzeAtMoment saves: PRE 2.5s / POST 1.5s around the scrubbed 41.7s, the player's own
+    useSwingSessionStore.getState().setShotClipBoundaries(s1().id, s1().shots[0].id, 39.2, 43.2, 41.7, 'user');
+    await runSwingAnalysis(s1().id, { angle: 'face_on' });
+    await tick(30);
+    expect(mockOrder).toEqual(['read', 'pose']);
+    expect(mockReadWindows.at(-1)).toEqual([39.2, 43.2]);
+    expect(mockPoseWindows.at(-1)).toEqual({ startMs: 39_200, endMs: 43_200 });
+    expect(s1().analysis_status).toBe('ok');
+  });
+
+  it('SmartMotion review offers it on that message and saves the moment as the player\'s window', () => {
+    // Source check: the screen has no render harness (camera, 7,000 lines).
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app/swinglab/smartmotion.tsx'), 'utf8') as string;
+    expect(src).toMatch(/if \(analysisError === NO_SWING_FOUND && segments\.length <= 1\) \{[\s\S]{0,900}onPress=\{analyzeAtMoment\}/);
+    expect(src).toMatch(/void runAnalysis\(clipUri, seg, \{ reuseSessionId: ingestedSessionIdRef\.current, userMomentSec: center \/ 1000 \}\);/);
+    expect(src).toMatch(/userMoment \?\? \(heard \? segment\.strikeMs \/ 1000 : undefined\), userMoment != null \? 'user' : 'auto'\);/);
+  });
+});

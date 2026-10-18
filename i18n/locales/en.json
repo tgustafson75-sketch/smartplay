@@ -2451,6 +2451,8 @@
       "cue": "CUE",
       "what_we_read": "WHAT WE READ",
       "couldn_t_get_a_full": "Couldn’t get a full coaching read on this clip, but your motion showed:",
+      "analyze_the_swing_at": "Analyze the swing at {{time}}",
+      "no_swing_scrub_hint": "Scrub the video to your swing, then tap below.",
       "top_focus": "TOP FOCUS",
       "why_it_happens": "WHY IT HAPPENS",
       "the_fix": "THE FIX",
