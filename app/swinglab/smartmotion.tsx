@@ -2354,6 +2354,18 @@ export default function SmartMotion() {
     const cr = analysis?.contact_read;
     return cr === 'clean' || cr === 'fat' || cr === 'thin' || cr === 'topped';
   }, [ballDeparture, analysis]);
+  /**
+   * 2026-10-17 (Tim, swings 2 and 3: "We may have a pause on that when you click on it, then it should
+   * analyze") — the shot whose body read was asked for (requestShotDetail, below) and has not finished.
+   * While it has not, a swing with no cloud read says ANALYZING, not "NO READ — RECORD AGAIN": its measured
+   * verdict is on the way.
+   */
+  const [bodyReadPendingShot, setBodyReadPendingShot] = useState<string | null>(null);
+  const selectedBodyReadPending = useMemo(() => {
+    const sh = cageSession?.shots[selectedSwing];
+    if (!cageSession || !sh || bodyReadPendingShot !== sh.id) return false;
+    return storedShotBiomech(cageSession, sh, cageSession.shots.find((x) => x.clipUri)?.id === sh.id) === undefined;
+  }, [cageSession, selectedSwing, bodyReadPendingShot]);
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
   // Putt mode has its own verdict (the swing `analysis` stays null for putts,
   // so deriveVerdict would wrongly say ANALYZING/NO READ).
@@ -2387,8 +2399,9 @@ export default function SmartMotion() {
     // null. Keying NO READ off `phase === 'analyzing'` (not the old null+no-error
     // test) keeps every in-flight pass — including the re-scan — showing ANALYZING,
     // so the read no longer flashes a fail state before it lands (cage findings).
-    return deriveVerdict(analysis, phase === 'analyzing', swingContact, measuredEvidence);
-  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact, poseRead, measuredEvidence]);
+    // 2026-10-17 — and while THIS swing's body read is still coming (a swing 2+ the player paged to).
+    return deriveVerdict(analysis, phase === 'analyzing' || (phase === 'review' && !analysis && selectedBodyReadPending), swingContact, measuredEvidence);
+  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact, poseRead, measuredEvidence, selectedBodyReadPending]);
   const coverageLine = useMemo(
     () => coverageNote(analysis?.sample_coverage ?? null, analysis?.phases_visible ?? null),
     [analysis],
@@ -2781,9 +2794,13 @@ export default function SmartMotion() {
     if (phase !== 'review' || !sessionId) return;
     const sh = useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId)?.shots[selectedSwing];
     if (!sh) return;
+    setBodyReadPendingShot(sh.id);
     // The arc on this screen comes from the silent pass (free on-device tracker); never a paid call
     // for paging to a swing.
-    return requestShotDetail(sessionId, sh.id, { arc: 'tracker' });
+    return requestShotDetail(sessionId, sh.id, {
+      arc: 'tracker',
+      onSettled: () => setBodyReadPendingShot((cur) => (cur === sh.id ? null : cur)),
+    });
   }, [phase, sessionId, selectedSwing]);
   useEffect(() => {
     if (selectedShotBio === undefined) {

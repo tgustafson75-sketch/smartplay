@@ -20,7 +20,7 @@
  * A shot that already has its biomechanics / a tracked arc is not recomputed unless `force` (a new
  * analysis of the swing, which may have moved the window).
  */
-import { getOrStartRun, liveRun, whenStageSettled, type AnalysisRun, type StageDef } from './engine';
+import { getOrStartRun, liveRun, liveRunKeys, whenStageSettled, type AnalysisRun, type StageDef } from './engine';
 import { liveSessionStore } from './liveSessionStore';
 import { useSwingSessionStore, type SwingSession, type SwingShot } from '../../../store/swingSessionStore';
 import type { PoseFrame, SwingBiomechanics } from '../../poseAnalysisApi';
@@ -138,6 +138,11 @@ export function impactIsHeard(shot: Pick<SwingShot, 'detectionMethod' | 'detecti
     && typeof shot.detectionOffsetSeconds === 'number' && Math.abs(shot.detectionOffsetSeconds * 1000 - impactMs) <= 50;
 }
 
+/** The impact the shot's body read was given (a located impact, else a heard strike, inside its window). */
+export function shotImpactMs(shot: SwingShot): number | null {
+  return windowAndImpact(shot).impactMs;
+}
+
 /** The shot's impact (what the body read is given when it has a window) is a heard strike. */
 export function shotImpactHeard(shot: SwingShot | null | undefined): boolean {
   return !!shot && impactIsHeard(shot, windowAndImpact(shot).impactMs);
@@ -209,6 +214,56 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
   if (first) store.setSessionBiomechanics(input.sessionId, biomech);
   traceStep('body read', { shot: traceShotLabel(s, input.shotId), frames: biomech?.frames.length ?? 0, windowed: !!window, impact: impactMs != null }, { sessionId: input.sessionId });
   return biomech;
+}
+
+/**
+ * 2026-10-17 (Tim: "it doesn't correctly analyze the second and third swing"; F2a's open item: with the
+ * cloud read down, swings 2+ "get no verdict") — A SWING THE READ DID NOT ANSWER GETS THE MEASURED ONE.
+ *
+ * The run names the first swing's verdict from its body read when the read fails (uploadRun 'pose'). Every
+ * other swing had nothing: the library row read "—", no fault ring, no pause, while the same screen drew
+ * that swing's measured Swing Breakdown underneath. The swing's own row is filled from its own body read,
+ * marked `source: 'measured'` with low confidence, and only where the read left it empty — a read's answer
+ * is never replaced, and a new read clears these rows like any other (clearShotAnalyses).
+ */
+function shotNeedsMeasuredVerdict(sessionId: string, shotId: string): boolean {
+  const hit = lookup(sessionId, shotId);
+  if (!hit || hit.shot.perShotAnalysis) return false;
+  const st = liveRun(swingRunKey(sessionId))?.snapshot().stages.read?.status;
+  if (st === 'pending' || st === 'running') return false;   // the read may still answer this swing
+  try {
+    const { getAnalyzerKind } = require('../../swingLibrary') as typeof import('../../swingLibrary');
+    if (getAnalyzerKind(hit.s) === 'putting') return false;  // a putt is not read by the full-swing faults
+  } catch { /* not a putt as far as we can tell */ }
+  return !!storedShotBiomech(hit.s, hit.shot, hit.first)?.frames?.length;
+}
+
+function measuredVerdictStage(input: In, signal: AbortSignal): boolean | null {
+  if (!shotNeedsMeasuredVerdict(input.sessionId, input.shotId)) return null;
+  const { s, shot, first } = lookup(input.sessionId, input.shotId)!;
+  const bio = storedShotBiomech(s, shot, first)!;
+  const poseMod = require('../../poseAnalysisApi') as typeof import('../../poseAnalysisApi');
+  const { buildPoseSwingRead } = require('../poseSwingRead') as typeof import('../poseSwingRead');
+  const { poseReadToPrimaryIssue } = require('../poseReadVerdict') as typeof import('../poseReadVerdict');
+  const read = buildPoseSwingRead(bio, poseMod.tempoFromPoseFrames(bio.frames, shotImpactMs(shot), 'video'));
+  const pi = poseReadToPrimaryIssue(read);
+  if (!pi) return null;
+  const top = read.faults[0] ?? null;
+  // Its own setter: setShotAnalysis would also mark the whole session's read 'ok'.
+  liveSessionStore(signal).setShotMeasuredVerdict(input.sessionId, input.shotId, {
+    detected_issue: top?.key ?? 'none',
+    primary_fault: pi.primary_fault ?? null,
+    severity: top?.severity ?? 'none',
+    confidence: 'low',
+    observation: `Measured on your phone — no full read for this swing. ${top ? top.evidence : read.headline}`,
+    fault_frame_index: -1,
+    visual_reference_path: null,
+    contact_read: 'unknown',
+  });
+  (require('../../analysisTrace') as typeof import('../../analysisTrace')).traceStep('body read named this swing', {
+    shot: traceShotLabel(s, input.shotId), issue: top?.key ?? 'none',
+  }, { sessionId: input.sessionId });
+  return true;
 }
 
 async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomechanics | undefined): Promise<{ points: number } | null> {
@@ -337,6 +392,15 @@ function stages(): StageDef<In>[] {
       },
       run: ({ input, signal, outputs }) => arcStage(input, signal, outputs.pose as SwingBiomechanics | undefined),
     },
+    {
+      // The measured verdict for a swing the read did not answer (see measuredVerdictStage) — right after
+      // its body read, beside the arc, so the row names it while the tracker is still working.
+      id: 'verdict',
+      after: ['pose'],
+      budgetMs: 5_000,
+      when: ({ input }) => shotNeedsMeasuredVerdict(input.sessionId, input.shotId),
+      run: async ({ input, signal }) => measuredVerdictStage(input, signal),
+    },
   ];
 }
 
@@ -384,30 +448,57 @@ export function runShotDetail(sessionId: string, shotId: string, opts: { force?:
  * The first swing belongs to the swing's analysis run while that run is live (it starts the shot run with
  * `force` after the read) — asking for it here too would decode the same window twice. Returns a cleanup.
  */
-export function requestShotDetail(sessionId: string, shotId: string, opts: { arc?: ArcRequest } = {}): () => void {
-  const hit = lookup(sessionId, shotId);
-  if (!hit) return () => {};
+export function requestShotDetail(
+  sessionId: string, shotId: string,
+  opts: {
+    arc?: ArcRequest;
+    /** 2026-10-17 — called once this request's run has finished (not when it is dropped or retired). */
+    onSettled?: () => void;
+  } = {},
+): () => void {
+  const runOpts = { arc: opts.arc };
+  // One `off` for the request and every step it defers: paging away silences all of them.
+  let off = false;
   // A later retirement of this swing (a new capture) silences everything this request deferred.
   const gen = retirementOf(sessionId);
-  const live = liveRun(swingRunKey(sessionId));
-  if (hit.first && live) {
-    let off = false;
-    void live.done.then(() => { if (!off && retirementOf(sessionId) === gen) runShotDetail(sessionId, shotId, opts); });
-    return () => { off = true; };
-  }
-  let off = false;
-  // While the swing's read is still going, ask only once it has settled: the shot run's budget would
-  // otherwise be spent waiting (a 6-swing read outlasts it) and the body read fail without decoding.
-  const readSt = live?.snapshot().stages.read?.status;
-  if (live && (readSt === 'pending' || readSt === 'running')) {
-    void whenStageSettled(swingRunKey(sessionId), 'read').then(() => { if (!off && retirementOf(sessionId) === gen) requestShotDetail(sessionId, shotId, opts); });
-    return () => { off = true; };
-  }
-  const run = runShotDetail(sessionId, shotId, opts);
-  // Cancelled by a NEW analysis of the swing (its window may have moved): the screen still shows this
-  // shot, so ask again once that analysis lets it (requestShotDetail waits for its read).
-  void run.done.then((snap) => {
-    if (!off && retirementOf(sessionId) === gen && Object.values(snap.stages).some((st) => st.status === 'cancelled')) requestShotDetail(sessionId, shotId, opts);
-  });
+  const wanted = () => !off && retirementOf(sessionId) === gen;
+  const ask = (): void => {
+    const hit = lookup(sessionId, shotId);
+    if (!hit) { opts.onSettled?.(); return; }
+    const live = liveRun(swingRunKey(sessionId));
+    if (hit.first && live) {
+      void live.done.then(() => {
+        if (!wanted()) return;
+        void runShotDetail(sessionId, shotId, runOpts).done.then(() => { if (wanted()) opts.onSettled?.(); });
+      });
+      return;
+    }
+    /**
+     * 2026-10-17 (Tim, swings 2 and 3: "a logical way so it didn't cause overloading and crashing or
+     * slowness") — ONE DECODE AT A TIME. Another swing's body read and arc runs only once the swing's own
+     * run is done (its read, then swing 1's body read and arc) and no other swing of this session is still
+     * being read; then it runs alone. Waiting here, before its run starts, keeps the wait off the run's
+     * budgets (a shot run that waited inside its pose stage ran out of time without decoding).
+     */
+    if (live) {
+      void live.done.then(() => { if (wanted()) ask(); });
+      return;
+    }
+    const other = liveRunKeys().find((k) => k.startsWith(`shot:${sessionId}:`) && k !== shotRunKey(sessionId, shotId));
+    const busy = other ? liveRun(other) : null;
+    if (busy) {
+      void busy.done.then(() => { if (wanted()) ask(); });
+      return;
+    }
+    const run = runShotDetail(sessionId, shotId, runOpts);
+    // Cancelled by a NEW analysis of the swing (its window may have moved): the screen still shows this
+    // shot, so ask again once that analysis lets it (ask waits for it).
+    void run.done.then((snap) => {
+      if (!wanted()) return;
+      if (Object.values(snap.stages).some((st) => st.status === 'cancelled')) ask();
+      else opts.onSettled?.();
+    });
+  };
+  ask();
   return () => { off = true; };
 }

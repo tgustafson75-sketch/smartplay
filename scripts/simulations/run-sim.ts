@@ -8461,7 +8461,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // 2026-08-10 — the call now also passes measuredEvidence (4th arg) so the tile can't contradict
     // the on-device numbers. This guard is about the PHASE GATING, so it no longer pins the exact
     // arity — only that the terminal-vs-in-flight distinction is still driven by `phase`.
-    /return deriveVerdict\(analysis, phase === 'analyzing', swingContact/.test(smSrc2) &&
+    /return deriveVerdict\(analysis, phase === 'analyzing' \|\| \(phase === 'review' && !analysis && selectedBodyReadPending\), swingContact/.test(smSrc2) &&
       /phase === 'review' && analysisError \? 'NO READ' : 'READING…'/.test(smSrc2),
     'the verdict shows ANALYZING for every in-flight pass (including the video re-scan) and only says NO READ once a read has terminally finished in review — no more fail-state flash before the read lands');
 
@@ -11224,7 +11224,7 @@ check('LOCK: swing verdict reconciles vision against on-device measurements (bot
     // and the tile must actually consume the measurements
     const wired = /reconcileSwingValidity\(a, measured \?\? null\)/.test(sm) &&
       /const measuredEvidence: MeasuredSwingEvidence = useMemo/.test(sm) &&
-      /deriveVerdict\(analysis, phase === 'analyzing', swingContact, measuredEvidence\)/.test(sm);
+      /deriveVerdict\(analysis, phase === 'analyzing' \|\| \(phase === 'review' && !analysis && selectedBodyReadPending\), swingContact, measuredEvidence\)/.test(sm);
     return reconciler && strict && neverDowngrades && wired;
   })(),
   'measured turn+tempo overrides a vision false-negative; noise/floor footage still cannot; good reads never downgraded');

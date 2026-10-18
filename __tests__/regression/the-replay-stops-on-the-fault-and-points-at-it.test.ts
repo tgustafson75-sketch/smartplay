@@ -194,7 +194,7 @@ describe('the arc shows by itself; only the player can pay for one', () => {
   it('a shot paged to asks the silent pass; only the touched toggle asks for more', () => {
     expect(sd).toMatch(/const traceAsked = showTrace && traceTouchedRef\.current;/);
     expect(sd).toMatch(/arc: traceAsked \? true : 'tracker'/);
-    expect(code('app/swinglab/smartmotion.tsx')).toMatch(/requestShotDetail\(sessionId, sh\.id, \{ arc: 'tracker' \}\)/);
+    expect(code('app/swinglab/smartmotion.tsx')).toMatch(/requestShotDetail\(sessionId, sh\.id, \{\s*arc: 'tracker',/);
   });
 
   // A fresh clip per test: an answered window is remembered for the app session (shotDetail `answered`).

@@ -89,6 +89,9 @@ export interface SwingShot {
     // by default). Persisted so the per-swing row labels a fat/thin strike instead of
     // "no clear issue". Absent on sessions analyzed before this ship.
     contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
+    /** 2026-10-17 — 'measured': named on the phone from this swing's body read because the read left it
+     *  empty (orchestrator/shotDetail). Absent = the read's own answer. */
+    source?: 'read' | 'measured';
   } | null;
 
   // 2026-08-01 (Tim — per-swing breakdown). Pose biomechanics + clubhead arc for THIS specific swing,
@@ -628,7 +631,19 @@ interface SwingSessionState {
       // 2026-07-07 (Tim — chunk honesty) — the model's honest strike read, persisted
       // so the per-swing row can label a fat/thin strike.
       contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
+      source?: 'read' | 'measured';
     },
+  ) => void;
+  /**
+   * 2026-10-17 — a swing's row named from its own BODY READ where the read left it empty
+   * (orchestrator/shotDetail). Unlike setShotAnalysis it never touches the session's status: one swing
+   * measured on the phone is not the session's read succeeding, and the run settles the status itself.
+   * Never replaces a row that is already there.
+   */
+  setShotMeasuredVerdict: (
+    sessionId: string,
+    shotId: string,
+    analysis: Omit<NonNullable<SwingShot['perShotAnalysis']>, 'source'>,
   ) => void;
   /** Phase R — patch Phase K analysis onto an existing session, used both
    *  by the live cage post-session pipeline (already in app/practice-session/summary.tsx)
@@ -1404,6 +1419,18 @@ export const useSwingSessionStore = create<SwingSessionState>()(
               ...(String(session.analysis_status ?? '').startsWith('analyzing')
                 ? {}
                 : { analysis_status: 'ok' as AnalysisStatus, analysis_error: null }),
+            },
+          ),
+        })),
+
+      setShotMeasuredVerdict: (sessionId, shotId, analysis) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId || shot.perShotAnalysis ? shot : { ...shot, perShotAnalysis: { ...analysis, source: 'measured' as const } },
+              ),
             },
           ),
         })),

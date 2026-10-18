@@ -13,7 +13,7 @@
  */
 import { cancelRunsWithPrefix, getOrStartRun, liveRun, liveRunKeys, whenStageSettled, type StageDef } from './engine';
 import { useSwingSessionStore } from '../../../store/swingSessionStore';
-import { retireSessionShotRuns, retirementOf, runShotDetail, shotRunKey, swingRunKey } from './shotDetail';
+import { retireSessionShotRuns, retirementOf, runShotDetail, shotImpactMs, shotRunKey, swingRunKey } from './shotDetail';
 import type { ReadExtras } from '../../videoUpload';
 
 /**
@@ -219,7 +219,8 @@ function stages(): StageDef<In>[] {
             const poseMod = require('../../poseAnalysisApi') as typeof import('../../poseAnalysisApi');
             const { buildPoseSwingRead } = require('../poseSwingRead') as typeof import('../poseSwingRead');
             const { poseReadToPrimaryIssue } = require('../poseReadVerdict') as typeof import('../poseReadVerdict');
-            const impactMs = typeof shot?.locatedImpactSec === 'number' && shot.locatedImpactSec > 0 ? shot.locatedImpactSec * 1000 : null;
+            // The impact the body read was given — the same one the swing's own row is named from (shotDetail).
+            const impactMs = shotImpactMs(shot);
             const pi = poseReadToPrimaryIssue(buildPoseSwingRead(bio, poseMod.tempoFromPoseFrames(bio.frames, impactMs, 'video')));
             if (pi) {
               const { liveSessionStore } = require('./liveSessionStore') as typeof import('./liveSessionStore');

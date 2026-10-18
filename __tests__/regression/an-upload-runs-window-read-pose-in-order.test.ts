@@ -293,7 +293,9 @@ describe('a new read clears the old swing rows, and checks the connection before
     // a shot's body read is asked only once the swing's read has settled (its budget is not spent waiting),
     // and a cancelled one stops DECODING
     const sd = fs.readFileSync(path.join(__dirname, '..', '..', 'services/swing/orchestrator/shotDetail.ts'), 'utf8');
-    expect(sd).toMatch(/if \(live && \(readSt === 'pending' \|\| readSt === 'running'\)\) \{\s*void whenStageSettled\(swingRunKey\(sessionId\), 'read'\)/);
+    // (2026-10-17 — a swing past the first now waits for the swing's whole run, read included, before its
+    // run starts: swings-two-and-three-are-read-on-tap)
+    expect(sd).toMatch(/if \(live\) \{\s*void live\.done\.then\(\(\) => \{ if \(wanted\(\)\) ask\(\); \}\);/);
     expect(sd).toMatch(/0, \(\) => signal\.aborted,/);
     // a read that THREW hands over to the body read like every other failure — never 'failed' then 'ok'
     expect(up).toMatch(/liveSessionStore\(signal\)\.setSessionAnalysisStatus\(sessionId, 'analyzing_pose'\);\s*return \{ primary_issue: null, drill_recommendation: null, analyses, readFailed: "I had trouble watching this one/);
