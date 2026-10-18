@@ -3579,8 +3579,8 @@ check('Voice VAD: adaptive noise floor lifts the silence bar in noise, unchanged
     const wired =
       /createEndpointer\(\{ shortMs: SILENCE_TIMEOUT_SHORT_MS, longMs: SILENCE_TIMEOUT_LONG_MS, speechLongMs: SPEECH_LONG_MS \}\)/.test(vs) &&
       /createEndpointer\(\{ shortMs: MIC_SILENCE_SHORT_MS, longMs: MIC_SILENCE_LONG_MS, speechLongMs: MIC_SPEECH_LONG_MS \}\)/.test(tab) &&
-      /const effSpeech = Math\.max\(SPEECH_DETECT_DB, floor \+ SPEECH_MARGIN_DB\)/.test(ep) &&
-      /const effSilence = Math\.max\(SILENCE_DB, floor \+ SILENCE_MARGIN_DB\)/.test(ep) &&
+      /if \(m > Math\.max\(SPEECH_DETECT_DB, floor \+ SPEECH_MARGIN_DB\)\) \{/.test(ep) &&
+      /still = Math\.max\(SILENCE_DB, floor \+ SILENCE_MARGIN_DB\)/.test(ep) &&
       /noiseFloorRef\.current \+= \(m - noiseFloorRef\.current\) \* a/.test(hook) &&
       /const effThresholdDb = Math\.max\(SPEECH_THRESHOLD_DB, noiseFloorRef\.current \+ SPEECH_MARGIN_DB\)/.test(hook);
     // Behavioral (traces live in __tests__/regression/wind-does-not-hold-the-mic-open): the endpointer's
@@ -3672,7 +3672,7 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
       (() => { const m = /const SILENCE_TIMEOUT_LONG_MS = (\d+);/.exec(vs); return !!m && Number(m[1]) >= 2000; })() &&
       // adaptive selection: long window once speech has run past SPEECH_LONG_MS
       // (2026-10-17: the selection lives in services/voice/endpointer; both paths hand it their windows)
-      /const window = nowMs - speechStart >= cfg\.speechLongMs \? cfg\.longMs : cfg\.shortMs;/.test(read('services/voice/endpointer.ts')) &&
+      /const window = nowMs - armedAt >= cfg\.speechLongMs \? cfg\.longMs : cfg\.shortMs;/.test(read('services/voice/endpointer.ts')) &&
       /createEndpointer\(\{ shortMs: SILENCE_TIMEOUT_SHORT_MS, longMs: SILENCE_TIMEOUT_LONG_MS, speechLongMs: SPEECH_LONG_MS \}\)/.test(vs) &&
       // the FIRST-turn mic path also runs the adaptive window (was a single fixed gap that clipped)
       (() => { const m = /const MIC_SILENCE_SHORT_MS = (\d+);/.exec(vc); return !!m && Number(m[1]) >= 1200; })() &&
