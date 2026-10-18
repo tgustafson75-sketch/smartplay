@@ -59,8 +59,13 @@ let retireSeq = 0;
 /** The session's retirement count — a request or run remembers it, and stops when it changes. */
 export const retirementOf = (sessionId: string): number => retiredAt.get(sessionId) ?? 0;
 
-export function retireSessionShotRuns(sessionId: string): void {
+/** Which newer capture retired a session — its own body read waits for that one's (uploadRun 'pose'). */
+const retiredByMap = new Map<string, string>();
+export const retiredBy = (sessionId: string): string | null => retiredByMap.get(sessionId) ?? null;
+
+export function retireSessionShotRuns(sessionId: string, by?: string): void {
   retiredAt.set(sessionId, ++retireSeq);
+  if (by) retiredByMap.set(sessionId, by);
   const { cancelRunsWithPrefix } = require('./engine') as typeof import('./engine');
   cancelRunsWithPrefix(`shot:${sessionId}:`);
 }

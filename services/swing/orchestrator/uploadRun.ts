@@ -13,7 +13,7 @@
  */
 import { cancelRunsWithPrefix, getOrStartRun, liveRun, liveRunKeys, whenStageSettled, type StageDef } from './engine';
 import { useSwingSessionStore } from '../../../store/swingSessionStore';
-import { retireSessionShotRuns, retirementOf, runShotDetail, shotImpactMs, shotRunKey, swingRunKey } from './shotDetail';
+import { retireSessionShotRuns, retiredBy, retirementOf, runShotDetail, shotImpactMs, shotRunKey, swingRunKey } from './shotDetail';
 import type { ReadExtras } from '../../videoUpload';
 
 /**
@@ -26,6 +26,8 @@ import type { ReadExtras } from '../../videoUpload';
  */
 /** `retired`: the session's retirement count when this run began (a newer capture retires its body read). */
 type In = { sessionId: string; extras?: ReadExtras; retired: number };
+/** A newer capture has retired this swing's body read since its run began. */
+const retired = (input: In) => retirementOf(input.sessionId) !== input.retired;
 type ReadResult = Awaited<ReturnType<typeof import('../../videoUpload')._runPhaseKRead>>;
 
 /** A single-swing upload this long or longer is a range session — the read carves its swings. */
@@ -189,12 +191,25 @@ function stages(): StageDef<In>[] {
       // on it: a read that overran is exactly when the body read has to answer.
       id: 'pose',
       after: ['read'],
-      budgetMs: 130_000,
-      // Not once a newer capture has retired this swing: its body read would decode through that one's.
-      when: ({ input, outputs }) => !isPutt(input.sessionId) && !noSwing(outputs) && retirementOf(input.sessionId) === input.retired,
+      // A retired swing's body read first waits for the newer capture's (below): room for both.
+      budgetMs: ({ input }) => (retired(input) ? 260_000 : 130_000),
+      /**
+       * Not once a newer capture has retired this swing — its body read would decode through that one's —
+       * UNLESS the read left this swing without a verdict. 2026-10-17 (review of F2a): capture A retired
+       * while its slow read was still in flight skipped A's body read, so when that read timed out A settled
+       * 'failed' for good (only this stage writes the body-read verdict). Then it is deferred, not skipped.
+       */
+      when: ({ input, outputs }) => !isPutt(input.sessionId) && !noSwing(outputs)
+        && (!retired(input) || session(input.sessionId)?.analysis_status !== 'ok'),
       run: async ({ input, signal }) => {
         const shot0 = session(input.sessionId)?.shots.find((x) => x.clipUri);
         if (!shot0) return null;
+        const newer = retired(input) ? retiredBy(input.sessionId) : null;
+        if (newer) {
+          (require('../../analysisTrace') as typeof import('../../analysisTrace')).traceStep('body read waits for the newer capture', {}, { sessionId: input.sessionId });
+          await whenStageSettled(swingRunKey(newer), 'pose', signal);
+          if (signal.aborted) return null;
+        }
         // The arc comes from the silent pass: the free on-device tracker, never the paid vision model
         // (2026-10-10). The player's Swing Trace toggle is what asks for more.
         const shotRun = runShotDetail(input.sessionId, shot0.id, { force: true, arc: 'tracker' });
@@ -306,9 +321,19 @@ function report(key: string, stage: string, error: string): void {
  * would strand that swing's status; the settle stage still answers for it. Uploads are not touched: an
  * upload's body read is its fallback verdict, and the player did not move on from it by recording.
  */
+/**
+ * 2026-10-17 (review of F2a) — ONLY A NEW CAPTURE RETIRES, AND ONLY CAPTURES OLDER THAN IT. Any live run
+ * used to retire every other live session: re-analysing an older swing (the library's Analyze, Analyze at
+ * this moment, SmartMotion's re-analyze) retired the capture just recorded. A session's first run in this
+ * app session is its capture's; a later run is a re-analysis, and retires nothing.
+ */
+const analysedThisLaunch = new Set<string>();
+
 function retireEarlierCaptures(sessionId: string): void {
   const s = session(sessionId);
-  if (!s || s.source === 'uploaded_video') return;
+  const firstRun = !analysedThisLaunch.has(sessionId);
+  analysedThisLaunch.add(sessionId);
+  if (!s || s.source === 'uploaded_video' || !firstRun) return;
   const others = new Set<string>();
   for (const k of liveRunKeys()) {
     const m = /^(?:shot|swing):([^:]+)/.exec(k);
@@ -316,9 +341,19 @@ function retireEarlierCaptures(sessionId: string): void {
   }
   for (const id of others) {
     const o = session(id);
-    if (o && o.source !== 'uploaded_video') retireSessionShotRuns(id);
+    if (o && o.source !== 'uploaded_video' && capturedAt(o) < capturedAt(s)) retireSessionShotRuns(id, sessionId);
   }
 }
+
+/** When a session was captured: its `date`, else the timestamp its id starts with. */
+function capturedAt(s: { id: string; date?: number | null }): number {
+  if (typeof s.date === 'number' && s.date > 0) return s.date;
+  const n = Number(/^(\d{10,})_/.exec(s.id)?.[1]);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Test seam: forget which sessions have run (a new app launch). */
+export function _resetAnalysedForTest(): void { analysedThisLaunch.clear(); }
 
 /**
  * Start (or join) this session's run and resolve with the READ's result as soon as the read settles —
