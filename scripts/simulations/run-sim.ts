@@ -3570,26 +3570,23 @@ check('Voice VAD: adaptive noise floor lifts the silence bar in noise, unchanged
   // never auto-stopped and Kevin got a long noisy clip. Thresholds now ride a live
   // ambient floor, clamped so a quiet room is byte-for-byte the old behavior.
   (() => {
+    // 2026-10-17 — both mic owners (voiceService captureUtterance + the Caddie tab, useVoiceCaddie) now
+    // end on ONE detector, services/voice/endpointer (Tim in wind: "hard time stop listening").
     const vs = read('services/voiceService.ts');
+    const tab = read('hooks/useVoiceCaddie.ts');
+    const ep = read('services/voice/endpointer.ts');
     const hook = read('hooks/useVoiceActivityDetection.ts');
     const wired =
-      /noiseFloorDb \+= \(m - noiseFloorDb\) \* alpha/.test(vs) &&
-      /const effSilenceDb = Math\.max\(SILENCE_DB_THRESHOLD, noiseFloorDb \+ SILENCE_MARGIN_DB\)/.test(vs) &&
-      /const effSpeechDb = Math\.max\(SPEECH_DETECT_DB, noiseFloorDb \+ SPEECH_MARGIN_DB\)/.test(vs) &&
+      /createEndpointer\(\{ shortMs: SILENCE_TIMEOUT_SHORT_MS, longMs: SILENCE_TIMEOUT_LONG_MS, speechLongMs: SPEECH_LONG_MS \}\)/.test(vs) &&
+      /createEndpointer\(\{ shortMs: MIC_SILENCE_SHORT_MS, longMs: MIC_SILENCE_LONG_MS, speechLongMs: MIC_SPEECH_LONG_MS \}\)/.test(tab) &&
+      /const effSpeech = Math\.max\(SPEECH_DETECT_DB, floor \+ SPEECH_MARGIN_DB\)/.test(ep) &&
+      /const effSilence = Math\.max\(SILENCE_DB, floor \+ SILENCE_MARGIN_DB\)/.test(ep) &&
       /noiseFloorRef\.current \+= \(m - noiseFloorRef\.current\) \* a/.test(hook) &&
       /const effThresholdDb = Math\.max\(SPEECH_THRESHOLD_DB, noiseFloorRef\.current \+ SPEECH_MARGIN_DB\)/.test(hook);
-    // Behavioral: replicate the floor math (INIT -50, MIN -60, fall .15 / rise .02).
-    const floorAfter = (db: number, n: number): number => {
-      let f = -50;
-      for (let i = 0; i < n; i++) { const m = Math.max(db, -60); const a = m < f ? 0.15 : 0.02; f += (m - f) * a; }
-      return f;
-    };
-    const effSilence = (f: number): number => Math.max(-40, f + 12);
-    const quiet = effSilence(floorAfter(-55, 40)); // quiet room (~-55 ambient)
-    const noisy = effSilence(floorAfter(-38, 80)); // sustained ~-38 background
-    const quietUnchanged = quiet === -40;          // identical to the prior fixed bar
-    const noisyLifted = noisy > -40 && -38 <= noisy; // -38 background no longer counts as "loud"
-    return wired && quietUnchanged && noisyLifted;
+    // Behavioral (traces live in __tests__/regression/wind-does-not-hold-the-mic-open): the endpointer's
+    // absolute bars are the old fixed ones, so a quiet room is unchanged.
+    const quietUnchanged = /export const SPEECH_DETECT_DB = -30;/.test(ep) && /export const SILENCE_DB = -40;/.test(ep);
+    return wired && quietUnchanged;
   })(),
   'noise lifts the VAD silence bar so auto-stop fires; a quiet room is unchanged');
 
@@ -3674,14 +3671,16 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
       (() => { const m = /const SILENCE_TIMEOUT_SHORT_MS = (\d+);/.exec(vs); return !!m && Number(m[1]) >= 1200; })() &&
       (() => { const m = /const SILENCE_TIMEOUT_LONG_MS = (\d+);/.exec(vs); return !!m && Number(m[1]) >= 2000; })() &&
       // adaptive selection: long window once speech has run past SPEECH_LONG_MS
-      /speakingForMs >= SPEECH_LONG_MS \? SILENCE_TIMEOUT_LONG_MS : SILENCE_TIMEOUT_SHORT_MS/.test(vs) &&
+      // (2026-10-17: the selection lives in services/voice/endpointer; both paths hand it their windows)
+      /const window = nowMs - speechStart >= cfg\.speechLongMs \? cfg\.longMs : cfg\.shortMs;/.test(read('services/voice/endpointer.ts')) &&
+      /createEndpointer\(\{ shortMs: SILENCE_TIMEOUT_SHORT_MS, longMs: SILENCE_TIMEOUT_LONG_MS, speechLongMs: SPEECH_LONG_MS \}\)/.test(vs) &&
       // the FIRST-turn mic path also runs the adaptive window (was a single fixed gap that clipped)
       (() => { const m = /const MIC_SILENCE_SHORT_MS = (\d+);/.exec(vc); return !!m && Number(m[1]) >= 1200; })() &&
       (() => { const m = /const MIC_SILENCE_LONG_MS = (\d+);/.exec(vc); return !!m && Number(m[1]) >= 2000; })() &&
       // And a greeting must reach the PATIENT window: "hi Serena" is ~900ms, so the sentence
       // threshold has to sit below that or the most common opener gets the short one.
       (() => { const m = /const MIC_SPEECH_LONG_MS = (\d+);/.exec(vc); return !!m && Number(m[1]) <= 900; })() &&
-      /speakingForMs >= MIC_SPEECH_LONG_MS \? MIC_SILENCE_LONG_MS : MIC_SILENCE_SHORT_MS/.test(vc)
+      /createEndpointer\(\{ shortMs: MIC_SILENCE_SHORT_MS, longMs: MIC_SILENCE_LONG_MS, speechLongMs: MIC_SPEECH_LONG_MS \}\)/.test(vc)
     );
   })(),
   'a 4-min heartbeat keeps endpoints warm; caddie warms on focus; ADAPTIVE silence endpoint on BOTH the follow-up loop AND the first-turn mic windows floored so a natural breath never clips a sentence, and the sentence threshold sits BELOW a ~900ms greeting so "hi Serena" earns the patient window');

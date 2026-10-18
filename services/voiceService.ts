@@ -3,7 +3,8 @@ import { playbackSoundOptions } from './audioPlaybackOptions';
 import * as Speech from 'expo-speech';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
-import { logVoiceSilentFail, logVoiceError, logTranscribeError } from './voiceErrorLog';
+import { logVoiceSilentFail, logVoiceError, logTranscribeError, logVoiceDiag } from './voiceErrorLog';
+import { createEndpointer } from './voice/endpointer';
 import type { CaptureBail } from './voice/captureBail';
 // 2026-06-07 (audit) — wire TTS into the circuit breaker so spoken replies
 // short-circuit under weak signal instead of burning the full 12s timeout
@@ -129,14 +130,8 @@ export const RECORDING_OPTIONS: Audio.RecordingOptions = {
   web: { mimeType: 'audio/webm', bitsPerSecond: 32000 },
 };
 
-// 2026-05-25 — Fix A: silence-VAD thresholds.
-// metering returns dB level; quieter = more negative. Typical room
-// ambient is ~ -55 dB, normal speech ~ -25 to -10 dB. A threshold of
-// -40 dB cleanly separates "user talking" from "user silent." If three
-// continuous seconds of below-threshold readings come in AND the user
-// has spoken at least once (so we don't auto-stop on dead silence
-// before they start), end the recording early.
-const SILENCE_DB_THRESHOLD = -40;
+// The dB thresholds and the ambient floor live in services/voice/endpointer (shared with the Caddie tab).
+// The windows below are this path's.
 // 2026-06-13 (Tim) — SNAP on silence. 4000ms made the caddie feel slow to react
 // ("doesn't snap silence well") vs an instant-feeling reference app. Dropped to
 // 1200ms so it endpoints quickly when you stop talking — still ~3-4x a normal
@@ -173,37 +168,7 @@ const SILENCE_TIMEOUT_LONG_MS = 2400;   // mid-sentence: wait out a natural word
  * Being cut off is a hard failure; waiting an extra second is a soft cost. Err long.
  */
 const SPEECH_LONG_MS = 700;             // anything past a single word counts as a sentence → LONG window
-const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
-// 2026-06-16 (Tim — "first tap to talk in background noise fails") — adaptive
-// noise floor, the same idea as Smart Motion's rolling strike floor. The fixed
-// -40/-30 thresholds above assume a ~-55 dB quiet room. With ANY real background
-// sound (TV, range, wind, traffic, a room of people) the ambient sits ABOVE -40,
-// so noise kept refreshing lastLoudAt and the silence-VAD NEVER tripped — the
-// capture ran the full timeout, then transcribed a long noisy clip and Kevin got
-// garbage / no usable response on the first tap. We now estimate the live ambient
-// floor and lift the speech + silence thresholds RELATIVE to it, clamped to the
-// absolute floors so a genuinely quiet room behaves EXACTLY as before (the fix can
-// only ever make it MORE robust, never less sensitive).
-const NOISE_FLOOR_INIT_DB = -50;     // sane ambient default before we've sampled
-const NOISE_FLOOR_MIN_DB = -60;      // ignore the -160 "no-signal" sentinel reads
-const NOISE_FLOOR_FALL_ALPHA = 0.15; // settle down to a quieter ambient in ~1.5s
-const NOISE_FLOOR_RISE_ALPHA = 0.02; // rise slowly so the user's speech can't inflate it
-const SILENCE_MARGIN_DB = 12;        // voice must clear ambient by this to count as "still talking"
-/**
- * 2026-08-12 (audit — divergent constants) — this was 18 while the VAD hook that OPENS the mic uses
- * 14 for the same question. That asymmetry is a bug with a very specific symptom: VAD hears you at
- * 14dB over ambient and opens a capture, then this refuses to count the same voice as speech, so
- * `hasSpoken` never flips — the capture stands down or returns silence, and the caddie says it
- * didn't catch you. The mic opened FOR speech it then declined to recognise.
- *
- * The invariant: whatever threshold decides to OPEN the mic must be at least as strict as the one
- * that decides someone SPOKE. Otherwise the app can promise a listen it cannot honour. Matched to
- * the VAD's 14 so anything loud enough to open the mic is loud enough to count.
- * (SILENCE_MARGIN_DB stays lower at 12 — ending a sentence should be easier than starting one, or a
- * trailing-off word clips the capture.)
- */
-const SPEECH_MARGIN_DB = 14;         // and by this to confirm "they spoke at least once"
 
 /**
  * Record audio for up to {timeoutMs}, transcribe, and return the text.
@@ -481,9 +446,9 @@ export const captureUtteranceDetailed = async (
     // silence sustained ≥ SILENCE_TIMEOUT_MS).
     // 2026-06-16 — thresholds are now lifted relative to a live ambient floor
     // (noiseFloorDb) so background noise can't masquerade as "still talking".
-    let speechStartAt = 0; // when the user first crossed the speech threshold (for adaptive endpoint)
-    let lastLoudAt = Date.now();
-    let noiseFloorDb = NOISE_FLOOR_INIT_DB;
+    // 2026-10-17 — the one end-of-speech detector, shared with the Caddie tab (services/voice/endpointer):
+    // in wind the old floor took ~5s to climb, so the wind "kept talking" to the 8s cap.
+    const ep = createEndpointer({ shortMs: SILENCE_TIMEOUT_SHORT_MS, longMs: SILENCE_TIMEOUT_LONG_MS, speechLongMs: SPEECH_LONG_MS });
 
     const r = await Audio.Recording.createAsync(
       RECORDING_OPTIONS,
@@ -491,23 +456,11 @@ export const captureUtteranceDetailed = async (
         if (!status.isRecording) return;
         const metering = (status as { metering?: number }).metering;
         if (typeof metering !== 'number') return;
-        // Adaptive ambient floor: fall fast toward a quieter level, rise slowly
-        // (the user's speech raises readings only briefly, so the slow rise keeps
-        // the floor tracking the TRUE ambient between/around words). Clamp the
-        // input so a -160 dropout can't crash the floor.
-        const m = Math.max(metering, NOISE_FLOOR_MIN_DB);
-        const alpha = m < noiseFloorDb ? NOISE_FLOOR_FALL_ALPHA : NOISE_FLOOR_RISE_ALPHA;
-        noiseFloorDb += (m - noiseFloorDb) * alpha;
-        // Effective thresholds = ambient + margin, but never more sensitive than
-        // the original fixed floors (so a quiet room is byte-for-byte prior behavior).
-        const effSpeechDb = Math.max(SPEECH_DETECT_DB, noiseFloorDb + SPEECH_MARGIN_DB);
-        const effSilenceDb = Math.max(SILENCE_DB_THRESHOLD, noiseFloorDb + SILENCE_MARGIN_DB);
-        if (metering > effSpeechDb) {
-          if (!hasSpoken) speechStartAt = Date.now(); // first real speech — start the sentence clock
+        ep.push(metering, Date.now());
+        if (ep.heardSpeech && !hasSpoken) {
           hasSpoken = true;
           currentCaptureHeardSpeech = true; // visible to releaseExternalMic (submit vs discard)
         }
-        if (metering > effSilenceDb) lastLoudAt = Date.now();
       },
       100, // 100ms update interval — cheap and responsive
     );
@@ -522,7 +475,7 @@ export const captureUtteranceDetailed = async (
     // and also keeps the file from being trivially-tiny on a fast
     // tap-stop sequence.
     await new Promise<void>(resolve => setTimeout(resolve, 100));
-    lastLoudAt = Date.now();
+    ep.markLoud(Date.now());
 
     // Wait up to timeoutMs OR until stopCapture flips the flag OR
     // silence-VAD trips early (Fix A) OR user taps to end early
@@ -535,9 +488,9 @@ export const captureUtteranceDetailed = async (
       // dead silence before they start) AND sustained quiet for ≥ the ADAPTIVE window. A brief
       // command ends promptly (SHORT); once they've been talking past SPEECH_LONG_MS it's a
       // sentence, so we wait out a natural mid-thought pause (LONG) and never clip them.
-      const speakingForMs = hasSpoken ? Date.now() - speechStartAt : 0;
-      const silenceWindow = speakingForMs >= SPEECH_LONG_MS ? SILENCE_TIMEOUT_LONG_MS : SILENCE_TIMEOUT_SHORT_MS;
-      if (hasSpoken && Date.now() - lastLoudAt >= silenceWindow) {
+      const endWhy = ep.shouldStop(Date.now(), start);
+      if (endWhy) {
+        if (endWhy !== 'silence' || ep.snapshot().noisy) logVoiceDiag('capture_endpoint', { source: 'captureUtterance', reason: endWhy, ms: Date.now() - start, ...ep.snapshot() });
         break;
       }
       // 2026-06-23 — real-time SIZE CEILING. Some Android OEMs (Samsung Z

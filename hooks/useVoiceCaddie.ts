@@ -68,6 +68,7 @@ import { CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 import { tabBypassKind } from '../services/tabVoiceBypass';
 import { isNotACommand } from '../services/utteranceIsCommand';
 import { createMeterTracker } from '../services/micStanddown';
+import { createEndpointer } from '../services/voice/endpointer';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -188,16 +189,8 @@ const brainTimeoutMs = (): number => (isEndpointWarmed('/api/kevin') ? BRAIN_TIM
 // 30s covers the realistic path + network margin; the pathological 36s server
 // cap is rare and falls through to the graceful minimal-retry + local responder.
 
-// 2026-06-06 — handleMicPress silence-VAD config. Mirrors the
-// SILENCE_DB_THRESHOLD / SPEECH_DETECT_DB / SILENCE_TIMEOUT_MS in
-// services/voiceService.ts (captureUtterance) so the manual-tap path
-// behaves identically to the follow-up-listen path. Tim's report:
-// "first question waits forever if you don't tap to stop listening"
-// — silence-VAD was only on captureUtterance, the first turn (which
-// always uses handleMicPress) had no silence detector and only the
-// 45s hard cap.
-const MIC_SILENCE_DB_THRESHOLD = -40;
-const MIC_SPEECH_DETECT_DB = -30;
+// handleMicPress silence-VAD: the dB thresholds and ambient floor are services/voice/endpointer, shared
+// with captureUtterance (they had drifted: this path used a fixed -40). The windows below are this path's.
 
 // 2026-08-11 — endsAsQuestion moved to services/voice/endsAsQuestion.ts so the earbud/global-mic
 // path (services/listeningSession.ts) re-arms on exactly the same rule this path uses. Re-exported
@@ -3076,10 +3069,10 @@ export const useVoiceCaddie = ({
       // was only being incremented on the pipecat entry, so "always the first turn" vs "the 1st and
       // the 9th" was unanswerable for the tap path — the exact question the stamp exists to answer.
       try { noteVoiceTurnStarted(); } catch { /* advisory */ }
-      let micLastLoudAt = Date.now();
-      // 2026-07-30 — when the user FIRST crossed the speech threshold, so the poll below can tell a
-      // quick command (short silence window) from a mid-sentence pause (long window) — the adaptive VAD.
-      let micSpeechStartAt = 0;
+      // 2026-10-17 (Tim in wind at the range: "hard time stop listening when I was done") — this path
+      // ended on a FIXED -40 dBFS, so any ambient above -40 never read as silence and it ran to the 18s cap.
+      // It now ends on the same detector as the earbud / text-box mic (services/voice/endpointer).
+      const ep = createEndpointer({ shortMs: MIC_SILENCE_SHORT_MS, longMs: MIC_SILENCE_LONG_MS, speechLongMs: MIC_SPEECH_LONG_MS });
       // 2026-10-15 (review) — the ambient-relative read of the same meter, consulted ONLY at the
       // no-speech stand-down (services/micStanddown).
       const meterTracker = createMeterTracker();
@@ -3090,12 +3083,11 @@ export const useVoiceCaddie = ({
           const metering = (status as { metering?: number }).metering;
           if (typeof metering !== 'number') return;
           meterTracker.update(metering);
-          if (metering > MIC_SPEECH_DETECT_DB) {
-            if (!micHasSpoken) micSpeechStartAt = Date.now();
+          ep.push(metering, Date.now());
+          if (ep.heardSpeech && !micHasSpoken) {
             micHasSpoken = true;
             micHasSpokenRef.current = true;
           }
-          if (metering > MIC_SILENCE_DB_THRESHOLD) micLastLoudAt = Date.now();
         },
         100,
       );
@@ -3107,7 +3099,7 @@ export const useVoiceCaddie = ({
       // reports — the first tap's recording is too quiet for Whisper
       // to land a confident transcript, so the user retries.
       await new Promise<void>(r => setTimeout(r, 100));
-      micLastLoudAt = Date.now();
+      ep.markLoud(Date.now());
 
       recordingRef.current = recording;
       // NOW the mic is genuinely capturing — past the VAD release, the audio-session queue,
@@ -3191,15 +3183,12 @@ export const useVoiceCaddie = ({
           })();
           return;
         }
-        if (micHasSpoken) {
-          // Adaptive endpoint: a 1-2 word command (spoken < MIC_SPEECH_LONG_MS) closes on the SHORT
-          // gap (snappy); once the user is into a sentence, the LONG gap rides out a word-search pause
-          // so it never clips. speakingForMs = first-speech → most-recent-loud.
-          const speakingForMs = micSpeechStartAt > 0 ? micLastLoudAt - micSpeechStartAt : 0;
-          const gap = speakingForMs >= MIC_SPEECH_LONG_MS ? MIC_SILENCE_LONG_MS : MIC_SILENCE_SHORT_MS;
-          if (Date.now() - micLastLoudAt >= gap) {
-            void hardStopAndProcess().catch(() => undefined);
-          }
+        // Adaptive endpoint (services/voice/endpointer): SHORT gap for a 1-2 word command, LONG once into
+        // a sentence; in noise, judged against the player's own voice level, and capped at NOISY_CAP_MS.
+        const endWhy = ep.shouldStop(Date.now(), recordStartedAt);
+        if (endWhy) {
+          if (endWhy !== 'silence' || ep.snapshot().noisy) logVoiceDiag('capture_endpoint', { source: 'tap', reason: endWhy, ms: Date.now() - recordStartedAt, ...ep.snapshot() });
+          void hardStopAndProcess().catch(() => undefined);
         }
       }, 200);
 

@@ -29,7 +29,8 @@ const num = (src: string, name: string): number => {
 };
 
 const vad = read('hooks/useVoiceActivityDetection.ts');
-const voice = read('services/voiceService.ts');
+// 2026-10-17 — the capture's margins moved into the shared end-of-speech detector.
+const voice = read('services/voice/endpointer.ts');
 
 describe('the mic never opens for speech the capture will not recognise', () => {
   it('the confirm threshold is no stricter than the open threshold', () => {
@@ -47,7 +48,7 @@ describe('the mic never opens for speech the capture will not recognise', () => 
   it('both are still adaptive against a measured noise floor, not absolute', () => {
     // The margins only mean anything relative to ambient — a fixed dB gate fails in a cart or wind.
     expect(vad).toContain('noiseFloorRef.current + SPEECH_MARGIN_DB');
-    expect(voice).toContain('noiseFloorDb + SPEECH_MARGIN_DB');
+    expect(voice).toContain('floor + SPEECH_MARGIN_DB');
   });
 });
 
