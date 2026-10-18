@@ -14,6 +14,7 @@ let mockMaxInFlight = 0;
 const mockStarts: number[] = [];
 let mockReadMs: (i: number) => number = () => 5;
 let mockLastVerdict: string | null = null;
+let mockVerdictAgeMs = 0;
 
 jest.mock('../../services/poseDetection', () => ({
   analyzeSwing: async (_uri: string, opts: { swing_number: number }) => {
@@ -31,7 +32,7 @@ jest.mock('../../services/poseDetection', () => ({
 }));
 jest.mock('../../services/reachability', () => ({
   ...jest.requireActual('../../services/reachability'),
-  lastReachability: () => (mockLastVerdict ? { verdict: mockLastVerdict, via: 'apple', controlMs: 3000, at: Date.now() } : null),
+  lastReachability: () => (mockLastVerdict ? { verdict: mockLastVerdict, via: 'apple', controlMs: 3000, at: Date.now() - mockVerdictAgeMs } : null),
 }));
 jest.mock('../../services/swingLibrary', () => ({ getAnalyzerKind: () => 'full_swing' }));
 jest.mock('../../services/swingCommentaryService', () => ({ getTranscriptionStatus: () => 'done' }));
@@ -48,7 +49,7 @@ const seed = (n: number) => useSwingSessionStore.setState({
 });
 
 beforeEach(() => {
-  mockInFlight = 0; mockMaxInFlight = 0; mockStarts.length = 0; mockReadMs = () => 5; mockLastVerdict = null;
+  mockInFlight = 0; mockMaxInFlight = 0; mockStarts.length = 0; mockReadMs = () => 5; mockLastVerdict = null; mockVerdictAgeMs = 0;
 });
 
 describe('a multi-swing capture reads the first swing alone', () => {
@@ -67,10 +68,10 @@ describe('a multi-swing capture reads the first swing alone', () => {
     seed(3);
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
     try {
-      mockReadMs = (i) => (i === 0 ? 25_000 : 5);
+      mockReadMs = (i) => (i === 0 ? 35_000 : 5);
       const p = _runPhaseKRead('s1');
       for (let k = 0; k < 400 && mockStarts.length < 3; k++) { await jest.advanceTimersByTimeAsync(200); }
-      await jest.advanceTimersByTimeAsync(30_000);
+      await jest.advanceTimersByTimeAsync(40_000);
       await p;
     } finally { jest.useRealTimers(); }
     expect(mockStarts).toEqual([0, 1, 2]);
@@ -83,5 +84,32 @@ describe('a multi-swing capture reads the first swing alone', () => {
     await _runPhaseKRead('s1');
     expect(mockStarts).toEqual([0, 1, 2]);
     expect(mockMaxInFlight).toBe(1);
+  });
+});
+
+/**
+ * 2026-10-17 (review of F1a) — a 'slow' probe from long ago, and an ordinary 20-25s first read, are not a
+ * weak link now: the rest still read three at a time.
+ */
+describe('only a weak link NOW makes the reads serial', () => {
+  it("a 'slow' verdict from five minutes ago does not", async () => {
+    seed(3);
+    mockLastVerdict = 'slow';
+    mockVerdictAgeMs = 5 * 60_000;
+    await _runPhaseKRead('s1');
+    expect(mockMaxInFlight).toBe(2);
+  });
+
+  it('a 22s first read (frame extraction + upload + server on a phone) does not', async () => {
+    seed(3);
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      mockReadMs = (i) => (i === 0 ? 22_000 : 5);
+      const p = _runPhaseKRead('s1');
+      for (let k = 0; k < 400 && mockStarts.length < 3; k++) { await jest.advanceTimersByTimeAsync(200); }
+      await jest.advanceTimersByTimeAsync(30_000);
+      await p;
+    } finally { jest.useRealTimers(); }
+    expect(mockMaxInFlight).toBe(2);
   });
 });

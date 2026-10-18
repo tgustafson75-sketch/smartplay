@@ -804,8 +804,14 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     // SmartMotion are the WOW path; regression here is unacceptable.
     const USE_PARALLEL_PER_SHOT = true;
     const USE_PARALLEL_BATCH_SIZE = 3;
-    /** A first read slower than this means a weak link: the remaining swings are read one at a time. */
-    const FIRST_READ_SLOW_MS = 20_000;
+    /**
+     * A first read slower than this means a weak link: the remaining swings are read one at a time.
+     * 2026-10-17 (review of F1a) — 20s → 30s. A healthy read is frame extraction + upload + ~9s of server
+     * time, which on a phone already lands in the mid-teens; 20s sent ordinary reads serial.
+     */
+    const FIRST_READ_SLOW_MS = 30_000;
+    /** Only a reachability verdict this recent describes the link the read is on now. */
+    const SLOW_VERDICT_FRESH_MS = 60_000;
 
     // Build the per-swing work item once so both sequential and
     // parallel paths share the same closure (zero behavior drift).
@@ -1004,8 +1010,11 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
       const firstT0 = Date.now();
       await Promise.allSettled([runOne(work[0])]);   // settled, like a batch: one swing's throw never ends the others
       const firstMs = Date.now() - firstT0;
+      // 2026-10-17 (review of F1a) — a 'slow' probe from minutes ago (any screen, any link) made every
+      // multi-swing read serial for the rest of the launch: only a fresh one counts.
+      const lastNet = (require('./reachability') as typeof import('./reachability')).lastReachability();
       const weakLink = firstMs > FIRST_READ_SLOW_MS
-        || (require('./reachability') as typeof import('./reachability')).lastReachability()?.verdict === 'slow';
+        || (lastNet?.verdict === 'slow' && Date.now() - lastNet.at < SLOW_VERDICT_FRESH_MS);
       const batchSize = weakLink ? 1 : USE_PARALLEL_BATCH_SIZE;
       V6('STAGE 2-3 — first swing read alone', { first_ms: firstMs, weak_link: weakLink, batch_size: batchSize, total_work: work.length });
       // Batched path. Each batch awaits Promise.allSettled
