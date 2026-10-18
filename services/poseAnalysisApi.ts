@@ -244,7 +244,18 @@ export function poseDetectorUnavailable(): boolean {
   } catch { return true; }
 }
 
-export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Promise<PoseFrame | null> {
+/**
+ * 2026-10-17 (review of F2a) — time spent waiting on the CLOUD pose proxy (5-15s a frame), so the body
+ * read's "nobody in frame for 15s" stop can count only the on-device engine's time. Monotonic.
+ */
+let cloudPoseMsTotal = 0;
+export const cloudPoseMs = (): number => cloudPoseMsTotal;
+
+export async function analyzePoseFromUri(
+  imageUri: string, timestampMs = 0,
+  /** deviceOnly: the on-device engine's answer only — no cloud fallback (a nudge while nobody has been seen). */
+  opts: { deviceOnly?: boolean } = {},
+): Promise<PoseFrame | null> {
   cloudPoseUnconfigured = false; // only THIS request's answer counts — a failed read or fetch is not "unconfigured"
   // 2026-06-11 — On-device MediaPipe first. The BlazePose model + native module
   // already ship via the withMediaPipePose config plugin (services/
@@ -268,6 +279,7 @@ export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Pro
   } catch {
     // fall through to cloud
   }
+  if (opts.deviceOnly) return null;
 
   let body: { imageUrl?: string; imageBase64?: string };
   if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
@@ -282,6 +294,7 @@ export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Pro
       return null;
     }
   }
+  const cloudT0 = Date.now();
   try {
     const res = await fetch(`${apiUrl()}/api/pose-analysis`, {
       method: 'POST',
@@ -309,6 +322,8 @@ export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Pro
   } catch (e) {
     console.warn('[pose] analyzePoseFromUri exception', e);
     return null;
+  } finally {
+    cloudPoseMsTotal += Date.now() - cloudT0;
   }
 }
 
@@ -490,6 +505,7 @@ export async function poseAtTime(
    * coordinates exactly as before.
    */
   roi?: { x: number; y: number; w: number; h: number } | null,
+  opts: { deviceOnly?: boolean } = {},
 ): Promise<PoseFrame | null> {
   try {
     let uri: string; let width: number | undefined; let height: number | undefined;
@@ -517,7 +533,7 @@ export async function poseAtTime(
         cropUri = manip.uri;
       } catch { cropUri = null; /* crop is an optimisation; fall back to the full frame */ }
     }
-    const frame = await analyzePoseFromUri(cropUri ?? uri, timeMs);
+    const frame = await analyzePoseFromUri(cropUri ?? uri, timeMs, opts);
     /**
      * 2026-09-17 — DELETE THE TEMPS. Every other extractor in this repo already does, with the
      * lesson attached (swing/ballPath "don't leak the crop temp", clubPath, ballDeparture,
@@ -1497,11 +1513,19 @@ export async function extractPoseFramesFromVideo(
   let nativeEngine = false;
   try { nativeEngine = (require('./mediaPipePoseService') as { isMediaPipeAvailable: () => boolean }).isMediaPipeAvailable(); } catch { /* cloud only */ }
   const sweepStartedAt = Date.now();
+  const cloudMsAtStart = cloudPoseMs();
+  /**
+   * 2026-10-17 (review of F2a) — the 15s is the ON-DEVICE engine's time. Counting cloud fallbacks (5-15s a
+   * frame) stopped the sweep after one missed address frame and its nudges, before takeaway or top were
+   * ever tried, and a golfer who walked in late lost his body read. At least two anchors must have come
+   * back empty too, and while nobody has been seen a nudge asks the device only.
+   */
+  const deviceMs = () => Date.now() - sweepStartedAt - (cloudPoseMs() - cloudMsAtStart);
   let nobodyInFrame = false;
   try {
     for (const { key, timeMs, source } of sampleTimes) {
       if (shouldAbort?.()) { console.log('[pose] aborted between frames — playback active'); break; }
-      if (frames.length === 0 && (missedPositions.length >= NOBODY_ANCHORS || (nativeEngine && Date.now() - sweepStartedAt > NOBODY_MS))) {
+      if (frames.length === 0 && (missedPositions.length >= NOBODY_ANCHORS || (nativeEngine && missedPositions.length >= 2 && deviceMs() > NOBODY_MS))) {
         nobodyInFrame = true;
         break;
       }
@@ -1529,7 +1553,7 @@ export async function extractPoseFramesFromVideo(
         for (const nudge of [-60, 60]) {
           if (shouldAbort?.()) break;
           const t = Math.max(0, Math.round(timeMs + nudge));
-          f = await poseAtTime(workUri, t, key);
+          f = await poseAtTime(workUri, t, key, null, { deviceOnly: nativeEngine && frames.length === 0 });
           if (f) { nudgedPositions.push(`${key}${nudge > 0 ? '+' : ''}${nudge}`); break; }
         }
         /**

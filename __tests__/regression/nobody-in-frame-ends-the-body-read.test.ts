@@ -60,3 +60,33 @@ describe('nobody in frame ends the body read', () => {
     expect(frames?.length ?? 0).toBeGreaterThan(5);
   });
 });
+
+/**
+ * 2026-10-17 (review of F2a) — the 15s stop counted CLOUD time. Every frame the device finds nobody in
+ * falls through to the cloud proxy, 5-15s each: one missed address frame and its two nudges passed 15s
+ * and the sweep stopped before takeaway or top were tried — a golfer who walked in late lost his read.
+ */
+describe('a slow cloud does not end the search for a golfer who walks in late', () => {
+  let clock = 1_000_000;
+  let nowSpy: jest.SpyInstance;
+  beforeEach(() => {
+    clock = 1_000_000;
+    nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => clock);
+    // Each cloud call takes 8s and finds nobody.
+    (global as unknown as { fetch: jest.Mock }).fetch = jest.fn(async () => { clock += 8_000; return { ok: true, json: async () => ({ data: null, configured: true }) }; });
+  });
+  afterEach(() => nowSpy.mockRestore());
+
+  it('address and takeaway are empty (cloud asked, slowly); the body at the top is still found', async () => {
+    mockBodyFrom = 1500;   // in place by the top (1916ms), not at address (192) or takeaway (958)
+    const frames = await extractPoseFramesFromVideo('file:///rec-3832.mp4', 3832, true, { startMs: 0, endMs: 3832 }, null);
+    expect(frames?.length ?? 0).toBeGreaterThan(3);
+  });
+
+  it('while nobody has been seen, a nudge asks the device only', async () => {
+    mockBodyFrom = 1500;
+    await extractPoseFramesFromVideo('file:///rec-3832.mp4', 3832, true, { startMs: 0, endMs: 3832 }, null);
+    // address and takeaway each asked the cloud once; their four nudges did not
+    expect((global as unknown as { fetch: jest.Mock }).fetch.mock.calls.length).toBe(2);
+  });
+});
