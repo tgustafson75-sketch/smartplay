@@ -18,6 +18,7 @@ import fx3870 from '../fixtures/clubtrack-3870.json';
 import fx6b from '../fixtures/clubtrack-6b.json';
 import wrists3870 from '../fixtures/locate-3870-wrists.json';
 import lily from '../fixtures/lily-4075-wrists.json';
+import range1017 from '../fixtures/range-1017-arcs.json';
 
 const mockArcCalls: { startMs: number; endMs: number; impactMs: number | null }[] = [];
 jest.mock('../../services/swing/clubPath', () => ({
@@ -94,6 +95,42 @@ describe('the arc window is the one swing: address → finish', () => {
     expect(w.startMs).toBeLessThanOrEqual(l.groundTruthMs.address);
     expect(w.endMs).toBeGreaterThanOrEqual(l.groundTruthMs.finish);
     expect(w.endMs - w.startMs).toBeLessThan(4000);
+  });
+});
+
+/**
+ * Tim's two range clips from 10-17 (the app's own 4s segments, the shipped tracker run on them, MediaPipe
+ * poses as the body read samples them). On both, what made the arc "crazy" was the tracker following the
+ * club AFTER the finish — lowered toward the balls and the basket while he turned to watch — inside the
+ * 1.5s the segment keeps after impact. Bounded to the swing, that trail is gone and the swing is all there.
+ */
+describe("Tim's 10-17 range clips: the arc stops at the finish", () => {
+  type Sw = { label: string; segment: { startMs: number; endMs: number }; impactMsFromFrames: number; finishMsFromFrames: number;
+    poses: { t: number; kp: Record<string, [number, number, number]> }[]; trackedOnSegment: [number, number, number][] };
+  const swings = (range1017 as unknown as { swings: Sw[] }).swings;
+  it.each(swings.map((s) => [s.label, s] as const))('%s', (_l, s) => {
+    const frames = s.poses.map((p) => ({ timestampMs: p.t, keypoints: Object.entries(p.kp).map(([name, [x, y, score]]) => ({ name, x, y, score })) }));
+    const a = anchorsFromPoseFrames(frames as never);
+    const w = oneSwingArcWindow(s.segment, frames as never, a?.impactMs ?? null, false);
+    expect(w.bounded).toBe(true);
+    expect(w.startMs).toBeLessThan(s.impactMsFromFrames - 500);           // the backswing is in it
+    expect(w.endMs).toBeGreaterThanOrEqual(s.finishMsFromFrames);         // and the finish
+    expect(w.endMs - w.startMs).toBeLessThan(2500);
+    // what the segment tracked after the finish (the club lowered by the balls / basket) is outside now
+    const trail = s.trackedOnSegment.filter(([t]) => t > w.endMs + 120);
+    expect(trail.length).toBeGreaterThanOrEqual(10);
+    expect(trail.every(([t]) => t > s.finishMsFromFrames)).toBe(true);
+  });
+
+  it('a practice swing and the real swing in one window: the arc is the real one', () => {
+    const p = (range1017 as unknown as { practiceThenReal: { practiceTopMs: number; realImpactMs: number; poses: { t: number; kp: Record<string, [number, number, number]> }[] } }).practiceThenReal;
+    const frames = p.poses.map((q) => ({ timestampMs: q.t, keypoints: Object.entries(q.kp).map(([name, [x, y, score]]) => ({ name, x, y, score })) }));
+    const a = anchorsFromPoseFrames(frames as never);
+    const w = oneSwingArcWindow({ startMs: 22000, endMs: 30000 }, frames as never, a?.impactMs ?? null, false);
+    expect(w.bounded).toBe(true);
+    expect(w.startMs).toBeGreaterThan(p.practiceTopMs + 1000);
+    expect(w.startMs).toBeLessThan(p.realImpactMs - 600);
+    expect(w.endMs).toBeGreaterThan(p.realImpactMs + 300);
   });
 });
 
