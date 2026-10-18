@@ -5481,3 +5481,13 @@ not seed a coarse/cached fix · SmartVision shows the resolver's number when GPS
 - Dead duplicate `useCaddieTabMic.processAudioUri`/`speakDeadEnd` (unreachable; pinned by two sim guards).
 - (later, 10-16) Swing-review fixes hardened through two more review rounds (S1e–S1k): waggle/stray-frame no longer hijacks impact or the arc anchor; real swings not rejected; Issue chip is per-review; heard-strike one answer. Sweep vs pre-10-15 code: no case worse. Gates: jest 627/6922, sim 1077/1077.
 
+
+## Day 145 — 2026-10-17 — range log + clips: read veto, 60s window, swings 2/3 on tap, arcs (branch only, NOT pushed)
+**Shipped today (branch swing-review-2026-10-10, on top of origin/main 81039e35 / OTA a3e3e755):**
+- F1a: a slow link no longer vetoes the swing read (sent unless proven offline). F2a: a 60s live capture is located, not read whole; stale runs retired; traces per session.
+- S2b: each arc covers its own swing only (address→finish); fixes the 7-iron zig-zag + extra loops.
+- S2c: swings 2/3 analysed on tap, one at a time. S2d/S2k/S2l: no "-21%" weight text anywhere (verdict, chip, lesson, trend, share, prompt).
+- S2e/S2k: only a newer capture retires an older one; the retired body read waits ≤75s then decodes. S2f–S2i: nobody-in-frame, slow-verdict age, Analyze-at-moment in SmartMotion (−2.5/+3s), window overrun.
+- S2j: REVERTED the practice-swing drop rule (could delete real swings) and the arc jump filter (could delete impact).
+**Gates:** tsc, lint, jest, sim 1077/1077 at 4502f930.
+**Open:** hybrid clip's swing at 27.5s missed by the range locator (deterministic; a half-step second pass catches it but adds a practice swing; Tim to decide). Practice swings → demote, never delete (needs clips with audio). Ship on Tim's go.
