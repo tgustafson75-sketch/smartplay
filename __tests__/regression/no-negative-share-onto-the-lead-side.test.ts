@@ -44,3 +44,25 @@ describe('no weight read, at any value, speaks a negative share "onto" anything'
     expect(signedWeightDisplay(-21)).toBe('21% back');
   });
 });
+
+/** Review of S2d — the other authors of weight text: the verdict line, the coach lesson, the share card, the read prompt. */
+describe('every other weight author says a negative share as "back"', () => {
+  const src = (rel: string) => require('fs').readFileSync(require('path').join(__dirname, '..', '..', rel), 'utf8') as string;
+  it('poseAnalysisApi verdict lines', () => {
+    // (built inside computeBiomechanics, which needs full pose frames — source check)
+    const s = src('services/poseAnalysisApi.ts');
+    expect(s).toMatch(/weightShiftPct < 0 \? `Weight moved back \$\{-weightShiftPct\}% toward your trail side/);
+    expect(s).toMatch(/finishWeightPct < 0 \? `Weight moved back \$\{-finishWeightPct\}% toward your trail side at the finish/);
+  });
+  it('the coach lesson never speaks "-21% on your lead side"', () => {
+    const { composeFocusFeedback } = require('../../services/coachLesson');
+    const r = composeFocusFeedback('weight_shift', bio({ weightShiftPct: -21 }));
+    expect(r.line).not.toMatch(/-\d+%/);
+    expect(r.line).toMatch(/back toward your trail side/);
+    expect(r.metricLabel).toBe('21% back');
+  });
+  it('the share card and the read prompt', () => {
+    expect(src('app/swinglab/swing/[swing_id].tsx')).toMatch(/label: 'Weight shift', value: signedWeightDisplay\(/);
+    expect(src('api/swing-analysis.ts')).toMatch(/m\.weight_shift_pct < 0 \? `weight moved BACK/);
+  });
+});

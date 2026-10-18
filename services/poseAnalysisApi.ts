@@ -1033,7 +1033,8 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
       `Shoulder turn ${shoulderTurnDeg}° — solid coil.`,
     weightShift:
       weightShiftPct == null ? null :
-      weightShiftPct < 10 ? `Weight shift ${weightShiftPct >= 0 ? '+' : ''}${weightShiftPct}% — hanging back; thin/topped contact risk.` :
+      weightShiftPct < 0 ? `Weight moved back ${-weightShiftPct}% toward your trail side — hanging back; thin/topped contact risk.` :
+      weightShiftPct < 10 ? `Weight shift +${weightShiftPct}% — hanging back; thin/topped contact risk.` :
       weightShiftPct > 50 ? `Weight shift +${weightShiftPct}% — over-shifting forward.` :
       `Weight shift +${weightShiftPct}% — solid forward move.`,
     posture:
@@ -1062,7 +1063,8 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
       `Lead arm extending (${leadArmImpactDeg}°) through impact — good release.`,
     finish:
       finishWeightPct == null ? null :
-      finishWeightPct < 15 ? `Finish weight ${finishWeightPct >= 0 ? '+' : ''}${finishWeightPct}% — not getting through; you're falling back instead of finishing balanced over your lead side.` :
+      finishWeightPct < 0 ? `Weight moved back ${-finishWeightPct}% toward your trail side at the finish — not getting through; you're falling back instead of finishing balanced over your lead side.` :
+      finishWeightPct < 15 ? `Finish weight +${finishWeightPct}% — not getting through; you're falling back instead of finishing balanced over your lead side.` :
       `Balanced finish — weight +${finishWeightPct}% onto the lead side.`,
     sway:
       swayNorm == null ? null :

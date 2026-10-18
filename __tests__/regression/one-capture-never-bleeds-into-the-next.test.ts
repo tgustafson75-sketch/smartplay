@@ -13,7 +13,7 @@
  */
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useIssueLogStore } from '../../store/issueLogStore';
-import { runSwingAnalysis } from '../../services/swing/orchestrator/uploadRun';
+import { runSwingAnalysis, RETIRED_POSE_WAIT_MS } from '../../services/swing/orchestrator/uploadRun';
 import { requestShotDetail, shotRunKey, swingRunKey } from '../../services/swing/orchestrator/shotDetail';
 import { _clearRunsForTest, liveRun } from '../../services/swing/orchestrator/engine';
 import { traceStep, _resetAnalysisTracesForTest } from '../../services/analysisTrace';
@@ -142,6 +142,28 @@ describe('retirement never strands a verdict, and only a newer capture retires',
     expect(mockPoseCalls).toContain(C.clip);     // its body read ran (after B's)
     expect(status(C.id)).toBe('ok');             // and named the verdict — not 'failed' for good
     expect(useSwingSessionStore.getState().sessionHistory.find((s) => s.id === C.id)?.primary_issue?.issue_id).toBe('no_clear_fault');
+  });
+
+  // Review of S2e: the wait for the newer capture's body read had no cap of its own — a newer read that
+  // never answers held this one for the whole doubled budget, and then failed it on 'budget'.
+  it("a retired swing's body read waits for the newer one at most RETIRED_POSE_WAIT_MS, then decodes anyway", async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      mockHoldReads.add(C.id);
+      void runSwingAnalysis(C.id);
+      await jest.advanceTimersByTimeAsync(10);
+      void runSwingAnalysis(N.id);               // newer capture: its body read never answers
+      await jest.advanceTimersByTimeAsync(20);
+      mockSlowReads[C.id]();
+      await jest.advanceTimersByTimeAsync(RETIRED_POSE_WAIT_MS - 1_000);
+      expect(mockPoseCalls).not.toContain(C.clip);   // still waiting its turn
+      await jest.advanceTimersByTimeAsync(2_000);
+      expect(mockPoseCalls).toContain(C.clip);       // the cap passed: it decodes
+      await jest.advanceTimersByTimeAsync(50);
+      expect(status(C.id)).toBe('ok');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('re-analysing an older swing does not retire the capture just recorded', async () => {

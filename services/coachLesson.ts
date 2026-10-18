@@ -112,6 +112,8 @@ export function composeFocusFeedback(focusId: string, a: SwingBiomechanics): Foc
       const v = a.weightShiftPct;
       if (v == null) return unclear('weight shift');
       const label = `${round(v)}% lead at impact`;
+      // A negative share is weight that moved back toward the trail side — never "-21% on your lead side".
+      if (v < 0) return { verdict: 'refine', line: `Your weight moved back toward your trail side through the ball. Feel like you finish with your belt buckle over your front foot. Let's run it back.`, metricLabel: `${round(-v)}% back` };
       if (v >= 55) return { verdict: 'good', line: `Nice — ${round(v)}% of your weight was on your lead side at impact. That's a solid shift. Same feel again.`, metricLabel: label };
       if (v < 45) return { verdict: 'refine', line: `You stayed back a touch — ${round(v)}% on your lead side. Feel like you finish with your belt buckle over your front foot. Let's run it back.`, metricLabel: label };
       return { verdict: 'refine', line: `Getting there — ${round(v)}% forward. Push a little more into that lead foot through the ball. Again.`, metricLabel: label };

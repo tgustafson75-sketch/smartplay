@@ -1237,7 +1237,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (typeof m.backswing_ms === 'number' && typeof m.downswing_ms === 'number') mParts.push(`backswing ${Math.round(m.backswing_ms)}ms, downswing ${Math.round(m.downswing_ms)}ms`);
       if (typeof m.shoulder_tilt_deg === 'number') mParts.push(`shoulder tilt ${Math.round(m.shoulder_tilt_deg)}°`);
       if (typeof m.spine_delta_deg === 'number') mParts.push(`spine-angle change ${Math.round(m.spine_delta_deg)}°`);
-      if (typeof m.weight_shift_pct === 'number') mParts.push(`weight shift ${Math.round(m.weight_shift_pct)}% to lead side`);
+      if (typeof m.weight_shift_pct === 'number') mParts.push(m.weight_shift_pct < 0 ? `weight moved BACK ${Math.round(-m.weight_shift_pct)}% toward the trail side (not onto the lead side)` : `weight shift ${Math.round(m.weight_shift_pct)}% to lead side`);
       if (typeof m.launch_divergence_deg === 'number' && typeof m.launch_side === 'string') mParts.push(`ball launched ${m.launch_divergence_deg}° ${m.launch_side} of the aim line (camera-tracked)`);
       if (typeof m.strike_peak_db === 'number' && m.strike_peak_db !== 0) mParts.push(`acoustic strike energy ${Math.round(m.strike_peak_db)}dB`);
       if (mParts.length > 0) {

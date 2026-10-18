@@ -189,3 +189,13 @@ describe('both review screens ask for the swing on screen', () => {
     expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/if \(!\(selectedShotIdx > 0 \|\| showSkeleton \|\| traceAsked\)\) return;[\s\S]{0,400}return requestShotDetail\(swing_id, selShot\.id/);
   });
 });
+
+/** Review of S2c — SmartMotion's no-launch write-back rebuilds the row; a measured row must stay marked measured. */
+describe('the no-launch write-back keeps a measured row measured', () => {
+  it('passes the previous source through', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app/swinglab/smartmotion.tsx'), 'utf8') as string;
+    const at = src.indexOf("contact_read: 'fat', // a no-launch duff");
+    expect(at).toBeGreaterThan(0);
+    expect(src.slice(at, at + 400)).toMatch(/\.\.\.\(prev\?\.source \? \{ source: prev\.source \} : \{\}\),\s*\}\);/);
+  });
+});

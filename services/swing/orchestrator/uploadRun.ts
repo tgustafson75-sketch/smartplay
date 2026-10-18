@@ -28,6 +28,11 @@ import type { ReadExtras } from '../../videoUpload';
 type In = { sessionId: string; extras?: ReadExtras; retired: number };
 /** A newer capture has retired this swing's body read since its run began. */
 const retired = (input: In) => retirementOf(input.sessionId) !== input.retired;
+/**
+ * How long a retired swing's body read waits for the newer capture's before decoding anyway (review of
+ * S2e): a newer read that never answers must not hold this one until its budget fails it.
+ */
+export const RETIRED_POSE_WAIT_MS = 75_000;
 type ReadResult = Awaited<ReturnType<typeof import('../../videoUpload')._runPhaseKRead>>;
 
 /** A single-swing upload this long or longer is a range session — the read carves its swings. */
@@ -212,7 +217,7 @@ function stages(): StageDef<In>[] {
       id: 'pose',
       after: ['read'],
       // A retired swing's body read first waits for the newer capture's (below): room for both.
-      budgetMs: ({ input }) => (retired(input) ? 260_000 : 130_000),
+      budgetMs: ({ input }) => (retired(input) ? 130_000 + RETIRED_POSE_WAIT_MS : 130_000),
       /**
        * Not once a newer capture has retired this swing — its body read would decode through that one's —
        * UNLESS the read left this swing without a verdict. 2026-10-17 (review of F2a): capture A retired
@@ -227,7 +232,11 @@ function stages(): StageDef<In>[] {
         const newer = retired(input) ? retiredBy(input.sessionId) : null;
         if (newer) {
           (require('../../analysisTrace') as typeof import('../../analysisTrace')).traceStep('body read waits for the newer capture', {}, { sessionId: input.sessionId });
-          await whenStageSettled(swingRunKey(newer), 'pose', signal);
+          let cap: ReturnType<typeof setTimeout> | undefined;
+          await Promise.race([
+            whenStageSettled(swingRunKey(newer), 'pose', signal),
+            new Promise<void>((resolve) => { cap = setTimeout(resolve, RETIRED_POSE_WAIT_MS); }),
+          ]).finally(() => clearTimeout(cap));
           if (signal.aborted) return null;
         }
         // The arc comes from the silent pass: the free on-device tracker, never the paid vision model

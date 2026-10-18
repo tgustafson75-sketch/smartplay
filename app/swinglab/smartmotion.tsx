@@ -2028,6 +2028,8 @@ export default function SmartMotion() {
                   fault_frame_index: prev?.fault_frame_index ?? -1,
                   visual_reference_path: prev?.visual_reference_path ?? null,
                   contact_read: 'fat', // a no-launch duff is a heavy/fat strike for the per-shot row + club confidence
+                  // a row named from the body read stays marked as measured (low confidence) through this write
+                  ...(prev?.source ? { source: prev.source } : {}),
                 });
               }
               // Session headline: only UPGRADE a non-contact issue to the duff verdict

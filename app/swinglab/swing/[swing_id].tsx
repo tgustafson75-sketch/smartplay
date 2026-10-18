@@ -70,7 +70,7 @@ import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/S
 import { calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
-import { buildPoseSwingRead } from '../../../services/swing/poseSwingRead';
+import { buildPoseSwingRead, signedWeightDisplay } from '../../../services/swing/poseSwingRead';
 import { BodyAnalysisRow, TempoBar, deriveBodyItems, type BodyItem, SwingBreakdownCard } from '../../../components/smartmotion/SmartMotionHud';
 import type { SwingAnalysis } from '../../../services/poseDetection';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
@@ -1469,7 +1469,7 @@ export default function SwingDetail() {
       // Only measurements that EXIST travel. An absent tempo is absent on the page, never filled in.
       const metrics: { label: string; value: string }[] = [];
       if (typeof activeBiomech?.shoulderTiltDeg === 'number') metrics.push({ label: 'Shoulder tilt', value: `${Math.round(activeBiomech.shoulderTiltDeg)}°` });
-      if (typeof activeBiomech?.weightShiftPct === 'number') metrics.push({ label: 'Weight shift', value: `${Math.round(activeBiomech.weightShiftPct)}%` });
+      if (typeof activeBiomech?.weightShiftPct === 'number') metrics.push({ label: 'Weight shift', value: signedWeightDisplay(Math.round(activeBiomech.weightShiftPct)) });
       if (session?.club) metrics.push({ label: 'Club', value: String(session.club) });
 
       const r = await createSwingShare({
