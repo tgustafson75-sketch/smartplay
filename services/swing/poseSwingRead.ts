@@ -173,6 +173,8 @@ export const SWAY_STRENGTH_MAX = 0.15;
 export const SWAY_NEEDS_WORK_MIN = 0.22;
 export const WEIGHT_SHIFT_STRENGTH_MIN = 12;
 export const WEIGHT_SHIFT_SOLID_MIN = 4;
+/** A weight share as shown: "+12%" toward the lead side, "21% back" toward the trail side — never "-21%". */
+export const signedWeightDisplay = (w: number): string => (w < 0 ? `${-w}% back` : w === 0 ? '0%' : `+${w}%`);
 
 export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTempo | null): PoseSwingRead {
   const dims: DimensionRead[] = [];
@@ -206,14 +208,25 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
 
   // Weight shift: positive % = weight moving to the lead side at impact (good). Near-zero / negative
   // = hanging back / reverse pivot.
+  // 2026-10-17 (Tim's range screenshot: "Weight only -21% onto the lead side") — a negative share is not an
+  // amount "onto the lead side"; it is weight that moved BACK, toward the trail side, and is said so.
   if (bio?.weightShiftPct != null) {
-    const w = bio.weightShiftPct;
-    const display = `${w > 0 ? '+' : ''}${Math.round(w)}%`;
+    const w = Math.round(bio.weightShiftPct);
+    const display = signedWeightDisplay(w);
     if (w >= WEIGHT_SHIFT_STRENGTH_MIN) dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: 'strength', note: `${display} onto your lead side at impact — you're driving through the ball.` });
     else if (w >= WEIGHT_SHIFT_SOLID_MIN) dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: 'solid', note: `${display} forward — moving in the right direction; a touch more drive adds compression.` });
     else {
-      dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: w < -4 ? 'needs_work' : 'watch', note: `${display} — your weight is hanging back through impact instead of driving forward.` });
-      if (trust(conf.weightShift)) faults.push(fault('reverse_pivot', 'Weight hanging back', sev(w < -8 ? 2 : w < 0 ? 1 : 0), `Weight shift ${display} at impact — you're not getting onto your lead side (power + strike suffer).`));
+      dims.push({
+        key: 'weight_shift', label: 'Weight shift', display, verdict: w < -4 ? 'needs_work' : 'watch',
+        note: w < 0
+          ? `Your weight moved ${-w}% of your stance back toward your trail side by impact — hanging back instead of driving forward.`
+          : w === 0 ? 'No weight moved toward your lead side by impact — hanging back instead of driving forward.'
+          : `Only ${display} toward your lead side by impact — your weight is hanging back instead of driving forward.`,
+      });
+      if (trust(conf.weightShift)) faults.push(fault('reverse_pivot', 'Weight hanging back', sev(w < -8 ? 2 : w < 0 ? 1 : 0), w < 0
+        ? `Your weight moved back toward your trail side by impact (${-w}% of your stance) — you're not getting onto your lead side, and power and strike suffer.`
+        : w === 0 ? 'Your weight never moved toward your lead side by impact — power and strike suffer.'
+        : `Weight shift only ${display} at impact — you're not getting onto your lead side (power + strike suffer).`));
     }
   }
 
@@ -270,12 +283,21 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
 
   // FINISH — weight through onto the lead side at the finish frame; low = falling back / incomplete.
   if (bio?.finishWeightPct != null) {
-    const w = bio.finishWeightPct;
-    const display = `${w >= 0 ? '+' : ''}${w}%`;
+    const w = Math.round(bio.finishWeightPct);
+    const display = signedWeightDisplay(w);
     if (w >= 25) dims.push({ key: 'finish', label: 'Finish', display, verdict: 'strength', note: `Balanced finish — weight ${display} onto the lead side, fully through.` });
     else {
-      dims.push({ key: 'finish', label: 'Finish', display, verdict: w < 5 ? 'needs_work' : 'watch', note: `Weight ${display} at the finish — not getting all the way through.` });
-      if (trust(conf.finish)) faults.push(fault('poor_finish', 'Incomplete finish', sev(w < 0 ? 2 : w < 10 ? 1 : 0), `Weight only ${display} onto the lead side at the finish — you're falling back instead of finishing balanced and rotated over your lead leg.`));
+      dims.push({
+        key: 'finish', label: 'Finish', display, verdict: w < 5 ? 'needs_work' : 'watch',
+        note: w < 0
+          ? `Your weight finished ${-w}% of your stance back toward your trail side — not getting through.`
+          : w === 0 ? 'No weight moved toward the lead side at the finish — not getting through.'
+          : `Weight ${display} toward the lead side at the finish — not getting all the way through.`,
+      });
+      if (trust(conf.finish)) faults.push(fault('poor_finish', 'Incomplete finish', sev(w < 0 ? 2 : w < 10 ? 1 : 0), w < 0
+        ? `Your weight moved back toward your trail side at the finish (${-w}% of your stance) — you're falling back instead of finishing balanced and rotated over your lead leg.`
+        : w === 0 ? "Your weight never moved onto your lead side at the finish — you're falling back instead of finishing balanced and rotated over your lead leg."
+        : `Weight only ${display} onto the lead side at the finish — you're falling back instead of finishing balanced and rotated over your lead leg.`));
     }
   }
 
