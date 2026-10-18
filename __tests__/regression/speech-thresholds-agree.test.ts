@@ -42,7 +42,7 @@ describe('the mic never opens for speech the capture will not recognise', () => 
   it('ending a sentence stays easier than starting one', () => {
     // A trailing-off final word must not clip the capture, so the silence margin sits below the
     // speech margin. If these ever cross, captures end mid-word.
-    expect(num(voice, 'SILENCE_MARGIN_DB')).toBeLessThanOrEqual(num(voice, 'SPEECH_MARGIN_DB'));
+    expect(num(voice, 'NOISY_SILENCE_MARGIN_DB')).toBeLessThanOrEqual(num(voice, 'SPEECH_MARGIN_DB'));
   });
 
   it('both are still adaptive against a measured noise floor, not absolute', () => {

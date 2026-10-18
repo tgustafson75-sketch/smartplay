@@ -49,7 +49,12 @@ const FLOOR_RISE_RUN = 5;
 export const SPEECH_DETECT_DB = -30;
 export const SILENCE_DB = -40;
 const SPEECH_MARGIN_DB = 14;
-const SILENCE_MARGIN_DB = 12;
+/**
+ * In noise the floor is the wind's own level (seeded at it), so 12 dB over it cut a normal phrase ~10 dB
+ * over steady wind after a louder opening (final review, 10-17). 6 keeps it (fuzzed: phrases 6-7 dB over the wind survive); the speech-relative
+ * bar is what separates a loud voice from gusts.
+ */
+const NOISY_SILENCE_MARGIN_DB = 6;
 /** Ambient above this is real noise: the fixed -40 "still talking" bar no longer separates a voice. */
 export const NOISY_FLOOR_DB = -40;
 /** In noise, a reading this far under the player's speaking level is not them still talking. */
@@ -100,7 +105,13 @@ export function createEndpointer(cfg: EndpointerConfig): Endpointer {
 
   return {
     push(meteringDb, nowMs) {
-      if (typeof meteringDb !== 'number' || !Number.isFinite(meteringDb) || meteringDb <= -100) return;
+      if (typeof meteringDb !== 'number' || !Number.isFinite(meteringDb)) return;
+      /**
+       * -160 is "no signal": a cold mic's warm-up, but also what Android reports for a quiet moment
+       * (getMaxAmplitude 0). It is never the seed, but after that it counts as the quietest reading — or a
+       * floor seeded at a voice that talked at mic-open could never come back down (final review, 10-17).
+       */
+      if (meteringDb <= -100 && samples === 0) return;
       const m = Math.max(meteringDb, NOISE_FLOOR_MIN_DB);
       if (samples === 0) floor = m;
       samples += 1;
@@ -117,7 +128,7 @@ export function createEndpointer(cfg: EndpointerConfig): Endpointer {
       }
       let still = SILENCE_DB;
       if (noisy()) {
-        still = Math.max(SILENCE_DB, floor + SILENCE_MARGIN_DB);
+        still = Math.max(SILENCE_DB, floor + NOISY_SILENCE_MARGIN_DB);
         const sp = speechDb();
         if (sp != null) still = Math.max(still, sp - SPEECH_DROP_DB);
       }

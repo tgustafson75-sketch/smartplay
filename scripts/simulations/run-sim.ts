@@ -3580,7 +3580,7 @@ check('Voice VAD: adaptive noise floor lifts the silence bar in noise, unchanged
       /createEndpointer\(\{ shortMs: SILENCE_TIMEOUT_SHORT_MS, longMs: SILENCE_TIMEOUT_LONG_MS, speechLongMs: SPEECH_LONG_MS \}\)/.test(vs) &&
       /createEndpointer\(\{ shortMs: MIC_SILENCE_SHORT_MS, longMs: MIC_SILENCE_LONG_MS, speechLongMs: MIC_SPEECH_LONG_MS \}\)/.test(tab) &&
       /if \(m > Math\.max\(SPEECH_DETECT_DB, floor \+ SPEECH_MARGIN_DB\)\) \{/.test(ep) &&
-      /still = Math\.max\(SILENCE_DB, floor \+ SILENCE_MARGIN_DB\)/.test(ep) &&
+      /still = Math\.max\(SILENCE_DB, floor \+ NOISY_SILENCE_MARGIN_DB\)/.test(ep) &&
       /noiseFloorRef\.current \+= \(m - noiseFloorRef\.current\) \* a/.test(hook) &&
       /const effThresholdDb = Math\.max\(SPEECH_THRESHOLD_DB, noiseFloorRef\.current \+ SPEECH_MARGIN_DB\)/.test(hook);
     // Behavioral (traces live in __tests__/regression/wind-does-not-hold-the-mic-open): the endpointer's

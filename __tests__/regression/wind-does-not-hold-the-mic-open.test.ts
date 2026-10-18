@@ -224,3 +224,21 @@ describe('final review — never before the player finished', () => {
   });
 });
 
+
+/** Re-review of ac20bfae (10-17). */
+describe('re-review — a normal phrase over steady wind, and -160 quiet readings', () => {
+  const sp = (n: number, hi: number, lo: number) => Array.from({ length: n }, (_, i) => (i % 4 === 3 ? lo : hi - (i % 3)));
+  const rep = (n: number, v: number) => Array(n).fill(v) as number[];
+  it.each([[-38], [-33], [-29]])('wind %i: a louder opening, then 4s of normal talk ~10 dB over the wind — not cut', (w) => {
+    const trace = [...rep(10, w), ...sp(10, w + 18, w + 12), ...rep(5, w), ...sp(40, w + 10, w + 4), ...rep(60, w)];
+    const out = run(trace);
+    expect(out === null || out.atMs >= 6_400).toBe(true);
+  });
+  it('a phone that reports -160 when quiet, talking at mic-open: ended, not held to the cap', () => {
+    const words = Array.from({ length: 30 }, (_, i) => (i % 4 === 3 ? -160 : -20 - (i % 3)));
+    const out = run([...words, ...rep(60, -160)])!;
+    expect(out).not.toBeNull();
+    expect(out.atMs).toBeGreaterThan(2_900);
+    expect(out.atMs).toBeLessThanOrEqual(2_900 + 2_600);
+  });
+});
