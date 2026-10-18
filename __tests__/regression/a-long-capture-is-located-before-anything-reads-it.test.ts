@@ -138,13 +138,13 @@ describe('the way out of "no swing found" is the moment the player points at', (
     await tick(20);
     expect(s1().analysis_error).toMatch(NO_SWING);
     mockOrder.length = 0;
-    // what SmartMotion's analyzeAtMoment saves: PRE 2.5s / POST 1.5s around the scrubbed 41.7s, the player's own
-    useSwingSessionStore.getState().setShotClipBoundaries(s1().id, s1().shots[0].id, 39.2, 43.2, 41.7, 'user');
+    // what SmartMotion's analyzeAtMoment saves: 2.5s before / 3s after the scrubbed 41.7s (the library's numbers), the player's own
+    useSwingSessionStore.getState().setShotClipBoundaries(s1().id, s1().shots[0].id, 39.2, 44.7, 41.7, 'user');
     await runSwingAnalysis(s1().id, { angle: 'face_on' });
     await tick(30);
     expect(mockOrder).toEqual(['read', 'pose']);
-    expect(mockReadWindows.at(-1)).toEqual([39.2, 43.2]);
-    expect(mockPoseWindows.at(-1)).toEqual({ startMs: 39_200, endMs: 43_200 });
+    expect(mockReadWindows.at(-1)).toEqual([39.2, 44.7]);
+    expect(mockPoseWindows.at(-1)).toEqual({ startMs: 39_200, endMs: 44_700 });
     expect(s1().analysis_status).toBe('ok');
   });
 
@@ -152,6 +152,8 @@ describe('the way out of "no swing found" is the moment the player points at', (
     // Source check: the screen has no render harness (camera, 7,000 lines).
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app/swinglab/smartmotion.tsx'), 'utf8') as string;
     expect(src).toMatch(/if \(analysisError === NO_SWING_FOUND && segments\.length <= 1\) \{[\s\S]{0,900}onPress=\{analyzeAtMoment\}/);
+    expect(src).toMatch(/Math\.min\(videoDurationMs, center \+ 3000\) : center \+ 3000;/);
+    expect(src).toMatch(/startMs: Math\.max\(0, center - 2500\)/);
     expect(src).toMatch(/void runAnalysis\(clipUri, seg, \{ reuseSessionId: ingestedSessionIdRef\.current, userMomentSec: center \/ 1000 \}\);/);
     expect(src).toMatch(/userMoment \?\? \(heard \? segment\.strikeMs \/ 1000 : undefined\), userMoment != null \? 'user' : 'auto'\);/);
   });

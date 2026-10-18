@@ -8,14 +8,12 @@
  * (1) The arc window was the shot's stored 4s segment (2.5s before a located impact, 1.5s after),
  *     narrowed only past 6s. Whatever else the hands did in those four seconds was tracked as club.
  *     It is now the ONE swing: address → finish from the body read's own hand-height anchors.
- * (2) Nothing judged the tracked path's continuity: a head that jumps out to the ball and straight back
- *     inside a frame or two was drawn. A clubhead cannot reverse like that; those points are dropped.
+ * (A reversal filter on the tracked points was tried and removed the same day: on the range clips it
+ *  removed nothing, and it could delete the real impact frame.)
  */
 import { oneSwingArcWindow, ARC_BEFORE_ADDRESS_MS, ARC_AFTER_FINISH_MS } from '../../services/swing/clubPathWindow';
-import { dropImpossibleReversals, classifyTrackedArc } from '../../services/swing/clubArcGate';
 import { anchorsFromPoseFrames } from '../../services/swing/poseMotion';
 import fx3870 from '../fixtures/clubtrack-3870.json';
-import fx6b from '../fixtures/clubtrack-6b.json';
 import wrists3870 from '../fixtures/locate-3870-wrists.json';
 import lily from '../fixtures/lily-4075-wrists.json';
 import range1017 from '../fixtures/range-1017-arcs.json';
@@ -159,42 +157,5 @@ describe('the one arc runner tracks only that swing', () => {
     expect(mockArcCalls).toHaveLength(1);
     expect(mockArcCalls[0].startMs).toBeGreaterThan(15400);
     expect(mockArcCalls[0].endMs).toBeLessThanOrEqual(17400 + ARC_AFTER_FINISH_MS);
-  });
-});
-
-describe('a tracked head that jumps out and straight back is not the club', () => {
-  const smooth = Array.from({ length: 12 }, (_, i) => ({ x: 0.3 + i * 0.03, y: 0.4 + i * 0.02, tMs: i * 33 }));
-
-  it('a one-frame excursion to the ball and back is dropped', () => {
-    const pts = [...smooth.slice(0, 6), { x: 0.85, y: 0.82, tMs: 6 * 33 }, ...smooth.slice(7)];
-    const out = dropImpossibleReversals(pts);
-    expect(out.find((p) => p.x === 0.85)).toBeUndefined();
-    expect(out).toHaveLength(11);
-  });
-
-  it('a two-frame excursion is dropped too', () => {
-    const pts = [...smooth.slice(0, 5), { x: 0.85, y: 0.82, tMs: 5 * 33 }, { x: 0.86, y: 0.8, tMs: 6 * 33 }, ...smooth.slice(7)];
-    const out = dropImpossibleReversals(pts);
-    expect(out.some((p) => p.x >= 0.85)).toBe(false);
-  });
-
-  it('a zig-zag that alternates between two places every frame keeps only one of them', () => {
-    const zz = Array.from({ length: 8 }, (_, i) => (i % 2 === 0 ? { x: 0.45, y: 0.7, tMs: i * 33 } : { x: 0.6, y: 0.6, tMs: i * 33 }));
-    const out = dropImpossibleReversals(zz);
-    expect(out.length).toBeLessThanOrEqual(5);
-  });
-
-  it("Tim's validated tracked arcs (3870, swing6b) lose nothing — top → impact → finish is not a reversal", () => {
-    for (const fx of [fx3870, fx6b]) {
-      const pts = (fx.points as { t: number; x: number; y: number }[]).map((p) => ({ x: p.x, y: p.y, tMs: p.t }));
-      const out = dropImpossibleReversals(pts);
-      expect(out).toHaveLength(pts.length);
-      expect(classifyTrackedArc(out).rejection).toBeNull();
-    }
-  });
-
-  it('a slow reversal (the club turning at the top over 300ms) is kept', () => {
-    const top = [{ x: 0.3, y: 0.3, tMs: 0 }, { x: 0.2, y: 0.2, tMs: 150 }, { x: 0.3, y: 0.31, tMs: 300 }];
-    expect(dropImpossibleReversals(top)).toHaveLength(3);
   });
 });

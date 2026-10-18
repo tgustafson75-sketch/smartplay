@@ -143,19 +143,6 @@ describe('detectClubPath tracks first, and only falls back when it cannot', () =
     expect(r?.frameW).toBe(1440);
   });
 
-  // 2026-10-17 (Tim's range screenshot: the arc zig-zagging out to the ball and back) — the tracked path
-  // loses a one-frame excursion before the gate counts it.
-  it('a tracked point that jumps out to the ball and straight back is not drawn', async () => {
-    const pts = [...fx3870.points];
-    const at = pts.findIndex((p) => p.t === 6633);
-    pts.splice(at, 1, { t: 6633, x: 0.9, y: 0.86, score: 0.5 });   // the ball, for one frame, mid-backswing
-    mockTrack.mockResolvedValue({ frames: 81, vw: 1440, vh: 1920, clubLen: 0.18, points: pts });
-    const { detectClubPath } = await import('../../services/swing/clubPath');
-    const r = await detectClubPath({ videoUri: 'file:///c.mp4', startMs: 5600, endMs: 8300, poseFrames: [0, 1, 2, 3, 4].map((k) => pose(5600 + k * 600)) as never });
-    expect(r?.points.length).toBeGreaterThanOrEqual(24);
-    expect(r?.points.some((p) => p.x > 0.85)).toBe(false);
-  });
-
   it('an honest "too few" from the tracker is the answer — not a second opinion from the model', async () => {
     mockTrack.mockResolvedValue({ frames: 81, vw: 1440, vh: 1920, clubLen: 0, points: fx3870.points.slice(0, 1) });
     mockFetch.mockClear();

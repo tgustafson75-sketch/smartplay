@@ -92,7 +92,7 @@ import { deriveSwingTempo, type PoseFrame, type SwingBiomechanics, type SwingTem
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
-import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, splitPracticeSwings, PRE_STRIKE_MS, POST_STRIKE_MS, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { NO_SWING_FOUND } from '../../services/swing/orchestrator/uploadRun';
 import { requestShotDetail, shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
 import { CONTACT_ISSUE_IDS, mishitFromFeel, noLaunchIssue } from '../../services/swing/contactVerdict';
@@ -307,28 +307,6 @@ function clubPathSpec(a: SwingAnalysis | null): MetricSpec {
 // the next club/angle/drill answer.
 const SESSION_DONE_FOCUS =
   'choosing whether to go again. If the player says YES / "another round" / "run it back" / "again" / "let\'s go", ACT immediately — call record_swing to start the next set (their last set auto-saves; same club and setup) and tell them it\'s rolling. If they name a club, angle, or drill ("driver full swing", "face on", "nine iron easy"), ACT immediately — call configure_drill and/or set_angle to set it up, then record_swing so it\'s rolling. Do NOT merely offer, do NOT ask again — they are standing at the ball, not at the phone.';
-
-/**
- * 2026-10-17 (Tim: "It's counting the practice swings sometimes as a swing") — the segments without the
- * practice swings (swingSegmentation.splitPracticeSwings decides), said in the log and on screen so a
- * skipped swing is never a silent loss.
- */
-function withoutPracticeSwings(
-  segs: SwingSegment[], strikes: readonly DetectedStrike[], videoSwings: readonly { timeSec: number }[],
-): SwingSegment[] {
-  const { swings, practice } = splitPracticeSwings(segs, strikes, videoSwings);
-  if (practice.length === 0) return segs;
-  try {
-    const { useIssueLogStore } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
-    useIssueLogStore.getState().addAppEvent('practice_swings_skipped', {
-      practice_s: practice.map((p) => Math.round(p.strikeMs / 100) / 10), kept: swings.length, strikes: strikes.length,
-    }, 'diag');
-  } catch { /* observation */ }
-  try {
-    useToastStore.getState().show(`Skipped ${practice.length === 1 ? 'a practice swing' : `${practice.length} practice swings`} — no strike heard`);
-  } catch { /* a courtesy */ }
-  return swings;
-}
 
 // deriveBodyItems now lives in components/smartmotion/SmartMotionHud.tsx (imported below) so the
 // live capture screen and the swing-detail screen build the BODY ANALYSIS row from one source.
@@ -3877,9 +3855,6 @@ export default function SmartMotion() {
             // vision empty — best effort, rebounds filtered (segmentation audit #3)
             segsForAnalysis = segmentsFromStrikes(filterReboundStrikes(acousticStrikes), durMs);
           }
-          // 2026-10-17 — a swing the camera found that struck nothing, in a capture where the mic plainly
-          // hears this player's strikes, is a practice swing: not counted, not read (swingSegmentation).
-          segsForAnalysis = withoutPracticeSwings(segsForAnalysis, filterReboundStrikes(acousticStrikes), swings);
           /**
            * 2026-08-18 — the confidence gate, now AFTER both signals have been fused (see the note
            * above). A segment is dropped only when neither the camera nor the microphone could
@@ -3995,11 +3970,9 @@ export default function SmartMotion() {
               // branch already merges via correlateStrikesWithVideo — do the same here
               // whenever we actually heard something.
               const acousticCount = segsForAnalysis.length;
-              // 2026-10-17 — a video swing that struck nothing, when the mic hears this player, is a
-              // practice swing (swingSegmentation.splitPracticeSwings) — this branch recovers MISSED strikes.
-              const fused = withoutPracticeSwings(acousticStrikes.length > 0
+              const fused = acousticStrikes.length > 0
                 ? correlateStrikesWithVideo(acousticStrikes, swings, durMs)
-                : segmentsFromVideoSwings(swings, durMs), acousticStrikes, swings);
+                : segmentsFromVideoSwings(swings, durMs);
               // The gate, now AFTER fusion (see the note above). A heard strike upgrades its video
               // swing out of 'low' (swingSegmentation.ts:227), so what remains unconfirmed here is a
               // motion neither signal could tie to a ball.
@@ -4460,13 +4433,13 @@ export default function SmartMotion() {
    * a swing in says "scrub to your swing and tap Analyze the swing at that moment" — and this screen had no
    * such button; its refresh re-read the same whole-clip segment and failed the same way. As in the library:
    * the moment the player scrubbed to is their declared impact, the window is a swing around it
-   * (swingSegmentation PRE/POST), saved as the player's own ('user') so nothing re-finds it.
+   * (−2.5 s / +3 s, the library's numbers), saved as the player's own ('user') so nothing re-finds it.
    */
   const analyzeAtMoment = useCallback(() => {
     if (!clipUri || phase === 'analyzing' || !ingestedSessionIdRef.current || segmentsRef.current.length > 1) return;
     const center = Math.max(0, Math.round(playbackMs));
-    const end = videoDurationMs && videoDurationMs > 0 ? Math.min(videoDurationMs, center + POST_STRIKE_MS) : center + POST_STRIKE_MS;
-    const seg: SwingSegment = { index: 1, strikeMs: center, startMs: Math.max(0, center - PRE_STRIKE_MS), endMs: end, confidence: 'low', peakDb: 0, confirmed: true };
+    const end = videoDurationMs && videoDurationMs > 0 ? Math.min(videoDurationMs, center + 3000) : center + 3000;
+    const seg: SwingSegment = { index: 1, strikeMs: center, startMs: Math.max(0, center - 2500), endMs: end, confidence: 'low', peakDb: 0, confirmed: true };
     segmentsRef.current = [seg];
     setSegments([seg]);
     setSelectedSwing(0);
