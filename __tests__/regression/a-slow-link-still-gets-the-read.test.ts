@@ -155,3 +155,45 @@ describe('the range split: the dead-host guard aborts only on a proven offline v
     expect(fb[0].details).toMatchObject({ reason: 'aborted', cause: 'dead_host', net: 'offline' });
   });
 });
+
+/**
+ * 2026-10-17 — Tim's hybrid range clip (1792271500056): real swings at ~16.4s, 27.5s, 40.8s. The 24-frame
+ * pass answered [17, 41.2] on every run (27.5s fell between frames 26.59s and 29.02s); the same frames
+ * half a step later answered [10.9, 27.8, 42.3]. These are the production API's real answers. Both passes
+ * are asked and merged, so no real swing is lost.
+ */
+describe('the range locate asks twice, half a step apart, and keeps every swing either pass saw', () => {
+  it('hybrid clip: 16.4 / 27.5 / 40.8 all come back', async () => {
+    mockVerdict = 'internet_ok';
+    const bodies: number[][] = [];
+    (globalThis as { fetch?: unknown }).fetch = jest.fn(async (url: string, init?: { body?: string }) => {
+      if (/\/api\/health/.test(url)) return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+      const times = (JSON.parse(init!.body!) as { frames: { time_sec: number }[] }).frames.map((f) => f.time_sec);
+      bodies.push(times);
+      const half = times[0] > 3.5;   // the half-step pass starts ~1.2s after the first
+      const swings = half ? [10.9, 27.8, 42.3] : [17, 41.2];
+      return { ok: true, status: 200, json: async () => ({ swings: swings.map((t) => ({ time_sec: t, confidence: 'high' })) }), text: async () => '' };
+    });
+    const found = await locateSwings('file:///range-hybrid.mp4', 59_851);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1][0] - bodies[0][0]).toBeGreaterThan(1);       // shifted, not the same frames twice
+    expect(bodies[1].every((t) => t <= 59.851)).toBe(true);
+    const near = (t: number) => found.some((f) => Math.abs(f.timeSec - t) < 1.6);
+    expect(near(16.4) && near(27.5) && near(40.8)).toBe(true);
+    expect(found.filter((f) => f.timeSec > 39 && f.timeSec < 44)).toHaveLength(1);   // 41.2 + 42.3 are one swing
+  });
+
+  it('one pass failing still returns the other pass\'s swings', async () => {
+    mockVerdict = 'internet_ok';
+    let n = 0;
+    (globalThis as { fetch?: unknown }).fetch = jest.fn(async (url: string) => {
+      if (/\/api\/health/.test(url)) return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+      n += 1;
+      if (n === 1) return { ok: false, status: 502, json: async () => ({}), text: async () => '' };
+      return { ok: true, status: 200, json: async () => ({ swings: [{ time_sec: 20, confidence: 'high' }] }), text: async () => '' };
+    });
+    const found = await locateSwings('file:///range-one-fails.mp4', 60_000);
+    expect(found.map((f) => f.timeSec)).toEqual([20]);
+  });
+});
+

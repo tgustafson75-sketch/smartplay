@@ -922,10 +922,12 @@ function armDeadHostGuard(
 
 // Small, many, evenly-spread frames tagged with timestamps. Cheap to extract
 // and tiny on the wire — used only to ASK "where's the swing", not to read it.
-async function extractCoarseFrames(clipUri: string, durationMs: number, count: number): Promise<Frame[]> {
+async function extractCoarseFrames(clipUri: string, durationMs: number, count: number, offsetSteps = 0): Promise<Frame[]> {
   const lo = 0.04;
   const hi = 0.97;
-  const fracs = Array.from({ length: count }, (_, i) => lo + ((hi - lo) * i) / (count - 1));
+  // offsetSteps shifts every frame by that fraction of the spacing (the range locate's half-step pass).
+  const step = (hi - lo) / (count - 1);
+  const fracs = Array.from({ length: count }, (_, i) => lo + step * (i + offsetSteps)).filter((f) => f <= 0.99);
   // 2026-07-29 (Tim — "60s to analyze, then a failure"). This used to fire ALL `count` (10-16)
   // getThumbnailAsync calls CONCURRENTLY via Promise.all. On a 4K phone clip that spins up 16 native
   // MediaMetadataRetriever instances decoding the SAME file at once — the documented slow/OOM/SIGSEGV
@@ -1211,6 +1213,16 @@ async function locateSwingsImpl(
     logLocate('range_locate_fallback', { reason: 'coarse_frames_failed', extracted: frames.length, wanted: count });
     return [];
   }
+  /**
+   * 2026-10-17 (Tim's range clip 1792271500056, hybrid) — A SECOND, HALF-STEP PASS. At ~2.5s spacing a
+   * whole swing (~1.5s) can fall between two frames: the real swing at 27.5s sat between frames at 26.59s
+   * and 29.02s and the model missed it on every run. The same 24 frames shifted half a step caught it.
+   * Each pass alone misses something, so both are asked (in parallel, separate calls — 30 frames in one
+   * call made the model return []) and their answers merged. Audio cannot be the backstop: wind at the
+   * range defeats it (Tim, 10-17). Cost: a second vision call per range clip; a practice swing the second
+   * pass sees is counted, which beats losing a real swing.
+   */
+  const framesHalf = await extractCoarseFrames(clipUri, durationMs, count, 0.5);
   // 2026-08-24 — same cause-naming as the single locate. This is the live_cage path, which is where
   // Tim's 7:30-7:34 PM aborts came from, so the ambiguity mattered here too.
   const rangeStartedAt = Date.now();
@@ -1227,28 +1239,41 @@ async function locateSwingsImpl(
       rangeAbortCause = rangeAbortCause ?? 'dead_host';
       rangeProbeVerdict = probes;
     });
-    let res: Response;
-    try {
-      res = await fetch(`${apiUrl}/api/swing-analysis`, {
+    const ask = async (set: Frame[]) => {
+      const r = await fetch(`${apiUrl}/api/swing-analysis`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'locate_swings',
-          frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
+          frames: set.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
         }),
         signal: rangeCtl.signal,
       });
+      if (!r.ok) return { status: r.status, swings: null };
+      const d = (await r.json()) as { swings?: { time_sec?: number; confidence?: string }[] };
+      return { status: r.status, swings: d.swings ?? [] };
+    };
+    let settled: PromiseSettledResult<{ status: number; swings: { time_sec?: number; confidence?: string }[] | null }>[];
+    try {
+      settled = await Promise.all([ask(frames), ...(framesHalf.length >= 3 ? [ask(framesHalf)] : [])].map((p) => p.then(
+        (value) => ({ status: 'fulfilled' as const, value }),
+        (reason: unknown) => ({ status: 'rejected' as const, reason }),
+      )));
     } finally {
       clearTimeout(rangeTimer);
       rangeGuard.cancel();
     }
-    if (!res.ok) {
-      logLocate('range_locate_fallback', { reason: 'server_' + res.status, coarse_frames: frames.length });
+    const answered = settled.flatMap((r) => (r.status === 'fulfilled' && r.value.swings ? [r.value.swings] : []));
+    if (answered.length === 0) {
+      // Neither pass answered: an abort/exception is reported below, a server status here.
+      const rejected = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (rejected) throw rejected.reason;
+      const st = settled.find((r) => r.status === 'fulfilled');
+      logLocate('range_locate_fallback', { reason: 'server_' + (st && st.status === 'fulfilled' ? st.value.status : 0), coarse_frames: frames.length });
       return [];
     }
-    const data = (await res.json()) as { swings?: { time_sec?: number; confidence?: string }[] };
     const durSec = durationMs / 1000;
-    const raw = (data.swings ?? [])
+    const raw = answered.flat()
       .filter((s) => typeof s.time_sec === 'number' && Number.isFinite(s.time_sec))
       .map((s) => ({
         timeSec: Math.max(0, Math.min(durSec, s.time_sec as number)),
@@ -1269,7 +1294,7 @@ async function locateSwingsImpl(
     // clip can't merge distinct swings; the floor still scales up from 2.5s for genuinely sparse frames.
     const frameIntervalSec = durationMs / 1000 / Math.max(1, frames.length);
     const out = mergeSwingDetections(raw, Math.min(3.5, Math.max(2.5, frameIntervalSec)));
-    logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length });
+    logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length, passes: answered.length, half_frames: framesHalf.length });
     return out;
   } catch (e) {
     // 2026-08-24 — name the cause, same as the single locate. `dead_host` with both probes false is
