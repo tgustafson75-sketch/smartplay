@@ -42,6 +42,7 @@
  * surface can call it during render without a guard.
  */
 
+import { signedWeightDisplay } from '../swing/poseSwingRead';
 import {
   clubCategoryFor,
   getBenchmarkMetric,
@@ -298,7 +299,8 @@ export function computeSwingMetricTrend(input: {
     const inBandNow = bandScoreSeries[last] === 100;
     const label = LABELS[key];
     const unit = UNITS[key];
-    const shown = `${rawSeries[last]}${unit}`;
+    // A negative weight share is weight that moved back toward the trail side — said as "6% back", never "-6%".
+    const shown = key === 'weightShiftPct' ? signedWeightDisplay(Math.round(rawSeries[last])) : `${rawSeries[last]}${unit}`;
 
     /**
      * The same sentence structure whichever way it went. A rail that gets chatty about progress and

@@ -40,7 +40,7 @@ import type { ThemeColors } from '../../theme/tokens';
 // Type-only (erased at compile — no runtime dep on the heavy pose/analysis modules).
 import type { SwingAnalysis } from '../../services/poseDetection';
 import type { SwingBiomechanics } from '../../services/poseAnalysisApi';
-import { SWAY_STRENGTH_MAX, SWAY_NEEDS_WORK_MIN, WEIGHT_SHIFT_SOLID_MIN } from '../../services/swing/poseSwingRead';
+import { SWAY_STRENGTH_MAX, SWAY_NEEDS_WORK_MIN, WEIGHT_SHIFT_SOLID_MIN, signedWeightDisplay } from '../../services/swing/poseSwingRead';
 import { useTranslation } from 'react-i18next';
 
 // 2026-06-12 — acoustic status badges (Tim's set) for the pickup card header.
@@ -376,7 +376,8 @@ export function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics 
   const conf = bio?.metric_confidence as Record<string, number | undefined> | undefined;
   const hedge = (k: string): string => (conf && typeof conf[k] === 'number' && conf[k]! < 0.5 ? '~' : '');
   const degVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${Math.round(v)}°`);
-  const pctVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${Math.round(v)}%`);
+  // A negative share is weight that moved back: "21% back", never "-21%".
+  const pctVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${signedWeightDisplay(Math.round(v))}`);
   return [
     { key: 'sway', label: 'Sway', tone: sway, icon: 'swap-horizontal-outline', image: ICON_BIOMECH.sway },
     { key: 'tilt', label: 'Tilt', tone: tilt, icon: 'contract-outline', image: ICON_BIOMECH.tilt, value: degVal(bio?.shoulderTiltDeg, 'shoulderTilt') },

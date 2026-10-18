@@ -66,3 +66,16 @@ describe('every other weight author says a negative share as "back"', () => {
     expect(src('api/swing-analysis.ts')).toMatch(/m\.weight_shift_pct < 0 \? `weight moved BACK/);
   });
 });
+
+/** Review of S2k — the two most visible weight numbers: the Body Analysis chip and the weekly trend Kevin reads. */
+describe('the Weight chip and the swing trend say "back", not a minus sign', () => {
+  // (the Body Analysis Weight chip: __tests__/components/weight-chip-says-back.test.tsx — it needs the component project)
+  it('the weekly trend line (dashboard + measuredSwingBlock)', () => {
+    const { computeSwingMetricTrend } = require('../../services/practice/swingMetricTrend');
+    const NOW = 1_700_000_000_000, WEEK = 7 * 24 * 3600 * 1000;
+    const swings = Array.from({ length: 8 }, (_, w) => ({ date: NOW - (8 - w) * WEEK + WEEK / 2, club: '7 iron', metrics: { weightShiftPct: 20 - w * 4 } }));
+    const out = JSON.stringify(computeSwingMetricTrend({ swings, nowMs: NOW }));
+    expect(out).toMatch(/weight/i);
+    expect(out).not.toMatch(/-\d+%/);
+  });
+});

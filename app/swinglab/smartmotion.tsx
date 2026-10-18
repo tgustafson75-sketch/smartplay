@@ -6383,7 +6383,7 @@ export default function SmartMotion() {
           if (partial.length === 0) {
             // A capture with no swing found: the way out is the moment the player points at.
             if (analysisError === NO_SWING_FOUND && segments.length <= 1) {
-              const sec = Math.floor(playbackMs / 1000);
+              const sec = Math.round(playbackMs / 1000);   // the scrubber's clock (ReviewScrubber rounds)
               return (
                 <View style={{ gap: 10 }}>
                   <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError}</Text>
