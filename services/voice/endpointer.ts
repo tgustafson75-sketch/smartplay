@@ -13,14 +13,23 @@
  *   that time the wind itself was "still talking", so it ran to its 8s cap.
  * Either way the clip was mostly wind, and Whisper heard nothing in it.
  *
- * What changes (quiet rooms keep the absolute floors exactly as before: -30 to count as speech, -40 to
- * count as still talking):
- * - The floor is seeded from the first reading and rises only on readings within 6 dB of it, so the
- *   player's voice (even a quiet one) cannot inflate it, and it can rise faster (8% a reading).
- * - In noise (floor above NOISY_FLOOR_DB), "still talking" is also judged against the player's own
- *   voice: a reading must come within SPEECH_DROP_DB of their speaking level. Wind that the absolute and
- *   ambient thresholds cannot tell from a voice falls under that.
- * - In noise, a listen ends at NOISY_CAP_MS whatever the meter says. A golfer's question is ~3-5s.
+ * THREE QUESTIONS, deliberately kept apart (the first cut of this merged them, and the review showed a
+ * soft voice in wind going unheard and its recording discarded):
+ * - HEARD (`heardSpeech`): did a person speak at all? Callers use it to decide transcribe-vs-discard,
+ *   so it is never stricter than either old path: above -30 (the tab's old bar) OR floor + 14 (the
+ *   earbud path's). Erring here costs a transcription, never a question.
+ * - ARMED: may a silence end the capture now? As strict as the earbud path always was —
+ *   above max(-30, floor + 14) — so a gust or a blip before the player speaks cannot start the clock.
+ * - STILL TALKING: below NOISY_FLOOR_DB the old fixed -40 (a quiet or mildly noisy room ends exactly as
+ *   the tab always did). Above it — real noise, where ambient itself crosses -40 — the reading must
+ *   clear floor + 12 AND come within SPEECH_DROP_DB of the player's own speaking level.
+ *
+ * The floor: seeded from the first reading, falls fast toward anything quieter, creeps up only on
+ * readings near it — and JUMPS to sustained noise: when even the quietest tenth of the last 2.5s sits
+ * 6 dB over it. Speech always dips toward ambient between words inside 2.5s; wind that settled does not.
+ *
+ * The noisy cap: in noise, a listen ends NOISY_CAP_AFTER_SPEECH_MS after the player was first heard,
+ * whatever the meter says — a golfer's question is ~3-5s, and this leaves room for a long answer.
  *
  * Pure: readings in, a decision out. Both call sites feed it from their metering callback and ask it
  * from their poll loop.
@@ -30,17 +39,20 @@ const NOISE_FLOOR_MIN_DB = -60;
 const FLOOR_FALL_ALPHA = 0.15;
 const FLOOR_RISE_ALPHA = 0.08;
 const FLOOR_RISE_BAND_DB = 6;
-/** Absolute bars (unchanged from both call sites): never more sensitive than these. */
+/** Sustained-noise jump: the window, and how far its quietest tenth must sit over the floor. */
+const SUSTAIN_WINDOW = 25;
+const SUSTAIN_OVER_DB = 6;
+/** Absolute bars (unchanged from both call sites). */
 export const SPEECH_DETECT_DB = -30;
 export const SILENCE_DB = -40;
 const SPEECH_MARGIN_DB = 14;
 const SILENCE_MARGIN_DB = 12;
-/** Ambient above this is a noisy place (a quiet phone mic sits around -55). */
-export const NOISY_FLOOR_DB = -46;
+/** Ambient above this is real noise: the fixed -40 "still talking" bar no longer separates a voice. */
+export const NOISY_FLOOR_DB = -40;
 /** In noise, a reading this far under the player's speaking level is not them still talking. */
-export const SPEECH_DROP_DB = 12;
-/** In noise, the longest a listen runs. */
-export const NOISY_CAP_MS = 8_000;
+export const SPEECH_DROP_DB = 15;
+/** In noise, the longest a listen runs after the player was first heard. */
+export const NOISY_CAP_AFTER_SPEECH_MS = 10_000;
 
 export type EndReason = 'silence' | 'noisy_cap';
 
@@ -60,9 +72,9 @@ export interface Endpointer {
   markLoud(nowMs: number): void;
   /** Should the capture end now? `startedAt` is when the mic opened. */
   shouldStop(nowMs: number, startedAt: number): EndReason | null;
+  /** A person spoke (transcribe, don't discard). */
   readonly heardSpeech: boolean;
-  readonly speechStartAt: number;
-  snapshot(): { floorDb: number | null; speechDb: number | null; noisy: boolean; samples: number };
+  snapshot(): { floorDb: number | null; speechDb: number | null; noisy: boolean; armed: boolean; samples: number };
 }
 
 const pct = (xs: number[], p: number): number => {
@@ -74,9 +86,12 @@ export function createEndpointer(cfg: EndpointerConfig): Endpointer {
   let samples = 0;
   let floor = -50;
   let heard = false;
-  let speechStart = 0;
+  let heardAt = 0;
+  let armed = false;
+  let armedAt = 0;
   let lastLoud = 0;
   const voice: number[] = [];
+  const recent: number[] = [];
   const noisy = () => samples > 0 && floor > NOISY_FLOOR_DB;
   const speechDb = () => (voice.length >= 3 ? pct(voice, 0.8) : null);
 
@@ -86,37 +101,42 @@ export function createEndpointer(cfg: EndpointerConfig): Endpointer {
       const m = Math.max(meteringDb, NOISE_FLOOR_MIN_DB);
       if (samples === 0) floor = m;
       samples += 1;
-      const effSpeech = Math.max(SPEECH_DETECT_DB, floor + SPEECH_MARGIN_DB);
-      const effSilence = Math.max(SILENCE_DB, floor + SILENCE_MARGIN_DB);
-      // The floor learns from ambient only: it falls toward anything quieter, and rises only on readings
-      // close to it (within FLOOR_RISE_BAND_DB) — a voice, even a quiet one, never pulls it up.
+      recent.push(m);
+      if (recent.length > SUSTAIN_WINDOW) recent.shift();
       if (m < floor) floor += (m - floor) * FLOOR_FALL_ALPHA;
       else if (m <= floor + FLOOR_RISE_BAND_DB) floor += (m - floor) * FLOOR_RISE_ALPHA;
-      if (m > effSpeech) {
-        if (!heard) speechStart = nowMs;
-        heard = true;
+      if (recent.length >= SUSTAIN_WINDOW) {
+        const quiet = pct(recent, 0.1);
+        if (quiet > floor + SUSTAIN_OVER_DB) floor = quiet;
+      }
+
+      if (!heard && (m > SPEECH_DETECT_DB || m > floor + SPEECH_MARGIN_DB)) { heard = true; heardAt = nowMs; }
+      if (m > Math.max(SPEECH_DETECT_DB, floor + SPEECH_MARGIN_DB)) {
+        if (!armed) { armed = true; armedAt = nowMs; }
         voice.push(m);
         if (voice.length > 60) voice.shift();
       }
-      let still = effSilence;
-      const sp = speechDb();
-      if (noisy() && sp != null) still = Math.max(still, sp - SPEECH_DROP_DB);
+      let still = SILENCE_DB;
+      if (noisy()) {
+        still = Math.max(SILENCE_DB, floor + SILENCE_MARGIN_DB);
+        const sp = speechDb();
+        if (sp != null) still = Math.max(still, sp - SPEECH_DROP_DB);
+      }
       if (m > still) lastLoud = nowMs;
     },
     markLoud(nowMs) { lastLoud = nowMs; },
-    shouldStop(nowMs, startedAt) {
-      if (heard) {
-        const window = nowMs - speechStart >= cfg.speechLongMs ? cfg.longMs : cfg.shortMs;
+    shouldStop(nowMs, _startedAt) {
+      if (armed) {
+        const window = nowMs - armedAt >= cfg.speechLongMs ? cfg.longMs : cfg.shortMs;
         if (nowMs - lastLoud >= window) return 'silence';
       }
-      if (noisy() && nowMs - startedAt >= NOISY_CAP_MS) return 'noisy_cap';
+      if (noisy() && heard && nowMs - heardAt >= NOISY_CAP_AFTER_SPEECH_MS) return 'noisy_cap';
       return null;
     },
     get heardSpeech() { return heard; },
-    get speechStartAt() { return speechStart; },
     snapshot() {
       const sp = speechDb();
-      return { floorDb: samples > 0 ? Math.round(floor) : null, speechDb: sp == null ? null : Math.round(sp), noisy: noisy(), samples };
+      return { floorDb: samples > 0 ? Math.round(floor) : null, speechDb: sp == null ? null : Math.round(sp), noisy: noisy(), armed, samples };
     },
   };
 }

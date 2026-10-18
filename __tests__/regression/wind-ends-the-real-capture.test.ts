@@ -93,4 +93,12 @@ describe('the earbud / text-box capture ends in wind', () => {
     expect(mockRec.stoppedAt).toBeGreaterThan(2_500 + 2_100);
     expect(mockRec.stoppedAt).toBeLessThan(2_500 + 2_900);
   });
+
+  it('a soft voice (-24) in steady wind (-35) counts as heard, so a tap submits it rather than discarding', async () => {
+    const r = rng(10);
+    const flat = (ms: number, level: number) => Array.from({ length: ms / 100 }, () => level + (r() * 4 - 2));
+    const trace = [...flat(500, -35), ...speech(3000, -24, -35, r), ...flat(10_000, -35)];
+    const out = await drive(trace, 8_000);
+    expect(out.heardSpeech).toBe(true);
+  });
 });

@@ -4,7 +4,7 @@
  * and the earbud / text-box mic (voiceService). Behavioural: metering traces at 100ms, the way both
  * call sites feed it. Noise is a seeded pseudo-random walk, so the traces are fixed.
  */
-import { createEndpointer, NOISY_CAP_MS, type EndReason } from '../../services/voice/endpointer';
+import { createEndpointer, NOISY_CAP_AFTER_SPEECH_MS, type EndReason } from '../../services/voice/endpointer';
 
 const CFG = { shortMs: 1500, longMs: 2400, speechLongMs: 700 };
 
@@ -87,11 +87,12 @@ describe('noise — the wind no longer holds the mic open', () => {
     expect(out.atMs).toBeLessThanOrEqual(3100 + 3500);
   });
 
-  it('wind as loud as the voice: the noisy cap ends it at 8s, not 18s', () => {
+  it('wind as loud as the voice: the noisy cap ends it ~10s after he was first heard, never before he finished', () => {
     const r = rng(6);
     const trace = [...wind(500, -25, -6, r), ...speech(2500, -8, -24, r), ...wind(16_000, -25, -6, r)];
     const out = run(trace)!;
-    expect(out.atMs).toBeLessThanOrEqual(NOISY_CAP_MS);
+    expect(out.atMs).toBeGreaterThan(3000);
+    expect(out.atMs).toBeLessThanOrEqual(NOISY_CAP_AFTER_SPEECH_MS + 600);
   });
 
   it('in noise, a 1s pause mid-question does not cut the player off', () => {
@@ -107,6 +108,50 @@ describe('noise — the wind no longer holds the mic open', () => {
     expect(out.reason).toBe('silence');
     expect(out.atMs).toBeGreaterThan(2500);
     expect(out.atMs).toBeLessThanOrEqual(2500 + 3000);
+  });
+});
+
+/** Review of the first cut (10-17): the cases it got wrong. */
+describe('review cases — never cut off, never discard, never stuck open', () => {
+  it('a soft voice (-24) in steady wind (-35) is HEARD (transcribed, not discarded) and still bounded', () => {
+    const r = rng(10);
+    const trace = [...flat(500, -35, 2, r), ...speech(3000, -24, -35, r), ...flat(14_000, -35, 2, r)];
+    const ep = createEndpointer(CFG);
+    trace.slice(0, 20).forEach((m, i) => ep.push(m, i * 100));
+    expect(ep.heardSpeech).toBe(true);
+    const out = run(trace)!;
+    expect(out.atMs).toBeGreaterThan(3500);
+    expect(out.atMs).toBeLessThanOrEqual(500 + NOISY_CAP_AFTER_SPEECH_MS + 200);
+  });
+
+  it('a gust after a lull (mic opens at -55, wind settles at -28): not stuck open', () => {
+    const r = rng(11);
+    const trace = [...flat(1000, -55, 2, r), ...flat(16_000, -28, 2, r)];
+    expect(run(trace)!.atMs).toBeLessThanOrEqual(8000);
+  });
+
+  it('one -60 warm-up reading, then wind at -32: not stuck open', () => {
+    const r = rng(12);
+    const trace = [-60, ...flat(17_000, -32, 2, r)];
+    expect(run(trace)!.atMs).toBeLessThanOrEqual(NOISY_CAP_AFTER_SPEECH_MS + 300);
+  });
+
+  it('a 14s "describe your game" answer in a TV room (-44) is not cut at 8s', () => {
+    const r = rng(13);
+    const trace = [...flat(500, -44, 2, r), ...speech(14_000, -18, -44, r), ...flat(4000, -44, 2, r)];
+    expect(run(trace)!.atMs).toBeGreaterThan(14_500);
+  });
+
+  it('in a car (-43), a quieter tail (-27, head turned) is not cut off', () => {
+    const r = rng(14);
+    const trace = [...flat(300, -43, 2, r), ...speech(3000, -15, -43, r), ...speech(3000, -27, -43, r), ...flat(4000, -43, 2, r)];
+    expect(run(trace)!.atMs).toBeGreaterThan(6300);
+  });
+
+  it('a quiet-room blip before he speaks does not start the silence clock', () => {
+    const r = rng(15);
+    const trace = [...flat(500, -55, 2, r), -38, -38, ...flat(2500, -55, 2, r), ...speech(2000, -20, -50, r), ...flat(4000, -55, 2, r)];
+    expect(run(trace)!.atMs).toBeGreaterThan(500 + 200 + 2500 + 2000);
   });
 });
 
@@ -130,7 +175,11 @@ describe('the Caddie tab ends on the same detector', () => {
     expect(src).toMatch(/meterTracker\.update\(metering\);\s*ep\.push\(metering, Date\.now\(\)\);/);
     expect(src).toMatch(/const endWhy = ep\.shouldStop\(Date\.now\(\), recordStartedAt\);\s*if \(endWhy\) \{[\s\S]{0,300}void hardStopAndProcess\(\)/);
   });
-  it('no fixed -40 / -30 endpoint is left beside it', () => {
-    expect(src).not.toMatch(/MIC_SILENCE_DB_THRESHOLD|MIC_SPEECH_DETECT_DB|micLastLoudAt/);
+  it('"spoke" keeps the tab\'s own -30 bar (the stand-down and handover depend on it), not the endpointer\'s', () => {
+    expect(src).toMatch(/ep\.push\(metering, Date\.now\(\)\);[\s\S]{0,400}if \(metering > -30 && !micHasSpoken\) \{/);
+    expect(src).not.toMatch(/ep\.heardSpeech/);
+  });
+  it('no fixed -40 endpoint is left beside it', () => {
+    expect(src).not.toMatch(/MIC_SILENCE_DB_THRESHOLD|micLastLoudAt/);
   });
 });

@@ -3084,7 +3084,9 @@ export const useVoiceCaddie = ({
           if (typeof metering !== 'number') return;
           meterTracker.update(metering);
           ep.push(metering, Date.now());
-          if (ep.heardSpeech && !micHasSpoken) {
+          // "Spoke" keeps this path's own bar (it decides the no-speech stand-down and submit-vs-discard
+          // on handover): a voice over -30 dBFS, as before. The endpointer only decides WHEN to stop.
+          if (metering > -30 && !micHasSpoken) {
             micHasSpoken = true;
             micHasSpokenRef.current = true;
           }
