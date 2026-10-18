@@ -124,16 +124,33 @@ describe('review cases — never cut off, never discard, never stuck open', () =
     expect(out.atMs).toBeLessThanOrEqual(500 + NOISY_CAP_AFTER_SPEECH_MS + 200);
   });
 
-  it('a gust after a lull (mic opens at -55, wind settles at -28): not stuck open', () => {
+  /**
+   * Wind that ARRIVES after the mic opened in a lull is left to the callers' caps (earbud 8s, tab 18s —
+   * what the tab always did). By level alone it is indistinguishable from continuous talking, and a
+   * floor that jumped to it cut a 14s answer off at 5s (see the car traces below). Never cut off first.
+   */
+  it('a gust after a lull (mic opens at -55, wind settles at -28): the endpointer does not guess', () => {
     const r = rng(11);
-    const trace = [...flat(1000, -55, 2, r), ...flat(16_000, -28, 2, r)];
-    expect(run(trace)!.atMs).toBeLessThanOrEqual(8000);
+    expect(run([...flat(1000, -55, 2, r), ...flat(16_000, -28, 2, r)])).toBeNull();
   });
 
-  it('one -60 warm-up reading, then wind at -32: not stuck open', () => {
-    const r = rng(12);
-    const trace = [-60, ...flat(17_000, -32, 2, r)];
-    expect(run(trace)!.atMs).toBeLessThanOrEqual(NOISY_CAP_AFTER_SPEECH_MS + 300);
+  /** The reviewer's traces (100ms; speech = hi, hi-1, hi-2, then a dip to lo). */
+  const rv = (n: number, hi: number, lo: number) => Array.from({ length: n }, (_, i) => (i % 4 === 3 ? lo : hi - (i % 3)));
+  const rep = (n: number, v: number) => Array(n).fill(v) as number[];
+  it('a 14s continuous answer in a car (-44, dips only to -26) is not cut off', () => {
+    expect(run([...rep(5, -44), ...rv(140, -18, -26), ...rep(60, -44)])!.atMs).toBeGreaterThan(14_500);
+  });
+  it('car (-43): loud, then a 3s head-turned tail at -27 — not cut before the tail ends', () => {
+    expect(run([...rep(5, -43), ...rv(25, -14, -24), ...rep(30, -27), ...rep(60, -43)])!.atMs).toBeGreaterThan(6_000);
+  });
+  it('TV room (-44): a soft talker with a -34 tail — not cut before the tail ends', () => {
+    expect(run([...rep(5, -44), ...rv(15, -26, -33), ...rep(30, -34), ...rep(60, -44)])!.atMs).toBeGreaterThan(5_000);
+  });
+  it('a fast talker at mic-open, close to the mic (word gaps only to -30), is still ended in a quiet room', () => {
+    const words = Array.from({ length: 40 }, (_, i) => (i % 6 < 4 ? -20 - (i % 2) * 3 : -30));
+    const out = run([...words, ...rep(60, -55)])!;
+    expect(out.atMs).toBeGreaterThan(4_000);
+    expect(out.atMs).toBeLessThanOrEqual(4_000 + 2_600);
   });
 
   it('a 14s "describe your game" answer in a TV room (-44) is not cut at 8s', () => {

@@ -3672,7 +3672,7 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
       (() => { const m = /const SILENCE_TIMEOUT_LONG_MS = (\d+);/.exec(vs); return !!m && Number(m[1]) >= 2000; })() &&
       // adaptive selection: long window once speech has run past SPEECH_LONG_MS
       // (2026-10-17: the selection lives in services/voice/endpointer; both paths hand it their windows)
-      /const window = nowMs - armedAt >= cfg\.speechLongMs \? cfg\.longMs : cfg\.shortMs;/.test(read('services/voice/endpointer.ts')) &&
+      /const window = nowMs - startAt >= cfg\.speechLongMs \? cfg\.longMs : cfg\.shortMs;/.test(read('services/voice/endpointer.ts')) &&
       /createEndpointer\(\{ shortMs: SILENCE_TIMEOUT_SHORT_MS, longMs: SILENCE_TIMEOUT_LONG_MS, speechLongMs: SPEECH_LONG_MS \}\)/.test(vs) &&
       // the FIRST-turn mic path also runs the adaptive window (was a single fixed gap that clipped)
       (() => { const m = /const MIC_SILENCE_SHORT_MS = (\d+);/.exec(vc); return !!m && Number(m[1]) >= 1200; })() &&
