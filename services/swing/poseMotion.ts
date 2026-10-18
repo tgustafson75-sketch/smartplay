@@ -247,6 +247,25 @@ export function isSwingSized(w: { startMs: number; endMs: number; topMs?: number
   return true;
 }
 
+/**
+ * 2026-10-17 (review of F2a) — a located window that is only too LONG, around a swing-fast top → impact,
+ * still found the swing: its address or finish anchor wandered (a waggle long before, the club lowered long
+ * after). The impact is kept and the window cut to a swing around it (2.5s before, 1.5s after — the
+ * segmenter's numbers) instead of the whole locate being thrown away. Only where the top was MEASURED: a
+ * window with no top → impact to judge is a miss, as before; so is a top → impact no downswing takes.
+ */
+export const LOCATED_PRE_IMPACT_MS = 2_500;
+export const LOCATED_POST_IMPACT_MS = 1_500;
+export function swingSizedWindow(w: { startMs: number; endMs: number; topMs?: number | null; impactMs?: number | null }): { startMs: number; endMs: number } | null {
+  if (isSwingSized(w)) return { startMs: w.startMs, endMs: w.endMs };
+  if (!(Number.isFinite(w.startMs) && Number.isFinite(w.endMs) && w.endMs > w.startMs)) return null;
+  const { topMs, impactMs } = w;
+  if (typeof topMs !== 'number' || typeof impactMs !== 'number' || !Number.isFinite(topMs) || !Number.isFinite(impactMs)) return null;
+  if (!(impactMs > topMs) || impactMs - topMs > MAX_LOCATED_TOP_TO_IMPACT_MS) return null;
+  if (impactMs < w.startMs || impactMs > w.endMs) return null;
+  return { startMs: Math.max(w.startMs, impactMs - LOCATED_PRE_IMPACT_MS), endMs: Math.min(w.endMs, impactMs + LOCATED_POST_IMPACT_MS) };
+}
+
 /** The swing's anchors read off a body read's frames (their wrists), or null. */
 export function anchorsFromPoseFrames(frames: readonly PoseFrame[] | null | undefined): SwingAnchors | null {
   if (!frames?.length) return null;

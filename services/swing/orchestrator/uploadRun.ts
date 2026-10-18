@@ -63,7 +63,25 @@ function storedWindowTooLong(shot: { clipStartSeconds?: number | null; clipEndSe
     && shot.clipEndSeconds - shot.clipStartSeconds > MAX_SWING_WINDOW_SEC;
 }
 
-const noSwing = (outputs: Record<string, unknown>) => (outputs.window as { noSwing?: boolean } | undefined)?.noSwing === true;
+/**
+ * No swing to read: the window stage found none — or (2026-10-17, review of F2a) a live capture's stored
+ * "window" is longer than a swing and the window stage gave no answer at all (it overran its budget). The
+ * read runs `after` the window, not on it, so an overrun used to hand it the whole minute after all.
+ */
+const noSwing = (outputs: Record<string, unknown>, sessionId?: string) =>
+  (outputs.window as { noSwing?: boolean } | undefined)?.noSwing === true
+  || (!!sessionId && outputs.window == null && liveWindowTooLong(sessionId));
+
+/** A live capture whose only window is longer than a swing (or none, on a clip longer than one). */
+function liveWindowTooLong(id: string): boolean {
+  const s = session(id);
+  const shot = s?.shots?.[0];
+  if (!s || !shot?.clipUri || s.source === 'uploaded_video' || isPutt(id)) return false;
+  if (s.shots.filter((x) => x.clipUri).length !== 1) return false;
+  if (shot.clipWindowSource === 'user') return false;
+  const { MAX_SWING_WINDOW_SEC } = require('../poseMotion') as typeof import('../poseMotion');
+  return storedWindowTooLong(shot) || (shot.clipStartSeconds == null && (s.upload?.duration_sec ?? 0) > MAX_SWING_WINDOW_SEC);
+}
 
 function needsWindow(id: string): boolean {
   if (isPutt(id)) return false;
@@ -149,9 +167,11 @@ function stages(): StageDef<In>[] {
         const perSwing = Number.isFinite(one) && one > 0 ? one : 160_000;
         // 2026-10-17 (F1a) — on a weak link the read goes one swing at a time (videoUpload), so the
         // backstop covers that serial worst case; an overrun here would discard swings already read.
-        return Math.min(15 * 60_000, perSwing * swings + 100_000);
+        // 2026-10-17 (review of F1a) — 15 → 30 min: one swing's worst case is ~170s, so a 5-swing capture
+        // read serially already passed 15 min, and an overrun discards swings already read.
+        return Math.min(30 * 60_000, perSwing * swings + 100_000);
       },
-      when: ({ outputs }) => !noSwing(outputs),
+      when: ({ input, outputs }) => !noSwing(outputs, input.sessionId),
       run: async ({ input, signal }) => {
         const vu = require('../../videoUpload') as typeof import('../../videoUpload');
         return vu._runPhaseKRead(input.sessionId, signal, input.extras);
@@ -167,7 +187,7 @@ function stages(): StageDef<In>[] {
       run: async ({ input, outputs }) => {
         // No read output = the read overran its budget or threw: that is a failed read too.
         const out = outputs.read as { readFailed?: string } | undefined;
-        const failed = noSwing(outputs) ? NO_SWING_FOUND : out ? out.readFailed : "Analysis didn't finish — tap Analyze to try again.";
+        const failed = noSwing(outputs, input.sessionId) ? NO_SWING_FOUND : out ? out.readFailed : "Analysis didn't finish — tap Analyze to try again.";
         if (!failed) return null;
         const st = session(input.sessionId)?.analysis_status;
         const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
@@ -199,7 +219,7 @@ function stages(): StageDef<In>[] {
        * while its slow read was still in flight skipped A's body read, so when that read timed out A settled
        * 'failed' for good (only this stage writes the body-read verdict). Then it is deferred, not skipped.
        */
-      when: ({ input, outputs }) => !isPutt(input.sessionId) && !noSwing(outputs)
+      when: ({ input, outputs }) => !isPutt(input.sessionId) && !noSwing(outputs, input.sessionId)
         && (!retired(input) || session(input.sessionId)?.analysis_status !== 'ok'),
       run: async ({ input, signal }) => {
         const shot0 = session(input.sessionId)?.shots.find((x) => x.clipUri);
@@ -415,7 +435,7 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
         // No read output = the read overran or threw: say so, so a caller waits for the run to settle (the
         // body read may still answer) instead of reading a half-finished store.
         resolve((snap.outputs.read as ReadResult | undefined)
-          ?? { primary_issue: null, drill_recommendation: null, analyses: {}, ...(st === 'cancelled' ? {} : { readFailed: noSwing(snap.outputs) ? NO_SWING_FOUND : "Analysis didn't finish — tap Analyze to try again." }) });
+          ?? { primary_issue: null, drill_recommendation: null, analyses: {}, ...(st === 'cancelled' ? {} : { readFailed: noSwing(snap.outputs, sessionId) ? NO_SWING_FOUND : "Analysis didn't finish — tap Analyze to try again." }) });
       }
     });
   });

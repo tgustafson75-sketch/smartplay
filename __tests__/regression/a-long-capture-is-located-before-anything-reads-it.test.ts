@@ -18,10 +18,10 @@ import { _resetAnalysisTracesForTest } from '../../services/analysisTrace';
 const mockOrder: string[] = [];
 const mockReadWindows: unknown[] = [];
 const mockPoseWindows: unknown[] = [];
-let mockFound: Record<string, unknown> = { via: 'middle', startSec: 27.4, endSec: 32.9, impactSec: null };
+let mockFound: Record<string, unknown> | 'hang' = { via: 'middle', startSec: 27.4, endSec: 32.9, impactSec: null };
 jest.mock('../../services/swingLibrary', () => ({ getAnalyzerKind: () => 'full_swing' }));
 jest.mock('../../services/swing/analysisOrchestrator', () => ({
-  findUploadSwingWindow: async () => { mockOrder.push('window'); return mockFound; },
+  findUploadSwingWindow: async () => { mockOrder.push('window'); return mockFound === 'hang' ? new Promise(() => undefined) : mockFound; },
 }));
 jest.mock('../../services/videoUpload', () => ({
   _runPhaseKRead: async (sid: string) => {
@@ -154,5 +154,25 @@ describe('the way out of "no swing found" is the moment the player points at', (
     expect(src).toMatch(/if \(analysisError === NO_SWING_FOUND && segments\.length <= 1\) \{[\s\S]{0,900}onPress=\{analyzeAtMoment\}/);
     expect(src).toMatch(/void runAnalysis\(clipUri, seg, \{ reuseSessionId: ingestedSessionIdRef\.current, userMomentSec: center \/ 1000 \}\);/);
     expect(src).toMatch(/userMoment \?\? \(heard \? segment\.strikeMs \/ 1000 : undefined\), userMoment != null \? 'user' : 'auto'\);/);
+  });
+});
+
+/** 2026-10-17 (review of F2a) — the window stage overrunning its budget must not hand the read the minute. */
+describe('a window stage that never answers', () => {
+  it('reads nothing: the read runs after the window, not on it, and the minute is not a swing', async () => {
+    mockFound = 'hang';
+    seedFieldCapture();
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      const p = runSwingAnalysis(s1().id, { angle: 'face_on' });
+      await jest.advanceTimersByTimeAsync(95_000);   // past the window stage's 90s budget
+      const read = await p;
+      await jest.advanceTimersByTimeAsync(10_000);
+      expect(mockOrder).toEqual(['window']);
+      expect(mockReadWindows).toEqual([]);
+      expect(mockPoseWindows).toEqual([]);
+      expect(read.readFailed).toMatch(NO_SWING);
+      expect(s1().analysis_error).toMatch(NO_SWING);
+    } finally { jest.useRealTimers(); }
   });
 });

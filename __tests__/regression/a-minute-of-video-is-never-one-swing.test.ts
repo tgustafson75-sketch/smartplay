@@ -81,3 +81,26 @@ describe('a located window bigger than a swing is a failed locate', () => {
     expect(Math.abs(w!.swingTimeSec - 7.0)).toBeLessThanOrEqual(0.5);
   });
 });
+
+/**
+ * 2026-10-17 (review of F2a) — a locate that is only too LONG, around a swing-fast top → impact, found the
+ * swing; its address anchor wandered. The impact stands and the window is cut around it, instead of the
+ * whole locate being thrown away. A top → impact no downswing takes is still a miss.
+ */
+describe('a located swing that is only too long keeps its impact', () => {
+  it('pure rule', () => {
+    const { swingSizedWindow } = require('../../services/swing/poseMotion') as typeof import('../../services/swing/poseMotion');
+    expect(swingSizedWindow({ startMs: 12_000, endMs: 21_200, topMs: 20_000, impactMs: 20_300 })).toEqual({ startMs: 17_800, endMs: 21_200 });
+    expect(swingSizedWindow({ startMs: 12_400, endMs: 47_420, topMs: 17_401, impactMs: 42_416 })).toBeNull();   // the field's 25s "downswing"
+    expect(swingSizedWindow({ startMs: 12_000, endMs: 21_200, impactMs: 20_300 })).toBeNull();                 // no top measured
+    expect(swingSizedWindow({ startMs: 19_000, endMs: 21_200, topMs: 20_000, impactMs: 20_300 })).toEqual({ startMs: 19_000, endMs: 21_200 });
+  });
+
+  it('the on-device locate applies it (not the reject-only size check)', () => {
+    // Source check: a refined on-device read whose only fault is its length is hard to stage through the
+    // sampler; the rule itself is pinned above.
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'services/swing/onDeviceLocate.ts'), 'utf8') as string;
+    expect(src).toMatch(/const sized = swingSizedWindow\(anchors\);/);
+    expect(src).not.toMatch(/if \(!isSwingSized\(anchors\)\)/);
+  });
+});
