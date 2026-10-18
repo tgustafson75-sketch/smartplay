@@ -29,6 +29,7 @@ export default function HoleLabScreen() {
   const isOwner = isOwnerEmail(usePlayerProfileStore((s) => s.email));
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (isOwner && !HAS_NATIVE_WEBVIEW) {
@@ -61,6 +62,7 @@ export default function HoleLabScreen() {
       {HAS_NATIVE_WEBVIEW && (
         <View style={styles.container}>
           <WebView
+            key={attempt}
             source={{ uri: HOLE_LAB_URL }}
             style={[styles.web, { backgroundColor: colors.background }]}
             javaScriptEnabled
@@ -68,6 +70,10 @@ export default function HoleLabScreen() {
             originWhitelist={['https://*']}
             onLoadEnd={() => setLoading(false)}
             onError={() => {
+              setLoading(false);
+              setFailed(true);
+            }}
+            onHttpError={() => {
               setLoading(false);
               setFailed(true);
             }}
@@ -80,6 +86,17 @@ export default function HoleLabScreen() {
           {failed && (
             <View style={styles.overlay}>
               <Text style={[styles.fail, { color: colors.text_muted }]}>Could not load the hole page. Check the connection and try again.</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setFailed(false);
+                  setLoading(true);
+                  setAttempt((n) => n + 1);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+              >
+                <Text style={{ color: colors.accent, marginTop: 14, fontWeight: '600' }}>Try again</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
