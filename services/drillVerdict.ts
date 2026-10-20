@@ -21,12 +21,14 @@ export interface DrillVerdict {
 }
 
 // A drill targets a CanonicalIssue by id, but the classifier can roll a swing up to
-// a RELATED canonical fault (e.g. over-the-top reads as the outside-in path / steep
-// plane family). Match the target against its family so "still present" is honest,
-// not a strict-id miss. Unlisted drills default to their own id only.
+// a RELATED canonical fault (e.g. over-the-top reads as the steep-plane family). Match the
+// target against its family so "still present" is honest, not a strict-id miss. Unlisted
+// drills default to their own id only.
+// 2026-10-20 (Tank) — the transition plane and the impact path are separate families: an
+// over-the-top transition does not prove an out-to-in path, nor the reverse.
 const DRILL_TARGET_FAULTS: Record<string, string[]> = {
-  over_the_top: ['over_the_top', 'swing_path_outside_in', 'plane_too_steep'],
-  swing_path_outside_in: ['swing_path_outside_in', 'over_the_top', 'plane_too_steep'],
+  over_the_top: ['over_the_top', 'plane_too_steep'],
+  swing_path_outside_in: ['swing_path_outside_in'],
   early_extension: ['early_extension', 'spine_angle_loss'],
   casting: ['casting', 'attack_angle_shallow'],
   sway: ['sway', 'reverse_pivot'],

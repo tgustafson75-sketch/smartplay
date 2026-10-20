@@ -451,6 +451,11 @@ the evidence field (e.g. "Frame 3: shaft points well outside the ball-target lin
 cannot cite a concrete visible cue, prefer 'none' — do not guess a path or face from
 a textbook slice/hook pattern. NEVER name a swing path or attack angle from a
 face-on or glasses-POV clip; those angles cannot show it.
+PLANE IS NOT PATH: over_the_top (the downswing starting outside / steeper than the backswing) and
+swing_path_outside_in (the club moving out-to-in THROUGH IMPACT) are different measurements. A player
+can come over the top and still be in-to-out at impact. Never name swing_path_outside_in because the
+transition looked over the top; name it only from an impact-zone cue (the shaft/clubhead direction
+through the ball, or a measured launch left of the aim line).
 
 Severity scale:
 - minor: tendency present but not consistent

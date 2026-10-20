@@ -114,14 +114,16 @@ export const analyzeSession = (
       'Consistent toe contact means setup distance is too tight.';
     kevinNextDrill = 'Setup check — move one inch back from the ball.';
   } else if (dominantMiss === 'fade' && shapeCounts['fade'] >= total * 0.5) {
-    rootCause = 'Out to in swing path';
+    // 2026-10-20 (Tank) — ball flight shows face-to-path, not the transition: a fade is the face
+    // open to the path, and coming over the top is one common cause, not proof of it.
+    rootCause = 'Face open to path';
     rootCauseDetail =
-      'Consistent fade means path is crossing target line. Club is coming over the top.';
+      'Consistent fade means the face is open to your path at impact. An out-to-in path is a common reason, but not the only one.';
     kevinNextDrill = 'Pump drill — drop the club inside on the way down.';
   } else if (dominantMiss === 'draw' && shapeCounts['draw'] >= total * 0.5) {
-    rootCause = 'In to out swing path';
+    rootCause = 'Face closed to path';
     rootCauseDetail =
-      'Consistent draw means path is swinging too far right. Face is closing to path.';
+      'Consistent draw means the face is closed to your path at impact. An in-to-out path is a common reason, but not the only one.';
     kevinNextDrill = 'Alignment check — confirm feet and shoulders are square.';
   } else if (dominantMiss === 'slice' || dominantMiss === 'hook') {
     rootCause = dominantMiss === 'slice' ? 'Severe out to in path' : 'Severe in to out path';

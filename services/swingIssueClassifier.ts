@@ -14,8 +14,8 @@ import { rankFaults } from './knowledgeBase/causalEngine';
  * means "no honest root key" — those issues fall straight back to the existing
  * most-frequent tally and are never re-ranked or dropped.
  *
- *   swing_path_outside_in → 'over-the-top'  (outside-in path IS the over-the-top
- *       signature — same P2 transition root)
+ *   swing_path_outside_in → null            (an impact-path OUTCOME, not proof of the
+ *       over-the-top transition — see the 2026-10-20 note on the map)
  *   over_the_top          → 'over-the-top'
  *   swing_path_inside_out → 'slide'          (the in-to-out / lower-body-slide
  *       lineage; 'slide' is the closest real P2 key — see CAUSAL_CHAINS
@@ -37,7 +37,10 @@ import { rankFaults } from './knowledgeBase/causalEngine';
  * to a setup root would be a measurement claim we can't make from the frames.
  */
 export const CANONICAL_TO_FAULT: Record<CanonicalIssue, string | null> = {
-  swing_path_outside_in: 'over-the-top',
+  // 2026-10-20 (Tank) — plane is not path: an out-to-in path at impact is an OUTCOME with several
+  // roots (over the top is one; an open-shoulder setup or a body stall are others), and a player can
+  // come over the top and still be in-to-out. Mapping it to 'over-the-top' merged two measurements.
+  swing_path_outside_in: null,
   over_the_top: 'over-the-top',
   swing_path_inside_out: 'slide',
   attack_angle_steep: 'steep',

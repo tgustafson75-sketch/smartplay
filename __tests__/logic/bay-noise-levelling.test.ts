@@ -200,3 +200,37 @@ describe('practice-session counter: live levelling (Tank: 10 shots counted as 48
     expect(ov).toMatch(/setSwingCount\(\(c\) => Math\.max\(0, c - n\)\)/);
   });
 });
+
+describe('Tank, 10-20: plane is not path', () => {
+  const code = (p: string) =>
+    fs.readFileSync(path.join(__dirname, '../..', p), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+
+  it('an out-to-in impact path is not rolled up as the over-the-top root', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { CANONICAL_TO_FAULT } = require('../../services/swingIssueClassifier');
+    expect(CANONICAL_TO_FAULT.swing_path_outside_in).toBeNull();
+    expect(CANONICAL_TO_FAULT.over_the_top).toBe('over-the-top');
+  });
+
+  it('an over-the-top drill is not judged by the impact path, nor the reverse', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { targetsForDrill } = require('../../services/drillVerdict');
+    expect(targetsForDrill('over_the_top')).not.toContain('swing_path_outside_in');
+    expect(targetsForDrill('swing_path_outside_in')).not.toContain('over_the_top');
+  });
+
+  it('the swing model is told the transition never proves the impact path', () => {
+    const api = code('api/swing-analysis.ts');
+    expect(api).toMatch(/PLANE IS NOT PATH/);
+    expect(api).toMatch(/Never name swing_path_outside_in because the\s*\n?\s*transition looked over the top/);
+  });
+
+  it('a fade or draw pattern is read as face-to-path, not as a swing path', () => {
+    const pe = code('services/patternEngine.ts');
+    expect(pe).not.toMatch(/rootCause = 'Out to in swing path'/);
+    expect(pe).not.toMatch(/rootCause = 'In to out swing path'/);
+    expect(pe).not.toMatch(/Club is coming over the top\./);
+  });
+});
