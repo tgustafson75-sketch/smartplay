@@ -20,6 +20,7 @@ import {
   createSession,
   endSession,
   addClipEvent,
+  retractClipEvents,
   finalizeClips,
   getSession,
   getSessionDir,
@@ -271,11 +272,23 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
     setSwingCount((c) => c + 1);
   }, []);
 
+  // 2026-10-20 (Tank: 10 shots → 48) — a louder real strike shows earlier quiet ones were club taps
+  // by the phone; take them back off the count and out of the clip cuts.
+  const handleShotsRetracted = useCallback((offsetsMs: number[]) => {
+    if (!isMountedRef.current || !sessionRef.current) return;
+    const n = retractClipEvents(sessionRef.current.id, offsetsMs.map((ms) => ms / 1000));
+    if (n > 0) {
+      practiceLog('swing-retracted', 'ok', { count: n, session_id: sessionRef.current.id });
+      setSwingCount((c) => Math.max(0, c - n));
+    }
+  }, []);
+
   const startMetering = useCallback(async () => {
     if (!meterAvailable) return;
     const ok = await startImpactRecording({
       mode: 'multi-shot',
       onShotDetected: handleShotDetected,
+      onShotsRetracted: handleShotsRetracted,
     });
     if (!ok) {
       practiceLog('metering-start', 'fail', { fallback: 'manual-only' });
@@ -283,7 +296,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
       return;
     }
     practiceLog('metering-start', 'ok', { interval_ms: METER_INTERVAL_MS, via: 'shared-detector' });
-  }, [meterAvailable, handleShotDetected]);
+  }, [meterAvailable, handleShotDetected, handleShotsRetracted]);
 
   const stopMetering = useCallback(async () => {
     const res = await stopMultiShotRecording();

@@ -5,7 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createLiveStrikeMeter } from '../../services/swing/liveStrikeMeter';
-import { detectStrikes, levelStrikes, type MeterSample } from '../../services/swing/strikeDetector';
+import { detectStrikes, levelStrikes, createSessionLeveller, type MeterSample } from '../../services/swing/strikeDetector';
 import { createSpeechOnsetGate } from '../../services/voice/speechOnset';
 
 /** A loud bay: ~-28 dBFS with ±3 dB of chatter/fan, 50ms readings. */
@@ -154,5 +154,49 @@ describe('Tank, 10-20: calibration setup and rest mode in a practice session', (
     for (const r of ['/swinglab/smartmotion', '/swinglab/coach-mode', '/swinglab/calibrate', '/practice-session/session']) {
       expect(routes).toContain(`'${r}'`);
     }
+  });
+});
+
+describe('practice-session counter: live levelling (Tank: 10 shots counted as 48)', () => {
+  it('club taps after the first real strike are never counted', () => {
+    const lv = createSessionLeveller();
+    expect(lv.push(1000, -3).accepted).toBe(true);    // strike
+    expect(lv.push(3000, -22).accepted).toBe(false);  // club grounding
+    expect(lv.push(4500, -25).accepted).toBe(false);  // raking the next ball over
+    expect(lv.push(7000, -5).accepted).toBe(true);    // strike
+  });
+
+  it('taps counted before the first strike are handed back when it lands', () => {
+    const lv = createSessionLeveller();
+    expect(lv.push(500, -24)).toEqual({ accepted: true, retracted: [] });
+    expect(lv.push(2500, -20)).toEqual({ accepted: true, retracted: [] });
+    expect(lv.push(5000, -2)).toEqual({ accepted: true, retracted: [500, 2500] });
+    expect(lv.push(8000, -9)).toEqual({ accepted: true, retracted: [] }); // a thinner real strike stays
+  });
+
+  it('retractClipEvents removes only the named acoustic events, never a manual mark', () => {
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ps = require('../../services/practiceStorage') as typeof import('../../services/practiceStorage');
+      ps.addClipEvent('s1', 0.5, 'audio_transient');
+      ps.addClipEvent('s1', 0.5, 'manual');
+      ps.addClipEvent('s1', 5, 'audio_transient');
+      expect(ps.retractClipEvents('s1', [0.5])).toBe(1);
+      expect(ps.retractClipEvents('s1', [0.5])).toBe(0);
+    });
+  });
+
+  it('the detector levels every multi-shot strike, and the overlay un-counts retractions', () => {
+    const code = (p: string) =>
+      fs.readFileSync(path.join(__dirname, '../..', p), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+    const det = code('services/acousticImpactDetector.ts');
+    expect(det).toMatch(/state\.leveller\.push\(pending\.offset_ms, pending\.db\)/);
+    expect(det).toMatch(/if \(lv\?\.accepted\) \{\s*\n\s*state\.lastDetectionTs = ts;/);
+    const ov = code('components/PracticeSessionOverlay.tsx');
+    expect(ov).toMatch(/onShotsRetracted: handleShotsRetracted/);
+    expect(ov).toMatch(/retractClipEvents\(sessionRef\.current\.id/);
+    expect(ov).toMatch(/setSwingCount\(\(c\) => Math\.max\(0, c - n\)\)/);
   });
 });

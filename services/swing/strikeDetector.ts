@@ -255,6 +255,28 @@ export function levelStrikes<T extends { peakDb: number }>(strikes: T[], dropDb 
   return { kept, dropped };
 }
 
+/**
+ * The same levelling, LIVE — for the practice-session counter (acousticImpactDetector multi-shot),
+ * which counts each strike as it lands. 2026-10-20 (Tank: 10 shots counted as 48, with the phone by
+ * the ball — club grounding, the ball being raked into place). A strike quieter than the session's
+ * loudest by more than dropDb is refused; when a new loudest arrives, earlier accepted strikes that
+ * now fall below it are handed back as `retracted` (taps counted before the first real strike).
+ */
+export function createSessionLeveller(dropDb = LEVEL_DROP_DB) {
+  let loudest = -Infinity;
+  let accepted: { offsetMs: number; peakDb: number }[] = [];
+  return {
+    push(offsetMs: number, peakDb: number): { accepted: boolean; retracted: number[] } {
+      if (peakDb < loudest - dropDb) return { accepted: false, retracted: [] };
+      loudest = Math.max(loudest, peakDb);
+      const retracted = accepted.filter((a) => a.peakDb < loudest - dropDb).map((a) => a.offsetMs);
+      accepted = accepted.filter((a) => a.peakDb >= loudest - dropDb);
+      accepted.push({ offsetMs, peakDb });
+      return { accepted: true, retracted };
+    },
+  };
+}
+
 /** Local noise floor at a point in time — median dB of samples within
  *  ±halfWindowMs of centerMs. Robust to a brief strike inside the window (one
  *  sharp sample is a tiny minority). Falls back to the global floor when the

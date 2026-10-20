@@ -38,6 +38,7 @@ import { Audio } from 'expo-av';
 // 2026-06-08 (audit M1) — serialize audio-mode writes (runs in parallel
 // with the camera + can race a TTS mode write).
 import { setAudioModeSerial } from './voiceService';
+import { createSessionLeveller } from './swing/strikeDetector';
 import {
   METER_INTERVAL_MS as CAGE_METER_INTERVAL_MS,
   METER_BUFFER_SAMPLES,
@@ -108,6 +109,10 @@ interface RunningRecorder {
   lastDetectionTs: number;
   /** Multi-shot: fires for EVERY validated strike. */
   onShotDetected: ((detection: ShotDetection) => void) | null;
+  /** Session levelling (strikeDetector.createSessionLeveller): the next bay, club taps by the phone. */
+  leveller: ReturnType<typeof createSessionLeveller>;
+  /** Multi-shot: earlier detections (offset_ms) a louder real strike showed were incidental. */
+  onShotsRetracted: ((offsets_ms: number[]) => void) | null;
 }
 
 let active: RunningRecorder | null = null;
@@ -198,6 +203,8 @@ export async function startImpactRecording(opts?: {
   /** Multi-shot only: fires for every validated strike. Use for
    *  range/cage sessions that capture multiple swings per clip. */
   onShotDetected?: (detection: ShotDetection) => void;
+  /** Multi-shot only: earlier detections to un-count — see RunningRecorder.onShotsRetracted. */
+  onShotsRetracted?: (offsets_ms: number[]) => void;
 }): Promise<boolean> {
   if (active) return false;
   try {
@@ -257,6 +264,8 @@ export async function startImpactRecording(opts?: {
       pendingPeak: null,
       lastDetectionTs: 0,
       onShotDetected: opts?.onShotDetected ?? null,
+      leveller: createSessionLeveller(),
+      onShotsRetracted: opts?.onShotsRetracted ?? null,
     };
 
     // Single-shot uses a faster cadence (50ms) for tight strike capture;
@@ -293,7 +302,16 @@ export async function startImpactRecording(opts?: {
             const sharpDecay = decay >= DECAY_MIN_DB_PER_SAMPLE;
             if (sharpDecay && !stillAboveThreshold) {
               const ts = Date.now();
-              if (ts - state.lastDetectionTs > MULTISHOT_DEBOUNCE_MS) {
+              const lv = ts - state.lastDetectionTs > MULTISHOT_DEBOUNCE_MS
+                ? state.leveller.push(pending.offset_ms, pending.db)
+                : null;
+              if (lv && !lv.accepted) {
+                console.log(`[acoustic] levelled out ${pending.db.toFixed(1)}dB — under the session's loudest strike`);
+              }
+              if (lv && lv.retracted.length > 0 && state.onShotsRetracted) {
+                try { state.onShotsRetracted(lv.retracted); } catch (e) { console.log('[acoustic] onShotsRetracted threw', e); }
+              }
+              if (lv?.accepted) {
                 state.lastDetectionTs = ts;
                 const noiseFloor = pending.noiseFloor; // real floor (audit #3), not threshold−18
                 if (state.onShotDetected) {

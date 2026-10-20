@@ -149,6 +149,16 @@ export function addClipEvent(
   });
 }
 
+/** 2026-10-20 — un-count acoustic events the session leveller showed were incidental (club taps by
+ *  the phone counted before the first real strike). Manual events are never touched. */
+export function retractClipEvents(session_id: string, offsets_seconds: number[]): number {
+  const events = _pendingEvents.get(session_id) ?? [];
+  const drop = (o: number) => offsets_seconds.some((x) => Math.abs(x - o) < 0.001);
+  const kept = events.filter((e) => e.method !== 'audio_transient' || !drop(e.offset));
+  _pendingEvents.set(session_id, kept);
+  return events.length - kept.length;
+}
+
 export async function finalizeClips(
   session_id: string,
   duration_seconds: number,
