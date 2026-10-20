@@ -999,7 +999,9 @@ check('clubIdToServerKey maps to acoustic-detect keys',
   'ClubId → server CLUB_TYPICAL key mapper present');
 
 check('Acoustic meter is driven by live dB, not hardcoded steps',
-  /levelDb/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
+  // 2026-10-20 — the live level is levelled against the room (services/swing/liveStrikeMeter).
+  /level: liveLevel = null/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
+    /level=\{phase === 'recording' && meteringActive \? \(liveRead\?\.level \?\? 0\) : null\}/.test(read('app/swinglab/smartmotion.tsx')) &&
     !/active \? 0\.74 : detected \? 0\.55/.test(read('components/smartmotion/SmartMotionHud.tsx')),
   'real live level replaces the 0.12/0.74/0.55/0.3 placeholder');
 
@@ -3575,14 +3577,17 @@ check('Voice VAD: adaptive noise floor lifts the silence bar in noise, unchanged
     const vs = read('services/voiceService.ts');
     const tab = read('hooks/useVoiceCaddie.ts');
     const ep = read('services/voice/endpointer.ts');
-    const hook = read('hooks/useVoiceActivityDetection.ts');
+    // 2026-10-20 — the Auto-Listen onset gate moved out of the hook into services/voice/speechOnset.
+    const hook = read('services/voice/speechOnset.ts');
+    const vadHook = read('hooks/useVoiceActivityDetection.ts');
     const wired =
       /createEndpointer\(\{ shortMs: SILENCE_TIMEOUT_SHORT_MS, longMs: SILENCE_TIMEOUT_LONG_MS, speechLongMs: SPEECH_LONG_MS \}\)/.test(vs) &&
       /createEndpointer\(\{ shortMs: MIC_SILENCE_SHORT_MS, longMs: MIC_SILENCE_LONG_MS, speechLongMs: MIC_SPEECH_LONG_MS \}\)/.test(tab) &&
       /if \(m > Math\.max\(SPEECH_DETECT_DB, floor \+ SPEECH_MARGIN_DB\)\) \{/.test(ep) &&
       /still = Math\.max\(SILENCE_DB, floor \+ NOISY_SILENCE_MARGIN_DB\)/.test(ep) &&
-      /noiseFloorRef\.current \+= \(m - noiseFloorRef\.current\) \* a/.test(hook) &&
-      /const effThresholdDb = Math\.max\(SPEECH_THRESHOLD_DB, noiseFloorRef\.current \+ SPEECH_MARGIN_DB\)/.test(hook);
+      /floor \+= \(m - floor\) \* \(m < floor \? NOISE_FLOOR_FALL_ALPHA : NOISE_FLOOR_RISE_ALPHA\)/.test(hook) &&
+      /const above = db > Math\.max\(SPEECH_THRESHOLD_DB, floor \+ SPEECH_MARGIN_DB\)/.test(hook) &&
+      /onsetGateRef\.current\.push\(db\)/.test(vadHook);
     // Behavioral (traces live in __tests__/regression/wind-does-not-hold-the-mic-open): the endpointer's
     // absolute bars are the old fixed ones, so a quiet room is unchanged.
     const quietUnchanged = /export const SPEECH_DETECT_DB = -30;/.test(ep) && /export const SILENCE_DB = -40;/.test(ep);
@@ -6050,7 +6055,9 @@ check('Cage calibration: env-gated + can lower the bar, not just raise it',
       // native detector and the post-hoc path gate on the indoor/outdoor env class.
       /env: sess\.env \?\? null/.test(cal) &&
       /const envClass = /.test(det) && /envClass\(applied\.env\) === envClass\(curEnv\)/.test(det) &&
-      /calOk \? appliedCalibration\?\.transientThresholdDb : undefined/.test(sm) &&
+      // 2026-10-20 — one threshold owner (strikeThresholdDb), read by detection and the live meter.
+      /return calOk \? cal\?\.transientThresholdDb : undefined/.test(sm) &&
+      /const thresholdDb = strikeThresholdDb\(chipOn, appliedCalibration, meterMode\)/.test(sm) &&
       // #3 — real floor stashed for honest telemetry (not threshold−18).
       /ts: Date\.now\(\), noiseFloor \}/.test(det) &&
       // #4 — client keeps the real payload when speed is null (honest server contract).
@@ -7299,7 +7306,8 @@ check('Perf: Smart Motion live meter state is throttled (no 20x/s full re-render
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
       /const lastDbSetAtRef = useRef\(0\);/.test(sm) &&
-      /if \(now - lastDbSetAtRef\.current >= 120\) \{\s*\n\s*lastDbSetAtRef\.current = now;\s*\n\s*setLiveDb\(s\.dB\);/.test(sm) &&
+      // 2026-10-20 — a strike bypasses the throttle so a one-sample hit is never skipped.
+      /if \(r\.hit \|\| now - lastDbSetAtRef\.current >= 120\) \{\s*\n\s*lastDbSetAtRef\.current = now;\s*\n\s*setLiveRead\(/.test(sm) &&
       // the raw every-tick setLiveDb(s.dB) callback form is gone
       !/startMeteredRecording\(\(s\) => setLiveDb\(s\.dB\)\)/.test(sm)
     );
@@ -8990,7 +8998,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /chipSensitivity: boolean/.test(read('store/settingsStore.ts')) &&
       /CHIP_STRIKE_THRESHOLD_DB = 18/.test(smSrc2) &&
       // 2026-07-08 (cage audit #1) — the calibration branch is now env-gated (calOk).
-      /const thresholdDb = chipOn \? CHIP_STRIKE_THRESHOLD_DB : \(calOk \? appliedCalibration\?\.transientThresholdDb : undefined\)/.test(smSrc2) &&
+      /if \(chipOn\) return CHIP_STRIKE_THRESHOLD_DB;\s*\n[^\n]*\n\s*const calOk = /.test(smSrc2) &&
+      /const thresholdDb = strikeThresholdDb\(chipOn, appliedCalibration, meterMode\)/.test(smSrc2) &&
       // 2026-08-08 (Tim — course acoustics in-round): chip → cage+course (INCLUDING in-round), NOT range.
       /chipOnStart\s*\n?\s*\? \(captureMode === 'sim' \|\| captureMode === 'course'\)/.test(smSrc2) &&
       // course+chip single-shot anchor

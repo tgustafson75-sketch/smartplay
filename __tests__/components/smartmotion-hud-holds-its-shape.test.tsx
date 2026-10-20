@@ -53,7 +53,7 @@ describe('the footer chips are a third of the deck each', () => {
 
 describe('long lines give way instead of bleeding out of their card', () => {
   it('the acoustic title shrinks inside its row and is capped', () => {
-    render(<AcousticPickupCard detected={false} calibrated listening={false} levelDb={null} />);
+    render(<AcousticPickupCard detected={false} calibrated listening={false} level={null} />);
     const title = screen.UNSAFE_getAllByType(Text).find((n) => n.props.numberOfLines === 1);
     expect(title).toBeDefined();
     expect(StyleSheet.flatten(title!.props.style).flexShrink).toBe(1);

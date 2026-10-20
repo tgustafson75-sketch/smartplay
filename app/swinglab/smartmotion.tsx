@@ -90,7 +90,8 @@ import {
 } from '../../services/swingMetricsService';
 import { deriveSwingTempo, type PoseFrame, type SwingBiomechanics, type SwingTempo } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
-import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
+import { detectStrikes, levelStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
+import { createLiveStrikeMeter } from '../../services/swing/liveStrikeMeter';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { NO_SWING_FOUND } from '../../services/swing/orchestrator/uploadRun';
@@ -168,6 +169,25 @@ const REVIEW_CARD_TITLES: Record<ReviewCardKey, string> = {
 // the quieter pitch/chip register. Used only when chipSensitivity is on (practice = alone,
 // so the few extra candidates it admits are harmless; range still vision-confirms).
 const CHIP_STRIKE_THRESHOLD_DB = 18;
+/** strikeDetector's own default — the live meter must use the same bar the detector will. */
+const DEFAULT_STRIKE_THRESHOLD_DB = 30;
+/**
+ * The strike threshold for this capture — ONE owner, read at record start (live meter) and at stop
+ * (detection), so the HUD never shows a strike the detector will not count. undefined = detector default.
+ * 2026-07-08 (cage audit #1) — only apply a calibration whose env class matches where we are now
+ * (indoor practice vs outdoor range/course); else fall back to the constant so a mismatched (quiet-room)
+ * calibration can't zero out detection at a loud venue. Chip sensitivity still wins when on.
+ */
+function strikeThresholdDb(
+  chipOn: boolean,
+  cal: { env?: string | null; transientThresholdDb: number } | null | undefined,
+  mode: string,
+): number | undefined {
+  if (chipOn) return CHIP_STRIKE_THRESHOLD_DB;
+  const envClass = (e: string): string => (e === 'range' || e === 'course') ? 'outdoor' : 'indoor';
+  const calOk = !cal?.env || envClass(cal.env) === envClass(mode);
+  return calOk ? cal?.transientThresholdDb : undefined;
+}
 /** 2026-08-17 — how recent a watch swing must be to stand in for a missing camera tempo read.
  *  Covers recording → reviewing → opening the read; anything older belongs to another session. */
 const WATCH_TEMPO_MAX_AGE_MS = 90_000;
@@ -763,10 +783,13 @@ export default function SmartMotion() {
   // nothing clearly detected → the overlay keeps the honest hand/tempo trace. Cached
   // per swing index like the ball path (one server pass per swing, on the Motion step).
   const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
-  const [liveDb, setLiveDb] = useState<number | null>(null);
+  // 2026-10-20 — the live meter is LEVELLED against the room (services/swing/liveStrikeMeter):
+  // `level` is height above the trailing floor, `hit` means a strike the detector would admit.
+  const [liveRead, setLiveRead] = useState<{ level: number; hit: boolean } | null>(null);
   // 2026-06-14 (audit — perf) — throttles the ~50ms meter callback down to ~120ms
   // of React state churn so the live meter doesn't re-render the whole screen 20×/s.
   const lastDbSetAtRef = useRef(0);
+  const lastLiveHitAtRef = useRef(0);
   // 2026-06-12 (honesty) — true ONLY while a metered mic track is actually capturing
   // (cage / range / off-round course). The AcousticPickupCard's "Listening" badge gates
   // on this so we never claim to be listening when metering is off (course-in-round,
@@ -3068,7 +3091,7 @@ export default function SmartMotion() {
     ballDepartureCacheRef.current = {}; // 2026-06-14 — drop per-swing trace cache on reset
     ballPathCacheRef.current = {};
     setBallPathPoints(null);
-    setLiveDb(null);
+    setLiveRead(null);
     setMeteringActive(false);
     // Clear caches BEFORE resetting selection so no stale per-swing
     // analysis/tempo can be read for the new recording (audit #2).
@@ -3415,7 +3438,7 @@ export default function SmartMotion() {
     setPlaceBallMode(false); // keep draftBall (carries into the session) but exit place mode
     setSegments([]);
     setSelectedSwing(0);
-    setLiveDb(null);
+    setLiveRead(null);
     setRecordedSeconds(0);
     stoppingRef.current = false;
     setPhase('recording');
@@ -3467,11 +3490,19 @@ export default function SmartMotion() {
         // component up to 20×/s. Throttle the React state to ~120ms (still smooth
         // for the meter bar) — detection is unaffected (it runs inside
         // startMeteredRecording, not off this display state).
+        const liveMeter = createLiveStrikeMeter(
+          strikeThresholdDb(chipOnStart, useAcousticCalibrationStore.getState().appliedCalibration, captureMode) ?? DEFAULT_STRIKE_THRESHOLD_DB,
+        );
+        lastLiveHitAtRef.current = 0;
         meteringRef.current = await startMeteredRecording((s) => {
           const now = Date.now();
-          if (now - lastDbSetAtRef.current >= 120) {
+          const r = liveMeter.push(s.timeMs, s.dB);
+          // A hit bypasses the throttle so a single-sample strike is never skipped, and holds the
+          // badge for 1.5s so it can be seen.
+          if (r.hit) lastLiveHitAtRef.current = now;
+          if (r.hit || now - lastDbSetAtRef.current >= 120) {
             lastDbSetAtRef.current = now;
-            setLiveDb(s.dB);
+            setLiveRead({ level: r.level, hit: now - lastLiveHitAtRef.current < 1500 });
           }
         });
       } catch {
@@ -3573,10 +3604,7 @@ export default function SmartMotion() {
         // where we are now (indoor cage≈backyard vs outdoor range/course); else fall
         // back to the constant so a mismatched (quiet-room) calibration can't zero out
         // detection at a loud venue. Chip sensitivity still wins when on.
-        const envClass = (e: string | null | undefined): string | null =>
-          !e ? null : (e === 'range' || e === 'course') ? 'outdoor' : 'indoor';
-        const calOk = !appliedCalibration?.env || envClass(appliedCalibration.env) === envClass(meterMode);
-        const thresholdDb = chipOn ? CHIP_STRIKE_THRESHOLD_DB : (calOk ? appliedCalibration?.transientThresholdDb : undefined);
+        const thresholdDb = strikeThresholdDb(chipOn, appliedCalibration, meterMode);
         let res = detectStrikes(samples, {
           thresholdDb,
           noisyFloorDb: meterMode === 'range' ? 0 : undefined,
@@ -3611,6 +3639,23 @@ export default function SmartMotion() {
         if (res.kind === 'noisy-environment') {
           console.log(`[smartmotion] noisy floor ${res.floorDb} in ${meterMode} — degrading to relative-threshold detection (keep swings)`);
           res = detectStrikes(samples, { thresholdDb, noisyFloorDb: Number.POSITIVE_INFINITY });
+        }
+        // 2026-10-20 — PRACTICE takes acoustics as final, so level out the next bay's strikes first
+        // (strikeDetector.levelStrikes). Range and course already let vision / the loudest decide.
+        if (res.kind === 'ok' && meterMode === 'sim' && !chipOn) {
+          const lv = levelStrikes(res.strikes);
+          if (lv.dropped.length > 0) {
+            try {
+              const { useIssueLogStore: ils } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
+              ils.getState().addAppEvent('acoustic_levelled', {
+                kept: lv.kept.length,
+                dropped: lv.dropped.length,
+                loudestDb: Math.round(Math.max(...res.strikes.map((st) => st.peakDb))),
+                droppedDb: lv.dropped.map((st) => Math.round(st.peakDb)),
+              }, 'diag');
+            } catch { /* a diagnostic must never break a recording */ }
+            res = { ...res, strikes: lv.kept };
+          }
         }
         /**
          * 2026-09-01 (deep SmartMotion pass) — WHY THE MIC HEARD NOTHING, IN NUMBERS.
@@ -6153,7 +6198,7 @@ export default function SmartMotion() {
                 accessibilityLabel={calibrated ? 'Re-calibrate acoustics, 10 strikes' : 'Calibrate acoustics, 10 strikes'}
               >
                 <AcousticPickupCard
-                  detected={phase === 'recording' && meteringActive ? liveDb != null && liveDb > -30 : segments.length > 0}
+                  detected={phase === 'recording' && meteringActive ? !!liveRead?.hit : segments.length > 0}
                   /**
                    * 2026-08-24 — a SYNTHESIZED whole-clip segment is not a detected swing. When the
                    * video locator aborts (Tim's log: swing_locate_fallback — Aborted, three times, on
@@ -6166,7 +6211,7 @@ export default function SmartMotion() {
                   swingCount={isReview ? segments.filter((sg) => !sg.synthesized).length : undefined}
                   heardCount={isReview ? heardStrikeCount : null}
                   calibrated={calibrated}
-                  levelDb={phase === 'recording' && meteringActive ? liveDb : null}
+                  level={phase === 'recording' && meteringActive ? (liveRead?.level ?? 0) : null}
                   listening={phase === 'recording' && meteringActive}
                   style={styles.glassCard}
                 />

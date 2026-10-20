@@ -422,7 +422,7 @@ export function AcousticPickupCard({
   swingCount,
   heardCount = null,
   calibrated = true,
-  levelDb = null,
+  level: liveLevel = null,
   listening = false,
   style,
 }: {
@@ -440,10 +440,10 @@ export function AcousticPickupCard({
    */
   heardCount?: number | null;
   calibrated?: boolean;
-  /** Live mic level in dBFS (~[-60,0]) while recording. When provided the
-   *  meter shows the REAL signal; when null (idle/review) the meter sits at
-   *  empty — it never fakes a level. */
-  levelDb?: number | null;
+  /** Live level 0..1 while recording: height ABOVE the room's own floor as a fraction of the strike
+   *  threshold (services/swing/liveStrikeMeter), so bay noise sits near empty and a strike fills it.
+   *  null (idle/review) = empty — it never fakes a level. */
+  level?: number | null;
   /** True ONLY while a recording is actually running. Drives the "Listening…"
    *  copy so we never claim to be listening when no mic capture is active. */
   listening?: boolean;
@@ -454,12 +454,9 @@ export function AcousticPickupCard({
   const active = detected && calibrated;
   const accent = active ? colors.accent : colors.text_muted;
   // Single level METER (not an equalizer): the fill + needle read like a
-  // VU / signal meter. Driven by the live mic level (dBFS → 0..1) when
+  // VU / signal meter. Driven by the levelled live reading (above the room) when
   // recording; empty when there's no live signal (honest — no fake motion).
-  const FLOOR_DB = -60;
-  const level = levelDb != null
-    ? Math.max(0, Math.min(1, (levelDb - FLOOR_DB) / (0 - FLOOR_DB)))
-    : 0;
+  const level = liveLevel ?? 0;
   const pct = `${Math.round(level * 100)}%` as DimensionValue;
   return (
     <View style={[styles.acousticCard, { backgroundColor: colors.surface_elevated, borderColor: active ? colors.accent : colors.border }, style]}>

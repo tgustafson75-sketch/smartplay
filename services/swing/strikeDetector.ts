@@ -229,6 +229,32 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
   return { kind: 'ok', floorDb, strikes };
 }
 
+/**
+ * SESSION LEVELLING — 2026-10-20 (Tim, practice bay: "the sound is too sensitive"; extra swings).
+ *
+ * In a bay, a neighbour's strike is a real strike: sharp attack, fast decay, well clear of the
+ * floor. Every per-peak gate above passes it, and PRACTICE takes acoustics as the final segmentation,
+ * so it became one of YOUR swings. The rebound filter keeps the EARLIEST strike of a group, so a
+ * neighbour hitting just before you could even replace your own strike.
+ *
+ * What separates them is distance. The phone is framed on you, so your own strikes are the loudest
+ * thing it hears; a strike from the next bay arrives well down from that. Keep a strike only if it is
+ * within LEVEL_DROP_DB of the session's loudest. Run it BEFORE the rebound filter.
+ *
+ * Not for chip sessions: a chip is about half a full strike's energy, so a full swing in the same
+ * session would level the chips out (callers skip it when chip sensitivity is on).
+ */
+export const LEVEL_DROP_DB = 12;
+
+export function levelStrikes<T extends { peakDb: number }>(strikes: T[], dropDb = LEVEL_DROP_DB): { kept: T[]; dropped: T[] } {
+  if (strikes.length < 2) return { kept: strikes, dropped: [] };
+  const loudest = Math.max(...strikes.map((s) => s.peakDb));
+  const kept: T[] = [];
+  const dropped: T[] = [];
+  for (const s of strikes) (loudest - s.peakDb <= dropDb ? kept : dropped).push(s);
+  return { kept, dropped };
+}
+
 /** Local noise floor at a point in time — median dB of samples within
  *  ±halfWindowMs of centerMs. Robust to a brief strike inside the window (one
  *  sharp sample is a tiny minority). Falls back to the global floor when the

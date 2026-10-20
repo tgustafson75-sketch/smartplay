@@ -28,7 +28,8 @@ const num = (src: string, name: string): number => {
   return Number(m[1]);
 };
 
-const vad = read('hooks/useVoiceActivityDetection.ts');
+// 2026-10-20 — the Auto-Listen onset gate moved out of the hook.
+const vad = read('services/voice/speechOnset.ts');
 // 2026-10-17 — the capture's margins moved into the shared end-of-speech detector.
 const voice = read('services/voice/endpointer.ts');
 
@@ -47,7 +48,7 @@ describe('the mic never opens for speech the capture will not recognise', () => 
 
   it('both are still adaptive against a measured noise floor, not absolute', () => {
     // The margins only mean anything relative to ambient — a fixed dB gate fails in a cart or wind.
-    expect(vad).toContain('noiseFloorRef.current + SPEECH_MARGIN_DB');
+    expect(vad).toContain('floor + SPEECH_MARGIN_DB');
     expect(voice).toContain('floor + SPEECH_MARGIN_DB');
   });
 });

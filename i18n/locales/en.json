@@ -2139,7 +2139,7 @@
       "save_apply": "Save & apply",
       "retake": "Retake",
       "record": "Record",
-      "take_ball_strikes_with_the": "Take {{TARGET_STRIKES}} ball strikes with the phone near where you hit. Smart Motion learns your strike sound so it can count and split your swings automatically.",
+      "take_ball_strikes_with_the": "Take {{TARGET_STRIKES}} ball strikes with the phone set up where it films you, not next to the ball. Smart Motion learns your strike sound so it can count and split your swings automatically.",
       "strikes_detected_target": "strikes detected (target {{TARGET_STRIKES}})",
       "listening_s": "LISTENING · {{elapsed}}s",
       "hit_your_strikes_then_tap": "Hit your {{TARGET_STRIKES}} strikes, then tap Done",

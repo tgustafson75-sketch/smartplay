@@ -23,13 +23,19 @@ import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeD
 import { TRANSIENT_THRESHOLD_DB } from '../../constants/cageDetection';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { useTranslation } from 'react-i18next';
+import { useSettingsStore } from '../../store/settingsStore';
+import { useRoundStore } from '../../store/roundStore';
 
 const TARGET_STRIKES = 10;
 
-type Env = 'range' | 'backyard' | 'course';
+type Env = 'indoor' | 'range' | 'backyard' | 'course';
 type Phase = 'idle' | 'recording' | 'done';
 
+// 2026-10-20 (Tank, practice bay) — no Indoor choice, and the screen opened on Range, so a bay
+// calibration was saved as OUTDOOR and Practice (indoor) then ignored it. Indoor is the bay / net /
+// sim; the default follows where SmartMotion is set to be.
 const ENVS: { key: Env; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
+  { key: 'indoor', label: 'Indoor', icon: 'business-outline' },
   { key: 'range', label: 'Range', icon: 'golf-outline' },
   { key: 'backyard', label: 'Backyard', icon: 'home-outline' },
   { key: 'course', label: 'Course', icon: 'flag-outline' },
@@ -45,7 +51,9 @@ export default function CalibrateAcoustics() {
   const applyCalibration = useAcousticCalibrationStore((s) => s.applyCalibrationFromSession);
   const appliedCalibration = useAcousticCalibrationStore((s) => s.appliedCalibration);
 
-  const [env, setEnv] = useState<Env>('range');
+  const [env, setEnv] = useState<Env>(() =>
+    useRoundStore.getState().isRoundActive ? 'course'
+      : useSettingsStore.getState().environmentMode === 'range' ? 'range' : 'indoor');
   const [phase, setPhase] = useState<Phase>('idle');
   const [liveDb, setLiveDb] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
