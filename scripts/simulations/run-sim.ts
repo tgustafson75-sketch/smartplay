@@ -7334,8 +7334,10 @@ check('Drill Check: grades the set vs the drill target, honest + directional',
   (() => {
     // Target fault still dominant + significant → not_yet
     const notYet = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: 'over_the_top', issueName: 'Over the Top', severity: 'significant', confidence: 'high' });
-    // Related family fault (outside-in path) still counts as the same target
-    const family = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: 'swing_path_outside_in', issueName: 'Outside-In Path', severity: 'moderate', confidence: 'high' });
+    // Related family fault (steep plane) still counts as the same target
+    const family = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: 'plane_too_steep', issueName: 'Steep Plane', severity: 'moderate', confidence: 'high' });
+    // 2026-10-20 (Tank) — plane is not path: an out-to-in impact path is NOT the over-the-top drill failing
+    const pathNotPlane = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: 'swing_path_outside_in', issueName: 'Outside-In Path', severity: 'moderate', confidence: 'high' });
     // Target present but only minor / low-confidence → closer
     const closer = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: 'over_the_top', issueName: 'Over the Top', severity: 'minor', confidence: 'high' });
     // Target fault no longer dominant (or none) → got_it
@@ -7346,6 +7348,7 @@ check('Drill Check: grades the set vs the drill target, honest + directional',
     return (
       notYet?.grade === 'not_yet' &&
       family?.grade === 'not_yet' &&           // related-fault family match works
+      pathNotPlane?.grade !== 'not_yet' &&      // an impact path never stands in for the transition
       closer?.grade === 'closer' &&
       gotIt?.grade === 'got_it' &&
       none === null &&
@@ -7353,7 +7356,7 @@ check('Drill Check: grades the set vs the drill target, honest + directional',
       /this set/i.test(notYet!.line)            // per-set framing, not a cure
     );
   })(),
-  'drill target still dominant → not_yet; related-fault family counts; minor/low → closer; gone → got_it; non-drill → null; never overclaims a permanent fix');
+  'drill target still dominant → not_yet; related-fault family counts (plane, not path); minor/low → closer; gone → got_it; non-drill → null; never overclaims a permanent fix');
 
 // 2026-06-14 (audit — store hygiene) — roundHistory grew unbounded (each record
 // carries its full shots[] and the whole blob re-serializes on every persist write).
