@@ -280,6 +280,9 @@ export interface SwingSession {
   // pipeline errored and we need to surface honest copy.
   analysis_status?: AnalysisStatus;
   analysis_error?: string | null;
+  /** 2026-10-25 — the read was not sent because the phone was PROVEN offline; it is sent again when the
+   *  connection returns (services/swing/orchestrator/readWhenOnline). Absent/false = nothing waiting. */
+  read_awaits_connection?: boolean;
   /** Pose-detection-derived biomechanics summary. Populated AFTER
    *  Phase K completes by services/poseAnalysisApi when POSE_API_KEY
    *  is set on the server. Null = pose API not configured, failed,
@@ -747,6 +750,11 @@ interface SwingSessionState {
   /** Phase V — track analysis lifecycle so the swing detail surface can
    *  show real progress and surface failures honestly. */
   setSessionAnalysisStatus: (sessionId: string, status: AnalysisStatus, error?: string | null) => void;
+  /** 2026-10-25 — mark / clear "this swing's read waits for a connection" (see read_awaits_connection). */
+  setSessionReadAwaitsConnection: (sessionId: string, awaits: boolean) => void;
+  /** 2026-10-25 — forget a shot's body read (back to UNREAD, not "read, nobody there"), and the session's
+   *  too when `andSession`: a new analysis that could not read the body must not leave the old window's. */
+  clearShotBiomechanics: (sessionId: string, shotId: string, andSession: boolean) => void;
   /** 2026-06-02 — Fix GN: walk every session and flip any non-terminal
    *  analysis_status ('pending' / 'analyzing_*') older than maxAgeMs
    *  to 'failed' with a "stale" error. Called once on app boot via
@@ -1861,6 +1869,36 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           };
         });
       },
+
+      clearShotBiomechanics: (sessionId, shotId, andSession) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession => {
+            if (session.id !== sessionId) return session;
+            const shots = session.shots.map(sh => {
+              if (sh.id !== shotId || sh.biomechanics === undefined) return sh;
+              const { biomechanics: _drop, ...rest } = sh;
+              return rest as SwingShot;
+            });
+            if (!andSession || session.biomechanics === undefined) return { ...session, shots };
+            const { biomechanics: _dropS, ...restS } = session;
+            return { ...(restS as SwingSession), shots };
+          };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
+
+      setSessionReadAwaitsConnection: (sessionId, awaits) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession =>
+            session.id !== sessionId || !!session.read_awaits_connection === awaits ? session
+              : { ...session, read_awaits_connection: awaits };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
 
       // 2026-06-02 — Fix GN: orphan-cleanup pass. Audit found that
       // sessions where analysis was in-flight at force-close stayed

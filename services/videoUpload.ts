@@ -28,6 +28,9 @@ import { synthesizeCageInsight } from './contextSynthesizer';
 import { uploadLog, uploadAdoptSessionKey, uploadResetTiming } from './uploadDiagnostic';
 import { practiceLog } from './practiceTelemetry';
 
+/** The read's answer when the phone was proven offline: the swing is kept and read when the signal returns. */
+export const OFFLINE_READ_WAITS = "You're offline — your swing is saved, and I'll read it as soon as you're back online.";
+
 export const MAX_FILE_SIZE_MB = 200;
 
 // Phase V.6 diagnostic — single grep target for the full pipeline trace:
@@ -1067,6 +1070,27 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
       attempted: swings.length,
     }, sessionId);
 
+    /**
+     * 2026-10-25 (Sentry MK / MW / MV / MT / MY / MZ / N3 — Tim's live captures, `analysis_failed ·
+     * live_capture · failure_kinds no_network`) — A READ THE PHONE COULD NOT SEND WAITS FOR THE CONNECTION.
+     * The swing was saved but its read was dropped: "check your network and try Re-analyze", and nothing
+     * read it when the signal came back. When the phone is PROVEN offline (never on our own probe's say-so)
+     * the session is marked, the offline banner goes up (its recovery probe is what notices the signal
+     * return), and services/swing/orchestrator/readWhenOnline sends the read then. Any other outcome
+     * clears the mark.
+     */
+    let awaitsConnection = false;
+    if (results.length === 0 && perSwingOutcomes.length > 0 && perSwingOutcomes.every(o => o.kind === 'no_network')) {
+      try {
+        const reach = require('./reachability') as typeof import('./reachability');
+        awaitsConnection = reach.isProvenOffline((await reach.probeReachability()).verdict);
+      } catch { awaitsConnection = false; }
+      if (awaitsConnection) {
+        try { (require('../store/connectivityStore') as typeof import('../store/connectivityStore')).reportVerifiedOffline(); } catch { /* the banner is advisory */ }
+      }
+    }
+    liveSessionStore(signal).setSessionReadAwaitsConnection(sessionId, awaitsConnection);
+
     if (results.length === 0) {
       // Phase U1 — heuristic-fallback path. Before declaring full failure,
       // try a single-frame tentative observation. The user gets a useful
@@ -1153,6 +1177,8 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
       const allError = failureKinds.every(k => k === 'error');
       const message = allNoFrames
         ? "I can't pull frames from this clip — its format or frame-rate is one this device can't sample for analysis, even though it plays back fine. Record the swing in Smart Motion (in-app) and it'll analyze cleanly."
+        : awaitsConnection
+        ? OFFLINE_READ_WAITS
         : allNoNetwork
         ? "Lost connection to the analyzer. Check your network and try Re-analyze."
         : allError

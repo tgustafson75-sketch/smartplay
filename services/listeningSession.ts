@@ -14,7 +14,8 @@ import { noteUserTurn, getUserTurnEpoch } from './userTurnClock';
 import { noteCaddieTurn } from './funnelEvents';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from './featureAccess';
 import { getDialog } from './dialogEngine';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_NEEDS_APP, CADDIE_NOTICE_MIC_TROUBLE, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { settleForegroundForMic, micMayBeRefusedNow } from './appForeground';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -550,6 +551,17 @@ export async function toggle(): Promise<void> {
       logVoiceDiag('tap_queued_during_opening', { source: 'listeningSession', sessionState: state });
       return;
     }
+    /**
+     * 2026-10-25 (Sentry MD, MP, N2, NG — every one guard session_in_flight, sessionState 'opening') —
+     * that is the ECHO: the same press arriving a second time (iOS fires play and togglePlayPause for
+     * one button; Android's pattern sub fires ~350ms after the legacy sub), absorbed by design while
+     * the tap it echoes is already opening the mic. Mailing it filed a failure for a tap that worked.
+     * Kept on device; a non-echo swallow in any other state is still reported.
+     */
+    if (isEcho && state === 'opening') {
+      logVoiceDiag('tap_echo_absorbed', { source: 'listeningSession', sessionState: state, msSinceOpenTap: Date.now() - sessionOpenTapAt });
+      return;
+    }
     swallowedTap('session_in_flight');
     return;
   }
@@ -898,7 +910,10 @@ async function deliverBrainReply(opts: {
   });
 }
 
-async function openSession() {
+/** How long a press may wait for iOS to finish bringing the app forward (cold launch, unlock). */
+const FOREGROUND_GRACE_MS = 1_500;
+
+async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
   // Review G2 — this session's serial. live() is false once a close or a newer session replaced it;
   // setMine / mine are the only way this turn writes or reads the shared state from here on.
   const mySerial = ++sessionSerial;
@@ -908,6 +923,19 @@ async function openSession() {
   turnAbort = new AbortController();
   const brainSignal = turnAbort.signal;
   setMine('opening');
+  /**
+   * 2026-10-25 (Sentry NB–NH, a relaunch mid-round) — a press that lands while iOS is still bringing
+   * the app forward (cold launch, unlock) waits briefly for 'active'. It never refuses: still not
+   * active after the wait, the mic is tried exactly as before (a locked phone with a live audio
+   * session may be allowed to record). The one thing it refuses is a STALE press — JS suspended
+   * mid-wait, the timer firing minutes later — which would open a mic nobody is talking into.
+   */
+  if ((await settleForegroundForMic(FOREGROUND_GRACE_MS)) === 'stale') {
+    logVoiceDiag('mic_press_stale', { source: 'listeningSession', origin });
+    setMine('idle');
+    return;
+  }
+  if (!live()) return;
   /**
    * Review G2 (finding 6) — a tap is the player starting to talk. If the caddie is mid-way through
    * something it started ON ITS OWN (a proactive line, a briefing), the go-ahead cue below would
@@ -1084,6 +1112,30 @@ async function openSession() {
     }
   };
   let capture: CaptureResult = await runCapture();
+
+  /**
+   * 2026-10-25 (Sentry ND/NF → NH → NC) — THE RECORDING WAS REFUSED BECAUSE THE APP IS NOT UP. iOS
+   * would not start it ("recording not started") with the app in the background; the retry below hit
+   * the same wall and the turn ended in "my mic didn't open — tap me again", which no tap fixes while
+   * the app stays behind the lock screen. Say the one thing that works, for a tap and for the
+   * auto-reopen after a caddie question alike (the player is answering into this mic). Foreground
+   * failures are untouched: they still retry and still own the mic trouble.
+   */
+  if (capture.bail === 'error' && micMayBeRefusedNow() && (state as SessionState) === 'listening' && live()) {
+    logVoiceSilentFail('mic_needs_foreground', { source: 'listeningSession', origin });
+    const s = useSettingsStore.getState();
+    const lang = (['en', 'es', 'zh'] as const).includes(s.language as never) ? (s.language as 'en' | 'es' | 'zh') : 'en';
+    const line = CADDIE_NOTICE_MIC_NEEDS_APP[lang];
+    try { flashCaption(line); } catch { /* caption optional */ }
+    if (s.voiceEnabled) {
+      try {
+        const { speakDeviceNotice } = await import('./voiceService');
+        await speakDeviceNotice(line, lang, s.voiceGender);
+      } catch { /* notice is best-effort */ }
+    }
+    setMine('idle');
+    return;
+  }
 
   /**
    * 2026-08-17 — RESTART FRESH, ported from the tap path (useVoiceCaddie's `restartFresh`, added
@@ -1923,7 +1975,7 @@ function endTurn(serial: number): void {
     // lock on the way to 'idle', so re-arm it here or a stray earbud echo would open a SECOND
     // session on top of the one we're about to start.
     sessionInFlight = true;
-    void openSession().catch((e) => {
+    void openSession('auto_reopen').catch((e) => {
       console.log('[listeningSession] auto-reopen failed', e);
       sessionInFlight = false;
       setSessionStateMirror('idle');

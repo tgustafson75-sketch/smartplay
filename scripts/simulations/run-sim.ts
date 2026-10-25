@@ -8291,7 +8291,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // announcing 'listening' before it invited him to speak into a dead mic.
   check('LOCK voice: the session does not claim to listen until the mic is about to capture',
     (() => {
-      const open = lsSrc.indexOf('async function openSession()');
+      const open = lsSrc.indexOf('async function openSession(');
       const body = lsSrc.slice(open, lsSrc.indexOf('function closeSession()', open));
       const cue = body.indexOf("playVerbalCue('listen'");
       const listening = body.indexOf("setSessionStateMirror('listening')");
@@ -11894,7 +11894,7 @@ check('LOCK: bundled geometry outranks the engine only if it reproduces its own 
 check('LOCK: the caddie claims the mic BEFORE it promises to listen (no cue over a busy mic)',
   (() => {
     const ls = read('services/listeningSession.ts');
-    const open = ls.slice(ls.indexOf('async function openSession()'));
+    const open = ls.slice(ls.indexOf('async function openSession('));
     const iHandover = open.indexOf('await releaseExternalMic()');
     const iCue = open.indexOf("playVerbalCue('listen'");
     const iCapture = open.indexOf('captureUtteranceDetailed(');

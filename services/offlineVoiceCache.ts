@@ -37,7 +37,7 @@
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
 import { FIXED_OFFLINE_REPLIES_EN } from './localStatusResponder';
-import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_SAVED_OFFLINE, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_SAVED_OFFLINE, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_MIC_NEEDS_APP, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { _allCaddieTemplates } from '../constants/dialogTemplates/caddieTemplates';
 import { _allCoachTemplates } from '../constants/dialogTemplates/coachTemplates';
 import { _allPsychologistTemplates } from '../constants/dialogTemplates/psychologistTemplates';
@@ -79,6 +79,8 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   // never opened). Same treatment: it's a line the user hears at a bad moment, so it must not be
   // the moment they also hear the robot voice.
   { slug: 'mic_trouble_en', language: 'en', text: CADDIE_NOTICE_MIC_TROUBLE.en },
+  // 2026-10-25 — a press while the app was not in the foreground (iOS will not start a recording then).
+  ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `mic_needs_app_${language}`, language, text: CADDIE_NOTICE_MIC_NEEDS_APP[language] })),
   ...ACK_PHRASES.en.map((text, i) => ({ slug: `ack_en_${i}`, language: 'en' as const, text })),
   // 2026-08-08 (Tim — verbal listen/got-it cues replace the earcons his Tozo T6 never hears). Rendered
   // in the persona's real voice; listeningSession resolves + plays them at tap-to-listen / tap-again.

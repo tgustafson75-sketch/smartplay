@@ -32,6 +32,17 @@ export const CADDIE_NOTICE_MIC_TROUBLE: Record<'en' | 'es' | 'zh', string> = {
 };
 
 /**
+ * 2026-10-25 — a press that reached us while SmartPlay was not the open app (screen locked, or the
+ * press itself launched the app in the background). iOS will not start a recording then, so the true
+ * thing to say is what will work: open the app. Never "tap me again" — that tap fails the same way.
+ */
+export const CADDIE_NOTICE_MIC_NEEDS_APP: Record<'en' | 'es' | 'zh', string> = {
+  en: 'Open SmartPlay to talk to me — I can\'t use the mic from the background.',
+  es: 'Abre SmartPlay para hablar conmigo — no puedo usar el micrófono en segundo plano.',
+  zh: '打开 SmartPlay 跟我说话——在后台我用不了麦克风。',
+};
+
+/**
  * 2026-08-17 — the lines for when the CONNECTION failed, shared by every path that can hit it.
  *
  * These lived privately inside listeningSession while useVoiceCaddie's aborted-transcribe branch

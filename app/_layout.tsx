@@ -1281,6 +1281,13 @@ function AppNavigator() {
     })();
   }, []);
 
+  // 2026-10-25 — a swing captured with no signal is read when the signal comes back (and at launch for
+  // any left waiting). services/swing/orchestrator/readWhenOnline.
+  useEffect(() => {
+    try { return (require('../services/swing/orchestrator/readWhenOnline') as typeof import('../services/swing/orchestrator/readWhenOnline')).startReadWhenOnline(); }
+    catch { /* never blocks boot */ }
+  }, []);
+
   // Open Thread #2 — reclaim orphaned clip files. Sessions age out of the
   // 50-session window via slice(-50) with NO file cleanup, so persisted swing
   // clips + fault frames leak and storage grows unbounded. Mark-and-sweep once

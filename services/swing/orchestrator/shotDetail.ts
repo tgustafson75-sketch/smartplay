@@ -209,11 +209,27 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
   // 2026-10-16 — is that impact a HEARD strike (frame-exact) or a located one? The body read trusts only
   // a heard one over the hands' own motion.
   const impactHeard = impactIsHeard(shot, impactMs);
+  const outcome: import('../../poseAnalysisApi').PoseReadOutcome = {};
   const biomech = await poseMod.analyzeSwingFromVideo(
     uri, durMs, s.upload?.angleOverride ?? null, probed > 0, window, impactMs, swingerForSession(s).handedness,
     0, () => signal.aborted,   // a superseded / cancelled body read stops decoding, not just writing
-    impactHeard,
+    impactHeard, outcome,
   );
+  /**
+   * 2026-10-25 (Sentry N4 — iPhone, build 31: `pose_zero_frames · no_pose_detector · nativePose false`)
+   * — NO DETECTOR LOOKED, SO THERE IS NO ANSWER TO STORE. A stored null means "read, nobody there", and
+   * the `when` above never asks again — so a swing recorded before the iPhone had its pose module (1.0.3)
+   * kept "no body read" for good after the update. Leave it unread; the next time the swing is shown, it
+   * is read by whatever detector the phone has then.
+   *
+   * Review (10-25): a FORCED run is a new analysis (perhaps a new window after a trim), so what is stored
+   * belongs to the old one — it goes back to unread too, never left standing as this window's skeleton.
+   */
+  if (!biomech && outcome.unanswered) {
+    if (input.force) liveSessionStore(signal).clearShotBiomechanics(input.sessionId, input.shotId, first);
+    traceStep('body read: no pose detector could look — not stored, read again next time', { shot: traceShotLabel(s, input.shotId), forced: input.force }, { sessionId: input.sessionId });
+    return null;
+  }
   const store = liveSessionStore(signal);
   store.setShotBiomechanics(input.sessionId, input.shotId, biomech);
   if (first) store.setSessionBiomechanics(input.sessionId, biomech);

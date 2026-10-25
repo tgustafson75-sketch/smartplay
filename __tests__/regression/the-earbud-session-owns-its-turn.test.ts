@@ -339,3 +339,124 @@ describe('finding 6 — a tap barges in on speech the caddie started on its own'
     expect(firstStop).toBeGreaterThan(playLocalFile.mock.invocationCallOrder[0]);
   });
 });
+
+/**
+ * 2026-10-25 (Sentry NB–NH, iPhone, build 33, a relaunch mid-round, in_foreground: false, /greeting).
+ * An earbud press reached the session while the app was not the open app. iOS refused the recording
+ * twice (ND, NF — "recording not started"), the retry was mailed (NH) and the turn ended in "my mic
+ * didn't open — tap me again" (NC), which no tap could fix while the app stayed in the background.
+ * The echo of the same press was mailed as a failure (NG).
+ *
+ * The mic is never REFUSED up front — a locked phone with a live audio session may be allowed to
+ * record, and pocketed earbud talk is the core on-course flow. Only a start that actually failed
+ * while the app was not up is explained, and only a press made stale by a suspended JS thread is
+ * dropped.
+ */
+describe('relaunch — a press while the app is not in the foreground', () => {
+  type RN = { AppState: { currentState: string; addEventListener: (e: string, l: (s: string) => void) => { remove: () => void } }; Platform: { OS: string } };
+  const rn = () => require('react-native') as RN;
+  const log = () => require('../../services/voiceErrorLog') as { logVoiceSilentFail: jest.Mock; logVoiceDiag: jest.Mock };
+  const { CADDIE_NOTICE_MIC_NEEDS_APP, CADDIE_NOTICE_MIC_TROUBLE } = require('../../services/caddieAckLines') as typeof import('../../services/caddieAckLines');
+  const refused: Capture = { text: null, bail: 'error', heardSpeech: false, durationMs: null };
+  let appListeners: Array<(s: string) => void>;
+  const realAdd = rn().AppState.addEventListener;
+  beforeEach(() => {
+    appListeners = [];
+    const { AppState } = rn();
+    AppState.addEventListener = (_e, l) => { appListeners.push(l); return { remove: () => { appListeners = appListeners.filter((x) => x !== l); } }; };
+  });
+  afterEach(() => {
+    const r = rn();
+    r.AppState.currentState = 'active';
+    r.AppState.addEventListener = realAdd;
+    r.Platform.OS = 'ios';
+  });
+  const graceElapsed = () => new Promise((r) => setTimeout(r, 1_700));
+  const becomeActive = () => { rn().AppState.currentState = 'active'; appListeners.forEach((l) => l('active')); };
+
+  it('THE BUG: iOS, backgrounded, the start is refused — no doomed retry, no "tap me again", it says to open the app', async () => {
+    rn().AppState.currentState = 'background';
+    mockState.captures.push(refused, refused);
+    await tap();
+    await flush();
+    expect(mockState.captureCalls).toBe(1);
+    expect(mockState.spoken).toContain(CADDIE_NOTICE_MIC_NEEDS_APP.en);
+    expect(mockState.spoken).not.toContain(CADDIE_NOTICE_MIC_TROUBLE.en);
+    expect(log().logVoiceSilentFail).toHaveBeenCalledWith('mic_needs_foreground', expect.objectContaining({ origin: 'tap' }));
+    expect(log().logVoiceSilentFail).not.toHaveBeenCalledWith('listen_capture_retry', expect.anything());
+    expect(ls.getSessionState()).toBe('idle');
+  });
+
+  it('pocketed earbud talk is NOT refused: backgrounded iOS still records at once, and a working mic is just a turn', async () => {
+    rn().AppState.currentState = 'background';
+    await tap(); // no grace wait — a press settled in the background goes straight to the mic
+    expect(mockState.captureCalls).toBe(1);
+    expect(mockState.spoken).not.toContain(CADDIE_NOTICE_MIC_NEEDS_APP.en);
+  });
+
+  it('the caddie\'s own reopen after a question gets the same honest line, not silence', async () => {
+    mockState.precheck = () => ({ intent_type: 'unknown', confidence: 'high', raw_text: 'hey' });
+    mockState.captures.push(said('hey'));
+    mockState.brain.push(async () => {
+      rn().AppState.currentState = 'background'; // the player locks the phone while it answers
+      mockState.captures.push(refused, refused);
+      return { text: "What's on your mind today?", audioBase64: null, toolActions: [] };
+    });
+    await tap();
+    await flush(60);
+    expect(mockState.captureCalls).toBe(2);
+    expect(log().logVoiceSilentFail).toHaveBeenCalledWith('mic_needs_foreground', expect.objectContaining({ origin: 'auto_reopen' }));
+    expect(mockState.spoken).toContain(CADDIE_NOTICE_MIC_NEEDS_APP.en);
+  });
+
+  it('a press while iOS is still bringing the app forward waits for the first active and then listens', async () => {
+    rn().AppState.currentState = 'inactive';
+    await tap();
+    expect(mockState.captureCalls).toBe(0);
+    becomeActive();
+    await flush();
+    expect(mockState.captureCalls).toBe(1);
+  });
+
+  it('a press whose wait was frozen by a suspended JS thread is stale — no mic opens minutes later', async () => {
+    rn().AppState.currentState = 'inactive';
+    await tap();
+    clock += 10 * 60_000; // JS suspended; the timer fires on the next wake
+    await graceElapsed();
+    await flush();
+    expect(mockState.captureCalls).toBe(0);
+    expect(log().logVoiceDiag).toHaveBeenCalledWith('mic_press_stale', expect.anything());
+    expect(ls.getSessionState()).toBe('idle');
+  });
+
+  it('foreground is unchanged: a failed start still retries and owns the mic trouble', async () => {
+    mockState.captures.push(refused, refused);
+    await tap();
+    await flush();
+    expect(mockState.captureCalls).toBe(2);
+    expect(mockState.spoken).toContain(CADDIE_NOTICE_MIC_TROUBLE.en);
+    expect(mockState.spoken).not.toContain(CADDIE_NOTICE_MIC_NEEDS_APP.en);
+  });
+
+  it('Android is unchanged: a backgrounded failure retries as before', async () => {
+    rn().Platform.OS = 'android';
+    rn().AppState.currentState = 'background';
+    mockState.captures.push(refused, refused);
+    await tap();
+    await flush();
+    expect(mockState.captureCalls).toBe(2);
+    expect(mockState.spoken).not.toContain(CADDIE_NOTICE_MIC_NEEDS_APP.en);
+  });
+
+  it('the echo of the same press while the mic is opening is absorbed, not mailed as a failure (NG, MD, MP, N2)', async () => {
+    rn().AppState.currentState = 'inactive'; // holds the session in 'opening' so the echo lands there
+    await tap();
+    expect(ls.getSessionState()).toBe('opening');
+    clock += 120; // the second event of one press
+    await ls.toggle();
+    expect(log().logVoiceSilentFail).not.toHaveBeenCalledWith('tap_swallowed', expect.anything());
+    expect(log().logVoiceDiag).toHaveBeenCalledWith('tap_echo_absorbed', expect.anything());
+    becomeActive();
+    await flush();
+  });
+});

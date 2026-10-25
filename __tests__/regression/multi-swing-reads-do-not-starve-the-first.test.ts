@@ -33,6 +33,8 @@ jest.mock('../../services/poseDetection', () => ({
 jest.mock('../../services/reachability', () => ({
   ...jest.requireActual('../../services/reachability'),
   lastReachability: () => (mockLastVerdict ? { verdict: mockLastVerdict, via: 'apple', controlMs: 3000, at: Date.now() - mockVerdictAgeMs } : null),
+  // Every read here fails no_network; the read then asks whether the phone is offline (2026-10-25). Never the real internet.
+  probeReachability: async () => ({ verdict: 'internet_ok', via: 'apple', controlMs: 100, at: Date.now() }),
 }));
 jest.mock('../../services/swingLibrary', () => ({ getAnalyzerKind: () => 'full_swing' }));
 jest.mock('../../services/swingCommentaryService', () => ({ getTranscriptionStatus: () => 'done' }));

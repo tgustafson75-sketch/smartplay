@@ -59,7 +59,7 @@ describe('the app never claims to be listening before the mic is live', () => {
 
   describe('earbud / global mic (listeningSession)', () => {
     const src = read('services/listeningSession.ts');
-    const open = src.indexOf('async function openSession()');
+    const open = src.indexOf('async function openSession(');
     const body = src.slice(open, src.indexOf('function closeSession()', open));
 
     it('holds the opening state through the awaited verbal cue', () => {

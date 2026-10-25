@@ -23,7 +23,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, StyleSheet, Animated, Image, TouchableWithoutFeedback,
-  useWindowDimensions, AccessibilityInfo, Easing,
+  useWindowDimensions, AccessibilityInfo, Easing, AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Asset } from 'expo-asset';
@@ -126,6 +126,24 @@ export default function GreetingScreen() {
   // branches were unaffected (speak() calls configureAudioForSpeech
   // internally as its first step).
   const [audioReady, setAudioReady] = useState(false);
+  /**
+   * 2026-10-25 (Sentry NB–NH — a relaunch mid-round with the app NOT in the foreground, route
+   * /greeting). A headset or car "play" can launch SmartPlay in the background (the native
+   * BluetoothMediaButton module registers it as a remote-command target), and index routes every
+   * cold launch here. The greeting then played into the player's earbuds with no screen up, spent
+   * the once-per-launch greeting where nobody could see it, and was the line the press then cut.
+   * The greeting is for a player looking at the app: it starts — and its 10s safety net arms — on
+   * the first 'active'.
+   */
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    if (appActive) return;
+    const sub = AppState.addEventListener('change', (next) => { if (next === 'active') setAppActive(true); });
+    // iOS reports 'inactive' through the launch itself; if it turned 'active' between the first
+    // render and this subscription, that event is gone — read it, or the greeting would never start.
+    if (AppState.currentState === 'active') setAppActive(true);
+    return () => sub.remove();
+  }, [appActive]);
 
   // 2026-06-01 — Fix GG: REVERT the D-ID Kevin intro video. Tim's repro
   // across many sessions: video renders visually but audio fires late
@@ -308,9 +326,10 @@ export default function GreetingScreen() {
   const startTransitionRef = useRef(startTransition);
   startTransitionRef.current = startTransition;
   useEffect(() => {
+    if (!appActive) return;
     const t = setTimeout(() => startTransitionRef.current(), 10_000);
     return () => clearTimeout(t);
-  }, []);
+  }, [appActive]);
 
   // 2026-06-01 — Fix GJ: structural fix for the splash audio cut-off.
   // The audio-kickoff effect's deps [greeting, settingsHydrated,
@@ -348,6 +367,7 @@ export default function GreetingScreen() {
     // video that hasn't mounted yet → ends silent. Effect re-runs
     // when audioReady flips true.
     if (!audioReady) return;
+    if (!appActive) return; // 2026-10-25 — never greet an app nobody is looking at (see appActive)
 
     // 2026-06-01 — Fix GJ: claim the start so the effect can never
     // re-enter mid-playback. Any subsequent dep flip will hit the
@@ -493,7 +513,7 @@ export default function GreetingScreen() {
     // effect re-runs after configureAudioForSpeech resolves so the
     // Kevin-video await aligns with the actual <Video> mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [greeting, settingsHydrated, audioReady]);
+  }, [greeting, settingsHydrated, audioReady, appActive]);
 
   // 2026-06-01 — Fix GJ: unmount-only cleanup. Runs ONLY when the
   // greeting screen truly unmounts (router.replace → /(tabs)/caddie or

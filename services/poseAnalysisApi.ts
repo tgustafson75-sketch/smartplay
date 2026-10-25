@@ -251,6 +251,15 @@ export function poseDetectorUnavailable(): boolean {
 let cloudPoseMsTotal = 0;
 export const cloudPoseMs = (): number => cloudPoseMsTotal;
 
+/**
+ * 2026-10-25 (Sentry N4 — an iPhone on build 31, `pose_zero_frames · no_pose_detector · nativePose
+ * false`) — HOW MANY FRAMES A DETECTOR ACTUALLY LOOKED AT. Monotonic. The on-device engine looks when
+ * its module is in the binary; the cloud looks when it answers as configured. A body read that ends with
+ * none and this count unmoved was never read — nothing could have seen the golfer — so its null is not
+ * an answer to store (services/swing/orchestrator/shotDetail).
+ */
+let poseLooksTotal = 0;
+
 export async function analyzePoseFromUri(
   imageUri: string, timestampMs = 0,
   /** deviceOnly: the on-device engine's answer only — no cloud fallback (a nudge while nobody has been seen). */
@@ -269,6 +278,7 @@ export async function analyzePoseFromUri(
   try {
     const mp = await import('./mediaPipePoseService');
     const t0 = Date.now();
+    if (mp.isMediaPipeAvailable()) poseLooksTotal += 1;
     const onDevice = await mp.detectPoseFromUri(imageUri, undefined, timestampMs);
     if (onDevice) {
       // SPEED telemetry — confirm the on-device path is live + measure it.
@@ -315,6 +325,7 @@ export async function analyzePoseFromUri(
     // set. Collapse to null so the biomechanics card stays hidden —
     // identical UX, just no false 503 alert from Vercel.
     cloudPoseUnconfigured = data.configured === false;
+    if (data.configured !== false) poseLooksTotal += 1;
     if (data.configured === false || data.data == null) return null;
     const keypoints = normalizeKeypoints(data.data);
     if (keypoints.length === 0) return null;
@@ -1149,6 +1160,9 @@ function avgScore(frameA: PoseFrame | undefined, frameB: PoseFrame | null | unde
   return Math.round(avg * 100) / 100;
 }
 
+/** Why a body read came back empty. `unanswered`: no detector looked — not "nobody in frame". */
+export interface PoseReadOutcome { unanswered?: boolean }
+
 /** Full pipeline: extract keyframes from a swing video, run pose detection
  *  on each, compute biomechanics. Returns null when the video is invalid
  *  OR the pose API failed for every frame (caller renders fallback). */
@@ -1166,9 +1180,11 @@ export async function analyzeSwingFromVideo(
   shouldAbort?: () => boolean,
   /** 2026-10-16 — `impactMs` is a strike the microphone HEARD (frame-exact), not a located guess. */
   impactHeard = false,
+  /** Filled in when the read found nothing: `unanswered` = no detector looked at a single frame. */
+  outcome?: PoseReadOutcome,
 ): Promise<SwingBiomechanics | null> {
   const frames = await extractPoseFramesFromVideo(
-    videoUri, durationMs, trustDuration, window, impactMs, shouldAbort, impactToleranceMs,
+    videoUri, durationMs, trustDuration, window, impactMs, shouldAbort, impactToleranceMs, outcome,
   );
   if (!frames) return null;
   return computeBiomechanics(frames, angle, handedness, impactHeard);
@@ -1202,8 +1218,12 @@ export async function extractPoseFramesFromVideo(
    * exactly the previous behaviour.
    */
   impactToleranceMs = 0,
+  /** Filled in when no frame read: `unanswered` = no detector looked at a single frame (see poseLooksTotal). */
+  outcome?: PoseReadOutcome,
 ): Promise<PoseFrame[] | null> {
   try { require('./routeBreadcrumb').breadcrumb('pose:extract:start', { durMs: Math.round(durationMs), windowed: !!window }); } catch { /* non-fatal */ }
+  const looksAtStart = poseLooksTotal;
+  if (outcome) outcome.unanswered = false;
 
   // 2026-07-30 (audit #13 — "analysis stuck, works on the 3rd try") — make the PRIVATE COPY FIRST, before
   // ANY native retriever runs (the duration probe below AND the frame extraction). Previously the copy
@@ -1287,6 +1307,7 @@ export async function extractPoseFramesFromVideo(
     console.warn('[pose] private copy failed — skipping frame extraction to avoid a native crash');
     // Costs the ENTIRE measured read (no biomech, no skeleton, no dimensions). Was console-only.
     logPose('pose_private_copy_failed', { videoUri: videoUri.slice(-40), windowed: !!window });
+    if (outcome) outcome.unanswered = true;   // nothing was decoded, so nothing was read
     return null;
   }
   workUri = sharedCopy.uri;
@@ -1724,6 +1745,7 @@ export async function extractPoseFramesFromVideo(
       fileWaitMs,
     });
     lastFrameFailure = null;
+    if (outcome) outcome.unanswered = poseLooksTotal === looksAtStart;
     return null;
   }
   return frames;

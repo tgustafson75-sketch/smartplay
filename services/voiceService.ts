@@ -3,7 +3,7 @@ import { playbackSoundOptions } from './audioPlaybackOptions';
 import * as Speech from 'expo-speech';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
-import { logVoiceSilentFail, logVoiceError, logTranscribeError, logVoiceDiag } from './voiceErrorLog';
+import { logVoiceSilentFail, logVoiceError, logTranscribeError, logVoiceDiag, describeError } from './voiceErrorLog';
 import { createEndpointer } from './voice/endpointer';
 import type { CaptureBail } from './voice/captureBail';
 // 2026-06-07 (audit) — wire TTS into the circuit breaker so spoken replies
@@ -638,9 +638,24 @@ export const captureUtteranceDetailed = async (
       }, HEDGE_MS);
     let res: Response;
     try {
-      res = await raceOnce(15_000);
-    } catch {
-      res = await raceOnce(12_000);
+      try {
+        res = await raceOnce(15_000);
+      } catch {
+        res = await raceOnce(12_000);
+      }
+    } catch (uploadErr) {
+      /**
+       * 2026-10-25 (field: MM → MQ → MS, one Fold3 turn) — THE MIC WORKED; THE UPLOAD DIDN'T.
+       *
+       * Both upload races threw (AbortError — no signal), and the outer catch below files every throw
+       * as bail 'error', which means "the microphone died". So listeningSession retried the CAPTURE —
+       * re-opening the mic and making the player say it all again into a network that was still
+       * down — and then spoke the mic-trouble line, blaming a microphone that recorded fine. The
+       * recording is on disk; only the connection failed. That is 'transcribe_failed', whose honest
+       * answer is the evidence-aware connection line and whose rule is: do not reopen the mic.
+       */
+      logTranscribeError(null, describeError(uploadErr), { source: 'captureUtterance_upload' });
+      return done('transcribe_failed');
     }
 
     if (!res.ok) {
