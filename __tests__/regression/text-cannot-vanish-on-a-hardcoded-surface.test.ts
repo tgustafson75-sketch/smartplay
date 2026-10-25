@@ -81,10 +81,9 @@ const REVIEWED_SAFE: Record<string, string> = {
  * move together and pinning would re-break it in the opposite direction — white-pinned text on a
  * white light-mode pill. The invariant it actually has to satisfy is asserted directly further down
  * ("the caddie bottom bar specifically"), computed across every palette rather than by pinning an
- * implementation. coach-lesson is unchanged: its surface really is a fixed black video review pane.
+ * implementation. (coach-lesson, the last pinned surface, was removed 2026-10-24.)
  */
 const PINNED_SURFACES: { file: string; consts: string[] }[] = [
-  { file: 'app/swinglab/coach-lesson.tsx', consts: ['ON_BLACK_TEXT', 'ON_BLACK_MUTED'] },
 ];
 
 describe('a fixed-colour surface never carries theme-coloured text', () => {
@@ -118,7 +117,8 @@ describe('a fixed-colour surface never carries theme-coloured text', () => {
     expect(stale).toEqual([]);
   });
 
-  it.each(PINNED_SURFACES.map(p => [p.file, p.consts] as const))(
+  // Empty since 2026-10-24; it.each refuses an empty table, so the check runs only when one is pinned.
+  if (PINNED_SURFACES.length) it.each(PINNED_SURFACES.map(p => [p.file, p.consts] as const))(
     '%s keeps its text pinned rather than themed',
     (file, consts) => {
       const src = fs.readFileSync(path.join(ROOT, file), 'utf8');

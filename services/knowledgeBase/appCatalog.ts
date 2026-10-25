@@ -105,6 +105,25 @@ const ALL_APP_FEATURES: AppFeature[] = [
 
   // ── PLAY / COACH ─────────────────────────────────────────────────────────
   {
+    id: 'smartbay',
+    name: 'SmartBay AI',
+    aliases: ['smartbay', 'smart bay', 'smartbay ai', 'give me a lesson', 'swing lesson', 'coach caddie', 'bay lesson', 'coach lesson', 'coach me', 'live lesson', 'virtual lesson'],
+    // 2026-10-24 — took over Coach Lesson's aliases when SmartBay replaced it on the hub.
+    route: '/swinglab/smartbay',
+    category: 'play',
+    blurb: 'A full AI swing lesson by camera: baseline swings, one fix, a drill, a retest. Range mode (camera only) or Bay mode (also reads the sim screen)',
+    whenToUse: 'they want a lesson or coaching on their swing at the range or in a simulator bay',
+  },
+  {
+    id: 'smartplay-golf',
+    name: 'SmartPlay Golf',
+    aliases: ['smartplay golf', 'smart play golf', 'golf game'],
+    route: '/swinglab/golf',
+    category: 'play',
+    blurb: 'The free 3D golf game: real holes, swing-arc tempo, challenges',
+    whenToUse: 'they want to play the golf game',
+  },
+  {
     id: 'coach-mode',
     name: 'Coach Mode',
     aliases: ['coach mode', 'coaching', 'coach someone', 'analyze another player'],
@@ -241,15 +260,6 @@ const ALL_APP_FEATURES: AppFeature[] = [
     category: 'practice',
     blurb: 'Indoor / hotel-room practice — swing work with no ball and limited space',
     whenToUse: 'they are indoors or in a hotel room with no ball',
-  },
-  {
-    id: 'coach-lesson',
-    name: 'Coach Lesson',
-    aliases: ['coach lesson', 'give me a lesson', 'coach me', 'live lesson', 'virtual lesson'],
-    route: '/swinglab/coach-lesson',
-    category: 'play',
-    blurb: 'Live camera-first lesson loop — the caddie watches, coaches, and re-checks in real time',
-    whenToUse: 'they want a real-time coached lesson on their swing',
   },
   {
     id: 'bilateral',

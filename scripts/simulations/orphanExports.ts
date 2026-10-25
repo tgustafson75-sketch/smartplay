@@ -205,13 +205,7 @@ export function findOrphanExports(): string[] {
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
   // ── 2026-10-14: SmartBay exchange v1 ────────────────────────────────────────
-  'services/bayExchange.ts :: parseBayLesson':
-    'SURFACE. The strict reader half of importBayLessonWithFeedback (Settings → Import SmartBay lesson calls ' +
-    'that); exported so __tests__/logic/bay-exchange.test.ts can hold it to the same example files the bay\'s ' +
-    'own bay-core tests parse.',
-  'services/bayExchange.ts :: importBayLesson':
-    'SURFACE. The store-writing half of importBayLessonWithFeedback, exported for the same test (one record, ' +
-    'dated at the lesson, no plan tick, labelled by the fix).',
+  // parseBayLesson + importBayLesson are wired since 2026-10-24: app/swinglab/smartbay.tsx imports a hosted lesson.
   'services/bayExchange.ts :: parsePlayer':
     'SURFACE. The bay\'s player-file reader, copied from smartbay-ai bay-core/exchange.ts so this app\'s own ' +
     'buildPlayerExport is tested against the exact reader the bay applies. PARKED for its in-app caller: ' +
@@ -271,12 +265,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'to the point I tapped" — the exact defect class fixed five times today. Delete candidate.',
   'services/puttingAnalysisService.ts :: speakPuttingAnalysis':
     'PARKED — the RENDERED-BUT-NEVER-SPOKEN defect is FIXED (2026-08-25): the camera putt path now calls the shared speakPuttRead, so the caddie says the read out loud. What remains orphaned is this SPOKEN-READ entry point — analyzePutt({ spoken_read }) for a player who says their own read aloud ("downhill, left to right"). That flow has no surface yet. Wire it when the green-side voice ask exists; do not delete, it is the other half of the same feature.',
-  'services/coachLesson.ts :: planById':
-    'PARKED (2.0) — was tagged WIRE, which reads as a live defect, and it is not one. The screen '
-    + 'picks a plan by tapping a card and passes the OBJECT, so nothing needs an id lookup today. '
-    + 'Selecting a plan BY NAME is what a voice-driven Coach Caddie needs, and Coach Caddie is '
-    + 'explicitly 2.0: releaseSurface.SHELVED_ROUTES already holds /swinglab/coach-lesson, and Tim '
-    + 'named it as THE 2.0 feature on 09-01. Named blocker, not "later".',
 
   // ── WIRE — the club seam, all of it feeding docs/NEXT-CLUB-LOGIC-SWEEP.md ──────
 

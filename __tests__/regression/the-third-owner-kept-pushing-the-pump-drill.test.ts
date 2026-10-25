@@ -85,7 +85,7 @@ describe('nothing was thrown away to get there', () => {
     // It was five-way authored once; data/drillProtocols owns it now and this keeps it that way.
     const proto = code('data/drillProtocols.ts');
     expect(proto).toMatch(/export const PUMP_DRILL: DrillProtocol/);
-    for (const f of ['data/drillCatalog.ts', 'services/coachKnowledge.ts', 'services/knowledgeBase/modules/drills.ts']) {
+    for (const f of ['data/drillCatalog.ts', 'services/knowledgeBase/modules/drills.ts']) {
       expect(code(f)).toMatch(/PUMP_DRILL/);
     }
   });

@@ -149,7 +149,11 @@
     },
     "accessibility_label": {
       "edit_your_profile": "Editar tu perfil",
-      "edit_your_bag": "Editar tu bolsa: palos, varillas y grips"
+      "edit_your_bag": "Editar tu bolsa: palos, varillas y grips",
+      "open_smartbay_lessons": "Abrir tus lecciones de SmartBay"
+    },
+    "text": {
+      "lesson_drill": "Ejercicio: {{drill}}"
     }
   },
   "play": {
@@ -434,5 +438,16 @@
     "accessibility_label": {
       "not_a_shot": "No fue golpe — quitarlo, solo estaba midiendo"
     }
+  },
+  "hosted_web": {
+    "smartbay_title": "SmartBay AI",
+    "golf_title": "SmartPlay Golf",
+    "back": "Volver a SwingLab",
+    "camera_off": "{{title}} observa tu swing con la cámara. El acceso a la cámara está desactivado para SmartPlay Caddie.",
+    "open_settings": "Abrir Ajustes",
+    "offline": "{{title}} necesita conexión para cargar.",
+    "try_again": "Reintentar",
+    "lesson_added": "Se añadió “{{label}}” a tu historial de práctica.",
+    "allow_camera": "Permitir cámara"
   }
 }

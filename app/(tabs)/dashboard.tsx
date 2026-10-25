@@ -81,7 +81,8 @@ import { setScreenContext } from '../../services/screenContext';
 import { generateKevinRead } from '../../services/kevinReadService';
 import { useTheme } from '../../contexts/ThemeContext';
 import { isShelved } from '../../services/releaseSurface';
-import { useCoachLessonStore } from '../../store/coachLessonStore';
+import { useBayLessonStore } from '../../store/bayLessonStore';
+import { bayLessonLabel } from '../../services/bayExchange';
 import { detectPatternShift } from '../../services/patternDetection';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
@@ -398,8 +399,8 @@ export default function Dashboard() {
   // analysis primary_fault via caddieMemoryStore) → curated golf exercises that help it. Honest:
   // only shows when we have a real fault AND a vetted exercise set for it. [[fault-to-workout-export]]
   const swingFault = useCaddieMemoryStore((s) => s.getPlayer().tendencies.dominantMiss);
-  // The most recent lesson SESSION (coachLessonStore.sessions), for the Lessons card below.
-  const lastLessonSession = useCoachLessonStore((s) => s.sessions[0] ?? null);
+  // The most recent SmartBay lesson (bayLessonStore), for the Lessons card below.
+  const lastLesson = useBayLessonStore((s) => s.lessons[0] ?? null);
   const faultWorkouts = useMemo(() => exercisesForFault(swingFault), [swingFault]);
   const faultLabel = useMemo(() => (swingFault ? swingFault.replace(/_/g, ' ') : ''), [swingFault]);
   const onExportWorkouts = useCallback(() => {
@@ -1004,24 +1005,15 @@ export default function Dashboard() {
         )}
 
         {/**
-          * 2026-09-01 (Tim — "make sure that those lessons have a store, not the swing library,
-          * probably more appropriate card in the dashboard") — WHERE A LESSON LIVES.
-          *
-          * A lesson is a SESSION — a plan, its focuses, the reps that were read — not a clip. Filing
-          * it in the swing library would bury it among every practice ball ever hit and lose the
-          * shape of the lesson entirely, so it has its own store (coachLessonStore.sessions) and its
-          * own card here, on the screen the player actually sees.
-          *
-          * Gated on isShelved: Coach Caddie left SHELVED_ROUTES for BETA_ROUTES on 2026-09-20, so the
-          * card shows for every player once a lesson exists. Re-shelving it is one line in
-          * releaseSurface.ts — the card, the store and the route go with it.
+          * 2026-10-24 (Tim) — a lesson is a SmartBay lesson now (Coach Caddie is gone). The latest one
+          * the hosted bay saved (bayLessonStore), its fix and its drill; tap for another lesson.
           */}
-        {!isShelved('/swinglab/coach-lesson') && lastLessonSession ? (
+        {lastLesson ? (
           <TouchableOpacity
             style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
-            onPress={() => router.push('/swinglab/coach-lesson' as never)}
+            onPress={() => router.push('/swinglab/smartbay' as never)}
             accessibilityRole="button"
-            accessibilityLabel={t('dashboard.accessibility_label.open_coach_caddie_lessons')}
+            accessibilityLabel={t('dashboard.accessibility_label.open_smartbay_lessons')}
           >
             <View style={styles.sharedHeader}>
               <View style={{ width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent_muted }}>
@@ -1030,10 +1022,11 @@ export default function Dashboard() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>{t('dashboard.text.lessons')}</Text>
                 <Text style={[styles.sharedTitle, { color: colors.text_primary }]} numberOfLines={1}>
-                  {lastLessonSession.label}
+                  {bayLessonLabel(lastLesson)}
                 </Text>
-                {/* Honest: reps READ, never reps attempted, and 'good' only where a verdict said so. */}
-                <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>{lastLessonSession.completed ? t('dashboard.text.finished', { plan: `${lastLessonSession.repsGood} of ${lastLessonSession.repsRead} swing${lastLessonSession.repsRead === 1 ? '' : 's'} on plan` }) : t('dashboard.text.ended_early', { plan: `${lastLessonSession.repsGood} of ${lastLessonSession.repsRead} swing${lastLessonSession.repsRead === 1 ? '' : 's'} on plan` })}</Text>
+                {lastLesson.lesson.drill ? (
+                  <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>{t('dashboard.text.lesson_drill', { drill: lastLesson.lesson.drill.name })}</Text>
+                ) : null}
               </View>
               <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
             </View>

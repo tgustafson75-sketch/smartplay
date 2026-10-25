@@ -80,7 +80,8 @@ describe('every route the app NAVIGATES to exists', () => {
    */
   function sourceFiles(dir: string, out: string[] = []): string[] {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (['node_modules', '.git', '.expo', 'ios', 'android', '__tests__'].includes(e.name)) continue;
+      // .claude holds agent worktrees: other checkouts of this repo, not this app's source.
+      if (['node_modules', '.git', '.expo', '.claude', 'ios', 'android', '__tests__'].includes(e.name)) continue;
       const f = path.join(dir, e.name);
       if (e.isDirectory()) sourceFiles(f, out);
       else if (/\.tsx?$/.test(e.name)) out.push(f);
@@ -121,7 +122,8 @@ describe('every dynamic module path resolves', () => {
    */
   function sourceFiles(dir: string, out: string[] = []): string[] {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (['node_modules', '.git', '.expo', 'ios', 'android', '__tests__'].includes(e.name)) continue;
+      // .claude holds agent worktrees: other checkouts of this repo, not this app's source.
+      if (['node_modules', '.git', '.expo', '.claude', 'ios', 'android', '__tests__'].includes(e.name)) continue;
       const f = path.join(dir, e.name);
       if (e.isDirectory()) sourceFiles(f, out);
       else if (/\.tsx?$/.test(e.name)) out.push(f);

@@ -54,13 +54,6 @@ describe('every other weight author says a negative share as "back"', () => {
     expect(s).toMatch(/weightShiftPct < 0 \? `Weight moved back \$\{-weightShiftPct\}% toward your trail side/);
     expect(s).toMatch(/finishWeightPct < 0 \? `Weight moved back \$\{-finishWeightPct\}% toward your trail side at the finish/);
   });
-  it('the coach lesson never speaks "-21% on your lead side"', () => {
-    const { composeFocusFeedback } = require('../../services/coachLesson');
-    const r = composeFocusFeedback('weight_shift', bio({ weightShiftPct: -21 }));
-    expect(r.line).not.toMatch(/-\d+%/);
-    expect(r.line).toMatch(/back toward your trail side/);
-    expect(r.metricLabel).toBe('21% back');
-  });
   it('the share card and the read prompt', () => {
     expect(src('app/swinglab/swing/[swing_id].tsx')).toMatch(/label: 'Weight shift', value: signedWeightDisplay\(/);
     expect(src('api/swing-analysis.ts')).toMatch(/m\.weight_shift_pct < 0 \? `weight moved BACK/);

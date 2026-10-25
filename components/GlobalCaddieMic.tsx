@@ -27,6 +27,8 @@ import { MESSAGING_ENABLED } from '../constants/featureFlags';
 const ROUTE_LABELS: { prefix: string; label: string }[] = [
   { prefix: '/swinglab/smartmotion', label: 'Smart Motion (recording + analyzing swings)' },
   { prefix: '/swinglab/coach-mode', label: 'Coach Mode' },
+  { prefix: '/swinglab/smartbay', label: 'SmartBay AI (a camera swing lesson: baseline, one fix, a drill, a retest)' },
+  { prefix: '/swinglab/golf', label: 'SmartPlay Golf (the 3D golf game)' },
   { prefix: '/swinglab/library', label: 'the Swing Library' },
   { prefix: '/swinglab/upload', label: 'PuttingLab / swing upload' },
   { prefix: '/swinglab', label: 'SwingLab' },

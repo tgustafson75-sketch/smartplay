@@ -385,11 +385,6 @@
     "text": "noise floor {Number.isFinite(result?.floorDb) ? result…} dB"
   },
   {
-    "file": "app/swinglab/coach-lesson.tsx",
-    "line": 556,
-    "text": "{pillText}{stepLabel ? ` · ${stepLabel}` : ''}{rep > 0 && !isDiag ? ` · rep ${rep}` : ''}"
-  },
-  {
     "file": "app/swinglab/coach-mode.tsx",
     "line": 384,
     "text": "{activeMember.approximate_handicap != null…}"

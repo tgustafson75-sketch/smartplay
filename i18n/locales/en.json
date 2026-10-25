@@ -492,7 +492,6 @@
       "open_profile": "Open profile",
       "open_settings": "Open settings",
       "open_messages": "Open Messages",
-      "open_coach_caddie_lessons": "Open Coach Caddie lessons",
       "open_coach_mode": "Open Coach Mode",
       "try_a_new_look_selfie": "Try a new look — selfie + AI portrait",
       "pick_a_course_on_the": "Pick a course on the Play tab",
@@ -501,7 +500,8 @@
       "export_these_exercises": "Export these exercises",
       "import_workouts_from_smartpump": "Import workouts from SmartPump",
       "edit_your_profile": "Edit your profile",
-      "edit_your_bag": "Edit your bag — clubs, shafts and grips"
+      "edit_your_bag": "Edit your bag — clubs, shafts and grips",
+      "open_smartbay_lessons": "Open your SmartBay lessons"
     },
     "text": {
       "messages": "Messages",
@@ -526,8 +526,6 @@
       "mph": "{{wind_speed_mph}} mph",
       "ball_one": "{{d}} · {{count}} ball",
       "ball_other": "{{d}} · {{count}} balls",
-      "finished": "{{plan}} · finished",
-      "ended_early": "{{plan}} · ended early",
       "tap_hit_the_mic_and": "Tap, hit the mic, and just talk golf — your caddie keeps learning your game and folds it into every read, drill and plan.",
       "tap_hit_the_mic_and_2": "Tap, hit the mic, and talk to your caddie about your game — how you practice, the time you have, what you’re chasing. It listens and fits everything to YOU.",
       "logged": "LOGGED",
@@ -543,7 +541,8 @@
       "practice_day_meta": "{{balls}} balls · {{bouts}}",
       "practice_bouts_one": "one go",
       "practice_bouts_other": "{{count}} goes",
-      "see_the_whole_day": "See the whole day →"
+      "see_the_whole_day": "See the whole day →",
+      "lesson_drill": "Drill: {{drill}}"
     },
     "alert": {
       "delete_round": "Delete round?"
@@ -2146,29 +2145,6 @@
       "tap_record_then_take_strikes": "Tap Record, then take {{TARGET_STRIKES}} strikes",
       "active_calibration_floor_db_threshold": "✓ Active calibration: floor {{noise_floor_db}} dB · threshold {{transient_threshold_db}} dB",
       "noise_floor": "noise floor {{value}} dB"
-    }
-  },
-  "swinglab_coach_lesson": {
-    "accessibility_label": {
-      "back": "Back",
-      "end_lesson": "End lesson"
-    },
-    "coach_lesson_screen": {
-      "ai_lesson": "AI LESSON",
-      "get_a_real_lesson": "Get a real lesson",
-      "your_caddie_watches_a_swing": "Your caddie watches a swing, finds the one thing costing you the most, and coaches you through it like a pro — feel, drill, and checkpoints.",
-      "start_lesson": "Start lesson",
-      "guided_sessions": "GUIDED SESSIONS",
-      "single_focus": "SINGLE FOCUS",
-      "watching": "Watching",
-      "record_a_baseline_swing": "Record a baseline swing",
-      "swing": "Swing",
-      "take_on_the_next_thing": "Take on the next thing",
-      "bank_it_finish": "Bank it & finish",
-      "got_it_end_lesson": "Got it — end lesson",
-      "end_lesson": "End lesson",
-      "drill": "DRILL · {{name}}",
-      "reading_that_clip": "Reading that one…"
     }
   },
   "swinglab_coach_mode": {
@@ -4126,5 +4102,16 @@
     "accessibility_label": {
       "open": "Open the round data view"
     }
+  },
+  "hosted_web": {
+    "smartbay_title": "SmartBay AI",
+    "golf_title": "SmartPlay Golf",
+    "back": "Back to SwingLab",
+    "camera_off": "{{title}} watches your swing through the camera. Camera access is off for SmartPlay Caddie.",
+    "open_settings": "Open Settings",
+    "offline": "{{title}} needs a connection to load.",
+    "try_again": "Try again",
+    "lesson_added": "Added “{{label}}” to your practice history.",
+    "allow_camera": "Allow camera"
   }
 }

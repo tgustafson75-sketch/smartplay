@@ -272,8 +272,13 @@ const ALL_TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; p
   // NO voice route (spoken "open Coach Caddie / Hotel Mode / SwingSim" → "I don't know that tool").
   // swingsim is DISTINCT from sim_round (the on-course narrated round) — the bare "sim" aliases
   // still route to sim_round; "swingsim"/"swing sim game" open the phone-as-club game screen.
-  coach_lesson: { type: 'navigate', path: '/swinglab/coach-lesson' },
-  coach_caddie: { type: 'navigate', path: '/swinglab/coach-lesson' },
+  // 2026-10-24 — a lesson is SmartBay AI now (it replaced Coach Caddie on the hub).
+  coach_lesson: { type: 'navigate', path: '/swinglab/smartbay' },
+  coach_caddie: { type: 'navigate', path: '/swinglab/smartbay' },
+  smartbay: { type: 'navigate', path: '/swinglab/smartbay' },
+  smartbay_ai: { type: 'navigate', path: '/swinglab/smartbay' },
+  smartplay_golf: { type: 'navigate', path: '/swinglab/golf' },
+  golf_game: { type: 'navigate', path: '/swinglab/golf' },
   hotel_mode: { type: 'navigate', path: '/swinglab/indoor' },
   indoor: { type: 'navigate', path: '/swinglab/indoor' },
   swingsim: { type: 'navigate', path: '/swinglab/simround' },
@@ -363,8 +368,12 @@ const TOOL_LABEL: Record<string, string> = {
   start_round: 'Play',
   // 2026-07-24 (final QA) — labels for the newly-routed tools AND for the vision-read / club-scan
   // aliases that previously fell through to the else branch and spoke "Opening undefined." aloud.
-  coach_lesson: 'Coach Caddie',
-  coach_caddie: 'Coach Caddie',
+  coach_lesson: 'SmartBay AI',
+  coach_caddie: 'SmartBay AI',
+  smartbay: 'SmartBay AI',
+  smartbay_ai: 'SmartBay AI',
+  smartplay_golf: 'SmartPlay Golf',
+  golf_game: 'SmartPlay Golf',
   hotel_mode: 'Hotel Mode',
   indoor: 'Hotel Mode',
   swingsim: 'SwingSim',

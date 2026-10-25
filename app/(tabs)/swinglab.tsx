@@ -173,16 +173,24 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
 // 2026-06-17 (Tim) — Play Smarter: Coach Mode + Focus Session + Shot Shapes.
 // On-Course Caddie removed (it just circled back to the Play tab).
 const PLAY_SECTION: LauncherCardSpec[] = [
-  // 2026-07-23 (Tim) — Coach Caddie leads the coaching section as its HERO (index 0). A guided AI
-  // lesson: the caddie names a focus, watches your swing (SmartMotion), and coaches that one thing,
-  // rep by rep. Compartmentalized — see services/coachLesson.ts + app/swinglab/coach-lesson.tsx.
+  // 2026-10-24 (Tim) — SmartBay AI replaces Coach Caddie as the section HERO: the bay's full lesson,
+  // hosted (services/smartBayHost.ts). Range = camera only; Bay adds the sim screen's numbers.
+  // Coach Caddie's screen stays for resuming a past lesson from the dashboard.
   {
-    key: 'coach-caddie',
+    key: 'smartbay',
     icon: 'sparkles-outline',
-    title: 'Coach Caddie',
-    sub: 'A guided AI lesson — the caddie coaches one focus at a time as you swing',
-    route: '/swinglab/coach-lesson',
+    title: 'SmartBay AI',
+    sub: 'A real lesson: baseline, one fix, a drill, a retest — at the range or in a sim bay',
+    route: '/swinglab/smartbay',
     tag: 'LESSON',
+  },
+  {
+    key: 'smartplay-golf',
+    icon: 'game-controller-outline',
+    title: 'SmartPlay Golf',
+    sub: 'The free 3D golf game — real holes, your tempo, play the smart shot',
+    route: '/swinglab/golf',
+    tag: 'GAME',
   },
   {
     key: 'coach-mode',

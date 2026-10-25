@@ -5,7 +5,6 @@
  *
  *   data/drillCatalog.ts                    pump 3x, then swing
  *   components/PracticeSessionOverlay.tsx       pump 3x, 4th finishes through
- *   services/coachKnowledge.ts              pump 2-3x, hit on the third
  *   services/drillRecommendation.ts         twenty pumps, then a ball
  *   services/knowledgeBase/modules/drills.ts   15-20 pumps, then hit
  *

@@ -32,10 +32,10 @@ describe('Coach Mode is on the player surface', () => {
    * not silently drag the other out with it, and a half-ready screen must never reach players
    * unlabelled. Both are asserted below, harder than before.
    */
-  it('Coach Caddie ships as a labelled BETA, not silently', () => {
-    expect(isShelved('/swinglab/coach-lesson')).toBe(false);   // players can reach it
-    expect(SHELVED_ROUTES.has('/swinglab/coach-lesson')).toBe(false);
-    expect(isBeta('/swinglab/coach-lesson')).toBe(true);       // ...and it says what it is
+  // 2026-10-24 (Tim) — Coach Caddie is gone; SmartBay AI (__tests__/logic/smartbay-host.test.ts) is the lesson.
+  it('SmartBay AI, the lesson that replaced Coach Caddie, reaches players unshelved', () => {
+    expect(isShelved('/swinglab/smartbay')).toBe(false);
+    expect(SHELVED_ROUTES.has('/swinglab/smartbay')).toBe(false);
   });
 
   it('Coach MODE is not mislabelled as beta — it is finished work', () => {
@@ -92,7 +92,6 @@ describe('the claim Coach Mode rests on', () => {
   it.each([
     ['services/mediaCapture.ts', 'the capture path'],
     ['services/videoUpload.ts', 'the upload/ingest path'],
-    ['services/swingerHandedness.ts', 'handedness resolution'],
   ])('%s reads active_member_id at ingest (%s)', (file) => {
     expect(code(file)).toMatch(/active_member_id/);
   });

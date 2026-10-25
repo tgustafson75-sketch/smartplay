@@ -60,34 +60,12 @@ export const SHELVED_ROUTES: ReadonlySet<string> = new Set<string>([
 ]);
 
 /**
- * 2026-09-20 (Tim) — "Take a look at Coach Caddie and see if we can release a strong beta version."
- *
- * A THIRD state, between shelved and shipped: it reaches players, and it says what it is.
- *
- * Coach Caddie was shelved on 2026-08-25 as "explicitly 2.0". Reviewed again today, that call has
- * been overtaken by the work done since:
- *
- *   - The coaching brain (coachKnowledge + coachSession + coachLesson) is pure and carries 47 tests.
- *   - The flow degrades honestly at every step: an unreadable window re-prompts softly instead of
- *     nagging, a camera that cannot start falls back to the picker, a cancelled picker re-arms
- *     rather than silently killing the loop, and DTL-invalid metrics are nulled so the coach never
- *     speaks a number it did not measure.
- *   - The one thing that WAS dishonest is fixed: before 2026-09-01 the pose sampler placed P1/P4/P6
- *     at fixed fractions of a ten-second window, so every number the coach spoke was measured at
- *     whatever the body happened to be doing at 0.65 of the clip. It now locates the real swing on
- *     device and the positions are strike-anchored measurements.
- *
- * What is left is the reason this is BETA and not GA, and it is the kind of thing only real use
- * settles: the ten-second window and the re-arm rhythm have not been tuned across many swings on
- * many devices, and the diagnostic mode does not yet share the auto-loop. Tim's bar for surfacing
- * it unlabelled is "totally ready", and that bar has not been met — so it ships wearing the word.
- *
- * A beta route is NOT shelved: the hub shows it, the caddie can open it, and every consumer treats
- * it as real. The only difference is the badge. [[teach-before-you-grade]]
+ * A THIRD state, between shelved and shipped: it reaches players, and it says what it is (BETA).
+ * A beta route is NOT shelved: the hub shows it, the caddie can open it, every consumer treats it as
+ * real; only the badge differs. Empty since 2026-10-24, when Coach Caddie (its one entry) was removed
+ * for SmartBay AI.
  */
-export const BETA_ROUTES: ReadonlySet<string> = new Set<string>([
-  '/swinglab/coach-lesson',
-]);
+export const BETA_ROUTES: ReadonlySet<string> = new Set<string>([]);
 
 /** True when a route ships to everyone but is still finding its edges on real devices. */
 export function isBeta(route: string | null | undefined): boolean {

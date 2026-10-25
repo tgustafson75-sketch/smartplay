@@ -54,7 +54,7 @@ const IDLE_MS = 60_000; // 1 min of no touch → rest (same as the on-course tim
 // Live-camera / stand-still screens: auto-rest would black out a golfer addressing the ball. Never rest.
 // 2026-10-20 (Tank: rest after five swings in a practice session) — the practice-session counter,
 // coach mode and acoustic calibration are hit-balls-without-touching screens too.
-const SUPPRESS_ROUTES = ['/swinglab/smartmotion', '/swinglab/coach-lesson', '/swinglab/coach-mode', '/swinglab/calibrate', '/practice-session/session', '/lie-analysis', '/smartfinder'];
+const SUPPRESS_ROUTES = ['/swinglab/smartmotion', '/swinglab/coach-mode', '/swinglab/calibrate', '/practice-session/session', '/lie-analysis', '/smartfinder', '/swinglab/smartbay', '/swinglab/golf'];
 
 // Holding keep-awake only while resting guarantees the screen never sleeps
 // (which would drop GPS) even if rest was entered from a non-round screen.

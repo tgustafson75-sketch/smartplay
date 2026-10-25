@@ -31,7 +31,9 @@ export const CADDIE_BAR_ENABLED = true;
 // so their bottom content sits ABOVE the bar instead of clipping.
 const HIDE_PREFIXES = [
   '/intro-video', '/permissions', '/greeting', '/welcome', '/paywall',
-  '/swinglab/smartmotion', '/swinglab/coach-lesson',
+  '/swinglab/smartmotion',
+  // 2026-10-24 — hosted web apps: the page owns the screen, the camera and (SmartBay) the mic.
+  '/swinglab/smartbay', '/swinglab/golf',
 ];
 
 /** Height (px) the bar reserves at the root ABOVE the home-indicator inset, or 0 where it's hidden.

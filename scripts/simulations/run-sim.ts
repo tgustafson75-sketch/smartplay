@@ -2149,7 +2149,7 @@ check('Final QA: start-a-round + tool-open + course-imagery + scoring-math corre
     //     and the "Opening undefined" fallback guard is in place.
     const ot = read('services/intents/openToolHandler.ts');
     const okTools =
-      /coach_lesson: \{ type: 'navigate', path: '\/swinglab\/coach-lesson' \}/.test(ot) &&
+      /coach_lesson: \{ type: 'navigate', path: '\/swinglab\/smartbay' \}/.test(ot) &&
       /hotel_mode: \{ type: 'navigate', path: '\/swinglab\/indoor' \}/.test(ot) &&
       /swingsim: \{ type: 'navigate', path: '\/swinglab\/simround' \}/.test(ot) &&
       /TOOL_LABEL\[toolName\] \?\? 'that'/.test(ot);
@@ -3293,10 +3293,8 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
   (() => {
     const pose = read('services/poseAnalysisApi.ts');
     const infer = read('services/cameraAngleInference.ts');
-    const coach = read('app/swinglab/coach-lesson.tsx');
     const estimator = read('services/poseEstimator.ts');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
-    const resolver = read('services/swingerHandedness.ts');
     return (
       // computeBiomechanics infers the angle when the caller passes none.
       /if \(angle == null\) \{\s*\n\s*angle = inferCameraAngle\(frames, atAddress\);/.test(pose) &&
@@ -3304,16 +3302,7 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
       // (only asserts DTL/face-on at unambiguous ratios, else null = compute as-is).
       /maxRatio < 0\.35\) return 'down_the_line'/.test(infer) &&
       /maxRatio > 0\.60\) return 'face_on'/.test(infer) &&
-      // the ONE service-safe handedness source mirrors SmartMotion's derivation.
-      /active\?\.handedness === 'left' \|\| active\?\.handedness === 'right'/.test(resolver) &&
-      // the Coach lesson (both live-camera + picker paths) threads handedness. 2026-07-24: the
-      // camera-first rebuild renamed the window const RECORD_WINDOW_SEC → WINDOW_SEC; honesty (angle
-      // null → inferred, handedness threaded) is unchanged.
-      // 2026-09-01 — this pinned the literal `null, false, null, null` argument list, so giving the
-      // coach a LOCATED window and a real impact (a strict improvement) read as a regression. The
-      // property is: angle stays null so it is inferred, and handedness is threaded.
-      /analyzeSwingFromVideo\(uri, WINDOW_SEC \* 1000, null, false, window, impactMs, resolveSwingerHandedness\(\)\)/.test(coach) &&
-      /analyzeSwingFromVideo\(asset\.uri, durationMs, null, false, null, null, resolveSwingerHandedness\(\)\)/.test(coach) &&
+      // (2026-10-24: the Coach lesson screen is gone — SmartBay AI replaced it.)
       // the raw-frame poseEstimator path threads lefty; the MIRROR path must NOT
       // (adjustFrames already flips lefty→righty — double-correcting would re-invert).
       /input\.durationMs, input\.context\?\.angle \?\? null, false, null, null, lefty \? 'left' : 'right'\)/.test(estimator) &&
@@ -3326,35 +3315,6 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
     );
   })(),
   'the Coach lesson + upload backfill no longer speak DTL-invalid turn/weight numbers as measured (angle inferred from geometry), and lefty weight-shift reads with the correct sign on every analysis path');
-
-// 2026-07-24 (Tim — "doesn't flow like a real lesson"). Coach Caddie REBUILT camera-first + auto-loop:
-// the camera is the persistent lesson surface (no text-wall, no per-rep mount flip, no black spinner),
-// coaching is captions over the live camera, and the guided/focus flow AUTO-LOOPS reps (no "Record my
-// swing" per rep) and auto-advances the plan on the checkpoint.
-check('Coach Caddie flows like a real lesson: camera-first, captioned, auto-looping',
-  (() => {
-    const coach = read('app/swinglab/coach-lesson.tsx');
-    const svc = read('services/coachLesson.ts');
-    return (
-      // Persistent camera whenever a session is live (not only during a capture window).
-      /\{sessionLive && <CoachSwingCamera ref=\{coachCamRef\} facing="back" style=\{StyleSheet\.absoluteFill\} \/>\}/.test(coach) &&
-      // Hands-free auto-loop: record window → read → feedback caption → re-arm, driven by a cancelable timer.
-      /const focusRep = useCallback/.test(coach) &&
-      /const scheduleRearm = useCallback/.test(coach) &&
-      /const applyFocusResult = useCallback/.test(coach) &&
-      // Feedback is a caption over the camera with a "Reading that one…" chip — NOT a black spinner page.
-      /Reading that one…/.test(coach) &&
-      /captionText/.test(coach) &&
-      // Focus/plan control bar is just Pause/End (no per-rep tap in the auto-loop).
-      /onPress=\{togglePause\}/.test(coach) &&
-      // Auto-advance the plan on the checkpoint (no "Next" tap).
-      /setPlanStep\(nextStep\); setFocus\(next\)/.test(coach) &&
-      // Short spoken opener (the long instruction paragraph was the "wall of text").
-      /export function openerLine/.test(svc) &&
-      /Make a swing when you're ready/.test(svc)
-    );
-  })(),
-  'starting a lesson drops straight onto the live camera with a short spoken opener; the guided flow watches → reads (caption, not spinner) → speaks feedback → re-arms and auto-advances hands-free — no wall of text, no per-rep Record/Done taps');
 
 check('Smart Motion record by tap-to-talk is deterministic + local (no brain loop)',
   // 2026-06-15 (Tim — "active listening doesn't work; I tap the earbud/glasses and
@@ -10544,7 +10504,6 @@ check('LOCK: the pump drill has ONE rep protocol, imported — never five',
     const owner = /export const PUMP_DRILL: DrillProtocol/.test(proto) && /pumps: 3/.test(proto);
     const consumers = [
       'components/PracticeSessionOverlay.tsx',
-      'services/coachKnowledge.ts',
       'services/knowledgeBase/modules/drills.ts',
       'data/drillCatalog.ts',
     ].every((f) => /PUMP_DRILL/.test(read(f)));
@@ -10552,7 +10511,6 @@ check('LOCK: the pump drill has ONE rep protocol, imported — never five',
     // failure mode, so the guard forbids the STRINGS, not just a missing import.
     const noRelapse = [
       'components/PracticeSessionOverlay.tsx',
-      'services/coachKnowledge.ts',
       'services/knowledgeBase/modules/drills.ts',
       'data/drillCatalog.ts',
       'services/drillRecommendation.ts',
@@ -16965,89 +16923,8 @@ check(
   );
 }
 
-/**
- * ─── 2026-09-01 — COACH CADDIE READS A LOCATED SWING, NOT A TEN-SECOND GUESS ───────────────────
- *
- * Tim: "we should reconsider whether Coach Caddie should be a WOW for 1.0."
- *
- * It is shelved for 2.0 today (releaseSurface.SHELVED_ROUTES). Whatever that decision becomes, the
- * screen was reading a 10s clip with NO window and NO impact, so the pose sampler took its
- * medium-clip branch and placed "impact" at a fixed fraction of the last five seconds. Every number
- * the coach spoke was measured wherever the body happened to be at that arithmetic point.
- */
-{
-  const coach = readCode('app/swinglab/coach-lesson.tsx');
-  check(
-    'COACH CADDIE: the swing is located before it is read',
-    /locateSwingWindowOnDevice\(uri, WINDOW_SEC \* 1000\)/.test(coach) &&
-      /analyzeSwingFromVideo\(uri, WINDOW_SEC \* 1000, null, false, window, impactMs, resolveSwingerHandedness\(\)\)/.test(coach),
-    'a window AND an impact switch the pose sampler to its strike-anchored branch, so the positions are measurements rather than fractions of a ten-second recording',
-  );
-  check(
-    'COACH CADDIE: a failed locate degrades, it does not fabricate',
-    // Assert the CODE, not the comment beside it: both values start null and are assigned only
-    // inside `if (found)`, so a locate that fails or throws leaves the previous behaviour intact.
-    /let window: \{ startMs: number; endMs: number \} \| null = null;/.test(coach) &&
-      /let impactMs: number \| null = null;/.test(coach) &&
-      /if \(found\) \{[\s\S]{0,260}?impactMs = Math\.round\(found\.swingTimeSec \* 1000\);/.test(coach),
-    'null window + null impact is exactly the previous behaviour — honest and merely coarse',
-  );
-}
-
-/**
- * ─── 2026-09-01 — A LESSON IS A SESSION, AND IT HAS A HOME ──────────────────────────────────────
- *
- * Tim: "make sure that those lessons have a store, not the swing library, probably more appropriate
- * card in the dashboard."
- *
- * Only the diagnosis path wrote to coachLessonStore, so a player could work three focuses, hear
- * "nice session — take those feels to the course", and the app would remember nothing.
- */
-{
-  const store = readCode('store/coachLessonStore.ts');
-  check(
-    'LESSONS: a session history that is separate from the swing library',
-    /export interface SessionRecord \{/.test(store) &&
-      /recordSession: \(r: Omit<SessionRecord, 'at'>, nowMs: number\) => void;/.test(store) &&
-      /sessions: SessionRecord\[\];/.test(store),
-    'a lesson is a plan + its focuses + the reps read; filing it as clips would bury it among every practice ball ever hit',
-  );
-  check(
-    'LESSONS: the persist key is unchanged and v1 blobs get their sessions array',
-    /name: 'coach-lesson-history-v1'/.test(store) &&
-      /version: 2,/.test(store) &&
-      /return \{ \.\.\.st, sessions: \[\] \} as CoachLessonState;/.test(store),
-    'every tester already holds a v1 blob with no sessions key — an unmigrated read would crash the dashboard on first launch after the update',
-  );
-
-  const coach = readCode('app/swinglab/coach-lesson.tsx');
-  check(
-    'LESSONS: a finished session is filed before the screen tears down',
-    /useCoachLessonStore\.getState\(\)\.recordSession\(\{/.test(coach) &&
-      /completed: opts\?\.completed === true,/.test(coach),
-    'recorded whether or not the plan completed — a session ended early is still a session the player did',
-  );
-  check(
-    'LESSONS: reps counted are reps the coach actually READ',
-    /sessionRepsRef\.current\.read \+= 1;/.test(coach) &&
-      /if \(fb\.verdict === 'good'\) sessionRepsRef\.current\.good \+= 1;/.test(coach) &&
-      /if \(reps\.read > 0 && \(p \|\| f\)\)/.test(coach),
-    'a session spent failing to get a readable window records as nothing, rather than inflating the count with camera trouble',
-  );
-  check(
-    'LESSONS: the End button cannot pass a touch event as options',
-    !/onPress=\{endSession\}/.test(coach) && /onPress=\{\(\) => endSession\(\)\}/.test(coach),
-    'endSession takes { completed }; a bare handler hands it a GestureResponderEvent',
-  );
-
-  const dash = readCode('app/(tabs)/dashboard.tsx');
-  check(
-    'LESSONS: the dashboard card exists and cannot leak a shelved route',
-    /!isShelved\('\/swinglab\/coach-lesson'\) && lastLessonSession/.test(dash) &&
-      /useCoachLessonStore\(\(s\) => s\.sessions\[0\] \?\? null\)/.test(dash),
-    'Coach Caddie is shelved today, so for a player this card does not exist; un-shelving is one deleted line in releaseSurface.ts',
-  );
-}
+// 2026-10-24 — Coach Caddie (screen, lesson store, dashboard card) removed; SmartBay AI is the lesson.
+// Its gates live in __tests__/logic/smartbay-host.test.ts.
 
 /**
  * ─── 2026-09-02 — THE 1.0 WIRING AUDIT: BRAIN PRESENCE + ACTION REACH ──────────────────────────
