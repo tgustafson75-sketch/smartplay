@@ -13,6 +13,7 @@ import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTyp
 import { useCameraPermissions } from 'expo-camera';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useNavigation } from 'expo-router';
+import { usePreventRemove } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { safeBack } from '../services/safeBack';
 import { isHostedOrigin } from '../services/smartBayHost';
@@ -32,13 +33,16 @@ interface Props {
   needsCamera?: boolean;
   /**
    * A window event the page needs before it is torn down (SmartBay: 'smartbay:leave' posts the lesson
-   * in progress). Every way out — back button, Android back, iOS swipe — fires it and waits briefly.
+   * in progress), and the message that says it is done ('smartbay:left'). Every way out — back button,
+   * Android back, iOS swipe — fires the event and closes on the reply, or after LEAVE_MAX_MS.
    */
-  leaveEvent?: string;
+  leave?: { event: string; done: (data: string) => boolean };
   onMessage?: (data: string) => void;
 }
 
-export function HostedWebApp({ title, url, origin, needsCamera = false, leaveEvent, onMessage }: Props) {
+const LEAVE_MAX_MS = 1200;
+
+export function HostedWebApp({ title, url, origin, needsCamera = false, leave, onMessage }: Props) {
   useKeepAwake();
   const { t } = useTranslation();
   const ref = useRef<WebView>(null);
@@ -73,19 +77,26 @@ export function HostedWebApp({ title, url, origin, needsCamera = false, leaveEve
   }, []);
 
   const navigation = useNavigation();
+  // usePreventRemove (not a raw beforeRemove listener) so the iOS swipe is held natively too.
+  const [left, setLeft] = useState(false);
+  const pendingLeave = useRef<(() => void) | null>(null);
+  const leaveAction = useRef<Parameters<typeof navigation.dispatch>[0] | null>(null);
+  // Dispatched only once the render with the prevent dropped has committed, or it is held again.
   useEffect(() => {
-    if (!leaveEvent) return;
-    let leaving = false;
-    const unsub = navigation.addListener('beforeRemove', (e) => {
-      if (leaving || !ref.current) return;
-      e.preventDefault();
-      leaving = true;
-      ref.current.injectJavaScript(`window.dispatchEvent(new Event(${JSON.stringify(leaveEvent)}));true;`);
-      // The page posts its lesson synchronously on the event; 300 ms covers the bridge hop.
-      setTimeout(() => navigation.dispatch(e.data.action), 300);
-    });
-    return unsub;
-  }, [navigation, leaveEvent]);
+    if (left && leaveAction.current) navigation.dispatch(leaveAction.current);
+  }, [left, navigation]);
+  usePreventRemove(!!leave && !!url && !left, ({ data }) => {
+    if (pendingLeave.current) return;
+    const go = () => {
+      pendingLeave.current = null;
+      leaveAction.current = data.action;
+      setLeft(true);
+    };
+    const timer = setTimeout(go, LEAVE_MAX_MS);
+    pendingLeave.current = () => { clearTimeout(timer); go(); };
+    if (ref.current) ref.current.injectJavaScript(`window.dispatchEvent(new Event(${JSON.stringify(leave!.event)}));true;`);
+    else pendingLeave.current();
+  });
 
   const onNav = useCallback((n: WebViewNavigation) => {
     canGoBack.current = n.canGoBack;
@@ -99,7 +110,11 @@ export function HostedWebApp({ title, url, origin, needsCamera = false, leaveEve
     return false;
   }, [origin]);
 
-  const onMsg = useCallback((e: WebViewMessageEvent) => onMessage?.(e.nativeEvent.data), [onMessage]);
+  const onMsg = useCallback((e: WebViewMessageEvent) => {
+    const data = e.nativeEvent.data;
+    onMessage?.(data);
+    if (pendingLeave.current && leave?.done(data)) pendingLeave.current();
+  }, [onMessage, leave]);
 
   const camPending = needsCamera && (cam == null || (!cam.granted && cam.canAskAgain && !asked) || (asked && cam.status === 'undetermined'));
   const camBlocked = needsCamera && !camPending && cam != null && !cam.granted;

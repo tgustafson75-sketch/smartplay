@@ -439,11 +439,25 @@ const PATTERNS: Pattern[] = [
    * inside SmartFinder.
    * [[a-toggle-that-does-nothing-for-the-default-user]] [[orphans-are-live-bugs-not-dead-code]]
    */
+  /**
+   * 2026-10-24 — SmartBay AI and SmartPlay Golf (SwingLab, hosted). An EXPLICIT open only, and ahead
+   * of the smart-play read below: "open smartplay golf" matched `open smart play` and was answered
+   * with a shot-strategy read, and "open smartbay" fell through to the classifier, which had no such
+   * tool and opened a scene read instead.
+   */
+  {
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?=.*\\b(?:open|pull\\s+up|bring\\s+up|launch|start|go\\s+to|take\\s+me\\s+to)\\s+(?:the\\s+|my\\s+)?smart\\s*bay\\b)', 'i'),
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartbay' }),
+  },
+  {
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?=.*\\b(?:(?:open|pull\\s+up|bring\\s+up|launch|start|go\\s+to|take\\s+me\\s+to|play)\\s+(?:the\\s+)?smart\\s*play\\s+golf|(?:open|launch|play|start)\\s+the\\s+golf\\s+game)\\b)', 'i'),
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartplay_golf' }),
+  },
   {
     // 2026-08-06 (voice audit) — NOT_ABOUT_TOOL guard, same as smartfinder/vision/swinglab below, so
     // "log an issue with the smart play" / "the smart play feature is broken" DON'T open SmartFinder.
     // The bare `the smart play` alternative (no verb anchor) was the exposure the others were spared.
-    rx: new RegExp('^' + NOT_ABOUT_TOOL + "(?=.*\\b(?:what(?:'s|s)?\\s+the\\s+smart\\s+play|give\\s+me\\s+the\\s+smart\\s+play|the\\s+smart\\s+play|open\\s+smart\\s*play|smartplay\\s+here)\\b)", 'i'),
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + "(?=.*\\b(?:what(?:'s|s)?\\s+the\\s+smart\\s+play|give\\s+me\\s+the\\s+smart\\s+play|the\\s+smart\\s+play|open\\s+smart\\s*play(?!\\s*golf)|smartplay\\s+here)\\b)", 'i'),
     build: (raw) => intent(raw, 'query_status', { query_topic: 'shot_strategy' }),
   },
   {

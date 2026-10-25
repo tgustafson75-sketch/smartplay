@@ -81,12 +81,27 @@ describe('reachable', () => {
     expect(lookupFeature('give me a lesson')?.route).toBe('/swinglab/smartbay');
     expect(lookupFeature('smartplay golf')?.route).toBe('/swinglab/golf');
   });
-  it('leaving the screen tells the page first, so a lesson in progress is saved', () => {
-    expect(read('app/swinglab/smartbay.tsx')).toContain('leaveEvent="smartbay:leave"');
+  it('leaving the screen tells the page first and waits for its answer, so a lesson in progress is saved', () => {
+    expect(read('app/swinglab/smartbay.tsx')).toMatch(/event: 'smartbay:leave', done: \(raw: string\) => parseBayHostMessage\(raw\)\?\.type === 'smartbay:left'/);
     const host = read('components/HostedWebApp.tsx');
-    expect(host).toMatch(/addListener\('beforeRemove'/);
-    expect(host).toMatch(/e\.preventDefault\(\);[\s\S]{0,200}injectJavaScript\(`window\.dispatchEvent\(new Event\(/);
-    expect(host).toMatch(/navigation\.dispatch\(e\.data\.action\)/);
+    expect(host).toMatch(/usePreventRemove\(!!leave && !!url && !left,/);           // held natively too (iOS swipe)
+    expect(host).toMatch(/injectJavaScript\(`window\.dispatchEvent\(new Event\(/);
+    expect(host).toMatch(/if \(pendingLeave\.current && leave\?\.done\(data\)\) pendingLeave\.current\(\);/);
+    expect(host).toMatch(/setTimeout\(go, LEAVE_MAX_MS\)/);                        // never stuck if the page is gone
+    expect(parseBayHostMessage('{"type":"smartbay:left"}')).toEqual({ type: 'smartbay:left' });
+  });
+  it('voice: explicit opens reach the hosted screens, and the smart-play read no longer eats "smartplay golf"', () => {
+    const { precheckLocalIntent } = require('../../services/localIntentPrecheck');
+    const tool = (t: string) => precheckLocalIntent(t)?.parameters?.tool_name ?? precheckLocalIntent(t)?.intent_type ?? null;
+    expect(tool('open smartbay')).toBe('smartbay');
+    expect(tool('open SmartBay AI')).toBe('smartbay');
+    expect(tool('take me to smart bay')).toBe('smartbay');
+    expect(tool('open smartplay golf')).toBe('smartplay_golf');
+    expect(tool('play the golf game')).toBe('smartplay_golf');
+    // unchanged neighbours
+    expect(precheckLocalIntent('open smartplay')?.parameters?.query_topic).toBe('shot_strategy');
+    expect(precheckLocalIntent('what\'s the smart play')?.parameters?.query_topic).toBe('shot_strategy');
+    expect(precheckLocalIntent('the smartbay lesson is broken')).toBeNull();
   });
   it('the screens exist', () => {
     expect(fs.existsSync(path.join(__dirname, '../../app/swinglab/smartbay.tsx'))).toBe(true);

@@ -175,7 +175,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
 const PLAY_SECTION: LauncherCardSpec[] = [
   // 2026-10-24 (Tim) — SmartBay AI replaces Coach Caddie as the section HERO: the bay's full lesson,
   // hosted (services/smartBayHost.ts). Range = camera only; Bay adds the sim screen's numbers.
-  // Coach Caddie's screen stays for resuming a past lesson from the dashboard.
+  // Coach Caddie was removed the same day (Tim: SmartBay is the lesson we were going for).
   {
     key: 'smartbay',
     icon: 'sparkles-outline',

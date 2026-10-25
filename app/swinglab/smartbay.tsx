@@ -12,6 +12,9 @@ import { buildPlayerExport, importBayLesson, parseBayLesson } from '../../servic
 import { derivePlayerId } from '../../store/swingSessionStore';
 import { useToastStore } from '../../store/toastStore';
 
+// The page posts any lesson in progress on 'smartbay:leave', then 'smartbay:left' (bridge order keeps it last).
+const LEAVE = { event: 'smartbay:leave', done: (raw: string) => parseBayHostMessage(raw)?.type === 'smartbay:left' };
+
 export default function SmartBayScreen() {
   const { t } = useTranslation();
   const [url, setUrl] = useState<string | null>(null);
@@ -38,5 +41,5 @@ export default function SmartBayScreen() {
     }
   }, [t]);
 
-  return <HostedWebApp title={t('hosted_web.smartbay_title')} url={url} origin={SMARTBAY_ORIGIN} needsCamera leaveEvent="smartbay:leave" onMessage={onMessage} />;
+  return <HostedWebApp title={t('hosted_web.smartbay_title')} url={url} origin={SMARTBAY_ORIGIN} needsCamera leave={LEAVE} onMessage={onMessage} />;
 }

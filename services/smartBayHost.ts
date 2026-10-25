@@ -10,6 +10,7 @@
  *
  *   Caddie → bay   /bay?host=caddie&where=range|bay#player=<base64url smartplay/player>
  *   bay → Caddie   {type:'smartbay:ready'} · {type:'smartbay:where', where} · {type:'smartbay:lesson', lesson}
+ *                  · {type:'smartbay:left'} (the answer to Caddie's 'smartbay:leave', after any lesson)
  *
  * RANGE = camera only. BAY = camera + the sim screen's numbers. The player's last choice is kept here.
  */
@@ -54,7 +55,8 @@ export function smartBayUrl(where: BayWhere, player?: unknown): string {
 export type BayHostMessage =
   | { type: 'smartbay:ready' }
   | { type: 'smartbay:where'; where: BayWhere }
-  | { type: 'smartbay:lesson'; lesson: unknown };
+  | { type: 'smartbay:lesson'; lesson: unknown }
+  | { type: 'smartbay:left' };
 
 /** The page's postMessage string → a known message, or null. Anything else is ignored. */
 export function parseBayHostMessage(raw: string): BayHostMessage | null {
@@ -67,6 +69,7 @@ export function parseBayHostMessage(raw: string): BayHostMessage | null {
   if (!m || typeof m !== 'object') return null;
   const o = m as Record<string, unknown>;
   if (o.type === 'smartbay:ready') return { type: 'smartbay:ready' };
+  if (o.type === 'smartbay:left') return { type: 'smartbay:left' };
   if (o.type === 'smartbay:where' && (o.where === 'range' || o.where === 'bay')) return { type: 'smartbay:where', where: o.where };
   if (o.type === 'smartbay:lesson' && o.lesson && typeof o.lesson === 'object') return { type: 'smartbay:lesson', lesson: o.lesson };
   return null;
