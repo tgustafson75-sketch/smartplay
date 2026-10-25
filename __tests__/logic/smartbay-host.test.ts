@@ -81,6 +81,13 @@ describe('reachable', () => {
     expect(lookupFeature('give me a lesson')?.route).toBe('/swinglab/smartbay');
     expect(lookupFeature('smartplay golf')?.route).toBe('/swinglab/golf');
   });
+  it('leaving the screen tells the page first, so a lesson in progress is saved', () => {
+    expect(read('app/swinglab/smartbay.tsx')).toContain('leaveEvent="smartbay:leave"');
+    const host = read('components/HostedWebApp.tsx');
+    expect(host).toMatch(/addListener\('beforeRemove'/);
+    expect(host).toMatch(/e\.preventDefault\(\);[\s\S]{0,200}injectJavaScript\(`window\.dispatchEvent\(new Event\(/);
+    expect(host).toMatch(/navigation\.dispatch\(e\.data\.action\)/);
+  });
   it('the screens exist', () => {
     expect(fs.existsSync(path.join(__dirname, '../../app/swinglab/smartbay.tsx'))).toBe(true);
     expect(fs.existsSync(path.join(__dirname, '../../app/swinglab/golf.tsx'))).toBe(true);

@@ -38,5 +38,5 @@ export default function SmartBayScreen() {
     }
   }, [t]);
 
-  return <HostedWebApp title={t('hosted_web.smartbay_title')} url={url} origin={SMARTBAY_ORIGIN} needsCamera onMessage={onMessage} />;
+  return <HostedWebApp title={t('hosted_web.smartbay_title')} url={url} origin={SMARTBAY_ORIGIN} needsCamera leaveEvent="smartbay:leave" onMessage={onMessage} />;
 }

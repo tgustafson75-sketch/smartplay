@@ -12,6 +12,7 @@ import { WebView, type WebViewMessageEvent, type WebViewNavigation } from 'react
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 import { useCameraPermissions } from 'expo-camera';
 import { useKeepAwake } from 'expo-keep-awake';
+import { useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { safeBack } from '../services/safeBack';
 import { isHostedOrigin } from '../services/smartBayHost';
@@ -29,10 +30,15 @@ interface Props {
   origin: string;
   /** The page needs the camera before it can do anything useful. */
   needsCamera?: boolean;
+  /**
+   * A window event the page needs before it is torn down (SmartBay: 'smartbay:leave' posts the lesson
+   * in progress). Every way out — back button, Android back, iOS swipe — fires it and waits briefly.
+   */
+  leaveEvent?: string;
   onMessage?: (data: string) => void;
 }
 
-export function HostedWebApp({ title, url, origin, needsCamera = false, onMessage }: Props) {
+export function HostedWebApp({ title, url, origin, needsCamera = false, leaveEvent, onMessage }: Props) {
   useKeepAwake();
   const { t } = useTranslation();
   const ref = useRef<WebView>(null);
@@ -65,6 +71,21 @@ export function HostedWebApp({ title, url, origin, needsCamera = false, onMessag
     });
     return () => sub.remove();
   }, []);
+
+  const navigation = useNavigation();
+  useEffect(() => {
+    if (!leaveEvent) return;
+    let leaving = false;
+    const unsub = navigation.addListener('beforeRemove', (e) => {
+      if (leaving || !ref.current) return;
+      e.preventDefault();
+      leaving = true;
+      ref.current.injectJavaScript(`window.dispatchEvent(new Event(${JSON.stringify(leaveEvent)}));true;`);
+      // The page posts its lesson synchronously on the event; 300 ms covers the bridge hop.
+      setTimeout(() => navigation.dispatch(e.data.action), 300);
+    });
+    return unsub;
+  }, [navigation, leaveEvent]);
 
   const onNav = useCallback((n: WebViewNavigation) => {
     canGoBack.current = n.canGoBack;
