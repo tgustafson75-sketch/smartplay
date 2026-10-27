@@ -377,6 +377,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       club_variant_insight = null,
       capture_quality = null,
       swing_read = null,
+      // 2026-10-27 — the swing on screen's tempo / start line / carry estimate. Per-turn, never cached.
+      swing_on_screen = null,
       physicalLimitation = null,
       goal = null,
       personalBest = null,
@@ -1193,6 +1195,11 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
       // 2026-09-29 — what the swing read on their screen was built on. Message side: it changes per swing.
       if (typeof swing_read === 'string' && swing_read.trim()) {
         lines.push(`- The swing read on their screen was built from: ${swing_read.trim().slice(0, 400)} Use it when they ask whether it saw their whole swing or why the confidence is what it is; do not recite it unprompted.`);
+      }
+      // 2026-10-27 — what the review on their screen shows for the swing on screen. Message side: it changes
+      // per swing. An older client never sends it; absent means unknown, and nothing is said.
+      if (typeof swing_on_screen === 'string' && swing_on_screen.trim()) {
+        lines.push(`- ${swing_on_screen.trim().slice(0, 500)} When they ask about "this swing" or "that one", answer from these numbers and keep an estimate an estimate; do not recite them unprompted.`);
       }
       if (typeof club_variant_insight === 'string' && club_variant_insight.trim()) {
         lines.push(`- If they ask which of their clubs is working — they own more than one of the same club — this is the answer from their own shots: ${club_variant_insight.trim()} Only say it if asked. Straighter beats longer, and the line already reflects that.`);

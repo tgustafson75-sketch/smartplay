@@ -151,7 +151,9 @@ describe('the way out of "no swing found" is the moment the player points at', (
   it('SmartMotion review offers it on that message and saves the moment as the player\'s window', () => {
     // Source check: the screen has no render harness (camera, 7,000 lines).
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'app/swinglab/smartmotion.tsx'), 'utf8') as string;
-    expect(src).toMatch(/if \(analysisError === NO_SWING_FOUND && segments\.length <= 1\) \{[\s\S]{0,900}onPress=\{analyzeAtMoment\}/);
+    // 2026-10-27 (audit R10) — the offer is services/swing/smartMotionReview.offerAnalyzeAtMoment (no longer hidden by a
+    // partial line such as the watch's tempo stand-in; behaviour in smartmotion-review-cards-are-this-swings).
+    expect(src).toMatch(/offerAnalyzeAtMoment\(\{ noSwingFound: analysisError === NO_SWING_FOUND, segmentCount: segments\.length, partialLineCount: partial\.length \}\) \? \([\s\S]{0,900}onPress=\{analyzeAtMoment\}/);
     expect(src).toMatch(/Math\.min\(videoDurationMs, center \+ 3000\) : center \+ 3000;/);
     expect(src).toMatch(/startMs: Math\.max\(0, center - 2500\)/);
     expect(src).toMatch(/void runAnalysis\(clipUri, seg, \{ reuseSessionId: ingestedSessionIdRef\.current, userMomentSec: center \/ 1000 \}\);/);

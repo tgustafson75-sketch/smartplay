@@ -6856,14 +6856,18 @@ check('Audit fix: review video loop reads live swing selection via ref (no reel-
 check('Cage multi-swing: per-swing trace + noisy-bay degrade (no lost swings)',
   (() => {
     const sm = read('app/swinglab/smartmotion.tsx');
+    // 2026-10-27 (audit R5) — the cache key is the swing AND the strike + ball region it was read from
+    // (services/swing/smartMotionReview.ballReadKey): an index key served the old moment's trace after
+    // "Analyze the swing at" moved swing 1's strike. Per-swing still holds (the index is in the key).
     const perSwingTrace =
-      /const ballDepartureCacheRef = useRef<Record<number, BallDepartureResult \| null>>\(\{\}\)/.test(sm) &&
-      // departure computed off the SELECTED swing's strike, cached per index
+      /const ballDepartureCacheRef = useRef<Record<string, BallDepartureResult \| null>>\(\{\}\)/.test(sm) &&
+      // departure computed off the SELECTED swing's strike, cached per swing + strike
       /const strikeMs = seg\?\.strikeMs \?\? firstStrikeMsRef\.current/.test(sm) &&
-      /if \(selectedSwing in ballDepartureCacheRef\.current\)/.test(sm) &&
+      /const departureKey = ballReadKey\(\{ swingIndex: selectedSwing, strikeMs, ballArea \}\);/.test(sm) &&
+      /if \(departureKey in ballDepartureCacheRef\.current\)/.test(sm) &&
       // 2026-06-15 — cache write is now the confidence-gated `accepted` value
       // (video-located degrade), not the raw result.
-      /ballDepartureCacheRef\.current\[selectedSwing\] = accepted/.test(sm) &&
+      /ballDepartureCacheRef\.current\[departureKey\] = accepted/.test(sm) &&
       // the old first-strike-only single-shot guard is gone
       !/firstStrikeMsRef\.current == null \|\| ballDeparture\) return/.test(sm) &&
       // cache cleared on new capture (reset + startRecording)
@@ -11357,10 +11361,17 @@ check('LOCK: cage rig geometry (canvas/camera-behind) is recorded ONLY in cage m
     const sm = read('app/swinglab/smartmotion.tsx');
     // BOTH write sites must be gated — the save-time write and the live-commit mirror. Fixing one
     // leaves "Canvas 14 ft" reappearing on course via whichever path commits last.
-    const gated = /const isPractice = effectiveMode === 'sim';/.test(sm) &&
-      /const isPracticeLive = effectiveMode === 'sim';/.test(sm) &&
-      (sm.match(/canvasFeet: isPractice(?:Live)? \? \(practiceCanvasFeet \?\? null\) : null,/g) ?? []).length === 2 &&
-      (sm.match(/cameraBehindFeet: isPractice(?:Live)? \? \(cameraBehindFeet \?\? null\) : null,/g) ?? []).length === 2;
+    // 2026-10-27 (audit R1) — both now build the snapshot through ONE owner,
+    // services/swing/smartMotionShotMap.shotMapToPersist (which also limits it to swing 1); the gate lives
+    // there and both sites pass the practice flag from effectiveMode. Behaviour: the-shot-map-is-swing-ones-own.
+    const owner = read('services/swing/smartMotionShotMap.ts');
+    const gated = /canvasFeet: src\.isPractice \? \(src\.practiceCanvasFeet \?\? null\) : null,/.test(owner) &&
+      /cameraBehindFeet: src\.isPractice \? \(src\.cameraBehindFeet \?\? null\) : null,/.test(owner) &&
+      /const isPractice = effectiveMode === 'sim';/.test(sm) &&
+      /isPractice: effectiveMode === 'sim',/.test(sm) &&
+      (sm.match(/shotMapToPersist\(\{/g) ?? []).length === 2 &&
+      (sm.match(/setSessionShotMap\(sid, snap\)/g) ?? []).length === 2 &&
+      (sm.match(/setSessionShotMap\(/g) ?? []).length === 2;
     // an active round must force course mode, or the gate reads the stale manual setting
     const roundForcesCourse = /effectiveMode: 'course' \| 'range' \| 'sim' = isRoundActive \? 'course' : environmentMode/.test(sm);
     // and the unconditional write must not come back

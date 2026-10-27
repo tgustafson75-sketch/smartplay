@@ -101,6 +101,14 @@ interface CaptureEngineState {
   reviewingClip: { fps: number | null; read?: ReviewedSwingRead | null } | null;
   /** `read` — what the analysis on screen was built on (coverage, phases seen, confidence), for the caddie. */
   setReviewingClip: (clip: { fps: number | null; read?: ReviewedSwingRead | null } | null) => void;
+  /**
+   * 2026-10-27 (audit R1) — the numbers the review on screen shows for the swing on screen (tempo, start
+   * line, the club + effort carry estimate), so the caddie can be asked about them (caddie_request
+   * swing_on_screen). Set by SmartMotion's review and the library's swing page; null when neither is
+   * showing a swing. Not persisted.
+   */
+  swingOnScreen: import('../services/swing/swingOnScreen').SwingOnScreen | null;
+  setSwingOnScreen: (s: import('../services/swing/swingOnScreen').SwingOnScreen | null) => void;
 }
 
 export const useCaptureEngineStore = create<CaptureEngineState>()(
@@ -128,6 +136,8 @@ export const useCaptureEngineStore = create<CaptureEngineState>()(
           ? { fps: typeof clip.fps === 'number' && Number.isFinite(clip.fps) && clip.fps > 0 ? clip.fps : null, read: clip.read ?? null }
           : null,
       }),
+      swingOnScreen: null,
+      setSwingOnScreen: (swingOnScreen) => set({ swingOnScreen: swingOnScreen ?? null }),
     }),
     {
       name: 'capture-engine-v1',

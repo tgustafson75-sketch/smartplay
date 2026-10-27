@@ -67,7 +67,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
-import { bodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, issueJumpSec, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, type IssueHold } from '../../../services/swing/faultSpotlight';
+import { bodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, issueJumpSec, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { drawableClubArc, overlayLayers, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
@@ -84,6 +84,9 @@ import { getApiBaseUrl } from '../../../services/apiBase';
 import { titleForUpload } from '../../../services/swing/swingTitle';
 import { swingClock, swingClockSec } from '../../../services/swing/swingClock';
 import { countedShots, isPracticeSwing, swingIsDoubtful, swingLayoutKey } from '../../../services/swing/practiceSwings';
+import { shotMapForShot } from '../../../services/swing/smartMotionShotMap';
+import { swingOnScreenFromShotMap } from '../../../services/swing/swingOnScreen';
+import { useCaptureEngineStore } from '../../../store/captureEngineStore';
 import { useTranslation } from 'react-i18next';
 import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
 
@@ -178,6 +181,22 @@ export default function SwingDetail() {
   // (persisted at capture / lazily backfilled below).
   const [selectedShotIdx, setSelectedShotIdx] = useState(0);
   const shot = session?.shots[selectedShotIdx] ?? session?.shots[0];   // clamped: a re-split can leave fewer swings
+  /**
+   * 2026-10-27 (audit R1) — the SmartMotion shot map (tempo, launch, effort, carry estimate, BODY tiles) is ONE
+   * snapshot per session and it is swing 1's; every other swing shows none of it rather than swing 1's numbers
+   * as its own (services/swing/smartMotionShotMap). Indexed by the swing actually shown (the clamp above).
+   */
+  const shownShotIdx = session?.shots[selectedShotIdx] ? selectedShotIdx : 0;
+  const shotMap = shotMapForShot(session?.smart_motion_shot_map, shownShotIdx);
+  // What the caddie is told is on screen (caddie_request swing_on_screen): swing 1's saved numbers, or that this
+  // swing has none saved. Cleared when the page goes.
+  // Published while this page is focused, so the screen under it (SmartMotion's review) re-publishes its own on return.
+  const shotCount = session?.shots.length ?? 0;
+  const shotMapSaved = session?.smart_motion_shot_map;
+  useFocusEffect(useCallback(() => {
+    useCaptureEngineStore.getState().setSwingOnScreen(swingOnScreenFromShotMap(shotMapSaved, shownShotIdx, shotCount));
+    return () => { useCaptureEngineStore.getState().setSwingOnScreen(null); };
+  }, [shotMapSaved, shownShotIdx, shotCount]));
   const shotBio = shot?.biomechanics;
   // The biomech to render: this shot's own if present; for shot 0 fall back to the session-level read
   // (legacy sessions + the primary write). Non-primary with nothing yet → null (until backfilled).
@@ -1791,8 +1810,9 @@ export default function SwingDetail() {
         // TempoResult ({ ratio }). The old `typeof sm.tempo === 'number'` check
         // was always false, so the PDF tempo row was dead. Read the ratio off
         // whichever shape is present.
-        const sm = s.smart_motion_shot_map as { tempo?: { ratio?: number | null } | null } | undefined;
-        const tr = s.tempo_result as { ratio?: number | null } | undefined;
+        // 2026-10-27 (audit R1) — the report is the swing on screen's: swing 1's session tempo is not swing 3's.
+        const sm = shotMap as { tempo?: { ratio?: number | null } | null } | null;
+        const tr = (shownShotIdx === 0 ? s.tempo_result : undefined) as { ratio?: number | null } | undefined;
         const smRatio = typeof sm?.tempo?.ratio === 'number' ? sm.tempo!.ratio! : null;
         const trRatio = typeof tr?.ratio === 'number' ? tr!.ratio! : null;
         const tempo = smRatio ?? trRatio;
@@ -3610,14 +3630,12 @@ export default function SwingDetail() {
                 // 2026-08-01 (per-swing) — derive from THIS swing: its own fault (per-shot analysis) +
                 // its own biomech. Falls back to the session primary read for shot 0 / legacy.
                 const psa = shot?.perShotAnalysis;
-                const bodyAnalysis = psa
-                  ? ({ primary_fault: psa.primary_fault ?? null, detected_issue: psa.detected_issue } as unknown as SwingAnalysis)
-                  : session.primary_issue
-                    ? ({ primary_fault: session.primary_issue.primary_fault, detected_issue: session.primary_issue.issue_id } as unknown as SwingAnalysis)
-                    : null;
+                // 2026-10-27 — the session headline only for a legacy swing 1 (faultSpotlight.swingBodyFaultRead, the
+                // rule of swingFaultOnScreen / audit R7): it stood in for EVERY swing, tinting swing 3's tiles.
+                const bodyAnalysis = swingBodyFaultRead(shownShotIdx, session.primary_issue, psa) as unknown as SwingAnalysis | null;
                 const items: BodyItem[] = activeBiomech
                   ? deriveBodyItems(bodyAnalysis, activeBiomech)
-                  : ((session.smart_motion_shot_map?.bodyItems as BodyItem[] | undefined) ?? []);
+                  : ((shotMap?.bodyItems as BodyItem[] | undefined) ?? []);
                 return items.length > 0
                   ? <BodyAnalysisRow items={items} style={{ marginTop: 12 }} />
                   : null;
@@ -3638,62 +3656,67 @@ export default function SwingDetail() {
                 nothing when the pose read isn't usable.
               */}
               {(() => {
-                const t = session.smart_motion_shot_map?.tempo ?? null;
+                const t = shotMap?.tempo ?? null;
                 const tempoForRead = t
                   ? { ratio: t.ratio, backswingMs: t.backswingMs, downswingMs: t.downswingMs, topMs: null, sequencingScore: t.sequencingScore }
                   : null;
                 const read = buildPoseSwingRead(activeBiomech ?? null, tempoForRead as never);
                 return read.usable ? <SwingBreakdownCard read={read} variant="card" style={{ marginTop: 12 }} /> : null;
               })()}
-              {session.smart_motion_shot_map?.tempo?.ratio != null ? (
+              {shotMap?.tempo?.ratio != null ? (
                 <View style={{ marginTop: 12 }}>
-                  <TempoBar ratio={session.smart_motion_shot_map.tempo.ratio} />
+                  <TempoBar ratio={shotMap.tempo.ratio} />
                   {/* 2026-06-30 (Tim — audit) — the tempo MS detail was persisted but never shown. */}
-                  {(session.smart_motion_shot_map.tempo.backswingMs != null && session.smart_motion_shot_map.tempo.downswingMs != null) ? (
+                  {(shotMap.tempo.backswingMs != null && shotMap.tempo.downswingMs != null) ? (
                     <Text style={[styles.biomechSub, { color: colors.text_muted, marginTop: 4 }]}>
                       {t('swinglab_swing.biomech.back_down_seconds', {
-                        back: (session.smart_motion_shot_map.tempo.backswingMs / 1000).toFixed(1),
-                        down: (session.smart_motion_shot_map.tempo.downswingMs / 1000).toFixed(1),
+                        back: (shotMap.tempo.backswingMs / 1000).toFixed(1),
+                        down: (shotMap.tempo.downswingMs / 1000).toFixed(1),
                       })}
-                      {session.smart_motion_shot_map.tempo.sequencingScore != null ? t('swinglab_swing.biomech.transition_suffix', { score: Math.round(session.smart_motion_shot_map.tempo.sequencingScore) }) : ''}
+                      {shotMap.tempo.sequencingScore != null ? t('swinglab_swing.biomech.transition_suffix', { score: Math.round(shotMap.tempo.sequencingScore) }) : ''}
                     </Text>
                   ) : null}
                 </View>
               ) : null}
-              {session.smart_motion_shot_map && (session.smart_motion_shot_map.effortPct != null || session.smart_motion_shot_map.estCarry != null || session.smart_motion_shot_map.trace) ? (
+              {shotMap && (shotMap.effortPct != null || shotMap.estCarry != null || shotMap.trace) ? (
                 <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
                   <Text style={[styles.biomechLabel, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.shot_map')}</Text>
                   <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                    {session.smart_motion_shot_map.effortPct != null ? (
+                    {shotMap.effortPct != null ? (
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.effort')}</Text>
-                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{session.smart_motion_shot_map.effortPct}%</Text>
+                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{shotMap.effortPct}%</Text>
                       </View>
                     ) : null}
-                    {session.smart_motion_shot_map.estCarry != null ? (
+                    {shotMap.estCarry != null ? (
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.carry')}</Text>
-                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{t('swinglab_swing.swing_detail.yds', { estCarry: toDisplayDistance(session.smart_motion_shot_map.estCarry, liveDistanceUnit()), unit: unitLabel(liveDistanceUnit()) })}</Text>
+                        {/* 2026-10-27 (audit R3) — the club + effort carry is an estimate; labelled one. */}
+                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.carry_est')}</Text>
+                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{t('swinglab_swing.swing_detail.yds', { estCarry: toDisplayDistance(shotMap.estCarry, liveDistanceUnit()), unit: unitLabel(liveDistanceUnit()) })}</Text>
                       </View>
                     ) : null}
-                    {session.smart_motion_shot_map.trace ? (
+                    {shotMap.trace ? (
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.launch')}</Text>
                         <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>
-                          {session.smart_motion_shot_map.trace.side === 'left' ? `${session.smart_motion_shot_map.trace.divergenceDeg}° L`
-                            : session.smart_motion_shot_map.trace.side === 'right' ? `${session.smart_motion_shot_map.trace.divergenceDeg}° R`
+                          {shotMap.trace.side === 'left' ? `${shotMap.trace.divergenceDeg}° L`
+                            : shotMap.trace.side === 'right' ? `${shotMap.trace.divergenceDeg}° R`
                             : 'Straight'}
                         </Text>
                       </View>
                     ) : null}
                   </View>
-                  {(session.smart_motion_shot_map.canvasFeet != null || session.smart_motion_shot_map.cameraBehindFeet != null) ? (
+                  {(shotMap.canvasFeet != null || shotMap.cameraBehindFeet != null) ? (
                     <Text style={[styles.biomechSub, { color: colors.text_muted, marginTop: 8 }]}>
-                      {session.smart_motion_shot_map.canvasFeet != null ? `Canvas ${session.smart_motion_shot_map.canvasFeet} ft` : ''}
-                      {session.smart_motion_shot_map.cameraBehindFeet != null ? `${session.smart_motion_shot_map.canvasFeet != null ? '  ·  ' : ''}Camera ${session.smart_motion_shot_map.cameraBehindFeet} ft back` : ''}
+                      {shotMap.canvasFeet != null ? `Canvas ${shotMap.canvasFeet} ft` : ''}
+                      {shotMap.cameraBehindFeet != null ? `${shotMap.canvasFeet != null ? '  ·  ' : ''}Camera ${shotMap.cameraBehindFeet} ft back` : ''}
                     </Text>
                   ) : null}
                 </View>
+              ) : null}
+              {/* Not silent: a later swing of a SmartMotion set says why it has no tempo / shot map. */}
+              {!shotMap && session.smart_motion_shot_map && shownShotIdx > 0 ? (
+                <Text style={[styles.biomechSub, { color: colors.text_muted, marginTop: 12 }]}>{t('swinglab_swing.swing_detail.shot_map_swing_one_only')}</Text>
               ) : null}
               {/* 2026-06-30 (Tim — audit) — the player's stated FEEL was captured
                   (setSessionFeel) but never shown anywhere. Surface it with the read. */}

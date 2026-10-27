@@ -287,3 +287,18 @@ export function spotlightRing(
   const r = Math.max(spread + scale * 0.25, scale * 0.45);
   return Number.isFinite(r) && r > 0 ? { cx, cy, r } : null;
 }
+
+/**
+ * 2026-10-27 — the fault the library's BODY tiles are toned from, for the swing on screen. Same rule as
+ * swingFaultOnScreen: the swing's own read; the session headline only for a legacy swing 1 with none. It fell
+ * back to the headline for EVERY swing, so swing 3's tiles were coloured by another swing's fault.
+ */
+export function swingBodyFaultRead(
+  idx: number,
+  sessionHeadline: FaultRead,
+  shotRead: FaultRead,
+): { primary_fault: string | null; detected_issue: string } | null {
+  if (shotRead) return { primary_fault: shotRead.primary_fault ?? null, detected_issue: shotRead.detected_issue ?? 'none' };
+  if (idx === 0 && sessionHeadline) return { primary_fault: sessionHeadline.primary_fault ?? null, detected_issue: sessionHeadline.issue_id ?? 'none' };
+  return null;
+}

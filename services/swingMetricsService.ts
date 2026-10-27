@@ -557,7 +557,10 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
     carryYards = finalize({
       value: Math.round(inputs.estimatedCarryYds),
       unit: 'yds',
-      source: 'pose', // estimate-grade → keeps the "est" marker/range (honest)
+      // 2026-10-27 (audit R3) — 'profile', not 'pose'. The club + effort carry is a TABLE estimate, the same
+      // for every swing of the club; tagged 'pose' it passed isSwingDerived, and the SPEED · TEMPO card then
+      // said "Speed measured" over it. Still an estimate everywhere (the "est" marker + range).
+      source: 'profile',
       confidence: 0.45,
       estimateNote: 'club + effort estimate',
     });

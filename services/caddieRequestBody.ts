@@ -1036,6 +1036,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return clip ? swingReadForCaddie(clip.read, clip.fps) : null;
     }, null),
     /**
+     * 2026-10-27 (audit R1) — THE NUMBERS ON THE SCREEN. The tempo, start line and club + effort carry the
+     * review shows for the swing on screen (SmartMotion's review, or the library's swing page). Without it
+     * "how was my tempo on that one?" was answered from the library's latest tempo — maybe another swing.
+     * The carry is always called an estimate, and a library swing whose numbers were never saved says so.
+     * Changes swing to swing: MESSAGE side (api/kevin live facts), never the cached prompt.
+     */
+    swing_on_screen: safe(() => {
+      const { swingOnScreenForCaddie } = require('./swing/swingOnScreen') as typeof import('./swing/swingOnScreen');
+      const { useCaptureEngineStore } = require('../store/captureEngineStore') as typeof import('../store/captureEngineStore');
+      return swingOnScreenForCaddie(useCaptureEngineStore.getState().swingOnScreen);
+    }, null),
+    /**
      * 2026-09-12 — how his balls actually compare on the card.
      *
      * Sent only once there is something real to say: services/ballPerformance returns a null

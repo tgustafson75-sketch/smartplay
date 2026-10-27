@@ -31,7 +31,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Modal,
   TextInput,
   Animated,
   Vibration,
@@ -41,12 +40,11 @@ import {
   type ViewStyle, Platform, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
-import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
@@ -95,8 +93,13 @@ import { deriveSwingTempo, type PoseFrame, type SwingBiomechanics, type SwingTem
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes, levelStrikes, LEVEL_DROP_DB, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { createLiveStrikeMeter } from '../../services/swing/liveStrikeMeter';
-import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
+import { analyzeStrike } from '../../services/acousticsAnalyzer';
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, reanalyzeSegment, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { shotMapToPersist } from '../../services/swing/smartMotionShotMap';
+import { drillRouteFor, speedTempoCard, carryOnScreen, strikeReadForSwing, ballReadKey, offerAnalyzeAtMoment, type GradedStrike } from '../../services/swing/smartMotionReview';
+import { playerZoomFor } from '../../services/swing/playerZoom';
+import { ReplayMarkupModal, freezeReplayForMarkup } from '../../components/smartmotion/ReplayMarkupModal';
+import { usePagerKeepsPage } from '../../hooks/usePagerKeepsPage';
 import { isPracticeSwing } from '../../services/swing/practiceSwings';
 import { NO_SWING_FOUND } from '../../services/swing/orchestrator/uploadRun';
 import { requestShotDetail, shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
@@ -764,14 +767,15 @@ export default function SmartMotion() {
    * Every input it needs is already computed at the metering stop: res.floorDb is the noise floor,
    * strike.peakDb the peak, and the 50ms sample buffer gives the decay. Nothing new to capture.
    */
-  const [acousticRead, setAcousticRead] = useState<AcousticAnalysis | null>(null);
+  /** Every heard strike of the set, graded (audit R2: the card shows the one in the selected swing's window). */
+  const [gradedStrikes, setGradedStrikes] = useState<GradedStrike[]>([]);
   /** Strikes the microphone actually heard in this recording — the honest shot count. */
   const [heardStrikeCount, setHeardStrikeCount] = useState<number | null>(null);
   // 2026-06-14 (Tim — per-swing trace) — cache the departure read PER swing index so
   // switching reel tabs shows THAT swing's trace. The old single-shot effect computed
   // departure once off the FIRST strike and never recomputed, so swings 2-5 showed
   // swing 1's trace (or none). Mirrors the per-swing tempo cache.
-  const ballDepartureCacheRef = useRef<Record<number, BallDepartureResult | null>>({});
+  const ballDepartureCacheRef = useRef<Record<string, BallDepartureResult | null>>({});
   // 2026-06-25 (Shot Tracing, Tim) — the MULTI-FRAME measured ball path for the
   // selected swing. Where ballDeparture seeds the single launch-direction line,
   // this carries the full set of detected post-impact positions that buildShotTrace
@@ -779,7 +783,7 @@ export default function SmartMotion() {
   // ball leaves frame). Cached per swing index like the departure read. null = not
   // run / nothing detected (the overlay degrades to the single-line trace + a note).
   const [ballPathPoints, setBallPathPoints] = useState<{ x: number; y: number }[] | null>(null);
-  const ballPathCacheRef = useRef<Record<number, { x: number; y: number }[] | null>>({});
+  const ballPathCacheRef = useRef<Record<string, { x: number; y: number }[] | null>>({});
   // 2026-07-07 — the SOURCE frame aspect (frameW/frameH) the ball-path was detected in,
   // so the overlay can map the frame-normalized points into the container's cover space.
   const [ballPathFrameAR, setBallPathFrameAR] = useState<number | null>(null);
@@ -1250,6 +1254,8 @@ export default function SmartMotion() {
 
   const [page, setPage] = useState(0);
   const [annotateOpen, setAnnotateOpen] = useState(false);
+  /** The moment the replay was frozen on for markup (audit R6). */
+  const [annotateAtMs, setAnnotateAtMs] = useState(0);
   const [showLayman, setShowLayman] = useState(false);
   const [coachNote, setCoachNote] = useState('');
   /** 2026-08-10 — a coach note typed BEFORE the session is ingested. Flushed on ingest so it can
@@ -1534,6 +1540,8 @@ export default function SmartMotion() {
     };
   }, []);
   const pagerRef = useRef<ScrollView>(null);
+  // 2026-10-27 (audit R8) — a Fold unfold / fold changes the page width; stay on the page, not between two.
+  usePagerKeepsPage(pagerRef, page, windowWidth);
   // 2026-08-01 (tester — "moving the ball box scrolls to another card") — true while a ball/target
   // drag is in flight, so the horizontal card pager freezes and can't steal the drag gesture.
   const [targetsDragging, setTargetsDragging] = useState(false);
@@ -1763,6 +1771,23 @@ export default function SmartMotion() {
     useCaptureEngineStore.getState().setReviewingClip(reviewing ? { fps: clipFps, read } : null);
   }, [clipUri, phase, clipFps, analysis]);
   useEffect(() => () => { useCaptureEngineStore.getState().setReviewingClip(null); }, []);
+  /**
+   * 2026-10-27 (audit R1) — and the NUMBERS the review shows for the swing on screen (tempo, start line, the
+   * club + effort carry estimate), so "how was my tempo on that one?" is answered about this swing
+   * (caddie_request swing_on_screen). Putts have none of these. Cleared off review and when the screen goes.
+   */
+  useFocusEffect(useCallback(() => {
+    // On focus (and on every change while focused): the swing page pushed over this review publishes its own.
+    if (phase !== 'review' || isPutt || !clipUri) { useCaptureEngineStore.getState().setSwingOnScreen(null); return undefined; }
+    useCaptureEngineStore.getState().setSwingOnScreen({
+      swing: selectedSwing + 1,
+      of: Math.max(1, segments.length),
+      tempo: tempo?.ratio != null ? { ratio: tempo.ratio, backswingMs: tempo.backswingMs ?? null, downswingMs: tempo.downswingMs ?? null } : null,
+      launch: ballTrace ? { side: ballTrace.side, deg: ballTrace.divergenceDeg } : null,
+      estCarryYds: estCarry ?? null,
+    });
+    return () => { useCaptureEngineStore.getState().setSwingOnScreen(null); };
+  }, [phase, isPutt, clipUri, selectedSwing, segments.length, tempo, ballTrace, estCarry]));
   // 2026-07-07 — ref mirrors so runAnalysis (a stable callback) reads the CURRENT
   // measured signals at call time without dep churn (same pattern as ballAreaRef).
   const tempoRef = useRef(tempo);
@@ -1806,6 +1831,8 @@ export default function SmartMotion() {
    * Null for a focus we do not recognise, so the review falls back to the generic read rather than
    * rendering an empty card.
    */
+  /** The microphone's grade of THE SWING ON SCREEN: the strike heard inside its own window (audit R2). */
+  const acousticRead = useMemo(() => strikeReadForSwing(gradedStrikes, segments[selectedSwing]), [gradedStrikes, segments, selectedSwing]);
   const focusRead = useMemo(() => drillFocusRead(drillFocus, {
     biomech,
     contactGrade: acousticRead?.quality ?? null,
@@ -1869,6 +1896,9 @@ export default function SmartMotion() {
       }),
     [poseFrames, videoDurationMs, measuredBallSpeedMph, profile.handicap, club, estCarry],
   );
+
+  /** The one carry, labelled an estimate (audit R3: it is the club + effort table, not a read of the swing). */
+  const carryShown = useMemo(() => carryOnScreen(metrics), [metrics]);
 
   // 2026-06-12 — RIGHT rail: now the SAME custom green badges as the left rail
   // (Tim — no more teal Ionicon cards). Club path (qualitative, OUT→IN / IN→OUT
@@ -2050,9 +2080,12 @@ export default function SmartMotion() {
     // WITHOUT ever drawing a wrong-direction line off a loose anchor — degrade+flag,
     // not hard-reject ([[overstrict-gate-lens]]).
     const videoLocated = (seg?.peakDb ?? 0) === 0;
-    // Cache hit → show this swing's trace immediately.
-    if (selectedSwing in ballDepartureCacheRef.current) {
-      setBallDeparture(ballDepartureCacheRef.current[selectedSwing]);
+    // Cache hit → show this swing's trace immediately. 2026-10-27 (audit R5) — keyed by the STRIKE and ball
+    // region it was read from, not the swing index: "Analyze the swing at" moves swing 1's strike, and the
+    // index-keyed cache served the old moment's trace (or its "no trace") for the new one.
+    const departureKey = ballReadKey({ swingIndex: selectedSwing, strikeMs, ballArea });
+    if (departureKey in ballDepartureCacheRef.current) {
+      setBallDeparture(ballDepartureCacheRef.current[departureKey]);
       return;
     }
     setBallDeparture(null); // clear the prior swing's trace while this one computes
@@ -2067,7 +2100,7 @@ export default function SmartMotion() {
         // 2026-09-29 — one rule, services/swing/ballRegion.acceptBallDeparture: the video-located rule
         // above unchanged, and the same discount for a ball region nobody measured (the default).
         const accepted = acceptBallDeparture(r, { videoLocated, regionSource: ballAreaSourceRef.current });
-        ballDepartureCacheRef.current[selectedSwing] = accepted;
+        ballDepartureCacheRef.current[departureKey] = accepted;
         setBallDeparture(accepted);
         // 2026-07-24 (full-app audit, root E) — PERSIST the duff. detectBallDeparture
         // runs lazily on the Motion step, AFTER the save-time write (which only had the
@@ -2133,8 +2166,9 @@ export default function SmartMotion() {
     const seg = segments[selectedSwing];
     const strikeMs = seg?.strikeMs ?? firstStrikeMsRef.current;
     if (strikeMs == null) return;
-    if (selectedSwing in ballPathCacheRef.current) {
-      setBallPathPoints(ballPathCacheRef.current[selectedSwing]);
+    const pathKey = ballReadKey({ swingIndex: selectedSwing, strikeMs, ballArea });   // audit R5, as above
+    if (pathKey in ballPathCacheRef.current) {
+      setBallPathPoints(ballPathCacheRef.current[pathKey]);
       return;
     }
     setBallPathPoints(null);
@@ -2146,7 +2180,7 @@ export default function SmartMotion() {
         // renders it as a flagged low-confidence launch marker (tier 'single') instead of
         // dropping a real, seen ball position.
         const pts = r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y })) : null;
-        ballPathCacheRef.current[selectedSwing] = pts;
+        ballPathCacheRef.current[pathKey] = pts;
         setBallPathPoints(pts);
         if (r?.frameW && r?.frameH) setBallPathFrameAR(r.frameW / r.frameH);
       })
@@ -2217,51 +2251,17 @@ export default function SmartMotion() {
    *
    * Returns null when there is no usable pose, and the view stays exactly as it is today.
    */
-  const playerZoom = useMemo((): { scale: number; tx: number; ty: number } | null => {
-    const frames = poseFrames;
-    if (!frames || frames.length === 0 || rootSize.w <= 0 || rootSize.h <= 0) return null;
-    // Keypoints arrive either normalized 0–1 or pixel-absolute; decide by magnitude, the same way
-    // SwingBodyOverlay does, so the two never disagree about the space they are in.
-    let maxCoord = 0;
-    for (const f of frames) for (const k of f.keypoints) { if (k.score > 0.2) maxCoord = Math.max(maxCoord, k.x, k.y); }
-    if (maxCoord <= 0) return null;
-    const norm = maxCoord <= 1.5;
-    const fw = frames.find(f => f.frameW)?.frameW ?? 0;
-    const fh = frames.find(f => f.frameH)?.frameH ?? 0;
-    if (!norm && (!fw || !fh)) return null; // pixel coords with no frame size — cannot normalize honestly
-
-    let minX = 1, maxX = 0, minY = 1, maxY = 0, seen = 0;
-    for (const f of frames) {
-      for (const k of f.keypoints) {
-        if (k.score <= 0.2) continue;
-        const x = norm ? k.x : k.x / fw;
-        const y = norm ? k.y : k.y / fh;
-        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) continue;
-        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-        seen++;
-      }
-    }
-    if (seen < 8 || maxX <= minX || maxY <= minY) return null;
-
-    // Golf padding: room for the club over the head and the ball under the hands.
-    const h = maxY - minY, w = maxX - minX;
-    const padTop = h * 0.60, padBottom = h * 0.35, padSide = w * 0.35;
-    const bx0 = Math.max(0, minX - padSide), bx1 = Math.min(1, maxX + padSide);
-    const by0 = Math.max(0, minY - padTop),  by1 = Math.min(1, maxY + padBottom);
-    const bw = bx1 - bx0, bh = by1 - by0;
-    if (bw <= 0.02 || bh <= 0.02) return null;
-
-    // Scale so the padded box fills the smaller dimension; never crop content away on the other axis.
-    const scale = Math.min(2.2, Math.max(1, Math.min(1 / bw, 1 / bh)));
-    if (scale <= 1.05) return null; // already filling the frame — leave it alone
-
-    // Move the box centre to the view centre, in post-scale pixels.
-    const cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2;
-    const tx = (0.5 - cx) * rootSize.w * scale;
-    const ty = (0.5 - cy) * rootSize.h * scale;
-    return { scale, tx, ty };
-  }, [poseFrames, rootSize.w, rootSize.h]);
+  // 2026-10-27 (audit R9) — services/swing/playerZoom, against the CONTAINED clip (the frame's own shape: the
+  // pose frames' size, else the player's natural size — the same the skeleton overlay maps with), not the root.
+  const zoomVideoAR = useMemo(() => {
+    const f = poseFrames?.find((x) => x.frameW && x.frameH);
+    if (f?.frameW && f.frameH) return f.frameW / f.frameH;
+    return reviewVideoNatural && reviewVideoNatural.w > 0 && reviewVideoNatural.h > 0 ? reviewVideoNatural.w / reviewVideoNatural.h : null;
+  }, [poseFrames, reviewVideoNatural]);
+  const playerZoom = useMemo(
+    () => playerZoomFor(poseFrames, { w: rootSize.w, h: rootSize.h }, zoomVideoAR),
+    [poseFrames, rootSize.w, rootSize.h, zoomVideoAR],
+  );
 
   /** One transform for the clip AND every frame-space overlay, so the skeleton, club arc and ball
    *  trace stay welded to the body they were computed against. Applying it to the video alone is how
@@ -2280,8 +2280,6 @@ export default function SmartMotion() {
       ? poseRead.dimensions.find((d) => d.verdict === 'needs_work') ?? poseRead.dimensions.find((d) => d.verdict === 'watch')
       : undefined;
     const toneFor = (v?: string) => (v === 'needs_work' ? '#ef4444' : v === 'watch' ? '#f59e0b' : v === 'strength' ? '#88F700' : '#7ED3A3');
-    const carry = isSwingDerived(metrics.carry_yards.source) ? metrics.carry_yards.value : null;
-    const clubSpeed = isSwingDerived(metrics.club_speed.source) ? metrics.club_speed.value : null;
     const bad = bodyItems.filter((b) => b.tone === 'bad');
     const warn = bodyItems.filter((b) => b.tone === 'warn');
     const measuredBody = bodyItems.filter((b) => b.tone !== 'neutral');
@@ -2313,12 +2311,9 @@ export default function SmartMotion() {
       {
         key: 'speed',
         title: 'SPEED · TEMPO',
-        value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}:1` : carry != null ? formatDistance(carry, liveDistanceUnit()) : clubSpeed != null ? `${clubSpeed} mph` : null,
-        note: tempo?.ratio != null
-          ? `Tempo${carry != null ? ` · ${formatDistance(carry, liveDistanceUnit())} carry` : ''}${tempo.sequencingScore != null ? ` · ${transitionLabel(tempo.sequencingScore)}` : ''}`
-          : carry != null || clubSpeed != null
-            ? 'Speed measured; no readable tempo on this swing.'
-            : 'No speed or tempo measured from this swing.',
+        // 2026-10-27 (audit R3) — the club + effort carry is an estimate and says so; "measured" only for a
+        // truth-grade speed (services/swing/smartMotionReview.speedTempoCard).
+        ...speedTempoCard({ tempo, metrics, formatCarry: (y) => formatDistance(y, liveDistanceUnit()), transitionLabel }),
       },
       {
         key: 'body',
@@ -3110,7 +3105,7 @@ export default function SmartMotion() {
     // 2026-08-24 — clear the acoustic read WITH the rest. Set but never cleared, a second set that
     // detected no strike would keep showing the FIRST set's "Flush" — a fabricated read on the one
     // card whose entire job is honesty about contact.
-    setAcousticRead(null);
+    setGradedStrikes([]);
     setHeardStrikeCount(null);
     setPuttAnalysis(null);
     // Putt mode is EXPLICIT + per-recording: clear it on every reset so it can
@@ -3172,8 +3167,8 @@ export default function SmartMotion() {
   }, [setReviewedClipFps]);
 
   const openDrills = useCallback(() => {
-    const issue = analysis?.detected_issue && analysis.detected_issue !== 'none' ? analysis.detected_issue : null;
-    router.push((issue ? `/drills/${issue}` : '/drills') as never);
+    // 2026-10-27 (audit R4) — the drill for the fault TOP FOCUS headlines (primary_fault first), not detected_issue.
+    router.push(drillRouteFor(analysis) as never);
   }, [analysis, router]);
 
   /**
@@ -3495,7 +3490,7 @@ export default function SmartMotion() {
     try { require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true }); } catch { /* non-fatal */ }
     setBallSpeed(null);
     setBallDeparture(null);
-    setAcousticRead(null);      // new recording → the previous set's strike grade is not this set's
+    setGradedStrikes([]);       // new recording → the previous set's strike grades are not this set's
     setHeardStrikeCount(null);
     ballDepartureCacheRef.current = {}; // 2026-06-14 — new recording → drop per-swing trace cache
     ballPathCacheRef.current = {};
@@ -3817,16 +3812,26 @@ export default function SmartMotion() {
            * alike, and the heuristic adjusts for it.
            */
           try {
-            const loudest = [...res.strikes].sort((a, b) => b.peakDb - a.peakDb)[0]!;
-            const at = samples.findIndex((sm) => sm.timeMs >= loudest.timeMs);
-            const nextDb = at >= 0 && at + 1 < samples.length ? samples[at + 1]!.dB : null;
-            const decayDb = nextDb == null ? null : loudest.peakDb - nextDb;
-            setAcousticRead(analyzeStrike({
-              reading: { impact_ms: loudest.timeMs, peak_db: loudest.peakDb, confidence: loudest.confidence === 'high' ? 0.9 : loudest.confidence === 'medium' ? 0.6 : 0.3, audio_uri: uri },
-              noise_floor_db: res.floorDb,
-              decay_db: decayDb,
-              club: clubRef.current ?? null,
-            }));
+            /**
+             * 2026-10-27 (audit R2) — EVERY strike is graded, and each swing's CONTACT card shows the strike
+             * heard in its own window (strikeReadForSwing). Grading only the set's loudest put that one grade
+             * on every swing of the reel.
+             */
+            const graded: GradedStrike[] = filterReboundStrikes(res.strikes).map((st) => {
+              const at = samples.findIndex((sm) => sm.timeMs >= st.timeMs);
+              const nextDb = at >= 0 && at + 1 < samples.length ? samples[at + 1]!.dB : null;
+              const decayDb = nextDb == null ? null : st.peakDb - nextDb;
+              return {
+                impactMs: st.timeMs,
+                read: analyzeStrike({
+                  reading: { impact_ms: st.timeMs, peak_db: st.peakDb, confidence: st.confidence === 'high' ? 0.9 : st.confidence === 'medium' ? 0.6 : 0.3, audio_uri: uri },
+                  noise_floor_db: res.floorDb,
+                  decay_db: decayDb,
+                  club: clubRef.current ?? null,
+                }),
+              };
+            });
+            setGradedStrikes(graded);
             setHeardStrikeCount(filterReboundStrikes(res.strikes).length);
           } catch { /* grading is additive — never let it break segmentation */ }
           // PRACTICE: trust acoustics as the final segmentation here. RANGE waits for
@@ -4642,6 +4647,14 @@ export default function SmartMotion() {
   }, [phase, scanningClub, detectClubFromCamera]);
 
   // Review video transport + keep/discard for the control bar.
+  // 2026-10-27 (audit R6) — tapping the replay to mark it up freezes it (state + player, so no sound under
+  // the markup) and opens the markup on the frame that was on screen, not frame 0.
+  const openMarkup = useCallback(() => {
+    void freezeReplayForMarkup({ video: videoRef.current, setVideoPaused, playbackMs }).then((ms) => {
+      setAnnotateAtMs(ms);
+      setAnnotateOpen(true);
+    });
+  }, [playbackMs]);
   const togglePlay = useCallback(async () => {
     const next = !videoPaused;
     setVideoPaused(next);
@@ -4706,24 +4719,13 @@ export default function SmartMotion() {
          * simply omits the line — no fabricated context. ([[environment-mode]])
          */
         const isPractice = effectiveMode === 'sim';   // rig geometry only means something indoors
-        if (estCarry != null || effortPct != null || ballTrace || (isPractice && practiceCanvasFeet != null) || tempo || biomech) {
-          store.setSessionShotMap(sid, {
-            estCarry: estCarry ?? null,
-            effortPct: effortPct ?? null,
-            trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
-            canvasFeet: isPractice ? (practiceCanvasFeet ?? null) : null,
-            cameraBehindFeet: isPractice ? (cameraBehindFeet ?? null) : null,
-            angle,
-            club: club ?? null,
-            tempo: tempo ? {
-              ratio: tempo.ratio ?? null,
-              backswingMs: tempo.backswingMs ?? null,
-              downswingMs: tempo.downswingMs ?? null,
-              sequencingScore: tempo.sequencingScore ?? null,
-            } : null,
-            bodyItems: bodyItems.map((b) => ({ key: b.key, label: b.label, tone: b.tone, icon: typeof b.icon === 'string' ? b.icon : undefined })),
-          });
-        }
+        // 2026-10-27 (audit R1) — swing 1's snapshot only. Saving with swing 3 on screen wrote swing 3's tempo
+        // and launch over the session, and the library showed them on every swing (smartMotionShotMap).
+        const snap = shotMapToPersist({
+          estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, isPractice, angle, club,
+          tempo, hasBiomech: !!biomech, bodyItems,
+        }, selectedSwingRef.current);
+        if (snap) store.setSessionShotMap(sid, snap);
       } catch { /* non-fatal */ }
     }
     // 2026-06-13 (Tim) — award CONSERVATIVE practice points for a completed drill
@@ -4810,31 +4812,18 @@ export default function SmartMotion() {
   // computed, for the PRIMARY swing — mirroring the biomech live-commit — so the library always mirrors
   // the session's 4-card analysis regardless of how the user leaves.
   useEffect(() => {
-    if (phase !== 'review' || selectedSwing !== 0) return;
+    if (phase !== 'review') return;
     const sid = ingestedSessionIdRef.current;
     if (!sid) return;
     // 2026-08-10 — SECOND write site for the same shot map (the live-commit mirror of the save-time
-    // write above). Cage rig geometry has to be gated here too; fixing only one of the two would
-    // leave "Canvas 14 ft" reappearing on course via whichever path committed last.
-    const isPracticeLive = effectiveMode === 'sim';
-    if (!(estCarry != null || effortPct != null || ballTrace || (isPracticeLive && practiceCanvasFeet != null) || tempo || biomech)) return;
+    // write above); both go through shotMapToPersist (swing 1 only, rig geometry only in practice).
+    const snap = shotMapToPersist({
+      estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, isPractice: effectiveMode === 'sim',
+      angle, club, tempo, hasBiomech: !!biomech, bodyItems,
+    }, selectedSwing);
+    if (!snap) return;
     try {
-      useSwingSessionStore.getState().setSessionShotMap(sid, {
-        estCarry: estCarry ?? null,
-        effortPct: effortPct ?? null,
-        trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
-        canvasFeet: isPracticeLive ? (practiceCanvasFeet ?? null) : null,
-        cameraBehindFeet: isPracticeLive ? (cameraBehindFeet ?? null) : null,
-        angle,
-        club: club ?? null,
-        tempo: tempo ? {
-          ratio: tempo.ratio ?? null,
-          backswingMs: tempo.backswingMs ?? null,
-          downswingMs: tempo.downswingMs ?? null,
-          sequencingScore: tempo.sequencingScore ?? null,
-        } : null,
-        bodyItems: bodyItems.map((b) => ({ key: b.key, label: b.label, tone: b.tone, icon: typeof b.icon === 'string' ? b.icon : undefined })),
-      });
+      useSwingSessionStore.getState().setSessionShotMap(sid, snap);
     } catch { /* non-fatal */ }
   }, [phase, selectedSwing, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, tempo, biomech, bodyItems, effectiveMode]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
@@ -5560,7 +5549,7 @@ export default function SmartMotion() {
 
         {/* Smart Capture — tap exposed video to freeze + mark up. */}
         {isReview && clipUri ? (
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setAnnotateOpen(true)} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.freeze_and_mark_up_this')} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={openMarkup} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.freeze_and_mark_up_this')} />
         ) : null}
 
         {/* Attached skeletal overlay — real keypoints tracked to playback.
@@ -6268,7 +6257,7 @@ export default function SmartMotion() {
                               handicap-table lookup is identical for every swing and carries no signal. */}
                           <SpeedStat label={t('scorecard.col_club')} value={isSwingDerived(metrics.club_speed.source) && metrics.club_speed.value != null ? String(metrics.club_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.club_speed.source)} style={{ flex: 1 }} />
                           <SpeedStat label={t('swinglab_smartmotion.label.ball')} value={isSwingDerived(metrics.ball_speed.source) && metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.ball_speed.source)} style={{ flex: 1 }} />
-                          <SpeedStat label={t('swinglab_smartmotion.label.carry')} value={isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null ? String(toDisplayDistance(metrics.carry_yards.value, liveDistanceUnit())) : null} unit={unitLabel(liveDistanceUnit())} estimate={!isTruthGrade(metrics.carry_yards.source)} style={{ flex: 1 }} />
+                          <SpeedStat label={t('swinglab_smartmotion.label.carry')} value={carryShown ? String(toDisplayDistance(carryShown.yds, liveDistanceUnit())) : null} unit={unitLabel(liveDistanceUnit())} estimate={carryShown?.estimate ?? true} style={{ flex: 1 }} />
                         </View>
                         <TempoBar ratio={tempo?.ratio ?? null} />
                         {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
@@ -6522,8 +6511,8 @@ export default function SmartMotion() {
             club={club ? clubIdLabel(club) : null}
             onClubPress={() => setClubMenuOpen(true)}
             shot={isReview ? selectedSwing + 1 : null}
-            distanceYds={isReview && isSwingDerived(metrics.carry_yards.source) ? metrics.carry_yards.value : null}
-            distanceEst={isReview && isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null}
+            distanceYds={isReview && carryShown ? carryShown.yds : null}
+            distanceEst={isReview && !!carryShown?.estimate}
             style={styles.glassCard}
           />
         </View>
@@ -6587,7 +6576,7 @@ export default function SmartMotion() {
           */}
           <Text style={[styles.muted, { color: colors.text_muted }]}>
             {phase === 'analyzing'
-              ? `Reading your swing… ${analysisElapsedSec}s${acousticRead ? '  ·  strike ✓' : ''}`
+              ? `Reading your swing… ${analysisElapsedSec}s${gradedStrikes.length > 0 ? '  ·  strike ✓' : ''}`
               : 'Record a swing to fill in your breakdown.'}
           </Text>
           {!isPutt ? <BodyAnalysisRow items={bodyItems} style={{ opacity: 0.7 }} /> : null}
@@ -6636,21 +6625,23 @@ export default function SmartMotion() {
             biomech?.verdicts?.sequencing,
           ].filter((v): v is string => !!v && v.trim().length > 0);
           if (tempo?.ratio != null) partial.push(`Tempo ${tempo.ratio.toFixed(1)} : 1 (backswing : downswing).`);
+          /**
+           * A capture with no swing found: the way out is the moment the player points at. 2026-10-27 (audit
+           * R10) — offered whatever partial lines there are: the watch's tempo stand-in made `partial`
+           * non-empty and hid the button, leaving no way to point at the swing.
+           */
+          const sec = Math.round(playbackMs / 1000);   // the scrubber's clock (ReviewScrubber rounds)
+          const analyzeAt = offerAnalyzeAtMoment({ noSwingFound: analysisError === NO_SWING_FOUND, segmentCount: segments.length, partialLineCount: partial.length }) ? (
+            <View style={{ gap: 10 }}>
+              <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError}</Text>
+              <Text style={[styles.muted, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.no_swing_scrub_hint')}</Text>
+              <TactilePressable onPress={analyzeAtMoment} disabled={!clipUri} style={[styles.momentBtn, { borderColor: colors.accent }]} accessibilityRole="button">
+                <Text style={{ color: colors.accent, fontWeight: '700' }}>{t('swinglab_smartmotion.smart_motion.analyze_the_swing_at', { time: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })}</Text>
+              </TactilePressable>
+            </View>
+          ) : null;
           if (partial.length === 0) {
-            // A capture with no swing found: the way out is the moment the player points at.
-            if (analysisError === NO_SWING_FOUND && segments.length <= 1) {
-              const sec = Math.round(playbackMs / 1000);   // the scrubber's clock (ReviewScrubber rounds)
-              return (
-                <View style={{ gap: 10 }}>
-                  <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError}</Text>
-                  <Text style={[styles.muted, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.no_swing_scrub_hint')}</Text>
-                  <TactilePressable onPress={analyzeAtMoment} disabled={!clipUri} style={[styles.momentBtn, { borderColor: colors.accent }]} accessibilityRole="button">
-                    <Text style={{ color: colors.accent, fontWeight: '700' }}>{t('swinglab_smartmotion.smart_motion.analyze_the_swing_at', { time: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` })}</Text>
-                  </TactilePressable>
-                </View>
-              );
-            }
-            return <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError ?? 'No analysis available for this swing.'}</Text>;
+            return analyzeAt ?? <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError ?? 'No analysis available for this swing.'}</Text>;
           }
           return (
             <>
@@ -6661,6 +6652,7 @@ export default function SmartMotion() {
               {partial.map((line, i) => (
                 <Text key={i} style={[styles.insightBody, { color: colors.text_secondary, backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>{line}</Text>
               ))}
+              {analyzeAt}
             </>
           );
         })()
@@ -6914,18 +6906,15 @@ export default function SmartMotion() {
         {shotMapPage}
       </ScrollView>
 
-      {/* Smart Capture markup — fullscreen frozen frame + draw tools. */}
-      <Modal visible={annotateOpen} animationType="fade" onRequestClose={() => setAnnotateOpen(false)} supportedOrientations={['portrait', 'landscape']}>
-        <View style={styles.markupRoot}>
-          {clipUri ? (
-            <Video source={{ uri: clipUri }} style={StyleSheet.absoluteFill} resizeMode={ResizeMode.CONTAIN} shouldPlay={false} useNativeControls={false} />
-          ) : null}
-          <VideoAnnotationOverlay topOffset={insets.top + 60} />
-          <Pressable onPress={() => setAnnotateOpen(false)} style={[styles.markupClose, { top: insets.top + 8 }]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.close_markup')}>
-            <Ionicons name="close" size={26} color="#fff" />
-          </Pressable>
-        </View>
-      </Modal>
+      {/* Smart Capture markup — fullscreen frozen frame + draw tools (audit R6: on the frozen moment). */}
+      <ReplayMarkupModal
+        open={annotateOpen}
+        clipUri={clipUri}
+        atMs={annotateAtMs}
+        onClose={() => setAnnotateOpen(false)}
+        topInset={insets.top}
+        closeLabel={t('swinglab_smartmotion.accessibility_label.close_markup')}
+      />
 
       {/* Club tag picker — standalone mode (does not touch the cage session).
           Tagging a club unlocks honest ball speed / smash / carry. */}
@@ -7241,8 +7230,6 @@ const styles = StyleSheet.create({
   micBtnActive: { backgroundColor: '#88F700', borderColor: '#88F700' },
 
   // markup
-  markupRoot: { flex: 1, backgroundColor: '#000' },
-  markupClose: { position: 'absolute', right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
 
   // permission
   primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, marginTop: 10 },

@@ -153,7 +153,11 @@ describe('shot trace computes without the pose-skeleton toggle', () => {
 
   it('the shot map still carries the trace it now actually receives', () => {
     // This is the analysis-card link Tim guessed at: no trace computed → trace: null persisted.
-    expect(sm).toContain('trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null');
+    // 2026-10-27 — both writers build the snapshot through services/swing/smartMotionShotMap.shotMapToPersist,
+    // handing it the screen's ballTrace (the mapping is asserted by behaviour in the-shot-map-is-swing-ones-own).
+    expect(sm).toMatch(/shotMapToPersist\(\{\s*estCarry, effortPct, ballTrace,/);
+    const owner = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'services/swing/smartMotionShotMap.ts'), 'utf8') as string;
+    expect(owner).toContain('trace: src.ballTrace ? { side: src.ballTrace.side, divergenceDeg: src.ballTrace.divergenceDeg } : null');
   });
 
   it('the overlay that draws it never depended on the toggle', () => {
