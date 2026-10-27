@@ -383,7 +383,12 @@ async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomec
   }
   answered.add(answerKey(s, shot));
   if (arc.points.length < 3 && arc.rejected?.reason === 'too_few') sayClubheadUnreadableOnce();
-  const pts = arc.points.length >= 3 ? arc.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + startMs })) : [];
+  // The measured grip rides along with its head (gx/gy, when the tracker saw it): the blue shaft needs it.
+  const pts = arc.points.length >= 3
+    ? arc.points.map((p) => (typeof p.gx === 'number' && typeof p.gy === 'number'
+      ? { x: p.x, y: p.y, tMs: p.tMs + startMs, gx: p.gx, gy: p.gy }
+      : { x: p.x, y: p.y, tMs: p.tMs + startMs }))
+    : [];
   const frame = pts.length ? { w: arc.frameW ?? null, h: arc.frameH ?? null } : null;
   // A forced run's answer replaces the old one outright, even an empty one (the setters keep a good arc
   // over an empty re-run otherwise).

@@ -10,7 +10,9 @@
  * Bump a number when the code behind it changes what it would store for the same clip.
  */
 export const BODY_READ_VERSION = 1;
-export const CLUB_ARC_VERSION = 1;
+// 2: the tracker returns the measured grip with each head (2026-10-26). An arc without it draws no shaft, so a
+// v1 arc is tracked again when its swing is next asked for, and is not drawn meanwhile (overlayVisibility).
+export const CLUB_ARC_VERSION = 2;
 
 export const bodyReadIsCurrent = (v: number | null | undefined): boolean =>
   typeof v === 'number' && v >= BODY_READ_VERSION;

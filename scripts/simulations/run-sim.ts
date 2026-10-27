@@ -1135,7 +1135,10 @@ check('Clubhead arc is computed at ANALYSIS time + persisted (not re-extracted o
       // live extraction; 2026-08-06 — a stored EMPTY arc no longer locks it blank forever (falls through to
       // the paused-gated live re-extraction), so the guard now asserts the real-arc short-circuit.
       // 2026-10-04 — and only an arc the on-device TRACKER found; a pre-tracker vision arc is re-tracked.
-      /const arc = shot\.club_arc \?\? \(first \? session\.club_arc : null\) \?\? null;/.test(detail) && /if \(src === 'tracker'\) return true;/.test(read('services/swing/orchestrator/shotDetail.ts'))
+      // 2026-10-26 — the stored-arc pick (this shot's own, or the session's for shot 0; today's tracker only)
+      // is overlayVisibility.drawableClubArc, shared with SmartMotion.
+      /setClubArcPoints\(session && shot \? drawableClubArc\(session, shot\) : null\)/.test(detail) &&
+      /const holder: ArcHolder \| null = own \? shot : \(first \? session : null\);/.test(read('services/swing/overlayVisibility.ts')) && /if \(src === 'tracker'\) return true;/.test(read('services/swing/orchestrator/shotDetail.ts'))
     );
   })(),
   'the clubhead arc is detected during analysis (retriever runs while nothing plays) and stored, so it draws immediately on open regardless of autoplay — no view-time re-extraction race');
@@ -5778,7 +5781,8 @@ check('Real clubhead arc: detected-only, honestly gated, wired end-to-end',
       /clubDots/.test(ov) &&
       // the one runner (the orchestrator's shot run) finds it; smartmotion passes the stored arc to the overlay.
       /detectClubPath\(/.test(read('services/swing/orchestrator/shotDetail.ts')) &&
-      /clubArc=\{clubArcPoints\}/.test(sm) &&
+      // 2026-10-26 — through the Swing Trace chip's rule (overlayVisibility): drawn only when the player turned it on.
+      /clubArc=\{reviewLayers\.clubArc\}/.test(sm) &&
       // Routed.
       /"\/api\/club-path"/.test(read('vercel.json'))
     );

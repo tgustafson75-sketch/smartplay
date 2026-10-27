@@ -19,7 +19,7 @@ const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 describe('a club-arc window is retried only when it was never answered', () => {
   it('stores a REAL result — and an empty one, with its source', () => {
-    expect(code).toMatch(/const pts = arc\.points\.length >= 3 \? arc\.points\.map[\s\S]{0,200}: \[\];/);
+    expect(code).toMatch(/const pts = arc\.points\.length >= 3\s*\?\s*arc\.points\.map[\s\S]{0,300}: \[\];/);
     expect(code).toMatch(/store\.setShotClubArc\(input\.sessionId, input\.shotId, pts, frame, arc\.source\);/);
   });
 

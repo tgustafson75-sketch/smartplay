@@ -235,7 +235,13 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body>
           var at = window.ClubTrack.anchorsFromPoses(poses, W, H);
           var r = window.ClubTrack.track(frames, at);
           var pts = [];
-          r.points.forEach(function (q) { if (q) pts.push({ t: q.t, x: q.x / W, y: q.y / H, score: q.score }); });
+          r.points.forEach(function (q) {
+            if (!q) return;
+            var o = { t: q.t, x: q.x / W, y: q.y / H, score: q.score };
+            // the measured grip (inner end of the moving shaft), when the tracker saw one
+            if (q.gx != null && q.gy != null) { o.gx = q.gx / W; o.gy = q.gy / H; }
+            pts.push(o);
+          });
           post({ type: 'club', id: id, ok: true, points: pts, frames: frames.length, vw: vw, vh: vh, clubLen: r.clubLen / Math.max(W, H) });
         });
       }).catch(function (e) {

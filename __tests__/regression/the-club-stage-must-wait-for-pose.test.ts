@@ -57,7 +57,7 @@ describe('the club stage waits for pose', () => {
     // SmartMotion draws the SELECTED shot's stored arc, or nothing.
     expect(sm).toContain('const sh = cageSession?.shots[selectedSwing];');
     expect(sm).toContain('if (!cageSession || !sh) { setClubArcPoints(null); return; }');
-    expect(sm).toContain('setClubArcPoints(pts && pts.length >= 3 ?');
+    expect(sm).toContain('setClubArcPoints(drawableClubArc(cageSession, sh));');
   });
 
   it('the answer is remembered per clip + window, never a bare swing index', () => {

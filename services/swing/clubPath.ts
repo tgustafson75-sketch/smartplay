@@ -36,6 +36,11 @@ export interface ClubPathPoint {
   y: number;
   /** ms from the swing-window start this frame was sampled at. */
   tMs: number;
+  /** 2026-10-26 — the MEASURED grip (inner end of the moving shaft the tracker saw ending at this head),
+   *  full-frame normalized. Absent = not seen (and always absent from the vision fallback): no shaft is
+   *  drawn for this point, only the head (services/swing/clubShaft). */
+  gx?: number;
+  gy?: number;
 }
 
 export interface ClubPathResult {
@@ -495,12 +500,18 @@ async function trackedClubPath(
     // 2026-10-26 — a detection before the window is outside it: dropped, never clamped to tMs 0 (the old
     // 120ms slack stacked two or three clubhead positions on the window's first instant).
     .filter((p) => p.t >= startMs && p.t <= endMs + 120 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
-    .map((p) => ({ x: p.x, y: p.y, tMs: p.t - startMs }));
+    .map((p) => {
+      const o: ClubPathPoint = { x: p.x, y: p.y, tMs: p.t - startMs };
+      if (typeof p.gx === 'number' && typeof p.gy === 'number' && p.gx >= 0 && p.gx <= 1 && p.gy >= 0 && p.gy <= 1) {
+        o.gx = p.gx; o.gy = p.gy;
+      }
+      return o;
+    });
   const { rejection, points } = classifyTrackedArc(raw);
   trace('club track (on-device)', { frames: r.frames, seen: raw.length, kept: rejection ? 0 : points.length, rejected: rejection, ms: Date.now() - t0 });
   console.log('[clubTrack]', JSON.stringify({ frames: r.frames, seen: raw.length, rejection, ms: Date.now() - t0 }));
   return {
-    points: rejection ? [] : (points as ClubPathPoint[]),
+    points: rejection ? [] : points,
     framesSampled: r.frames,
     framesPlanned: r.frames,
     frameW: r.vw,

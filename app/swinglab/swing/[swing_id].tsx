@@ -70,6 +70,7 @@ import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/S
 import { calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
+import { drawableClubArc, overlayLayers, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
 import { buildPoseSwingRead, signedWeightDisplay } from '../../../services/swing/poseSwingRead';
 import { BodyAnalysisRow, TempoBar, deriveBodyItems, type BodyItem, SwingBreakdownCard } from '../../../components/smartmotion/SmartMotionHud';
 import type { SwingAnalysis } from '../../../services/poseDetection';
@@ -617,14 +618,12 @@ export default function SwingDetail() {
   // the old auto-play — opened straight into the 25×/s overlay path that triggered the crash.)
   const [showSkeleton, setShowSkeleton] = useState(false);
   /**
-   * 2026-10-10 (Tim: the swing arc "needs to be a real working option … so useful and clean if we get it
-   * right"). The trace turns ON BY ITSELF once the shot has a real arc (the auto-on effect below). The
-   * comment that stood here since 07-27 promised exactly that, but no code ever set it — the arc was
-   * computed by the analysis run and then hidden until the player found the toggle. Clubhead-or-nothing,
-   * so turning it on never draws anything fabricated. Once the player turns it off, it stays off.
+   * 2026-10-26 (Tim: "Tracing is still on by default, and off doesn't work") — the Swing Trace (clubhead arc,
+   * its dots and the blue club) is OPT-IN: off on every swing opened, on only from the player's toggle, and
+   * off is off. The 10-10 auto-on (on by itself whenever a stored arc existed, re-armed for every swing) is
+   * gone. What each layer draws is services/swing/overlayVisibility — the rule SmartMotion's review uses too.
    */
   const [showTrace, setShowTrace] = useState(false);
-  const traceTouchedRef = useRef(false);
   // 2026-08-05 (Tim — "ball box and direction line still show on replay, should not — default off/hidden").
   // The cage targeting overlay (ball area + aim/direction line) is a CAPTURE-time framing aid; on replay
   // it's clutter over the swing. Default HIDDEN; a "Targets" toggle re-enables it for anyone who wants it.
@@ -692,7 +691,7 @@ export default function SwingDetail() {
   // never here. Run the same clubhead detector across THIS swing's window and feed
   // the overlay, so the library shows the true clubhead path (falls back to the
   // honest wrist trace when the head can't be seen). One server pass per swing.
-  const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
+  const [clubArcPoints, setClubArcPoints] = useState<OverlayArcPoint[] | null>(null);
   /**
    * 2026-08-13 (audit — S1) — the club-plane read, derived here rather than persisted.
    *
@@ -724,18 +723,13 @@ export default function SwingDetail() {
    * carry a different arc here than in SmartMotion. It draws what is stored for the shot; the shot's body
    * read and arc are asked for in the effect below.
    */
+  // 2026-10-26 — only an arc today's tracker stored, grip kept (overlayVisibility.drawableClubArc): an older
+  // build's arc is not drawn, and turning the trace on asks the run for a fresh one.
   useEffect(() => {
-    if (!session || !shot) { setClubArcPoints(null); return; }
-    const first = session.shots.find((x) => x.clipUri)?.id === shot.id;
-    const arc = shot.club_arc ?? (first ? session.club_arc : null) ?? null;
-    setClubArcPoints(arc && arc.length >= 3 ? arc.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
+    setClubArcPoints(session && shot ? drawableClubArc(session, shot) : null);
   }, [session, shot]);
-  useEffect(() => { traceTouchedRef.current = false; }, [swing_id]);
-  // Untouched, the trace follows the swing on screen: on where there is a stored arc, off where there is
-  // none (so a paged swing without one never shows an ON toggle drawing nothing).
-  useEffect(() => {
-    if (!traceTouchedRef.current) setShowTrace(!!(clubArcPoints && clubArcPoints.length >= 3));
-  }, [clubArcPoints]);
+  // Each swing opened starts with the trace off (paging within one reel keeps the player's choice).
+  useEffect(() => { setShowTrace(false); }, [swing_id]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -883,9 +877,9 @@ export default function SwingDetail() {
     if (!swing_id) return;
     const selShot = session?.shots[selectedShotIdx];
     if (!selShot?.clipUri) return;
-    // An auto-on trace (traceTouchedRef false) is drawing an arc already STORED: it asks the run for
-    // nothing, so opening a settled swing still does no analysis work.
-    const traceAsked = showTrace && traceTouchedRef.current;
+    // The trace is only ever on because the player turned it on, so it is his request (it may pay for the
+    // arc); opening a settled swing with everything off still does no analysis work.
+    const traceAsked = showTrace;
     if (!(selectedShotIdx > 0 || showSkeleton || traceAsked)) return;
     // 2026-10-10 — the arc for a swing the player pages to comes from the SILENT pass (the free on-device
     // tracker); only the Swing Trace toggle, turned on by the player, may ask the paid vision model.
@@ -1260,6 +1254,9 @@ export default function SwingDetail() {
     if (next.jumpToFault) jumpToIssue();
   }, [reviewPause, jumpToIssue]);
   const spotlightOn = onIssueFrame && highlightIssue && hasPose && overlayFaultJoints.length > 0;
+  const layers = overlayLayers({
+    userSkeleton: showSkeleton, userTrace: showTrace, motionOnly, spotlight: spotlightOn, hasPose, arc: clubArcPoints,
+  });
 
   // 2026-07-10 (Tim — "missing play rewind and forward and slider controls in swing
   // library") — a real transport deck below the frame: jog ±2s, single-frame step
@@ -1660,7 +1657,8 @@ export default function SwingDetail() {
       const overlayOn = hasPose && (showSkeleton || showTrace || motionOnly);
       let outUri: string | null = null;
       if (overlayOn) {
-        outUri = await captureOverlayStill(uri, timeMs);
+        // What is on screen, not every layer: a layer the player turned off is not in his photo.
+        outUri = await captureOverlayStill(uri, timeMs, { showSkeleton: layers.skeleton, showTrace: layers.trace });
       }
       if (!outUri) {
         const { uri: thumbUri } = await VideoThumbnails.getThumbnailAsync(uri, { time: timeMs, quality: 1 });
@@ -2432,7 +2430,7 @@ export default function SwingDetail() {
               {motionOnly && (
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0B1220' }]} pointerEvents="none" />
               )}
-              {hasPose && (showSkeleton || showTrace || motionOnly || spotlightOn) && (() => {
+              {hasPose && layers.mount && (() => {
                 // 2026-07-26 (Tim — "the mechanics is playing BEFORE the swing; locate the swing then
                 // only apply to the swing") — the clip includes pre-swing setup/waggle, and the skeleton
                 // was drawn across the WHOLE clip. Gate the overlay to the located swing window
@@ -2452,15 +2450,15 @@ export default function SwingDetail() {
                 <SwingBodyOverlay
                   frames={poseFrames}
                   currentTimeMs={Number.isFinite(position) ? position * 1000 : 0}
-                  showSkeleton={showSkeleton || motionOnly}
-                  showTrace={showTrace}
+                  showSkeleton={layers.skeleton}
+                  showTrace={layers.trace}
                   resizeMode="contain"
                   // 2026-07-06 (Tim — GolfFix-style region heat) — paint the
                   // diagnosed fault's body region orange/red on the skeleton.
                   faultJoints={overlayFaultJoints}
                   faultSevere={overlayFaultSevere}
-                  // Trace off hides the club too (the blue shaft draws from this arc).
-                  clubArc={showTrace ? clubArcPoints : null}
+                  // Trace off hides the club too (the blue club draws from this arc) — overlayLayers.
+                  clubArc={layers.clubArc}
                   videoW={videoNatural?.w ?? null}
                   videoH={videoNatural?.h ?? null}
                   spotlight={spotlightOn}
@@ -2731,7 +2729,7 @@ export default function SwingDetail() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, showTrace && { backgroundColor: colors.accent }]}
-                  onPress={() => { traceTouchedRef.current = true; setShowTrace(v => !v); }}
+                  onPress={() => setShowTrace(v => !v)}
                   accessibilityRole="button"
                   accessibilityLabel={t('swinglab_swing.accessibility_label.toggle_swing_trace')}
                 >

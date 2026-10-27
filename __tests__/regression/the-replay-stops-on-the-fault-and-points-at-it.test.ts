@@ -134,7 +134,9 @@ describe('the swing screen stops, rings and names it — the skeleton stays opt-
   });
   it('the ring needs the highlight setting and the overlay mounts for it without the skeleton', () => {
     expect(sd).toMatch(/const spotlightOn = onIssueFrame && highlightIssue && hasPose && overlayFaultJoints\.length > 0;/);
-    expect(sd).toMatch(/showSkeleton \|\| showTrace \|\| motionOnly \|\| spotlightOn\)/);
+    // 2026-10-26 — through overlayLayers, which mounts for the ring alone (the-blue-club-is-measured-and-opt-in).
+    expect(sd).toMatch(/spotlight: spotlightOn/);
+    expect(sd).toContain('{hasPose && layers.mount && (');
     expect(sd).toMatch(/spotlight=\{spotlightOn\}/);
     expect(sd).toMatch(/const \[showSkeleton, setShowSkeleton\] = useState\(false\);/);   // still opt-in
   });
@@ -169,7 +171,10 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
   });
   it('the ring mounts the overlay without the skeleton, and needs the highlight setting', () => {
     expect(sm).toMatch(/const reviewSpotlightOn = reviewOnIssueFrame && highlightIssue && poseReady && reviewFaultJoints\.length > 0;/);
-    expect(sm).toMatch(/\|\|\s*reviewSpotlightOn\s*\) \? \(/);
+    // 2026-10-26 — the mount is overlayLayers' (services/swing/overlayVisibility), which mounts for the ring alone
+    // (behaviour: the-blue-club-is-measured-and-opt-in).
+    expect(sm).toMatch(/spotlight: reviewSpotlightOn/);
+    expect(sm).toContain('isReview && showResults && reviewLayers.mount ? (');
     expect(sm).toMatch(/spotlight=\{reviewSpotlightOn\}/);
   });
   it('the fault hooks sit above the permission gate (the 08-09 "more hooks" crash)', () => {
@@ -183,16 +188,25 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
   });
 });
 
-describe('the arc shows by itself; only the player can pay for one', () => {
+/**
+ * 2026-10-26 — INVERTED (Tim: "Tracing is still on by default, and off doesn't work"). These pinned the 10-10
+ * auto-on — the trace turning itself on whenever a stored arc existed, re-armed for every swing opened — which
+ * was the defect. The trace is the player's toggle now; what each layer draws is overlayLayers, tested by
+ * behaviour in the-blue-club-is-measured-and-opt-in and the overlay render test. These only check the screen is
+ * wired to it.
+ */
+describe('the arc is the player\'s to turn on; only the player can pay for one', () => {
   const sd = code('app/swinglab/swing/[swing_id].tsx');
-  it('the trace follows the swing on screen (on with a stored arc, off without) until the player touches it; off hides the club', () => {
-    expect(sd).toMatch(/if \(!traceTouchedRef\.current\) setShowTrace\(!!\(clubArcPoints && clubArcPoints\.length >= 3\)\);/);
-    expect(sd).toMatch(/clubArc=\{showTrace \? clubArcPoints : null\}/);
+  it('the trace is off on every swing opened, only the toggle turns it on, and off hides the club', () => {
+    expect(sd).not.toMatch(/traceTouchedRef/);
+    expect((sd.match(/setShowTrace\(/g) ?? []).length).toBe(2);   // the toggle, and the per-swing reset to off
+    expect(sd).toContain('useEffect(() => { setShowTrace(false); }, [swing_id]);');
+    expect(sd).toContain('clubArc={layers.clubArc}');
     // the stored arc is read whether or not the trace is on (it used to be nulled while off)
     expect(sd).not.toMatch(/if \(!showTrace \|\| !session \|\| !shot\) \{ setClubArcPoints\(null\)/);
   });
-  it('a shot paged to asks the silent pass; only the touched toggle asks for more', () => {
-    expect(sd).toMatch(/const traceAsked = showTrace && traceTouchedRef\.current;/);
+  it('a shot paged to asks the silent pass; only the player\'s trace asks for more', () => {
+    expect(sd).toMatch(/const traceAsked = showTrace;/);
     expect(sd).toMatch(/arc: traceAsked \? true : 'tracker'/);
     expect(code('app/swinglab/smartmotion.tsx')).toMatch(/requestShotDetail\(sessionId, sh\.id, \{\s*arc: 'tracker',/);
   });

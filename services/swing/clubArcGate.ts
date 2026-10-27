@@ -174,7 +174,7 @@ export function classifyArc(raw: readonly ArcPoint[]): { rejection: ArcRejection
  * own clips that tripped "scatter" on a clean arc. So a tracked arc keeps the gates that still mean
  * something (enough points, not a cluster) and not the one written for a different failure.
  */
-export function classifyTrackedArc(raw: readonly ArcPoint[]): { rejection: ArcRejection | null; points: ArcPoint[] } {
+export function classifyTrackedArc<T extends ArcPoint>(raw: readonly T[]): { rejection: ArcRejection | null; points: T[] } {
   if (raw.length === 0) return { rejection: 'none', points: [] };
   const points = dedupeArcPoints(raw);
   if (points.length < MIN_ARC_POINTS) return { rejection: 'too_few', points };

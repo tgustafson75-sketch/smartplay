@@ -40,14 +40,19 @@ type OverlayOpts = {
   // 2026-07-27 (full-app audit) — the DETECTED clubhead arc. Without it the trace is skeleton-only
   // (the trace is clubhead-OR-NOTHING now), so exported "Grab Frame" stills + the coach report silently
   // lost the swing trace. Threading it restores the real clubhead trace + blue club in the baked still.
-  clubArc?: { x: number; y: number; tMs: number }[] | null;
+  clubArc?: { x: number; y: number; tMs: number; gx?: number; gy?: number }[] | null;
 };
+
+/** 2026-10-26 — the layers ONE capture bakes. Grab Frame passes what is on screen (a layer the player
+ *  turned off is not in his photo); the coach report passes nothing and keeps the hook's (both on). */
+type CaptureLayers = { showSkeleton?: boolean; showTrace?: boolean };
 
 type Job = {
   frameUri: string;
   w: number;
   h: number;
   timeMs: number;
+  layers?: CaptureLayers;
   resolve: (uri: string | null) => void;
 };
 
@@ -59,7 +64,7 @@ const CAPTURE_MAX = 1080;
  * Returns { capture, element }.
  *  - Render `element` once anywhere in the screen tree (it lives off-screen and
  *    only mounts while a capture is in flight).
- *  - Call `capture(clipUri, timeMs)` to get a PNG file URI with the overlay
+ *  - Call `capture(clipUri, timeMs, layers?)` to get a PNG file URI with the overlay
  *    baked in at that time, or null if capture isn't possible.
  */
 export function useSwingStillCapture(opts: OverlayOpts) {
@@ -68,7 +73,7 @@ export function useSwingStillCapture(opts: OverlayOpts) {
   const [job, setJob] = useState<Job | null>(null);
   jobRef.current = job;
 
-  const capture = useCallback(async (clipUri: string, timeMs: number): Promise<string | null> => {
+  const capture = useCallback(async (clipUri: string, timeMs: number, layers?: CaptureLayers): Promise<string | null> => {
     if (!opts.poseFrames || opts.poseFrames.length < 2) return null;
     let frameUri: string;
     let w = 0;
@@ -87,7 +92,7 @@ export function useSwingStillCapture(opts: OverlayOpts) {
     }
     if (!w || !h) { w = 720; h = 1280; }
     return await new Promise<string | null>((resolve) => {
-      setJob({ frameUri, w, h, timeMs, resolve });
+      setJob({ frameUri, w, h, timeMs, layers, resolve });
     });
   }, [opts.poseFrames]);
 
@@ -137,8 +142,8 @@ export function useSwingStillCapture(opts: OverlayOpts) {
         <SwingBodyOverlay
           frames={opts.poseFrames}
           currentTimeMs={job.timeMs}
-          showSkeleton={opts.showSkeleton ?? true}
-          showTrace={opts.showTrace ?? true}
+          showSkeleton={job.layers?.showSkeleton ?? opts.showSkeleton ?? true}
+          showTrace={job.layers?.showTrace ?? opts.showTrace ?? true}
           resizeMode="contain"
           faultJoints={opts.faultJoints}
           faultSevere={opts.faultSevere}

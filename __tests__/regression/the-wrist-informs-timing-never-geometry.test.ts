@@ -135,7 +135,9 @@ describe('the wrist may NEVER become geometry', () => {
 
   it('the trace still comes from the clubhead detector, or from nothing', () => {
     expect(screen).toMatch(/detectClubPath/);
-    expect(screen).toMatch(/setClubArcPoints\(null\)/); // it is allowed to show nothing
+    // it is allowed to show nothing (2026-10-26: through overlayVisibility.drawableClubArc, which returns null for
+    // no arc or an older build's — behaviour in the-blue-club-is-measured-and-opt-in)
+    expect(screen).toMatch(/setClubArcPoints\(session && shot \? drawableClubArc\(session, shot\) : null\)/);
   });
 
   it('poseMotion itself exposes no drawing helper that could be mistaken for a trace', () => {

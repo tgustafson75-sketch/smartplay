@@ -67,24 +67,33 @@ describe('the arc computes without the Motion toggle', () => {
   });
 
   it('still refuses to draw a guess — a validated arc or nothing', () => {
-    expect(runner).toContain('arc.points.length >= 3 ? arc.points.map');
-    expect(sm).toContain('setClubArcPoints(pts && pts.length >= 3 ?');
+    expect(runner).toMatch(/arc\.points\.length >= 3\s*\?\s*arc\.points\.map/);
+    // 2026-10-26 — the ≥3 rule (and today's-tracker-only) lives in overlayVisibility.drawableClubArc now.
+    expect(sm).toContain('setClubArcPoints(drawableClubArc(cageSession, sh));');
   });
 });
 
-describe('the arc renders without the skeleton', () => {
-  it('the overlay mounts when EITHER the skeleton or an arc is available', () => {
-    expect(sm).toContain('(showSkeleton && poseFrames && poseFrames.length > 0) ||');
-    expect(sm).toContain('(clubArcPoints != null && clubArcPoints.length >= 3)');
+/**
+ * 2026-10-26 — PARTLY INVERTED (Tim: "Tracing is still on by default, and off doesn't work"). "Mounts whenever an
+ * arc was detected" and showTrace={shotConfirmed} drew the arc and the blue club with no way to turn them off —
+ * the Motion chip only ever flipped the skeleton. The arc still renders WITHOUT the skeleton, but only from its own
+ * Swing Trace chip. The rule is overlayLayers (behaviour: the-blue-club-is-measured-and-opt-in); these check wiring.
+ */
+describe('the arc renders without the skeleton — from its own chip', () => {
+  it('the overlay mounts by the shared rule, not whenever an arc exists', () => {
+    expect(sm).toContain('isReview && showResults && reviewLayers.mount ? (');
+    expect(sm).not.toContain('(clubArcPoints != null && clubArcPoints.length >= 3)');
   });
 
   it('the skeleton stays bound to the toggle — it was defaulted off for a reason', () => {
-    expect(sm).toContain('showSkeleton={!!(showSkeleton && poseFrames && poseFrames.length > 0)}');
+    expect(sm).toContain('showSkeleton={reviewLayers.skeleton}');
   });
 
-  it('the trace no longer inherits the toggle', () => {
+  it('the trace is its own chip: not the Motion toggle, and not on by itself for a confirmed strike', () => {
     expect(sm).not.toContain('showTrace={showSkeleton && shotConfirmed}');
-    expect(sm).toContain('showTrace={shotConfirmed}');
+    expect(sm).not.toContain('showTrace={shotConfirmed}');
+    expect(sm).toContain('showTrace={reviewLayers.trace}');
+    expect(sm).toContain('clubArc={reviewLayers.clubArc}');
   });
 
   it('still only traces a CONFIRMED strike, never a practice swing', () => {
@@ -102,7 +111,8 @@ describe('a missing pose frame no longer takes the arc down with it', () => {
   });
 
   it('every live-pose consumer tolerates a null frame', () => {
-    expect(ov).toContain("(live ? [getKp(live, 'left_wrist'), getKp(live, 'right_wrist')] : [])");
+    // 2026-10-26 — the shaft no longer reads the wrists at all (a measured grip or no shaft: clubShaft).
+    expect(ov).not.toContain("getKp(live, 'left_wrist')");
     expect(ov).toContain('{showSkeleton && live && (');
   });
 

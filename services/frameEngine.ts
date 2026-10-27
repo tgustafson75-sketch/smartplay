@@ -27,8 +27,9 @@ type Grab = { b64: string; width: number; height: number };
 export type MotionWindow = { startMs: number; endMs: number; peakMs: number };
 /** A distinct short peak of motion — a candidate for the swing (see findUploadSwingWindow). */
 export type MotionBurst = { startMs: number; endMs: number; peakMs: number; peak: number };
-/** A tracked clubhead: `t` ms in the clip, x/y normalised to the frame (services/swing/clubTrackSource). */
-export type ClubTrackPoint = { t: number; x: number; y: number; score: number };
+/** A tracked clubhead: `t` ms in the clip, x/y normalised to the frame (services/swing/clubTrackSource).
+ *  gx/gy (2026-10-26): the MEASURED grip — the inner end of the moving shaft — when the tracker saw one. */
+export type ClubTrackPoint = { t: number; x: number; y: number; score: number; gx?: number; gy?: number };
 /** Body anchors for the tracker: one pose frame, keypoints by COCO name → [x, y, score], normalised. */
 export type ClubTrackPose = { t: number; kp: Record<string, [number, number, number]> };
 

@@ -50,6 +50,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
+import { drawableClubArc, overlayLayers, type OverlayArcPoint } from '../../services/swing/overlayVisibility';
 import { calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress } from '../../services/swing/faultSpotlight';
 import { anchorsFromPoseFrames, swingStageTimesMs, type SwingStageKey } from '../../services/swing/poseMotion';
 import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
@@ -783,7 +784,7 @@ export default function SmartMotion() {
   // selected swing (frame-normalized + tMs), from detectClubPath. null = not run /
   // nothing clearly detected → the overlay keeps the honest hand/tempo trace. Cached
   // per swing index like the ball path (one server pass per swing, on the Motion step).
-  const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
+  const [clubArcPoints, setClubArcPoints] = useState<OverlayArcPoint[] | null>(null);
   // 2026-10-20 — the live meter is LEVELLED against the room (services/swing/liveStrikeMeter):
   // `level` is height above the trailing floor, `hit` means a strike the detector would admit.
   const [liveRead, setLiveRead] = useState<{ level: number; hit: boolean } | null>(null);
@@ -1299,6 +1300,14 @@ export default function SmartMotion() {
   // the toggle re-enables + processes them on demand. ([[overstrict-gate-lens]] —
   // off-by-default-but-available, not removed.)
   const [showSkeleton, setShowSkeleton] = useState(false);
+  /**
+   * 2026-10-26 (Tim: "Tracing is still on by default, and off doesn't work") — the Swing Trace (clubhead arc,
+   * its dots, the blue club) is the player's chip here too. Review used to draw it whenever a strike was
+   * confirmed, with no way to turn it off (the Motion chip only ever flipped the skeleton). Off for every new
+   * recording; services/swing/overlayVisibility is the rule the library swing uses as well. The ball-flight
+   * trace (shot tracer) is not this chip.
+   */
+  const [showTrace, setShowTrace] = useState(false);
   // 2026-06-12 — master show/hide for the result overlays on the review video, so the
   // player can grab a CLEAN frame (off) or an annotated one (on) for screenshot/share
   // (Tim's Smart Capture), and to declutter the center video. Video + controls stay.
@@ -1576,6 +1585,7 @@ export default function SmartMotion() {
   const cageSession = useSwingSessionStore(s =>
     sessionId ? s.sessionHistory.find(x => x.id === sessionId) ?? null : null,
   );
+  useEffect(() => { setShowTrace(false); }, [sessionId]);
   const setSessionBallArea = useSwingSessionStore(s => s.setSessionBallArea);
   const setSessionTarget = useSwingSessionStore(s => s.setSessionTarget);
   const ballArea = cageSession?.ball_area_norm ?? null;
@@ -2135,9 +2145,8 @@ export default function SmartMotion() {
   useEffect(() => {
     const sh = cageSession?.shots[selectedSwing];
     if (!cageSession || !sh) { setClubArcPoints(null); return; }
-    const first = cageSession.shots.find((x) => x.clipUri)?.id === sh.id;
-    const pts = sh.club_arc ?? (first ? cageSession.club_arc : null) ?? null;
-    setClubArcPoints(pts && pts.length >= 3 ? pts.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
+    // 2026-10-26 — only an arc today's tracker stored, grip kept (overlayVisibility.drawableClubArc).
+    setClubArcPoints(drawableClubArc(cageSession, sh));
   }, [cageSession, selectedSwing]);
 
   // Compose the tiered multi-point shot trace from the measured positions +
@@ -3129,6 +3138,7 @@ export default function SmartMotion() {
     setVideoPaused(false);
     setPlaybackRate(1);
     setShowSkeleton(false); // Motion defaults OFF each review (light default path)
+    setShowTrace(false);    // and so does the Swing Trace (overlayVisibility)
     setPage(0);
     pagerRef.current?.scrollTo({ x: 0, animated: false });
     setPhase('setup');
@@ -5082,6 +5092,10 @@ export default function SmartMotion() {
   };
   const reviewFaultJoints = faultJointsFor(reviewFaultId);
   const reviewSpotlightOn = reviewOnIssueFrame && highlightIssue && poseReady && reviewFaultJoints.length > 0;
+  const reviewLayers = overlayLayers({
+    userSkeleton: showSkeleton, userTrace: showTrace, spotlight: reviewSpotlightOn, hasPose: poseReady,
+    arc: clubArcPoints, shotConfirmed,
+  });
   const reviewCaption = reviewOnIssueFrame && reviewFaultId ? faultCaption(reviewFaultId) : null;
   const skeletonRow =
     isReview ? (
@@ -5095,6 +5109,18 @@ export default function SmartMotion() {
             {showSkeleton ? (poseReady ? 'Motion ✓' : 'Reading motion…') : 'Motion'}
           </Text>
         </TactilePressable>
+        {shotConfirmed ? (
+          <TactilePressable
+            onPress={() => setShowTrace((v) => !v)}
+            style={[styles.skelToggle, { borderColor: showTrace ? colors.accent : 'rgba(255,255,255,0.3)', backgroundColor: showTrace ? colors.accent_muted : 'rgba(0,0,0,0.4)' }]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: showTrace }}
+            accessibilityLabel={t('swinglab_swing.accessibility_label.toggle_swing_trace')}
+          >
+            <Ionicons name="analytics-outline" size={13} color={showTrace ? colors.accent : '#fff'} />
+            <Text style={[styles.skelToggleText, { color: showTrace ? colors.accent : '#fff' }]}>{t('swinglab_swing.swing_detail.swing_trace')}</Text>
+          </TactilePressable>
+        ) : null}
         {showSkeleton && poseReady ? P_SCRUB.map((p) => (
           <TactilePressable key={p.key} onPress={() => void seekToPosition(p.key)} style={styles.scrubChip}>
             <Text style={styles.scrubChipText}>{p.label}</Text>
@@ -5409,18 +5435,17 @@ export default function SmartMotion() {
             The arc is drawn by SwingBodyOverlay rather than a second component on purpose: the
             de-spiking, centripetal Catmull-Rom smoothing and speed-heat colouring already live there
             and took several passes to get right. A parallel implementation would drift from it.
-            [[smartmotion-clubhead-trace-root-cause]] — clubhead-or-NOTHING; never a wrist fallback. */}
-        {isReview && showResults && (
-          (showSkeleton && poseFrames && poseFrames.length > 0) ||
-          (clubArcPoints != null && clubArcPoints.length >= 3) ||
-          reviewSpotlightOn
-        ) ? (
+            [[smartmotion-clubhead-trace-root-cause]] — clubhead-or-NOTHING; never a wrist fallback.
+            2026-10-26 (Tim: "Tracing is still on by default, and off doesn't work") — "whenever detected" was
+            the defect: the arc and the blue club are the Swing Trace chip's now, the skeleton the Motion
+            chip's, and reviewLayers (services/swing/overlayVisibility) decides both, as on the library swing. */}
+        {isReview && showResults && reviewLayers.mount ? (
           <View style={[StyleSheet.absoluteFill, zoomStyle]} pointerEvents="none">
             <SwingBodyOverlay
               frames={poseFrames ?? []}
               currentTimeMs={playbackMs}
-              showSkeleton={!!(showSkeleton && poseFrames && poseFrames.length > 0)}
-              showTrace={shotConfirmed}
+              showSkeleton={reviewLayers.skeleton}
+              showTrace={reviewLayers.trace}
               // 2026-08-06 — matches the review <Video> CONTAIN mode (video containment) so the skeleton
               // letterboxes with the frame instead of cropping.
               resizeMode="contain"
@@ -5429,7 +5454,7 @@ export default function SmartMotion() {
               // screen), so a significant over-the-top actually reads red as you watch.
               faultJoints={faultJointsFor(analysis?.primary_fault ?? analysis?.detected_issue)}
               faultSevere={analysis?.severity === 'significant'}
-              clubArc={clubArcPoints}
+              clubArc={reviewLayers.clubArc}
               videoW={reviewVideoNatural?.w ?? null}
               videoH={reviewVideoNatural?.h ?? null}
               spotlight={reviewSpotlightOn}

@@ -119,17 +119,21 @@ describe('a saved swing: settled, its windows, and what opening it does', () => 
    * test protects is unchanged: opening a settled swing does no analysis work. An auto-on trace only draws
    * what is stored and asks the run for nothing; the body (skeleton) stays the player's toggle only.
    */
-  it('opening a settled swing does no analysis work; the body starts OFF; the trace turns on only for a STORED arc', () => {
+  // 2026-10-26 — INVERTED (Tim: "Tracing is still on by default, and off doesn't work"): the stored-arc auto-on
+  // was the defect. The trace starts OFF like the body and only the player turns it on (behaviour:
+  // the-blue-club-is-measured-and-opt-in). Opening a settled swing still does no analysis work.
+  it('opening a settled swing does no analysis work; the body AND the trace start OFF', () => {
     const d = code('app/swinglab/swing/[swing_id].tsx');
     expect(d).toMatch(/settledOnOpenRef\.current = isAnalysisSettled\(st\);\s*if \(settledOnOpenRef\.current\) return;/);
     expect(d).toMatch(/const \[showTrace, setShowTrace\] = useState\(false\);/);
     expect(d).toMatch(/const \[showSkeleton, setShowSkeleton\] = useState\(false\);/);
     expect((d.match(/setShowSkeleton\(/g) ?? []).length).toBe(1);   // the player's toggle only
-    // exactly two writers of the trace: the player's toggle, and the stored-arc auto-on
+    // exactly two writers of the trace: the player's toggle, and the reset to OFF for each swing opened
     expect((d.match(/setShowTrace\(/g) ?? []).length).toBe(2);
-    expect(d).toMatch(/if \(!traceTouchedRef\.current\) setShowTrace\(!!\(clubArcPoints && clubArcPoints\.length >= 3\)\);/);
-    // the auto-on trace starts no run: only a trace the player turned on asks for the shot's detail
-    expect(d).toMatch(/const traceAsked = showTrace && traceTouchedRef\.current;\s*if \(!\(selectedShotIdx > 0 \|\| showSkeleton \|\| traceAsked\)\) return;/);
+    expect(d).toContain('useEffect(() => { setShowTrace(false); }, [swing_id]);');
+    expect(d).not.toMatch(/traceTouchedRef/);
+    // everything off starts no run; a trace the player turned on is his request
+    expect(d).toMatch(/const traceAsked = showTrace;\s*if \(!\(selectedShotIdx > 0 \|\| showSkeleton \|\| traceAsked\)\) return;/);
   });
 
   it('only a window the PLAYER chose survives a re-analyze; the finder\'s own answer is re-found', () => {

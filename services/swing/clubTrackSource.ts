@@ -19,6 +19,12 @@
  *
  * Desk-validated 2026-10-04 on Tim's 3870 (14.5s, 30fps) and swing6b (6s, 30fps): on the clubhead
  * through takeaway, top, impact and follow-through; no detections at address.
+ *
+ * The GRIP (gx/gy, 2026-10-26) was desk-validated on Lily's 4075 (DTL driver, 30fps, 240x427 working size)
+ * against MediaPipe's per-frame wrists: median 3.6px (p90 17) from the true hands with ~20 pose frames, and on
+ * the hands in the fast downswing where the interpolated hands were 18-22px off. Its quality is bounded by the
+ * head's: where the head is a mis-detection the shaft is too. Not yet benched on 3870 / swing6b (no dense pose
+ * for them on the desk).
  */
 export const CLUB_TRACK_JS = String.raw`/* Clubhead tracker — pure functions over decoded frames. Runs in the app's hidden browser engine
  * (components/FrameEngineHost) and in the desk test bench, unchanged.
@@ -26,7 +32,8 @@ export const CLUB_TRACK_JS = String.raw`/* Clubhead tracker — pure functions o
  * Input:
  *   frames:  [{ t (ms), w, h, luma: Uint8Array(w*h) }] — consecutive frames at the clip's own rate
  *   anchors: (t) => { hand:{x,y}, shoulder:{x,y}, hip:{x,y}, knee:{x,y}, ankleY, bodyH } | null  (pixels)
- * Output: [{ t, x, y, score } | null] per frame — MEASURED positions only; null where not seen.
+ * Output: [{ t, x, y, score, gx?, gy? } | null] per frame — MEASURED positions only; null where not seen.
+ *   gx/gy: the grip, the inner end of the moving shaft seen ending at the head (absent when not seen).
  */
 (function (root) {
   'use strict';
@@ -108,7 +115,33 @@ export const CLUB_TRACK_JS = String.raw`/* Clubhead tracker — pure functions o
       for (var j = 0; j < keep.length; j++) if (Math.hypot(c.x - keep[j].x, c.y - keep[j].y) < B * 0.08) { dup = true; break; }
       if (!dup) keep.push(c);
     }
+    for (var g = 0; g < keep.length; g++) keep[g].grip = shaftInnerEnd(md, w, h, keep[g].x, keep[g].y, an.hand.x, an.hand.y);
     return keep;
+  }
+
+  // 2026-10-26 (Tim: "the blue club line stays with the arc, not the golfer's hands") — THE GRIP, MEASURED:
+  // the inner end of the moving shaft that ends at the head. From the head, walk the straight line of
+  // moving pixels back toward the hands, trying directions either side of the hands (pose comes ~20 times
+  // a swing, so the interpolated hands can be a hand-width off through the downswing); the longest unbroken
+  // run is the shaft and its inner end is the grip. Never longer than the head-to-hands distance (+15%):
+  // through impact the lead arm continues the shaft's line and must not be read as more club. A run under
+  // 40% of that distance is not a shaft we saw: null, and nothing is drawn for it.
+  function shaftInnerEnd(md, w, h, px, py, hx, hy) {
+    var dx = hx - px, dy = hy - py, L = Math.sqrt(dx * dx + dy * dy);
+    if (L < 6) return null;
+    var base = Math.atan2(dy, dx), best = 0, bestA = base, maxS = L;
+    for (var j = 0; j <= 16; j++) {
+      var k = j % 2 ? (j + 1) / 2 : -j / 2;            // 0, 1, -1, 2, -2 … : ties keep the hands' direction
+      var a = base + k * 0.04, cx = Math.cos(a), cy = Math.sin(a), run = 0, miss = 0;
+      for (var s = 1; s <= maxS; s++) {
+        var x = Math.round(px + cx * s), y = Math.round(py + cy * s);
+        if (x < 0 || y < 0 || x >= w || y >= h) break;
+        if (md[y * w + x]) { run = s; miss = 0; } else if (++miss > 3) break;
+      }
+      if (run > best) { best = run; bestA = a; }
+    }
+    if (best < L * 0.4) return null;
+    return { x: px + Math.cos(bestA) * best, y: py + Math.sin(bestA) * best };
   }
 
   function searchFrom(m, md, w, h, an, hx, hy, rMin, rMax, covFrom) {
@@ -217,7 +250,12 @@ export const CLUB_TRACK_JS = String.raw`/* Clubhead tracker — pure functions o
     p2 = p2.map(function (p, i) { return p && (p2[i - 1] || p2[i + 1]) ? p : null; });
     return {
       clubLen: clubLen,
-      points: p2.map(function (p, i) { return p ? { t: frames[i].t, x: p.x, y: p.y, score: Math.round(p.score * 100) / 100 } : null; }),
+      points: p2.map(function (p, i) {
+        if (!p) return null;
+        var q = { t: frames[i].t, x: p.x, y: p.y, score: Math.round(p.score * 100) / 100 };
+        if (p.grip) { q.gx = Math.round(p.grip.x * 10) / 10; q.gy = Math.round(p.grip.y * 10) / 10; }
+        return q;
+      }),
     };
   }
 

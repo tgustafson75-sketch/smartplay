@@ -29,13 +29,14 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Circle, G } from 'react-native-svg';
 import type { PoseFrame, Keypoint } from '../../services/poseAnalysisApi';
-import { cleanArc, catmullRomBezier, catmullRomPoint, type ArcPoint } from '../../services/swing/smoothArc';
+import { cleanArc, catmullRomBezier, type ArcPoint } from '../../services/swing/smoothArc';
 import { strokeForSubject } from '../../services/swing/overlayScale';
 // 2026-08-11 — pose-window interpolation lives in a PURE module so it can be tested (this file
 // imports react-native-svg, which the logic suite cannot load). See poseInterpolate for the fix
 // that stops an address skeleton being drawn over a player who hasn't walked into frame yet.
 import { interpolateFrame } from '../../services/swing/poseInterpolate';
 import { FAULT_REGION_JOINTS, spotlightRing } from '../../services/swing/faultSpotlight';
+import { clubShaftAt, type GripSample } from '../../services/swing/clubShaft';
 
 const SKELETON_EDGES: [string, string][] = [
   ['left_shoulder', 'right_shoulder'],
@@ -87,7 +88,9 @@ type Props = {
    *  order. When present with enough points, the swing trace is drawn through the REAL
    *  clubhead path (with a dot at each detected position) instead of the wrist proxy.
    *  Absent/too-few → the honest hand/tempo trace, exactly as before. */
-  clubArc?: { x: number; y: number; tMs: number }[] | null;
+  // 2026-10-26 — gx/gy: the tracker's MEASURED grip (inner end of the moving shaft), full-frame normalized.
+  // Without it no shaft is drawn, only the head (services/swing/clubShaft).
+  clubArc?: { x: number; y: number; tMs: number; gx?: number; gy?: number }[] | null;
   /** 2026-08-10 (Tim — "haven't seen the club trace in a week") — the video's true pixel size. Used as
    *  the ALIGNED-space fallback so the clubhead arc (full-frame normalized) still renders when the pose
    *  frames don't carry frameW/frameH (skeleton falls back to bbox; the club needs a frame to map into).
@@ -162,8 +165,10 @@ function computeBBox(frames: PoseFrame[]): { x: number; y: number; w: number; h:
 export default function SwingBodyOverlay({
   frames,
   currentTimeMs,
-  showSkeleton = true,
-  showTrace = true,
+  // 2026-10-26 (Tim: "Tracing is still on by default, and off doesn't work") — every layer is OPT-IN: a mount
+  // that names none draws nothing (services/swing/overlayVisibility decides what each screen turns on).
+  showSkeleton = false,
+  showTrace = false,
   resizeMode = 'contain',
   faultJoints,
   faultSevere = false,
@@ -276,35 +281,21 @@ export default function SwingBodyOverlay({
     return tracePts.pts.filter(d => Number.isFinite(d.x) && Number.isFinite(d.y));
   }, [useClub, tracePts]);
 
-  // 2026-07-27 (Tim — "line the club shaft and head as a jointed body part, blue for clarity") — the
-  // clubhead position at the CURRENT frame, interpolated along the cleaned club arc (already in frame-
-  // pixel space). Paired with the grip (wrist midpoint) below to draw a blue shaft + head that extends
-  // the skeleton into the club. Only when we have a REAL detected clubhead path (useClub) → honest.
-  const clubTip = useMemo(() => {
-    const P = tracePts.pts;
-    if (!useClub || P.length < 2) return null;
-    const t = currentTimeMs;
-    if (t <= P[0].t) return { x: P[0].x, y: P[0].y };
-    if (t >= P[P.length - 1].t) return { x: P[P.length - 1].x, y: P[P.length - 1].y };
-    for (let i = 0; i < P.length - 1; i++) {
-      const a = P[i], b = P[i + 1];
-      if (t >= a.t && t <= b.t) {
-        const s = b.t > a.t ? (t - a.t) / (b.t - a.t) : 0;
-        // 2026-08-06 (Tim — "the club shows but doesn't line up with the actual club"). Interpolate the
-        // head along a smooth CATMULL-ROM curve through the neighboring arc points instead of a straight
-        // CHORD between two sparse detections. A chord cuts across the real sweep, so mid-swing the head
-        // sat inside/off the true arc; the spline follows the curve so the blue head tracks the real
-        // clubhead between detections. Endpoints clamp to the segment (degrades to ~linear at the ends).
-        const p0 = P[i - 1] ?? a, p3 = P[i + 2] ?? b;
-        // 2026-08-06 (analysis audit) — evaluate the SAME centripetal Catmull-Rom Bézier the trace draws
-        // (catmullRomPoint) instead of a UNIFORM CR eval. Uniform traced a different curve than the drawn
-        // (centripetal) line AND overshot the reversal, so the blue head floated off its own arc. Now the
-        // marker sits exactly on the rendered trace.
-        return catmullRomPoint(p0, a, b, p3, s);
-      }
-    }
-    return { x: P[P.length - 1].x, y: P[P.length - 1].y };
-  }, [useClub, tracePts, currentTimeMs]);
+  // 2026-07-27 (Tim — "line the club shaft and head as a jointed body part, blue for clarity") — the blue club
+  // at the CURRENT frame. 2026-10-26 (Tim: "the blue club line stays with the arc, not the golfer's hands"):
+  // the head used to be clamped to the arc's first/last point outside it and the shaft ran to the interpolated
+  // wrists. clubShaftAt gives the head only inside the measured arc (no gliding across gaps) and the grip only
+  // where the tracker MEASURED it; no grip → the head dot alone.
+  const gripSamples = useMemo<GripSample[]>(() => {
+    if (!useClub || !aligned || !clubArc) return [];
+    return clubArc
+      .filter((p) => typeof p.gx === 'number' && typeof p.gy === 'number')
+      .map((p) => ({ t: p.tMs, x: (p.gx as number) * aligned.fw, y: (p.gy as number) * aligned.fh }));
+  }, [useClub, aligned, clubArc]);
+  const shaft = useMemo(
+    () => (useClub && showTrace ? clubShaftAt(tracePts.pts, gripSamples, currentTimeMs) : null),
+    [useClub, showTrace, tracePts, gripSamples, currentTimeMs],
+  );
 
   /**
    * 2026-08-12 (Tim — "I keep saying SmartMotion needs to be perfect, and this needs to be fixed").
@@ -393,22 +384,14 @@ export default function SwingBodyOverlay({
   // Tied to `sw` so the dots shrink with the player alongside the lines they sit on.
   const dotR = sw;
 
-  // 2026-07-27 (Tim) — the BLUE club: a shaft from the grip (wrist midpoint) to the live clubhead + a
-  // blue clubhead dot, drawn ON TOP so it reads as the club extending off the hands. Only when a real
-  // clubhead path is detected (useClub) and we have both endpoints this frame — honest, never faked.
+  // 2026-07-27 (Tim) — the BLUE club: a shaft from the grip to the live clubhead + a blue clubhead dot, drawn
+  // ON TOP so it reads as the club extending off the hands. Part of the Swing Trace (opt-in): the head only
+  // where the club was seen, the shaft only from a measured grip (see `shaft` above).
   const CLUB_BLUE = '#4EA8FF';
-  // `live` can be null now (arc-only render, or playback outside the pose window) — the club SHAFT
-  // needs a grip and so simply doesn't draw, while the arc above is unaffected.
-  const gripKps = (live ? [getKp(live, 'left_wrist'), getKp(live, 'right_wrist')] : []).filter(Boolean) as Keypoint[];
-  const grip = gripKps.length
-    ? { x: (gripKps.reduce((s, k) => s + k.x, 0) / gripKps.length) * sx, y: (gripKps.reduce((s, k) => s + k.y, 0) / gripKps.length) * sy }
-    : null;
   const ring = spotlight && live && hotSet.size > 0 ? spotlightRing(live, [...hotSet], sx, sy, MIN_KP_SCORE) : null;
 
-  const showClub = useClub && !!clubTip && !!grip
-    && Number.isFinite(grip.x) && Number.isFinite(grip.y)
-    && Number.isFinite(clubTip.x) && Number.isFinite(clubTip.y)
-    && (showSkeleton || showTrace);
+  const clubTip = shaft?.head ?? null;
+  const grip = shaft?.grip ?? null;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -473,15 +456,17 @@ export default function SwingBodyOverlay({
         )}
         {/* Blue club — shaft (grip → clubhead) + clubhead dot. Drawn last so it sits on top of the
             skeleton, reading as the club jointed off the hands. Only when a real clubhead is detected. */}
-        {showClub && grip && clubTip && (
+        {clubTip && (
           <G>
-            <Line
-              x1={grip.x} y1={grip.y} x2={clubTip.x} y2={clubTip.y}
-              stroke={CLUB_BLUE}
-              strokeWidth={sw * 1.15}
-              strokeOpacity={0.95}
-              strokeLinecap="round"
-            />
+            {grip && (
+              <Line
+                x1={grip.x} y1={grip.y} x2={clubTip.x} y2={clubTip.y}
+                stroke={CLUB_BLUE}
+                strokeWidth={sw * 1.15}
+                strokeOpacity={0.95}
+                strokeLinecap="round"
+              />
+            )}
             <Circle cx={clubTip.x} cy={clubTip.y} r={dotR * 1.7} fill={CLUB_BLUE} fillOpacity={0.95} stroke="#ffffff" strokeWidth={sw * 0.4} />
           </G>
         )}
