@@ -8,7 +8,7 @@ import * as Sentry from '@sentry/react-native';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
-import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerBuild } from '../store/playerProfileStore';
 import { useOnboardingTourStore } from '../store/onboardingTourStore';
 import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { useClubBagStore } from '../store/clubBagStore';
@@ -207,7 +207,7 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // 2026-05-21 — Consolidation 3: owner-only authoring + diagnostic
   // surfaces added for centralised gating. Each was reachable today
   // — /author/reference-assets via the Tools menu "Reference
-  // Authoring" row (no row-level isOwnerEmail check). (/landmark-curate was removed 2026-09-23 with the
+  // Authoring" row (no row-level isOwnerBuild check). (/landmark-curate was removed 2026-09-23 with the
   // bundled hole photos it placed landmarks on.)
   '/author/reference-assets',
   // 2026-09-09 — Tim's field checklist. Owner-only at the route AND at the render (a route is
@@ -285,7 +285,7 @@ function AppNavigator() {
   useEffect(() => {
     if (!pathname) return;
     if (!DEBUG_ROUTES.has(pathname)) return;
-    if (__DEV__ || isOwnerEmail(ownerEmail)) return;
+    if (__DEV__ || isOwnerBuild()) return;
     try { goToTab('caddie'); } catch (e) {
       console.log('[debug-gate] redirect failed', e);
     }
@@ -477,7 +477,7 @@ function AppNavigator() {
       settled = true;
       try {
         const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
-        if (!prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email)) return true;  // settled: not the owner
+        if (!prof.isOwnerBuild()) return true;  // settled: not the owner
         const cl = require('../store/ownerChecklistStore') as typeof import('../store/ownerChecklistStore');
         const open = cl.useOwnerChecklistStore.getState().items.filter(i => !i.done).length;
         if (open === 0) return true;
@@ -674,43 +674,7 @@ function AppNavigator() {
       done = true;
 
       const profile = usePlayerProfileStore.getState();
-      const { first_opened_at, trial_started_at, subscription_status, setSubscriptionStatus, grantLifetime } = profile;
-
-      // 2026-05-19 — Owner email auto-mirror. Runs BEFORE the
-      // subscriptions kill-switch so Owner Tools (Settings → Owner Tools)
-      // are reachable even when SUBSCRIPTIONS_ENABLED is false. Previously
-      // the kill-switch returned early before the env-mirror code at line
-      // 106 ran, so profile.email stayed blank and isOwnerEmail() returned
-      // false → Owner Tools section never rendered for Tim on the preview
-      // build (env var EXPO_PUBLIC_OWNER_EMAIL only lives in .env.local,
-      // not in the preview eas.json profile).
-      //
-      /**
-       * 2026-09-13 (release audit) — THE SINGLE-ENTRY FALLBACK WAS A LANDMINE, AND IT IS GONE.
-       *
-       * It used to read:
-       *
-       *     if (envOwner) setEmail(envOwner);
-       *     else if (OWNER_EMAILS.length === 1) setEmail(OWNER_EMAILS[0]);
-       *
-       * a beta convenience so owner mode worked on a preview build without env hassle, disarmed only
-       * by the accident that the allowlist currently holds FOUR entries. Trim it back to one — which
-       * the old comment explicitly contemplated, and which is the natural thing to do after launch
-       * when the App Review and support accounts come out — and EVERY NEW INSTALL silently becomes
-       * the owner: Owner Tools on every player's Settings screen, Tim's email written into their
-       * profile, and `planTrialLifecycle` reading isOwner → grantLifetime, so every player gets
-       * lifetime access and billing never engages. A one-line edit to an unrelated list, months from
-       * now, with no test in the way.
-       *
-       * Owner is now ONLY ever claimed by an explicit signal: the build's own env var, or an email
-       * the player typed. The convenience it existed for is handled where it belongs — eas.json sets
-       * EXPO_PUBLIC_OWNER_EMAIL on the development and preview profiles and deliberately not on
-       * production. [[a-default-that-grants-privilege-is-not-a-default]]
-       */
-      if (!profile.email) {
-        const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
-        if (envOwner.length > 0) profile.setEmail(envOwner);
-      }
+      const { first_opened_at, trial_started_at, subscription_status, setSubscriptionStatus } = profile;
 
       /**
        * THE DECISION IS IN services/billing/trialLifecycle.ts, and it is pure.
@@ -722,24 +686,8 @@ function AppNavigator() {
        *
        * This effect now only CARRIES OUT the plan. Anything that decides belongs in the module.
        */
-      /**
-       * 2026-08-30 (full audit) — RE-READ THE EMAIL. `profile` is a getState() snapshot taken above,
-       * and the owner mirror a few lines up writes through setEmail — which replaces the state
-       * object rather than mutating this one, so `profile.email` here is still the PRE-MIRROR value
-       * (verified against zustand directly, not assumed).
-       *
-       * The stale read predates today's work and was harmless while the kill-switch granted lifetime
-       * to everyone regardless. It stops being harmless the moment billing turns on: on the first
-       * launch after an install, the mirror and the owner check happen in the same tick, so an owner
-       * whose email came from the owner mirror rather than a persisted profile would be handed a
-       * TRIAL instead of lifetime. It self-heals on the next launch, which is exactly what would
-       * have made it hard to believe as a bug report. (The mirror now only ever reads the build's env
-       * var — see the note above on why the single-entry allowlist fallback was removed.)
-       */
-      const ownerEmail = usePlayerProfileStore.getState().email;
       const plan = planTrialLifecycle({
         subscriptionsEnabled: SUBSCRIPTIONS_ENABLED,
-        isOwner: isOwnerEmail(ownerEmail) || (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().length > 0,
         status: subscription_status,
         promoExpiresAt: profile.promo_expires_at,
         firstOpenedAt: first_opened_at,
@@ -749,7 +697,6 @@ function AppNavigator() {
         storeEntitled: usePlayerProfileStore.getState().store_entitlement_active,
       });
       if (plan.clearPromo) profile.clearPromo();
-      if (plan.grantLifetime) grantLifetime();
       /**
        * 2026-09-28 (1.0.2) — initTrial is gone: the store's intro offer is the only trial. What it
        * also did — stamp when this player first opened the app — is still wanted (the first_open
@@ -966,7 +913,7 @@ function AppNavigator() {
 
   // 2026-05-24 — Feel-capture init (owner-only). Subscribes to cage
   // store changes and transcribes each shot's clip audio via Whisper
-  // when (a) settings.feelCaptureEnabled AND (b) isOwnerEmail. No-op
+  // when (a) settings.feelCaptureEnabled AND (b) isOwnerBuild. No-op
   // when either gate fails; cheap on every other user.
   useEffect(() => {
     const teardown = initFeelCapture();

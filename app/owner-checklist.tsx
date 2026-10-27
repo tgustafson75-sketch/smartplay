@@ -17,7 +17,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild } from '../store/playerProfileStore';
 import { useOwnerChecklistStore, GROUP_LABEL, type ChecklistGroup } from '../store/ownerChecklistStore';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -26,8 +26,7 @@ const GROUP_ORDER: ChecklistGroup[] = ['field', 'watch', 'ship'];
 export default function OwnerChecklist() {
   const router = useRouter();
   const { colors } = useTheme();
-  const email = usePlayerProfileStore((s) => s.email);
-  const isOwner = isOwnerEmail(email);
+  const isOwner = isOwnerBuild();
   const items = useOwnerChecklistStore((s) => s.items);
   const toggle = useOwnerChecklistStore((s) => s.toggle);
   const resetAll = useOwnerChecklistStore((s) => s.resetAll);

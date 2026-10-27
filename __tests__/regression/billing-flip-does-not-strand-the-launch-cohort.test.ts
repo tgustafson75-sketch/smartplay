@@ -34,7 +34,6 @@ const NOW = Date.UTC(2026, 7, 30);
 
 const base: LifecycleInput = {
   subscriptionsEnabled: false,
-  isOwner: false,
   status: 'free',
   promoExpiresAt: null,
   firstOpenedAt: null,
@@ -55,10 +54,14 @@ describe('while billing is off, nothing is stamped', () => {
       .toEqual({ setStatus: 'free' });
   });
 
-  it('leaves the owner alone — clearing his lifetime would lock Tim out of his own app', () => {
-    expect(planTrialLifecycle({ ...base, isOwner: true, status: 'lifetime' })).toEqual({});
-    expect(planTrialLifecycle({ ...base, isOwner: true, status: 'free' }))
-      .toEqual({ grantLifetime: true });
+  /**
+   * 2026-10-27 (security audit Critical #1) — there is NO owner grant. Owner used to be a typed
+   * (unverified) email that earned a persisted lifetime; owner is now the build (isOwnerBuild), honoured
+   * at canAccess and never written into the billing status, so nobody can type their way to lifetime.
+   */
+  it('never grants lifetime, and clears one it finds', () => {
+    expect(planTrialLifecycle({ ...base, status: 'free' })).not.toHaveProperty('grantLifetime');
+    expect(planTrialLifecycle({ ...base, status: 'lifetime' }).setStatus).toBe('free');
   });
 });
 
@@ -136,8 +139,7 @@ describe('an active comp still outranks both blanket grants', () => {
   it('holds active, and is checked before the owner and kill-switch rungs', () => {
     expect(planTrialLifecycle({ ...base, promoExpiresAt: NOW + 5 * DAY, status: 'free' }))
       .toEqual({ setStatus: 'active' });
-    // Even for an owner: a comp set deliberately on Tim's account is the thing being tested.
-    expect(planTrialLifecycle({ ...base, isOwner: true, promoExpiresAt: NOW + 5 * DAY, status: 'active' }))
+    expect(planTrialLifecycle({ ...base, promoExpiresAt: NOW + 5 * DAY, status: 'active' }))
       .toEqual({});
   });
 
@@ -161,7 +163,6 @@ describe('an active comp still outranks both blanket grants', () => {
 describe('a stale lifetime cannot survive the flip (2026-09-01 audit)', () => {
   const base = {
     subscriptionsEnabled: true,
-    isOwner: false,
     promoExpiresAt: null,
     firstOpenedAt: 1_000,
     trialStartedAt: null,
@@ -181,10 +182,6 @@ describe('a stale lifetime cannot survive the flip (2026-09-01 audit)', () => {
     const plan = planTrialLifecycle({ ...base, status: 'lifetime' });
     expect(plan).not.toHaveProperty('initTrial');
     expect(plan.setStatus).toBe('free');
-  });
-
-  it('an OWNER keeps lifetime — rung 2 still returns before this', () => {
-    expect(planTrialLifecycle({ ...base, isOwner: true, status: 'lifetime' })).toEqual({});
   });
 
   it('and while billing is OFF the old rung still clears it', () => {

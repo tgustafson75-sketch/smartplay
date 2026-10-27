@@ -277,7 +277,7 @@ interface SettingsState {
   // {clip, transcript, analysis} tuple set for future feel-vs-real
   // calibration. NEVER on by default — transcribing every user's
   // audio is a cost + privacy problem. Gated additionally on
-  // isOwnerEmail at the call site so only the owner's testing
+  // isOwnerBuild at the call site so only the owner's testing
   // sessions produce data even if the flag leaks.
   feelCaptureEnabled: boolean;
   kevinGreetingEnabled: boolean;

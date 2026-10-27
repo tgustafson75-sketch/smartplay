@@ -82,11 +82,10 @@ export const BETA_BADGE = 'BETA';
  * My error: I hid these from EVERY build, including his. He tests on the shipped app, so hiding a
  * screen from himself removes the only way he exercises it. Shelved means **hidden from players and
  * visible-but-labelled for the owner** — the same pattern already used for watch extras
- * (watchRoundSync), feel capture and the boot trace, all gated on isOwnerEmail.
+ * (watchRoundSync), feel capture and the boot trace, all gated on isOwnerBuild.
  *
- * Deliberately checked at CALL TIME rather than captured once: the owner email arrives with the
- * profile, which hydrates after first paint, so a value read at module load would be wrong on the
- * very first render — the same hydration trap that has bitten this project before.
+ * Owner is the BUILD (store/playerProfileStore isOwnerBuild — dev/preview only since 2026-10-27);
+ * this wrapper only adds the server guard below.
  */
 export function isOwnerBuild(): boolean {
   /**
@@ -99,7 +98,7 @@ export function isOwnerBuild(): boolean {
   if (typeof process !== 'undefined' && process.env?.VERCEL) return false;
   try {
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
-    return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
+    return prof.isOwnerBuild();
   } catch {
     return false;   // never let an owner check crash a screen — a player build is the safe answer
   }

@@ -307,7 +307,7 @@ describe('a custom-caddie clip cannot wedge the speak queue', () => {
     jest.doMock('expo-av', () => av.mod);
     jest.doMock('../../store/playerProfileStore', () => {
       const state = { useCustomCaddie: true, customCaddieClips: {}, email: null };
-      return { usePlayerProfileStore: { getState: () => state }, isOwnerEmail: () => false };
+      return { usePlayerProfileStore: { getState: () => state }, isOwnerBuild: () => false };
     });
     // A non-file:// URI is trusted without a disk probe.
     jest.doMock('../../services/customCaddieClips', () => ({ lookupClipUri: () => 'asset://my-line.m4a' }));

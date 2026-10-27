@@ -199,8 +199,6 @@
       "learning": "{{caddieName}} Learning",
       "vocabulary_has_picked_up_from": "Vocabulary {{caddieName}} has picked up from your shot phrasing. Review entries, correct miscoded meanings.",
       "handicap_goal": "Handicap {{handicap}} · Goal {{goal}}",
-      "optional_owner_tools_unlocked": "Optional. ✓ Owner Tools unlocked.",
-      "optional_owner_devices_enter_your": "Optional. Owner devices: enter your owner email to unlock Owner Tools.",
       "swing_capture": "{{watch_device_label}} swing capture",
       "swing_capture_needs_latest_build": "{{watch_device_label}} swing capture · needs latest build",
       "trail_wrist_your_release_side": "Trail wrist (your release side) — best for spotting casting / early release. Club speed is a rougher estimate from here.",

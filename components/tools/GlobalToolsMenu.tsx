@@ -87,7 +87,7 @@ export function GlobalToolsMenu() {
   // Feature gate (subscription_status lives in playerProfileStore)
   const subscription_status = usePlayerProfileStore((s) => s.subscription_status);
   // 2026-06-15 (Tim) — Reference Authoring relocated to Settings → Owner Tools
-  // as "Train the Trainer"; the owner gate (isOwnerEmail) moved with it.
+  // as "Train the Trainer"; the owner gate (isOwnerBuild) moved with it.
 
   // ─── Action helpers — all close menu + haptic, optional toast/nav ─
 

@@ -400,7 +400,7 @@ export const useIssueLogStore = create<IssueLogState>()(
         // with their whole conversation. Fail-safe: if we can't tell, don't log.
         try {
           const prof = require('./playerProfileStore') as typeof import('./playerProfileStore');
-          if (!prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email)) return;
+          if (!prof.isOwnerBuild()) return;
         } catch { return; }
         const reply = (response ?? '').trim();
         const summary = `voice: "${t.slice(0, 160)}" → ${reply ? `"${reply.slice(0, 160)}"` : '(no reply)'}`;

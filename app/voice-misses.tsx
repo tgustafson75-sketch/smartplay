@@ -11,11 +11,11 @@
  * phrasing he tries that doesn't work lands here with transcript +
  * surface + reason. Tim reviews the list and decides what to wire.
  *
- * Gated to the owner email via isOwnerEmail() so non-owner installs
+ * Gated to the owner email via isOwnerBuild() so non-owner installs
  * see a polite placeholder rather than the list.
  */
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,7 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useVoiceMissStore, type VoiceMissEntry, type VoiceMissType } from '../store/voiceMissStore';
 import { useAgentBrainStats } from '../store/agentBrainStats';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild } from '../store/playerProfileStore';
 import { MONO_FONT } from '../theme/fonts';
 
 function formatTimestamp(ms: number): string {
@@ -57,8 +57,7 @@ export default function VoiceMissesScreen() {
   const cloudEscalated = useAgentBrainStats(s => s.cloudEscalated);
   const brainTotal = localAnswered + cloudEscalated;
   const brainRate = brainTotal > 0 ? Math.round((localAnswered / brainTotal) * 100) : 0;
-  const ownerEmail = usePlayerProfileStore(s => s.email);
-  const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
+  const isOwner = isOwnerBuild();
 
   const onExport = async () => {
     if (entries.length === 0) return;

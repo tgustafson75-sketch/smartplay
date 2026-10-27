@@ -22,7 +22,7 @@ import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { canAccess, type FeatureKey } from '../services/featureAccess';
 import { triggerPaywall } from '../services/paywallGuard';
-import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerBuild } from '../store/playerProfileStore';
 
 const HOME = '/(tabs)/caddie';
 
@@ -34,7 +34,6 @@ function profileHydrated(): boolean {
 /** Whether this player may use `feature` right now — the pure half, read from the store. */
 export function mayOpenPaidScreen(feature: FeatureKey): boolean {
   const { subscription_status, email } = usePlayerProfileStore.getState();
-  if (isOwnerEmail(email)) return true;
   return canAccess(feature, subscription_status);
 }
 

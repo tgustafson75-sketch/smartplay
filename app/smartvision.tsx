@@ -1415,7 +1415,7 @@ export default function SmartVisionScreen() {
   const strategyOwner = useMemo(() => {
     try {
       const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
-      return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
+      return prof.isOwnerBuild();
     } catch { return false; }
   }, []);
 

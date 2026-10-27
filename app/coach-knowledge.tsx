@@ -33,7 +33,7 @@ import {
   useCoachKnowledgeStore,
   type CoachKnowledgeEntry,
 } from '../store/coachKnowledgeStore';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild } from '../store/playerProfileStore';
 
 function formatTimestamp(ts: number): string {
   try { return new Date(ts).toLocaleString(); } catch { return String(ts); }
@@ -62,8 +62,7 @@ function entryToBody(entry: CoachKnowledgeEntry): string {
 export default function CoachKnowledgeScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const ownerEmail = usePlayerProfileStore(s => s.email);
-  const isOwner = isOwnerEmail(ownerEmail);
+  const isOwner = isOwnerBuild();
   const entries = useCoachKnowledgeStore(s => s.entries);
   const remove = useCoachKnowledgeStore(s => s.remove);
 

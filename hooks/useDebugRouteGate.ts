@@ -5,7 +5,7 @@
  * smartfinder, subscription, voice, etc.) leak diagnostic data that
  * normal users should never see and that Apple/Google reviewers will
  * reject if they're left deep-linkable. This hook gates the route at
- * the top: only owners (per isOwnerEmail) and dev builds (__DEV__) are
+ * the top: only owners (per isOwnerBuild) and dev builds (__DEV__) are
  * allowed in; everyone else is silently redirected to the home tab.
  *
  * Usage at the top of a debug route component:
@@ -18,13 +18,13 @@
 
 import { useEffect } from 'react';
 import { router } from 'expo-router';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild, usePlayerProfileStore } from '../store/playerProfileStore';
 import { goToTab } from '../services/safeBack';
 
 export function useDebugRouteGate(): boolean {
   const email = usePlayerProfileStore(s => s.email);
   // 2026-08-23 — `typeof` guard, same latent ReferenceError class as services/devLog.ts.
-  const allowed = (typeof __DEV__ !== 'undefined' && __DEV__) || isOwnerEmail(email);
+  const allowed = (typeof __DEV__ !== 'undefined' && __DEV__) || isOwnerBuild();
 
   useEffect(() => {
     if (allowed) return;

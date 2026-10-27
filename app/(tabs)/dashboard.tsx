@@ -70,7 +70,7 @@ import { getDrillEntry } from '../../data/drillCatalog';
 import { loadRecap } from '../../services/planStorage';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import ShotTimeline from '../../components/caddie/ShotTimeline';
-import { usePlayerProfileStore, isOwnerEmail } from '../../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerBuild } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
@@ -475,8 +475,7 @@ export default function Dashboard() {
    * contact is closer to what the fault-driven exercises target and moves in weeks, not rounds.
    * Owner-gated below: SmartPump is Tim's, so nobody else has a training side to plot.
    */
-  const ownerEmail = usePlayerProfileStore((s) => s.email);
-  const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
+  const isOwner = isOwnerBuild();
   const workoutSwing = useMemo(
     () => computeWorkoutSwingImpact({
       workouts: (workoutHistory ?? []).map((w) => ({ date: w.date, durationMin: w.durationMin })),

@@ -13,7 +13,7 @@
  * Tim owns. This module subscribes instead, so the round store is untouched and there is a single
  * place to look when the watch says something wrong.
  *
- * OWNER-GATED at every entry (isOwnerEmail), per the feature freeze: watch extras are Beta 2, and
+ * OWNER-GATED at every entry (isOwnerBuild), per the feature freeze: watch extras are Beta 2, and
  * this ships now only because it cannot appear for anyone else. Remove the gate to promote it.
  *
  * FIRE-AND-FORGET, ALWAYS. Every push is wrapped and voided. A watch that is asleep, absent, or on
@@ -30,7 +30,7 @@ import { devLog } from './devLog';
 function ownerOnly(): boolean {
   try {
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
-    return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
+    return prof.isOwnerBuild();
   } catch {
     return false;
   }

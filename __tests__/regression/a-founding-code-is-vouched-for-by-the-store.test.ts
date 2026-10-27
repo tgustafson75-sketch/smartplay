@@ -136,7 +136,7 @@ describe('why the store, not a code of our own', () => {
     await flush();
     const p = usePlayerProfileStore.getState();
     const base = {
-      subscriptionsEnabled: true, isOwner: false, status: p.subscription_status,
+      subscriptionsEnabled: true, status: p.subscription_status,
       promoExpiresAt: 1, firstOpenedAt: 0, trialStartedAt: null, trialDurationMs: 14 * 864e5, now: 2,
     };
     // Redeemed through the store: the promo clears and the access stays.

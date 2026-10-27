@@ -650,12 +650,11 @@ const profileSrc = fs.readFileSync(profilePath, 'utf-8');
 check('SubscriptionStatus includes lifetime',
   /SubscriptionStatus\s*=\s*[^;]*'lifetime'/.test(profileSrc),
   'lifetime tier defined');
-check('isOwnerEmail honors Tim\'s email and env-var fallback',
-  profileSrc.includes('isOwnerEmail') && profileSrc.includes('EXPO_PUBLIC_OWNER_EMAIL'),
-  'owner allow-list + env fallback wired');
-check('grantLifetime action exists',
-  profileSrc.includes('grantLifetime'),
-  'lifetime grant action present');
+// 2026-10-27 (security audit Critical #1) — owner is the BUILD, never a typed email, and nothing grants lifetime.
+check('LOCK: owner is the build — no email allow-list, no lifetime grant',
+  /export function isOwnerBuild\(\): boolean \{\s*return \(process\.env\.EXPO_PUBLIC_OWNER_EMAIL \?\? ''\)\.trim\(\)\.length > 0;\s*\}/.test(profileSrc) &&
+    !/OWNER_EMAILS|isOwnerEmail|grantLifetime/.test(profileSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')),
+  'owner comes only from the build env (dev/preview); a typed email grants nothing and no lifetime is ever written');
 
 const featurePath = path.resolve(__dirname, '../../services/featureAccess.ts');
 const featureSrc = fs.readFileSync(featurePath, 'utf-8');
@@ -4163,7 +4162,7 @@ check('LOCK: the paywall preview is owner-only',
     if (!m) { console.log('   paywall preview: no `previewing` binding found'); return false; }
     const expr = m[1];
     const problems: string[] = [];
-    if (!/isOwnerEmail\s*\(/.test(expr)) problems.push('preview is not owner-gated');
+    if (!/isOwnerBuild\s*\(\)/.test(expr)) problems.push('preview is not owner-gated');
     if (!/preview\s*===\s*'1'/.test(expr)) problems.push('preview flag not required');
     if (!/&&/.test(expr)) problems.push('the two checks are not ANDed');
     // Both the bounce and the render guard must consult it, or one path renders regardless.
@@ -6416,12 +6415,6 @@ const ownerProfileSrc = read('store/playerProfileStore.ts');
  * additionally pins that the Profile screen actually renders the form. Checking only that the field
  * exists somewhere would pass on a component nothing mounts. [[built-is-not-reachable]]
  */
-check('Owner tools restorable: hotmail allow-listed + a reachable email input',
-  /t\.gustafson@hotmail\.com/.test(ownerProfileSrc) &&
-    saysToPlayer(read('components/profile/ProfileForm.tsx'), 'Account email') &&
-    /p\.setEmail\(/.test(read('components/profile/ProfileForm.tsx')) &&
-    /<ProfileForm \/>/.test(read('app/profile.tsx')),
-  'owner can set email on the Profile screen to unlock Owner Tools (issue log / voice misses / harness)');
 
 // ─── 2026-06-09: feels engine + putt mode ──────────────────────────────────
 check('Feels engine wired (capture → caddie brain reconcile)',
@@ -8891,15 +8884,15 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'a render crash (white-screen) AND any uncaught async/handler JS error are recorded to the Issue Log as app_error entries, so tester crashes are finally visible + exportable (global handler chains to the platform default)');
 
   check('Issue Log is tester-accessible while owner tools stay gated (audit N1 lock)',
-    // the Issue Log screen renders for everyone (no wholesale owner-gate); only the Claude
-    // triage button + result are owner-gated (they burn API credit).
-    /\{isOwner && \(/.test(read('app/owner-logs.tsx')) &&
+    // the Issue Log screen renders for everyone (no wholesale owner-gate). The Claude triage button
+    // was removed 2026-10-27 with the unauthenticated /api/owner-triage route.
+    !/owner-triage/.test(readCode('app/owner-logs.tsx')) &&
       !/if \(!isOwner\)\s*(?:\{\s*)?return/.test(read('app/owner-logs.tsx')) &&
       // testers can SEND issues — export targets support@smartplaycaddie.com
       /support@smartplaycaddie\.com/.test(read('app/owner-logs.tsx')) &&
       // the Owner Tools SETTINGS section is fully gated so no owner tool leaks to testers
-      /const showOwner = isOwnerEmail\(profile\.email\);\s*if \(!showOwner\) return null;/.test(read('app/settings.tsx')),
-    'testers can open + export the Issue Log to support@smartplaycaddie.com; ONLY the Claude-triage button and the Owner Tools settings section are owner-gated (no owner tool leaks, no wholesale re-gate of the log)');
+      /const showOwner = isOwnerBuild\(\);\s*if \(!showOwner\) return null;/.test(read('app/settings.tsx')),
+    'testers can open + export the Issue Log to support@smartplaycaddie.com; the Owner Tools settings section is owner-gated (no owner tool leaks, no wholesale re-gate of the log)');
 
   check('Scorecard + round-end fixes from Tim\'s round (2026-06-12)',
     // (a) scoring chips open INLINE under the tapped hole (any hole, incl. a missed one),
@@ -14133,7 +14126,7 @@ check('LOCK: the watch pipe has something going down it — owner-gated, and it 
       .every(fn => new RegExp(`${fn}\\(`).test(sync));
     // Owner gate, and it is the gate every push goes through.
     const gated = /function ownerOnly\(\): boolean/.test(sync) &&
-      /prof\.isOwnerEmail\(prof\.usePlayerProfileStore\.getState\(\)\.email\)/.test(sync) &&
+      /prof\.isOwnerBuild\(\)/.test(sync) &&
       /if \(!ownerOnly\(\)\) return;/.test(sync) &&
       /**
        * 2026-08-24 (triple-check pass C) — PIN THE GATE TO THE PUSH PATH. A break test removed the
@@ -14188,7 +14181,7 @@ check('LOCK: the SmartVision strategy layer is DRAWN, owner-gated, and cannot em
       /&& strategy && \(/.test(sv);   // the render gate; its full condition is asserted below
     // Gated, and the gate is what the memo keys off — not a stray boolean.
     const gated = /const strategyOwner = useMemo\(/.test(sv) &&
-      /prof\.isOwnerEmail\(prof\.usePlayerProfileStore\.getState\(\)\.email\)/.test(sv) &&
+      /prof\.isOwnerBuild\(\)/.test(sv) &&
       /if \(!strategyOwner \|\| !geometry\) return null;/.test(sv);
     // Every derived pixel is finite-checked before it can become an SVG attribute.
     const nanSafe = /if \(!Number\.isFinite\(r\) \|\| r <= 0/.test(sv) &&

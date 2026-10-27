@@ -40,7 +40,7 @@ import {
   useReferenceAuthoringStore,
   type AuthoredReference,
 } from '../../store/referenceAuthoringStore';
-import { usePlayerProfileStore, isOwnerEmail } from '../../store/playerProfileStore';
+import { isOwnerBuild } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
 
 // Mirror the bundled registry's category order so the author screen
@@ -74,7 +74,6 @@ export default function ReferenceAssetAuthoringScreen() {
   // route too (Tools menu hides the row, but a deep-link / future
   // suggested-action could still navigate here). Non-owner renders
   // null so the route silently no-ops.
-  const profileEmail = usePlayerProfileStore(s => s.email);
   const byCategory = useReferenceAuthoringStore(s => s.byCategory);
   const setImage = useReferenceAuthoringStore(s => s.setImage);
   const setVideo = useReferenceAuthoringStore(s => s.setVideo);
@@ -231,7 +230,7 @@ export default function ReferenceAssetAuthoringScreen() {
   }).length;
 
   // Owner-only gate AFTER all hooks (rules-of-hooks). Non-owner no-ops.
-  if (!isOwnerEmail(profileEmail)) return null;
+  if (!isOwnerBuild()) return null;
 
   return (
     <SafeAreaView style={[styles.root, { paddingTop: insets.top }]} edges={['left', 'right']}>

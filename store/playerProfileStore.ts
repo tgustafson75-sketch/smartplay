@@ -12,59 +12,16 @@ import { normalizeRateCategory, type RateCategory } from '../lib/rateCategory';
 export type SubscriptionStatus = 'trial' | 'expired' | 'active' | 'free' | 'lifetime';
 
 /**
- * WHO EACH ADDRESS IS — the authoritative mapping (Tim, 2026-09-13).
+ * 2026-10-27 (security audit Critical #1) — OWNER IS A PROPERTY OF THE BUILD, NEVER OF A TYPED EMAIL.
  *
- * Corrected after a session described `support@smartplaycaddie.com` as "the product support address,
- * not Tim" and treated the two personal addresses as different people. Both were wrong, and the wrong
- * version was about to be handed to a future session as a change prompt. It lives here now because this
- * is the file that decides what the address MEANS, so there is one place to read it from.
- *
- *   t.gustafson75@gmail.com   ┐ BOTH Tim, ONE account/identity — not two owners and not a "test
- *   t.gustafson@hotmail.com   ┘ device" address. The gmail one is his primary; the hotmail one is the
- *                               same person signed in elsewhere: it is the `appleId` on both eas.json
- *                               submit profiles and the Meta glasses developer-app account
- *                               (i18n `the_app_registration_check_out`). Treat any change to one as a
- *                               change to both.
- *   support@smartplaycaddie.com  Tim's MAIN account email. NOT merely an App Review credential, which
- *                               is what the previous comment claimed. It is also the user-facing
- *                               support address printed in the privacy policy and 31 other places —
- *                               see the note below, which is a recorded decision rather than an
- *                               oversight.
- *   tim@smartplaycaddie.com      Google Play / App Review access. Declared in Play Console → App
- *                               content → Sign in details; do not remove without updating that
- *                               declaration, because review uses it to reach paid features.
- *
- * KNOWN AND ACCEPTED (Tim's call, 2026-09-13): `support@smartplaycaddie.com` is on this list AND is
- * published in the app's own privacy policy, so owner privilege — Owner Tools plus the lifetime grant
- * below — is attached to a publicly-known address. It is not reachable without the mailbox, and it stays
- * because it is his main account. Flagged here so nobody re-discovers it as a vulnerability.
- *
- * Owner allow-list: any user whose email matches one of these gets a lifetime grant on first boot,
- * bypassing the trial. Also unlocks the owner-gated debug surfaces (Issue Log, Voice Misses, GPS Test
- * Bench, Kevin Learning) per useDebugRouteGate + Settings → Owner Tools. Add to this list (or set
- * EXPO_PUBLIC_OWNER_EMAIL) when granting comp access. Matching is case-insensitive on the trimmed
- * profile email.
- *
- * NEVER let this list reach exactly ONE entry — see
- * __tests__/regression/a-single-owner-email-would-make-every-install-an-owner.test.ts for why that used
- * to hand every fresh install owner mode, and why the runtime fallback that did so is gone.
+ * Owner status used to come from matching the profile email (typed freely in Settings, never verified)
+ * against an allow-list that shipped in the bundle and included the published support address, so
+ * anyone could type it and get lifetime Pro plus Owner Tools. Now only a build that carries
+ * EXPO_PUBLIC_OWNER_EMAIL is an owner build. The development and preview profiles in eas.json set it;
+ * production does not, and scripts/ota-owner-guard.mjs refuses a production OTA while it is set.
  */
-export const OWNER_EMAILS: readonly string[] = [
-  // Tim — one account, two addresses (see the mapping above).
-  't.gustafson75@gmail.com',
-  't.gustafson@hotmail.com',
-  // Tim's main account email, and the published support address.
-  'support@smartplaycaddie.com',
-  // Google Play / App Review sign-in.
-  'tim@smartplaycaddie.com',
-];
-
-export function isOwnerEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const normalized = email.trim().toLowerCase();
-  if (OWNER_EMAILS.includes(normalized)) return true;
-  const fromEnv = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().toLowerCase();
-  return fromEnv.length > 0 && fromEnv === normalized;
+export function isOwnerBuild(): boolean {
+  return (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().length > 0;
 }
 
 /**
@@ -209,10 +166,7 @@ interface PlayerProfileState {
   store_entitlement_active: boolean | null;
   setStoreEntitlementActive: (on: boolean) => void;
   subscription_status: SubscriptionStatus;
-  /** Optional player email. Used by isOwnerEmail() to grant lifetime
-   *  access on first boot. Currently no auth surface populates this; set
-   *  manually via setEmail or via the EXPO_PUBLIC_OWNER_EMAIL env-var
-   *  fallback in isOwnerEmail. */
+  /** Optional player email (typed in Settings, unverified). Grants nothing. */
   email: string | null;
 
   // Phase T — WHS handicap fields
@@ -383,9 +337,6 @@ interface PlayerProfileState {
    */
   setTrialStartedAt: (ms: number | null) => void;
   setEmail: (email: string | null) => void;
-  /** Owner override — sets subscription_status='lifetime' and stamps
-   *  first_opened_at if missing. Idempotent. */
-  grantLifetime: () => void;
   // Phase T
   setHandicapIndex: (idx: number | null) => void;
   setHandicapGender: (g: 'm' | 'f' | 'x') => void;
@@ -557,14 +508,6 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         }),
       setTrialStartedAt: (ms) => set({ trial_started_at: ms }),
       setEmail: (email) => set({ email }),
-      grantLifetime: () =>
-        set(s => ({
-          first_opened_at: s.first_opened_at ?? Date.now(),
-          // Clear trial timestamp so any UI that checks it doesn't show
-          // a "trial expires in X" prompt on a lifetime account.
-          trial_started_at: null,
-          subscription_status: 'lifetime',
-        })),
       setHandicapIndex: (idx) => set(s => {
         // 2026-05-16 — Keep the legacy integer `handicap` field in
         // lockstep with handicap_index so consumers that read either

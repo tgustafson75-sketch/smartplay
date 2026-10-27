@@ -26,7 +26,7 @@ import {
 import { formatRunReport, collectRunEnv } from '../services/harness/report';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild } from '../store/playerProfileStore';
 
 import type { Scenario, ScenarioCategory } from '../services/harness/scenarios';
 import type { ScenarioReport } from '../services/harness/assert';
@@ -114,8 +114,7 @@ const STATUS_COLOR: Record<'pass' | 'fail' | 'skip', string> = {
 
 export default function HarnessScreen() {
   const router = useRouter();
-  const ownerEmail = usePlayerProfileStore(s => s.email);
-  const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
+  const isOwner = isOwnerBuild();
 
   const ALL_SCENARIOS = _allScenariosCache ?? [];
   const [states, setStates] = useState<Record<string, RowState>>({});

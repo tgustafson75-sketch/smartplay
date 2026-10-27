@@ -33,7 +33,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
-import { usePlayerProfileStore, isOwnerEmail, MAX_HOME_COURSES } from '../../store/playerProfileStore';
+import { usePlayerProfileStore, MAX_HOME_COURSES } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
 import { PillRow } from '../PillRow';
 import { RATE_CATEGORIES, normalizeRateCategory } from '../../lib/rateCategory';
@@ -403,9 +403,6 @@ export function ProfileForm() {
         autoCorrect={false}
         placeholder={t('settings.placeholder.you_email_com')}
       />
-      <Text style={s.helper}>
-        {isOwnerEmail(editEmail) ? t('settings.text.optional_owner_tools_unlocked') : t('settings.text.optional_owner_devices_enter_your')}
-      </Text>
 
       <TouchableOpacity style={s.saveBtn} onPress={save} accessibilityRole="button">
         <Text style={s.saveBtnText}>{t('settings.text.save_profile')}</Text>

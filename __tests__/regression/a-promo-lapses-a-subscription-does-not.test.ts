@@ -17,7 +17,6 @@ const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 8, 28);
 const lapsedPromo: LifecycleInput = {
   subscriptionsEnabled: true,
-  isOwner: false,
   status: 'active',
   promoExpiresAt: NOW - DAY,
   firstOpenedAt: NOW - 60 * DAY,
@@ -58,9 +57,9 @@ describe('when a promo ends', () => {
     expect(planTrialLifecycle({ ...lapsedPromo, promoExpiresAt: NOW + DAY, storeEntitled: false })).toEqual({});
   });
 
-  it('the owner keeps lifetime', () => {
-    expect(planTrialLifecycle({ ...lapsedPromo, isOwner: true, status: 'lifetime', storeEntitled: false }))
-      .toEqual({ clearPromo: true });
+  it('a leftover lifetime is cleared with the lapsed promo — there is no owner grant (2026-10-27)', () => {
+    expect(planTrialLifecycle({ ...lapsedPromo, status: 'lifetime', storeEntitled: false }))
+      .toEqual({ clearPromo: true, setStatus: 'free' });
   });
 });
 

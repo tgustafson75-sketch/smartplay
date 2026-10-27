@@ -111,8 +111,9 @@ describe('owner mode after an OTA', () => {
      * OWNER_EMAILS.length === 1 fallback was the right fix: privilege now comes from the artifact it
      * was built into, not from a list whose length an unrelated edit could change.
      */
-    const layout = code('app/_layout.tsx');
-    expect(layout).toMatch(/process\.env\.EXPO_PUBLIC_OWNER_EMAIL/);
-    expect(layout).not.toMatch(/OWNER_EMAILS\.length\s*===\s*1/);
+    // 2026-10-27 — owner is ONLY the build: isOwnerBuild reads the inlined env var and nothing else.
+    const store = code('store/playerProfileStore.ts');
+    expect(store).toMatch(/export function isOwnerBuild\(\): boolean \{\s*return \(process\.env\.EXPO_PUBLIC_OWNER_EMAIL \?\? ''\)\.trim\(\)\.length > 0;\s*\}/);
+    expect(store).not.toMatch(/OWNER_EMAILS/);
   });
 });

@@ -7,7 +7,7 @@
 let mockStoreLoads = 0;
 jest.mock('../../store/playerProfileStore', () => {
   mockStoreLoads++;
-  return { isOwnerEmail: () => true, usePlayerProfileStore: { getState: () => ({ email: 'owner@example.com' }) } };
+  return { isOwnerBuild: () => true };
 });
 
 import { isOwnerBuild } from '../../services/releaseSurface';

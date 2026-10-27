@@ -80,7 +80,6 @@ describe('the players it already happened to are healed', () => {
   /** Tim's profile, exactly as it sits on disk after installing 1.0 from the App Store. */
   const clobbered = {
     subscriptionsEnabled: true,
-    isOwner: false,
     status: 'free' as const,
     promoExpiresAt: null,
     firstOpenedAt: 1789763755619,

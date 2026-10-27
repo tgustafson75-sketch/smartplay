@@ -11,7 +11,7 @@
  *      want logged.
  *   2. The voice-intent classifier returns intent_type='log_issue' with
  *      parameters.note = the issue description.
- *   3. This handler verifies the user is the owner (isOwnerEmail), then
+ *   3. This handler verifies the user is the owner (isOwnerBuild), then
  *      appends an entry to issueLogStore with route + persona + round
  *      context snapshot.
  *   4. Caddie acknowledges the capture in a single short line.
@@ -22,14 +22,14 @@
  */
 
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
-import { isOwnerEmail, usePlayerProfileStore } from '../../store/playerProfileStore';
+import { isOwnerBuild, usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useIssueLogStore } from '../../store/issueLogStore';
 
 function ownerCheck(): boolean {
   const profile = usePlayerProfileStore.getState();
-  return isOwnerEmail(profile.email);
+  return isOwnerBuild();
 }
 
 export const logIssueHandler: IntentHandler = {

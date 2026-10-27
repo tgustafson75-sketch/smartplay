@@ -66,7 +66,7 @@ describe('the route is wired and owner-gated', () => {
   it('the SCREEN gates on owner, not just the menu that links to it', () => {
     // A route is reachable by voice and by deep link, so hiding the row is not a gate.
     const src = read('app/owner-card.tsx');
-    expect(src).toMatch(/isOwnerEmail/);
+    expect(src).toMatch(/isOwnerBuild\(\)/);
     expect(src).toMatch(/if \(!isOwner\)/);
   });
 

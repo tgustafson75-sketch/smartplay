@@ -30,7 +30,7 @@ import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable
 // for clean promo / store screenshots). Sourced from its own store
 // so app-wide consumers (the root StatusBar binding) read the same flag.
 import { useScreenshotModeStore } from '../store/screenshotModeStore';
-import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerBuild } from '../store/playerProfileStore';
 import { PillRow } from '../components/PillRow';
 
 import { useToastStore } from '../store/toastStore';
@@ -1753,8 +1753,7 @@ export default function Settings() {
             above so testers can use it too. */}
         {(() => {
           try {
-            const profile = usePlayerProfileStore.getState();
-            const showOwner = isOwnerEmail(profile.email);
+            const showOwner = isOwnerBuild();
             if (!showOwner) return null;
             return (
               <>
@@ -2225,7 +2224,7 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
  * for future feel-vs-real calibration. No user surface — only the
  * /swing-sessions-debug viewer surfaces the captured data.
  *
- * Defense-in-depth: the service ALSO checks isOwnerEmail at the call
+ * Defense-in-depth: the service ALSO checks isOwnerBuild at the call
  * site, so a leaked persisted flag from a previous account doesn't
  * accidentally fire transcription on a non-owner's audio.
  */

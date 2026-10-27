@@ -79,7 +79,6 @@ describe('end to end: the flip does not evict a player mid-trial', () => {
     // 2. The lifecycle, with whatever the store read left behind.
     const plan = planTrialLifecycle({
       subscriptionsEnabled: true,
-      isOwner: false,
       status: afterStoreRead,
       promoExpiresAt: null,
       firstOpenedAt: now - 30 * DAY,

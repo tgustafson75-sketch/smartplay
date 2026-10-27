@@ -33,7 +33,7 @@ import { memoryWarningCount } from '../services/memoryPressure';
 import { useOwnerChecklistStore } from '../store/ownerChecklistStore';
 import { useIssueLogStore } from '../store/issueLogStore';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
 
 type Tool = { label: string; sub: string; route: string; icon: React.ComponentProps<typeof Ionicons>['name'] };
@@ -103,7 +103,7 @@ export default function OwnerConsole() {
    * route is reachable by voice, deep link, or typing it, and this screen is the front door to every
    * other owner surface — so it is gated at least as tightly as the tightest thing it reaches.
    */
-  const isOwner = isOwnerEmail(usePlayerProfileStore((s) => s.email));
+  const isOwner = isOwnerBuild();
 
   // Select the array itself and count outside: a selector that allocates re-runs on every store
   // write, and `.filter()` inside one is the shape a-selector-must-not-build-what-it-returns forbids.

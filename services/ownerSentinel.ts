@@ -47,7 +47,7 @@ export function ownerSentinel(scope: string, err: unknown, extra?: Record<string
 
     const profileMod = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     const email = profileMod.usePlayerProfileStore.getState().email;
-    if (!profileMod.isOwnerEmail(email)) return;
+    if (!profileMod.isOwnerBuild()) return;
 
     const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
     const errText = err instanceof Error

@@ -22,7 +22,7 @@
  * ONE-WAY. markObserved never un-ticks and never downgrades a manual tick.
  */
 import { useOwnerChecklistStore } from '../store/ownerChecklistStore';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild, usePlayerProfileStore } from '../store/playerProfileStore';
 
 /**
  * The observable events, and the items each one actually proves.
@@ -78,7 +78,7 @@ export function noteChecklistEvent(event: keyof typeof PROVES | string): void {
     const ids = PROVES[event];
     if (!ids) return;
     // The checklist is Tim's. Nobody else should be paying for this, even the map lookup's writes.
-    if (!isOwnerEmail(usePlayerProfileStore.getState().email)) return;
+    if (!isOwnerBuild()) return;
 
     const store = useOwnerChecklistStore.getState();
     const newlyTicked = ids.filter((id) => !store.items.find((i) => i.id === id)?.done);

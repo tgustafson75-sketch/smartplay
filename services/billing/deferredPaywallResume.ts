@@ -13,7 +13,7 @@
  */
 import { consumeDeferredPaywall } from '../paywallGuard';
 import { canAccess, editionFor, FEATURE_EDITION, type FeatureKey } from '../featureAccess';
-import { usePlayerProfileStore, isOwnerEmail, type SubscriptionStatus } from '../../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerBuild, type SubscriptionStatus } from '../../store/playerProfileStore';
 
 /** Should a paywall deferred for `reason` still be shown to a player whose status is `status`? */
 export function deferredPaywallStillWanted(reason: string, status: SubscriptionStatus): boolean {
@@ -42,7 +42,7 @@ export async function resumeDeferredPaywall(show: () => void): Promise<'shown' |
   if (!deferred) return 'none';
   await profileHydrated();
   const { subscription_status, email } = usePlayerProfileStore.getState();
-  if (isOwnerEmail(email) || !deferredPaywallStillWanted(deferred.reason, subscription_status)) {
+  if (isOwnerBuild() || !deferredPaywallStillWanted(deferred.reason, subscription_status)) {
     console.log('[paywall] deferred paywall no longer needed —', deferred.reason, subscription_status);
     return 'skipped';
   }

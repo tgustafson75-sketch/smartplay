@@ -173,7 +173,14 @@ export function effectiveEdition(feature: FeatureKey): Edition {
 export function canAccess(feature: FeatureKey, status: SubscriptionStatus): boolean {
   if (!SUBSCRIPTIONS_ENABLED) return true;
   const required = effectiveEdition(feature);
-  return required === 'lite' || editionFor(status) === 'pro';
+  // 2026-10-27 — an owner BUILD (dev/preview, never production) gets everything. This replaced the
+  // persisted 'lifetime' grant that a typed email used to earn.
+  return required === 'lite' || editionFor(status) === 'pro' || ownerBuild();
+}
+
+function ownerBuild(): boolean {
+  try { return (require('../store/playerProfileStore') as typeof import('../store/playerProfileStore')).isOwnerBuild(); }
+  catch { return false; }
 }
 
 /**

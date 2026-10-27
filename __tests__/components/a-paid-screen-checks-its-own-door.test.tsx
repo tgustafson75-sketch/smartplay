@@ -5,7 +5,7 @@
  *
  * This MOUNTS the real screens (native modules stubbed) and follows what they do on mount:
  *   • a lite player is sent to the paywall (replace, so Back does not bounce into the screen);
- *   • an active / trial / lifetime player, and an owner, are never touched;
+ *   • an active / trial / lifetime player, and an owner BUILD, are never touched;
  *   • nothing is decided before the profile store has hydrated (the 'free' default would look like a
  *     locked-out subscriber).
  */
@@ -108,13 +108,24 @@ describe.each(['smartfinder', 'smartvision'] as const)('%s — the screen checks
     r.unmount();
   });
 
-  it('an owner is never gated, whatever the status says', async () => {
-    const { usePlayerProfileStore, OWNER_EMAILS } = require('../../store/playerProfileStore');
-    const owner = (OWNER_EMAILS as string[] | undefined)?.[0] ?? process.env.EXPO_PUBLIC_OWNER_EMAIL;
-    if (!owner) return; // no owner configured in this build — nothing to assert
-    usePlayerProfileStore.setState({ subscription_status: 'free', email: owner });
+  // 2026-10-27 — owner is the BUILD (dev/preview), never a typed email.
+  it('an owner BUILD is never gated, whatever the status says', async () => {
+    const { usePlayerProfileStore } = require('../../store/playerProfileStore');
+    process.env.EXPO_PUBLIC_OWNER_EMAIL = 'owner@build';
+    try {
+      usePlayerProfileStore.setState({ subscription_status: 'free', email: '' });
+      const r = await mount(route);
+      expect(pushedPaywall()).toBe(false);
+      r.unmount();
+    } finally { delete process.env.EXPO_PUBLIC_OWNER_EMAIL; }
+  });
+
+  it('a TYPED owner email on a player build is gated like anyone else', async () => {
+    const { usePlayerProfileStore } = require('../../store/playerProfileStore');
+    delete process.env.EXPO_PUBLIC_OWNER_EMAIL;
+    usePlayerProfileStore.setState({ subscription_status: 'free', email: 'support@smartplaycaddie.com' });
     const r = await mount(route);
-    expect(pushedPaywall()).toBe(false);
+    expect(pushedPaywall()).toBe(true);
     r.unmount();
   });
 

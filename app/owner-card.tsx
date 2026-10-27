@@ -20,7 +20,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, Linking, S
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild } from '../store/playerProfileStore';
 import { CARD, shareTextFor, telUriFor, qrSizeFor, CARD_MAX_W, CARD_H_PAD, PLATE_PAD } from '../services/ownerCard';
 
 /** The card's own palette — a committed look, independent of the app theme, exactly as designed. */
@@ -35,8 +35,7 @@ export default function OwnerCard() {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const qrSize = qrSizeFor(windowWidth);
-  const email = usePlayerProfileStore((s) => s.email);
-  const isOwner = isOwnerEmail(email);
+  const isOwner = isOwnerBuild();
 
   const open = useCallback((url: string) => {
     // Never throws at the caller: a device with no mail client is not a crash.

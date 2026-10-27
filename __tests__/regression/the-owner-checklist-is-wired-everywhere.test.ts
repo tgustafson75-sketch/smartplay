@@ -58,7 +58,7 @@ describe('the list can grow without losing ticks', () => {
 describe('all four surfaces are connected', () => {
   it('the screen exists and gates on the OWNER at the render, not just the menu', () => {
     const screen = code('app/owner-checklist.tsx');
-    expect(screen).toContain('isOwnerEmail(email)');
+    expect(screen).toContain('isOwnerBuild()');
     expect(screen).toContain('Owner tools only.');
   });
 

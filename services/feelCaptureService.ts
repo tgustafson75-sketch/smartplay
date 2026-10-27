@@ -19,7 +19,7 @@
  * Gating (defense-in-depth):
  *   1. settingsStore.feelCaptureEnabled === true (owner explicitly
  *      flipped the toggle in Settings → Owner Tools)
- *   2. isOwnerEmail(playerProfile.email) === true (re-check at call
+ *   2. isOwnerBuild() === true (re-check at call
  *      time; defends against a leaked persisted-flag from a previous
  *      account)
  *   3. clipUri is present (no transcription without an audio source)
@@ -37,7 +37,7 @@
 
 import { useSwingSessionStore, type SwingShot, type SwingSession } from '../store/swingSessionStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerBuild } from '../store/playerProfileStore';
 import { track } from './analytics';
 import { getApiBaseUrl } from './apiBase';
 
@@ -147,7 +147,7 @@ export function initFeelCapture(): () => void {
     try {
       if (!useSettingsStore.getState().feelCaptureEnabled) return false;
       const email = usePlayerProfileStore.getState().email;
-      return isOwnerEmail(email);
+      return isOwnerBuild();
     } catch {
       return false;
     }

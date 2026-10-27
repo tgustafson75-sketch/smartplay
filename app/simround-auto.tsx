@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild } from '../store/playerProfileStore';
 import { formatRunReport, collectRunEnv } from '../services/harness/report';
 import type { ScenarioReport } from '../services/harness/assert';
 
@@ -33,8 +33,7 @@ function safeText(v: unknown, maxLen = 400): string {
 
 export default function AutoSimRoundScreen() {
   const router = useRouter();
-  const ownerEmail = usePlayerProfileStore(s => s.email);
-  const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
+  const isOwner = isOwnerBuild();
 
   const [reports, setReports] = useState<ScenarioReport[]>([]);
   const [running, setRunning] = useState(false);

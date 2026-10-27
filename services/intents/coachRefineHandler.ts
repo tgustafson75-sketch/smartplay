@@ -81,8 +81,8 @@ export const coachRefineHandler: IntentHandler = {
     const email = profile.email ?? null;
 
     // Authorization: coach by inviteePreferences OR owner (for testing).
-    const { isOwnerEmail } = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
-    const isOwner = isOwnerEmail(email);
+    const { isOwnerBuild } = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
+    const isOwner = isOwnerBuild();
     const isCoach = isAuthorizedCoach(email);
     if (!isOwner && !isCoach) {
       return {

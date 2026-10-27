@@ -22,6 +22,12 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRoundStore } from '../../store/roundStore';
 
 const setEmail = (email: string | null) => usePlayerProfileStore.setState({ email } as never);
+// 2026-10-27 — owner is the BUILD (EXPO_PUBLIC_OWNER_EMAIL, dev/preview only), never a typed email.
+const ownerBuild = (on: boolean) => {
+  if (on) process.env.EXPO_PUBLIC_OWNER_EMAIL = 'owner@build';
+  else delete process.env.EXPO_PUBLIC_OWNER_EMAIL;
+};
+afterAll(() => ownerBuild(false));
 const sends = () =>
   (bridge.sendVoicePrompt as jest.Mock).mock.calls.length +
   (bridge.sendNotification as jest.Mock).mock.calls.length +
@@ -35,6 +41,7 @@ beforeEach(() => {
 
 describe('the watch stays owner-only', () => {
   it('a tester gets NOTHING — no spoken line, no toast, no score, no state', () => {
+    ownerBuild(false);
     setEmail('someone.else@example.com');
     pushWatchVoicePrompt('smooth seven');
     pushWatchNotification('course is ready');
@@ -44,6 +51,7 @@ describe('the watch stays owner-only', () => {
   });
 
   it('an ABSENT email is treated as not-owner, not as owner-by-default', () => {
+    ownerBuild(false);
     setEmail(null);
     pushWatchVoicePrompt('smooth seven');
     startWatchRoundSync();
@@ -51,61 +59,55 @@ describe('the watch stays owner-only', () => {
   });
 
   it('the owner does get the spoken line', () => {
-    setEmail('t.gustafson75@gmail.com');
+    ownerBuild(true);
     pushWatchVoicePrompt('smooth seven');
     expect(bridge.sendVoicePrompt as jest.Mock).toHaveBeenCalledWith('smooth seven');
   });
 
   it('the owner gets round state on a hole change', () => {
-    setEmail('t.gustafson75@gmail.com');
+    ownerBuild(true);
     useRoundStore.setState({ isRoundActive: true, currentHole: 3 } as never);
     startWatchRoundSync();
     expect(bridge.sendRoundState as jest.Mock).toHaveBeenCalledWith(true, 3);
   });
 
   it('an empty line is never pushed — the wrist does not buzz for nothing', () => {
-    setEmail('t.gustafson75@gmail.com');
+    ownerBuild(true);
     pushWatchVoicePrompt('   ');
     pushWatchNotification('');
     expect(sends()).toBe(0);
   });
 
   it('a push can never throw into its caller — a dead watch must not break the phone', () => {
-    setEmail('t.gustafson75@gmail.com');
+    ownerBuild(true);
     (bridge.sendVoicePrompt as jest.Mock).mockImplementationOnce(() => { throw new Error('watch is asleep'); });
     expect(() => pushWatchVoicePrompt('smooth seven')).not.toThrow();
   });
 
   it('a rejected send is swallowed too, not left as an unhandled rejection', () => {
-    setEmail('t.gustafson75@gmail.com');
+    ownerBuild(true);
     (bridge.sendVoicePrompt as jest.Mock).mockImplementationOnce(async () => { throw new Error('no route'); });
     expect(() => pushWatchVoicePrompt('smooth seven')).not.toThrow();
   });
 
   /**
-   * 2026-08-24 (verification pass) — HYDRATION ORDER MUST NOT DECIDE THE FEATURE.
-   *
-   * startWatchRoundSync used to early-return when the owner check failed, and never retry. But
-   * playerProfileStore is async-persisted and the watch bridge initialises off a DIFFERENT store's
-   * hydration flag, so on a cold boot the email could still be null — and the watch would then
-   * receive nothing for the whole session. The owner check now lives at every push instead of being
-   * decided once, too early.
+   * 2026-10-27 (security audit Critical #1) — A TYPED EMAIL GRANTS NOTHING. The owner allow-list used
+   * to match the unverified profile email, so typing a published owner address unlocked owner features.
    */
-  it('an owner whose profile hydrates LATE still gets the watch, without a restart', () => {
-    setEmail(null);                       // profile not hydrated yet
+  it('an owner email TYPED into a player build gets nothing', () => {
+    ownerBuild(false);
+    setEmail('support@smartplaycaddie.com');
     useRoundStore.setState({ isRoundActive: true, currentHole: 7 } as never);
+    pushWatchVoicePrompt('smooth seven');
     startWatchRoundSync();
-    expect(sends()).toBe(0);              // correctly silent while we do not know who this is
-
-    setEmail('t.gustafson75@gmail.com');  // hydration lands
-    expect(bridge.sendRoundState as jest.Mock).toHaveBeenCalledWith(true, 7);
+    expect(sends()).toBe(0);
   });
 
-  it('a tester whose profile hydrates late still gets nothing', () => {
+  it('an owner build needs no email at all', () => {
+    ownerBuild(true);
     setEmail(null);
+    useRoundStore.setState({ isRoundActive: true, currentHole: 7 } as never);
     startWatchRoundSync();
-    setEmail('someone.else@example.com');
-    useRoundStore.setState({ isRoundActive: true, currentHole: 2 } as never);
-    expect(sends()).toBe(0);
+    expect(bridge.sendRoundState as jest.Mock).toHaveBeenCalledWith(true, 7);
   });
 });

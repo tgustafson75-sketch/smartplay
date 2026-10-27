@@ -21,7 +21,7 @@
  *
  * Persisted to AsyncStorage under 'voice-misses-v1'. Capped at 100
  * entries FIFO. Surface is owner-only (app/voice-misses.tsx, gated by
- * isOwnerEmail() like owner-logs.tsx).
+ * isOwnerBuild() like owner-logs.tsx).
  */
 
 import { create } from 'zustand';

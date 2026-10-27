@@ -30,7 +30,7 @@ describe('the console is gated like the surfaces it opens', () => {
   });
 
   it('gates at the render too, not only at the route', () => {
-    expect(CONSOLE).toContain('isOwnerEmail');
+    expect(CONSOLE).toContain('isOwnerBuild()');
     expect(CONSOLE).toMatch(/if \(!isOwner\)/);
     expect(CONSOLE).toContain('Owner tools only.');
   });

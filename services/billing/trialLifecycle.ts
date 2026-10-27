@@ -13,7 +13,7 @@
  * ORDER IS THE SPECIFICATION. Each rung exists because of a real defect:
  *   1. PROMO first, because both blanket grants below re-assert on every boot and would overwrite a
  *      comp on next launch — a 30-day promotion would have lasted until the app was closed.
- *   2. OWNER before the kill-switch, so the switch's branch can assume it is not an owner and clear
+ *   2. (removed 2026-10-27 — no owner grant; owner is the build, see isOwnerBuild) — formerly: OWNER first, then clear
  *      a stale lifetime without locking Tim out of his own app.
  *   3. KILL-SWITCH stamps NOTHING. canAccess() already returns true for everything while it is off,
  *      so a grant buys nobody anything and only writes state that survives the flip.
@@ -30,7 +30,6 @@ import type { SubscriptionStatus } from '../../store/playerProfileStore';
 
 export type LifecycleInput = {
   subscriptionsEnabled: boolean;
-  isOwner: boolean;
   status: SubscriptionStatus;
   promoExpiresAt: number | null;
   firstOpenedAt: number | null;
@@ -53,13 +52,12 @@ export type LifecycleInput = {
  */
 export type LifecyclePlan = {
   clearPromo?: boolean;
-  grantLifetime?: boolean;
   setStatus?: SubscriptionStatus;
 };
 
 export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
   const {
-    subscriptionsEnabled, isOwner, status, promoExpiresAt,
+    subscriptionsEnabled, status, promoExpiresAt,
     trialStartedAt, trialDurationMs, now,
   } = input;
 
@@ -76,7 +74,7 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
      * Pro for ever. Leave the promo in place (still expired, access unchanged — never a downgrade on a
      * guess); the launch read records the store's answer and the next launch decides with it.
      */
-    if (status === 'active' && input.storeEntitled == null && !isOwner && subscriptionsEnabled) {
+    if (status === 'active' && input.storeEntitled == null && subscriptionsEnabled) {
       return {};
     }
     // Expired: clear it and fall through to the normal ladder, so running out is visible in the
@@ -89,14 +87,14 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
      * does not vouch for came from the promo and lapses to 'expired'. A store subscriber — a referral
      * reward stacked on a paid plan is exactly this — is never touched here; the store owns their status.
      */
-    if (status === 'active' && input.storeEntitled === false && !isOwner && subscriptionsEnabled && !rest.setStatus && !rest.grantLifetime) {
+    if (status === 'active' && input.storeEntitled === false && subscriptionsEnabled && !rest.setStatus) {
       return { clearPromo: true, ...rest, setStatus: 'expired' };
     }
     return { clearPromo: true, ...rest };
   }
 
-  // 2) Owner lifetime wins over everything, and is decided before the kill-switch.
-  if (isOwner) return status === 'lifetime' ? {} : { grantLifetime: true };
+  // 2) (2026-10-27) There is no owner grant any more — owner is a property of the build
+  //    (isOwnerBuild), honoured at the access check, never written into the billing status.
 
   // 3) Kill-switch: unlocked, unstamped, and any old blanket grant cleared.
   if (!subscriptionsEnabled) {

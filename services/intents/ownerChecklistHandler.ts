@@ -1,6 +1,6 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useOwnerChecklistStore, GROUP_LABEL } from '../../store/ownerChecklistStore';
-import { isOwnerEmail, usePlayerProfileStore } from '../../store/playerProfileStore';
+import { isOwnerBuild, usePlayerProfileStore } from '../../store/playerProfileStore';
 
 /**
  * 2026-09-09 (Tim: "have it so the Caddie can read the reminder if I want") — THE LIST, SPOKEN.
@@ -33,7 +33,7 @@ export const ownerChecklistHandler: IntentHandler = {
   ],
 
   async execute(_intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
-    if (!isOwnerEmail(usePlayerProfileStore.getState().email)) {
+    if (!isOwnerBuild()) {
       // Not "you don't have one" — nothing at all, so the brain answers whatever they actually meant.
       return { success: false, voice_response: null, side_effects: ['owner_checklist:not_owner'], follow_up_needed: false };
     }

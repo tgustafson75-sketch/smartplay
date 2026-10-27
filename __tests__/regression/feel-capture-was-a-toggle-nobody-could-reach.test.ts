@@ -28,7 +28,7 @@ describe('feel capture can be switched on', () => {
 
   it('it sits behind the owner gate, like the service it feeds', () => {
     const at = settings.indexOf('<FeelCaptureRow');
-    const gate = settings.lastIndexOf('const showOwner = isOwnerEmail', at);
+    const gate = settings.lastIndexOf('const showOwner = isOwnerBuild()', at);
     expect(gate).toBeGreaterThan(-1);
     // and nothing closes the owner section between the gate and the row
     expect(settings.slice(gate, at)).not.toContain('</CollapsibleSection>');

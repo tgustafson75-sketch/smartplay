@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AppIcon, { type IconName } from '../components/AppIcon';
-import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerBuild } from '../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { track } from '../services/analytics';
@@ -41,7 +41,7 @@ export default function PaywallScreen() {
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = getApiBaseUrl();
-  const { subscription_status, setSubscriptionStatus, setTrialStartedAt, setStoreEntitlementActive, email } = usePlayerProfileStore();
+  const { subscription_status, setSubscriptionStatus, setTrialStartedAt, setStoreEntitlementActive } = usePlayerProfileStore();
   const [busy, setBusy] = useState(false);
   // 2026-09-29 — tell the caddie gate the plans are already on screen (no second paywall on top).
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function PaywallScreen() {
    * reviewer while subscriptions are off, which is the confusion this whole switch exists to avoid.
    */
   const { preview } = useLocalSearchParams<{ preview?: string }>();
-  const previewing = preview === '1' && isOwnerEmail(email);
+  const previewing = preview === '1' && isOwnerBuild();
 
   const caddieName = getCaddieName(caddiePersonality);
   const FEATURES: { icon: IconName; label: string; sub: string }[] = [

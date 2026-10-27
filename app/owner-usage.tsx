@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { safeBack } from '../services/safeBack';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { isOwnerBuild } from '../store/playerProfileStore';
 import {
   fetchOwnerUsage, getOwnerKey, setOwnerKey, exportUsageToSmartManage, EXPORT_TO, type FetchResult,
 } from '../services/ownerUsage';
@@ -19,7 +19,7 @@ import {
 export default function OwnerUsage() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const isOwner = isOwnerEmail(usePlayerProfileStore((s) => s.email));
+  const isOwner = isOwnerBuild();
   const [keyDraft, setKeyDraft] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [loading, setLoading] = useState(false);

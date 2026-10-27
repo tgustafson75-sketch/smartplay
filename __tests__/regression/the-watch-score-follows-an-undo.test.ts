@@ -13,13 +13,14 @@ jest.mock('../../services/watchBridge', () => ({
 
 import * as bridge from '../../services/watchBridge';
 import { startWatchRoundSync, stopWatchRoundSync } from '../../services/watchRoundSync';
-import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRoundStore } from '../../store/roundStore';
+
+afterAll(() => { delete process.env.EXPO_PUBLIC_OWNER_EMAIL; });
 
 beforeEach(() => {
   stopWatchRoundSync();
   jest.clearAllMocks();
-  usePlayerProfileStore.setState({ email: 't.gustafson75@gmail.com' } as never);
+  process.env.EXPO_PUBLIC_OWNER_EMAIL = 'owner@build';   // owner is the build (2026-10-27)
   useRoundStore.setState({
     isRoundActive: true, currentHole: 2, scores: {}, lastMutation: null,
     courseHoles: [{ hole: 1, par: 4 }, { hole: 2, par: 0 }, { hole: 3, par: 4 }],
