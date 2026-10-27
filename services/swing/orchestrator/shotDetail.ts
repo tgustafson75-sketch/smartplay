@@ -72,6 +72,25 @@ export function retireSessionShotRuns(sessionId: string, by?: string): void {
 }
 
 /**
+ * 2026-10-27 (Phase SB5, recheck R1) — HOW MANY ANALYSES OF EACH SWING HAVE STARTED this launch
+ * (uploadRun.runSwingAnalysis bumps it as a new run starts, before it clears anything). A screen showing a
+ * swing whose body read is ALREADY unread (its read failed or found no one) asks for it again when a new
+ * analysis starts: the Re-analyze under "No body read for this swing" re-reads only swing 1, and nothing
+ * else about swing 2 changes (hooks/useShotDetailRequest).
+ */
+const swingRunStarts = new Map<string, number>();
+const swingRunStartListeners = new Set<() => void>();
+export const swingRunStartsOf = (sessionId: string): number => swingRunStarts.get(sessionId) ?? 0;
+export function subscribeSwingRunStarts(listener: () => void): () => void {
+  swingRunStartListeners.add(listener);
+  return () => { swingRunStartListeners.delete(listener); };
+}
+export function noteSwingRunStarted(sessionId: string): void {
+  swingRunStarts.set(sessionId, swingRunStartsOf(sessionId) + 1);
+  for (const l of [...swingRunStartListeners]) l();
+}
+
+/**
  * A shot as a trace names it: its place in the swing and its id's unique part. Every live capture's shot
  * id ENDS in `cage_shot`, so the old `id.slice(-6)` named every shot of every session `e_shot`.
  */
@@ -120,8 +139,24 @@ export function shownSwingHoldsOlderRead(s: SwingSession | null | undefined, sel
   if (!s || !shot) return false;
   const first = s.shots.find((x) => x.clipUri)?.id === shot.id;
   if (storedShotBiomech(s, shot, first) !== undefined) return false;
-  const raw = shot.biomechanics !== undefined ? shot.biomechanics : (first ? s.biomechanics : undefined);
-  return raw != null;
+  return rawShotBiomech(s, shot, first) != null;
+}
+
+/** What is stored for the shot by ANY build (the shot's own, or for swing 1 the session's). */
+function rawShotBiomech(s: SwingSession, shot: SwingShot, first: boolean): SwingBiomechanics | null | undefined {
+  return shot.biomechanics !== undefined ? shot.biomechanics : (first ? s.biomechanics : undefined);
+}
+
+/**
+ * 2026-10-27 (Phase SB5, recheck R2) — the swing shown (clamped) has NO body read stored by any build: the
+ * only swing the library may show SmartMotion's snapshot body tiles for (a legacy save with a report and no
+ * biomechanics). An older build's read is unread, not absent — its snapshot tiles are that read's verdicts,
+ * and stood right under "this swing's body read is from an older version, so it isn't shown".
+ */
+export function shownSwingNeverRead(s: SwingSession | null | undefined, selectedShotIdx: number): boolean {
+  const shot = s?.shots[selectedShotIdx] ?? s?.shots[0];
+  if (!s || !shot) return false;
+  return rawShotBiomech(s, shot, s.shots.find((x) => x.clipUri)?.id === shot.id) === undefined;
 }
 
 /** True when this platform can only produce a vision arc — a stored one is then as good as it gets. */

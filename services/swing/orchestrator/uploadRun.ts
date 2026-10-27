@@ -13,7 +13,7 @@
  */
 import { cancelRunsWithPrefix, getOrStartRun, liveRun, liveRunKeys, whenStageSettled, type StageDef } from './engine';
 import { useSwingSessionStore } from '../../../store/swingSessionStore';
-import { clearAnswered, retireSessionShotRuns, retiredBy, retirementOf, runShotDetail, shotImpactMs, shotRunKey, swingRunKey } from './shotDetail';
+import { clearAnswered, noteSwingRunStarted, retireSessionShotRuns, retiredBy, retirementOf, runShotDetail, shotImpactMs, shotRunKey, swingRunKey } from './shotDetail';
 import type { ReadExtras } from '../../videoUpload';
 
 /**
@@ -455,6 +455,8 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
     runWindow.set(sessionId, windowOf());
     // A new analysis may have moved the window: the swing's shot runs (body + arc) start over.
     cancelRunsWithPrefix(`shot:${sessionId}:`);
+    // 2026-10-27 (SB5) — a new analysis of the swing: a screen showing an already-unread swing asks again.
+    noteSwingRunStarted(sessionId);
     // Before retireEarlierCaptures, which marks the session as run this launch.
     invalidateForReanalysis(sessionId, extras);
     retireEarlierCaptures(sessionId);

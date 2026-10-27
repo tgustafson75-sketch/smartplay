@@ -4,6 +4,7 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 import { practiceLog } from '../services/practiceTelemetry';
 import { BODY_READ_VERSION, CLUB_ARC_VERSION, bodyReadIsCurrent, clubArcIsCurrent } from '../services/swing/analysisVersion';
 import { isPracticeSwing, UPLOAD_FINDER_VERSION } from '../services/swing/practiceSwings';
+import type { SetCreditSnapshot } from '../services/practice/smartMotionPracticeCredit';
 
 /** A shot or session without its club arc (the arc, its frame, its source and its version). */
 function withoutArc<T extends { club_arc?: unknown; club_arc_frame?: unknown; club_arc_source?: unknown; club_arc_version?: unknown }>(x: T): T {
@@ -441,6 +442,11 @@ export interface SwingSession {
   /** 2026-06-29 (Tim) — true once this session's practice points were awarded, so a
    *  backfill (or a re-save) can never double-count it. */
   creditedPractice?: boolean;
+  /** 2026-10-27 (Phase SB5) — a SmartMotion set's practice credit asked for (Save / New Set / Back) while its
+   *  read was still running: held here, not only in the screen's memory, so a kill before the read settles
+   *  does not lose it (services/practice/smartMotionPracticeCredit.applyHeldSetCredits at launch). Cleared
+   *  when the set is credited. */
+  practiceCreditPending?: SetCreditSnapshot | null;
 }
 
 export type AnalysisStatus =
@@ -861,6 +867,8 @@ interface SwingSessionState {
   setSessionPlayer: (sessionId: string, playerId: string) => void;
   /** Mark a session's practice credit as awarded (backfill double-count guard). */
   setSessionCreditedPractice: (sessionId: string, credited: boolean) => void;
+  /** Hold (or drop, null) a set's practice credit until its read settles (SB5). */
+  setSessionPracticeCreditPending: (sessionId: string, snap: SetCreditSnapshot | null) => void;
 }
 
 // ─── Helpers ──────────────────────────────
@@ -2055,7 +2063,12 @@ export const useSwingSessionStore = create<SwingSessionState>()(
               return rest as SwingShot;
             });
             const { biomechanics: _b, analysis_version: _v, ...rest } = withoutArc(session);
-            return { ...(rest as SwingSession), shots, fault_frame_uri: null, fault_frame_index: null, fault_frame_fraction: null };
+            // 2026-10-27 (SB5, recheck R2) — the SmartMotion snapshot's BODY tiles were read off the body read
+            // cleared here: they go with it, or the old verdicts stood under the new analysis (and for good
+            // when its body read failed). The rest of the snapshot (carry, tempo, canvas) is not a body read.
+            const map = rest.smart_motion_shot_map;
+            const shotMap = map?.bodyItems != null ? { ...map, bodyItems: null } : map;
+            return { ...(rest as SwingSession), shots, smart_motion_shot_map: shotMap, fault_frame_uri: null, fault_frame_index: null, fault_frame_fraction: null };
           };
           return {
             activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
@@ -2257,7 +2270,19 @@ export const useSwingSessionStore = create<SwingSessionState>()(
       setSessionCreditedPractice: (sessionId, credited) =>
         set(s => {
           const apply = (session: SwingSession): SwingSession =>
-            session.id !== sessionId ? session : { ...session, creditedPractice: credited };
+            session.id !== sessionId ? session
+              // A credited set holds no credit any more (SB5).
+              : { ...session, creditedPractice: credited, ...(credited ? { practiceCreditPending: null } : {}) };
+          return {
+            activeSession:
+              s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
+      setSessionPracticeCreditPending: (sessionId, snap) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession =>
+            session.id !== sessionId ? session : { ...session, practiceCreditPending: snap };
           return {
             activeSession:
               s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,

@@ -146,6 +146,10 @@ export function creditSmartMotionSet(sid: string, snap: SetCreditSnapshot, books
  * session is in flight, the credit is HELD (the first ask's snapshot; later asks join it) and applied once
  * when the last read ends (`flush`). Keyed by the session id it was asked for, never by the screen's current
  * session: reset() and New Set clear that before the read ends. Never applied twice by this ledger.
+ *
+ * 2026-10-27 (Phase SB5, recheck "credit held in memory only") — a held credit is ALSO written to the swing
+ * session (practiceCreditPending): this ledger lives in the screen's memory, and a set saved mid-read whose
+ * app was killed before the read settled lost its credit for good. applyHeldSetCredits applies it at launch.
  */
 export function createSetCreditLedger<R>(apply: (sid: string, snap: SetCreditSnapshot, late: boolean) => R) {
   const inFlight = new Map<string, number>();
@@ -163,7 +167,10 @@ export function createSetCreditLedger<R>(apply: (sid: string, snap: SetCreditSna
     request(sid: string, snap: SetCreditSnapshot): { pending: boolean; result?: R } {
       if (done.has(sid)) return { pending: false };
       if (!settled(sid)) {
-        if (!held.has(sid)) held.set(sid, snap);
+        if (!held.has(sid)) {
+          held.set(sid, snap);
+          holdOnSession(sid, snap);
+        }
         return { pending: true };
       }
       const s = held.get(sid) ?? snap;
@@ -182,4 +189,49 @@ export function createSetCreditLedger<R>(apply: (sid: string, snap: SetCreditSna
       return true;
     },
   };
+}
+
+/** The held credit, on the session (persisted): applyHeldSetCredits finds it if the app dies first. */
+function holdOnSession(sid: string, snap: SetCreditSnapshot): void {
+  try {
+    const { useSwingSessionStore } = require('../../store/swingSessionStore') as typeof import('../../store/swingSessionStore');
+    useSwingSessionStore.getState().setSessionPracticeCreditPending(sid, snap);
+  } catch { /* the in-memory hold still applies it while the app lives */ }
+}
+
+type Persisted = { persist?: { hasHydrated: () => boolean; onFinishHydration: (cb: () => void) => () => void } };
+const hydrated = (store: Persisted): Promise<void> => new Promise((resolve) => {
+  const p = store.persist;
+  if (!p || p.hasHydrated()) { resolve(); return; }
+  const off = p.onFinishHydration(() => { off(); resolve(); });
+});
+
+/**
+ * 2026-10-27 (Phase SB5) — AT LAUNCH: every set whose credit was held for a read the app did not live to see
+ * settle is credited now, once, without the swings a read demoted (creditSmartMotionSet). A read of it still
+ * going (the read that waited for a connection) is waited for first. Every store it writes has loaded first:
+ * points awarded into a store that was still loading would be overwritten by what it loads. Returns the sets
+ * credited. Called once at boot (app/_layout).
+ */
+export async function applyHeldSetCredits(): Promise<string[]> {
+  const { useSwingSessionStore } = require('../../store/swingSessionStore') as typeof import('../../store/swingSessionStore');
+  const { usePracticeSessionStore } = require('../../store/practiceSessionStore') as typeof import('../../store/practiceSessionStore');
+  const { usePracticePointsStore } = require('../../store/practicePointsStore') as typeof import('../../store/practicePointsStore');
+  await Promise.all([useSwingSessionStore, usePracticeSessionStore, usePracticePointsStore].map((st) => hydrated(st as unknown as Persisted)));
+  const { liveRun } = require('../swing/orchestrator/engine') as typeof import('../swing/orchestrator/engine');
+  const { swingRunKey } = require('../swing/orchestrator/shotDetail') as typeof import('../swing/orchestrator/shotDetail');
+  const held = () => useSwingSessionStore.getState().sessionHistory.filter((x) => x.practiceCreditPending != null);
+  const out: string[] = [];
+  for (const { id } of held()) {
+    await liveRun(swingRunKey(id))?.done;
+    const s = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === id);
+    const snap = s?.practiceCreditPending;
+    if (!s || !snap) continue;
+    if (s.creditedPractice === true) { useSwingSessionStore.getState().setSessionPracticeCreditPending(id, null); continue; }
+    try {
+      creditSmartMotionSet(id, snap, { stamped: new Set(), samples: new Map() });
+      out.push(id);
+    } catch { /* non-fatal: still held, tried again next launch */ }
+  }
+  return out;
 }

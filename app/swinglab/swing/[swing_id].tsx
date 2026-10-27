@@ -38,7 +38,7 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, shownSwingNeverRead, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
 import { useShotDetailRequest } from '../../../hooks/useShotDetailRequest';
 import { useIssueAsk } from '../../../hooks/useIssueAsk';
 // 2026-09-20 — this screen HAS pose frames (activeBiomech.frames) and was still asking the model
@@ -3678,9 +3678,11 @@ export default function SwingDetail() {
                 // 2026-10-27 — the session headline only for a legacy swing 1 (faultSpotlight.swingBodyFaultRead, the
                 // rule of swingFaultOnScreen / audit R7): it stood in for EVERY swing, tinting swing 3's tiles.
                 const bodyAnalysis = swingBodyFaultRead(shownShotIdx, session.primary_issue, psa, shot) as unknown as SwingAnalysis | null;
+                // 2026-10-27 (SB5) — the snapshot only for a swing with NO body read stored by any build: an
+                // older build's read is unread, and its snapshot tiles are that read's verdicts.
                 const items: BodyItem[] = activeBiomech
                   ? deriveBodyItems(bodyAnalysis, activeBiomech)
-                  : ((shotMap?.bodyItems as BodyItem[] | undefined) ?? []);
+                  : shownSwingNeverRead(session, selectedShotIdx) ? ((shotMap?.bodyItems as BodyItem[] | undefined) ?? []) : [];
                 return items.length > 0
                   ? <BodyAnalysisRow items={items} style={{ marginTop: 12 }} />
                   : null;

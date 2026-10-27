@@ -1281,6 +1281,15 @@ function AppNavigator() {
     })();
   }, []);
 
+  // 2026-10-27 (SB5) — a SmartMotion set saved while its read was running, whose app closed before the read
+  // settled, is credited now (services/practice/smartMotionPracticeCredit).
+  useEffect(() => {
+    try {
+      void (require('../services/practice/smartMotionPracticeCredit') as typeof import('../services/practice/smartMotionPracticeCredit'))
+        .applyHeldSetCredits().catch(() => undefined);
+    } catch { /* never blocks boot */ }
+  }, []);
+
   // 2026-10-25 — a swing captured with no signal is read when the signal comes back (and at launch for
   // any left waiting). services/swing/orchestrator/readWhenOnline.
   useEffect(() => {
