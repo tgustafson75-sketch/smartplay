@@ -62,8 +62,8 @@ import { detectBallPath } from '../../services/swing/ballPath';
 // 2026-09-20 — moved to services/swing/bodyBounds so the three call sites that could not import a
 // SCREEN can crop too. See that file: three of four ran full-frame, including the persist pass.
 import { frameToContainerNorm } from '../../services/swing/overlayCoords';
-import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../store/practiceSessionStore';
-import { samplesToStamp, creditedSwingCount, shouldCreditOnLeave } from '../../services/practice/smartMotionPracticeCredit';
+import { recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
+import { shouldCreditOnLeave, stampSetSwings, creditSmartMotionSet, createSetCreditLedger, type SetCreditBooks, type SetCreditSnapshot } from '../../services/practice/smartMotionPracticeCredit';
 // Type-only — erased at runtime, so it never loads the vision-camera native module.
 // The component is lazy-required ONLY when the runtime toggle is on (a vision build),
 // keeping this file's JS OTA-safe on a build that doesn't link vision-camera.
@@ -125,7 +125,7 @@ import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStor
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
-import { usePracticePointsStore } from '../../store/practicePointsStore';
+import { useAutoClubScan } from '../../hooks/useAutoClubScan';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useRoundStore } from '../../store/roundStore';
@@ -841,6 +841,8 @@ export default function SmartMotion() {
   // presents the club SOLE steadily (a quick pass gives the vision a blurry,
   // unreadable frame — the "8-iron" only reads from a crisp held frame).
   const [clubScanActive, setClubScanActive] = useState(false);
+  const clubScanActiveRef = useRef(false);
+  clubScanActiveRef.current = clubScanActive;
   const [clubScanCount, setClubScanCount] = useState(0);
   // 2026-06-11 — periodic auto club detection (Tim: "every ~3 cycles"). A completed
   // recording bumps cycleCountRef; every Nth cycle marks a scan due, fired silently
@@ -1976,36 +1978,41 @@ export default function SmartMotion() {
    * stamped. The swing on screen carries what was measured on it; the rest of the set is stamped with what
    * is known (the club) when the set is saved or the player leaves. services/practice/smartMotionPracticeCredit.
    */
-  const stampedSwingsRef = useRef<Set<string>>(new Set());
+  // 2026-06-30 (audit M4) — the per-swing samples are also COLLECTED, so the session-less save path (plain
+  // SmartMotion + drills → recordCompletedSession) stamps them and the practice-detail screen shows real
+  // striation + tempo. 2026-10-27 — the stamps and samples are kept PER SESSION id (SetCreditBooks): a set's
+  // credit can now land after the screen has moved on to the next set (it waits for the set's read).
+  const creditBooksRef = useRef<SetCreditBooks>({ stamped: new Set(), samples: new Map() });
+  const tRef = useRef(t);
+  tRef.current = t;
+  const creditLedgerRef = useRef<ReturnType<typeof createSetCreditLedger<number | null>>>(null as never);
+  if (!creditLedgerRef.current) {
+    creditLedgerRef.current = createSetCreditLedger<number | null>((sid, snap, late) => {
+      try {
+        const pts = creditSmartMotionSet(sid, snap, creditBooksRef.current);
+        // Save / New Set said "Saved to your Swing Library" while the read was going: the points say themselves now.
+        if (late && snap.announce && pts != null) {
+          useToastStore.getState().show(tRef.current('swinglab_smartmotion.smart_motion.practice_points_after_read', { points: pts }));
+        }
+        return pts;
+      } catch { return null; /* non-fatal */ }
+    });
+  }
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   /** The session whose run's READ has settled (the practice classifier has run): the review stamp waits for it. */
   const [readSettledSid, setReadSettledSid] = useState<string | null>(null);
   // True when the saved session is a set recorded HERE (not a clip opened for review): only those are credited on leave.
   const sessionFromCaptureRef = useRef(false);
-  // 2026-06-30 (audit M4) — also COLLECT each per-swing sample for this Smart Motion open,
-  // so the session-less save path (plain SmartMotion + drills → recordCompletedSession) can
-  // stamp them and the practice-detail screen shows real striation + tempo, not just a count.
-  const practiceSwingSamplesRef = useRef<Parameters<typeof recordPracticeSwingIfActive>[0][]>([]);
-  const stampPracticeSwings = useCallback((only?: number, measuredSample?: Parameters<typeof recordPracticeSwingIfActive>[0] | null, readSettled?: boolean) => {
-    const sid = ingestedSessionIdRef.current;
-    if (!sid) return 0;
-    const shots = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.shots ?? [];
-    const out = samplesToStamp({
-      sessionId: sid,
+  /** Swing `only` of session `sid` (the one on screen), with what was measured on it — once the read has settled. */
+  const stampPracticeSwings = useCallback((sid: string, only: number, measuredSample: Parameters<typeof recordPracticeSwingIfActive>[0] | null, readSettled: boolean) =>
+    stampSetSwings(sid, creditBooksRef.current, {
       swingCount: segmentsRef.current.length,
-      shots,
-      stamped: stampedSwingsRef.current,
       club: clubRef.current ?? null,
       only,
-      measured: only != null && measuredSample ? { index: only, sample: measuredSample } : null,
+      measured: measuredSample ? { index: only, sample: measuredSample } : null,
       readSettled,
-    });
-    for (const o of out) {
-      stampedSwingsRef.current.add(o.key);
-      recordPracticeSwingIfActive(o.sample);
-      practiceSwingSamplesRef.current.push(o.sample);
-    }
-    return out.length;
-  }, []);
+    }), []);
   useEffect(() => {
     // Swing 1 only: paging to swing N shows swing 1's tempo/trace until N's are recomputed, so a measured
     // stamp there could carry the wrong swing's numbers (the shot-map live commit has the same guard).
@@ -2019,7 +2026,7 @@ export default function SmartMotion() {
       tempoRatio: tempo?.ratio ?? null,
       divergenceDeg: signedDiv,
     };
-    if (stampPracticeSwings(0, sample, readSettledSid === sessionId) === 0) return;
+    if (stampPracticeSwings(sessionId, 0, sample, readSettledSid === sessionId) === 0) return;
     // 2026-07-07 (Tim — "tie the tracing into the caddie brain") — the same measured
     // signals also feed the CNS rolling tendencies, so the brain can cite YOUR real
     // tempo average / start-line % / contact pattern (was: computed but never learned).
@@ -2665,6 +2672,8 @@ export default function SmartMotion() {
           liveRun(swingRunKey(sid))?.cancel();
         } catch { /* no live run */ }
       }
+      // 2026-10-27 — a set's credit asked for while this read runs waits for it to end (createSetCreditLedger).
+      creditLedgerRef.current.readStarted(sid);
       const readP = runSwingAnalysis(sid, {
         caddie_name: getCaddieName(analysisCaddieRef.current),
         ...(angle === 'face_on' || angle === 'down_the_line' ? { angle } : {}),
@@ -2717,7 +2726,14 @@ export default function SmartMotion() {
           locateDegradedByShotRef.current[i] = v.locate_degraded;
         }
       }).finally(() => {
-        if (sessionRunRef.current !== myRun) return;
+        // The read of `sid` has ended (the classifier has run) — whether or not this screen still shows it. A
+        // credit held for it is applied: by the effect after the review's own swing-1 stamp while this run is
+        // the one on screen, at once otherwise (New Set, reset() or leaving moved on; the effect never runs).
+        creditLedgerRef.current.readEnded(sid);
+        if (sessionRunRef.current !== myRun || !mountedRef.current) {
+          creditLedgerRef.current.flush(sid);
+          return;
+        }
         setReadSettledSid(sid);   // the classifier has run: the review may credit the swing on screen
         const left = shotReadWaitersRef.current;
         shotReadWaitersRef.current = {};
@@ -4359,6 +4375,9 @@ export default function SmartMotion() {
   const detectClubFromCamera = useCallback(async (opts?: { auto?: boolean }) => {
     if (scanningClub) return;
     const auto = opts?.auto === true;
+    // 2026-10-27 (Phase SB4x) — a silent scan never starts over the player's guided scan (one shared scan
+    // epoch: it would cancel the 3-2-1). A ref, so the check is current inside the auto scan's timer.
+    if (auto && clubScanActiveRef.current) return;
     // Don't grab a still mid-record (audit 2026-06-11) — a takePictureAsync overlapping
     // recordAsync can hiccup the video session. The periodic auto scan especially must
     // never fire into a recording the user just started.
@@ -4424,6 +4443,7 @@ export default function SmartMotion() {
     if (scanTok == null) return;
     const scanWanted = () => captureLifeRef.current.scanStillWanted(scanTok, !!recordingPromiseRef.current);
     setClubScanActive(true);
+    clubScanActiveRef.current = true;   // at once: a silent scan's timer may fire before the next render
     try {
       // Countdown 3 → 2 → 1 (≈0.7s each) so the user can present + steady the sole.
       for (let n = 3; n >= 1; n--) {
@@ -4464,6 +4484,7 @@ export default function SmartMotion() {
     } finally {
       setScanningClub(false);
       setClubScanActive(false);
+      clubScanActiveRef.current = false;
       setClubScanCount(0);
     }
   }, [scanningClub, clubScanActive, setClub, applyPuttMode]);
@@ -4644,12 +4665,8 @@ export default function SmartMotion() {
   // but NOT during the hands-free auto-record relaunch (pendingStartRef), so it can
   // never race the camera into the next recording. Silent (auto:true), and yields
   // to/from the framing loop via scanningClub.
-  useEffect(() => {
-    if (phase !== 'setup' || !clubScanDueRef.current || scanningClub || pendingStartRef.current) return;
-    clubScanDueRef.current = false;
-    const t = setTimeout(() => { void detectClubFromCamera({ auto: true }); }, 500);
-    return () => clearTimeout(t);
-  }, [phase, scanningClub, detectClubFromCamera]);
+  const fireAutoClubScan = useCallback(() => { void detectClubFromCamera({ auto: true }); }, [detectClubFromCamera]);
+  useAutoClubScan({ phase, dueRef: clubScanDueRef, scanningClub, guidedScanActive: clubScanActive, pendingStartRef, fire: fireAutoClubScan });
 
   // Review video transport + keep/discard for the control bar.
   // 2026-10-27 (audit R6) — tapping the replay to mark it up freezes it (state + player, so no sound under
@@ -4745,65 +4762,39 @@ export default function SmartMotion() {
    * library with no points). Stamps any swing of the set not yet stamped, then awards once per session.
    * Returns the toast line when points were awarded here, null otherwise.
    */
-  const creditPracticeRef = useRef<(sid: string) => string | null>(() => null);
-  creditPracticeRef.current = (sid: string) => {
-    let savedMsg: string | null = null;
-    {
-      try {
-        stampPracticeSwings();
-        // 2026-10-26 — a swing the read demoted as practice earns no credit (services/swing/practiceSwings).
-        const swings = creditedSwingCount({
-          swingCount: segmentsRef.current.length,
-          drillShotCount,
-          shots: useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.shots ?? [],
-        });
-        // 2026-06-30 (audit M1 — double-count fix) — when an Open Range / Focus / SmartPlan
-        // SESSION is active, this swing was already stamped into it (recordPracticeSwingIfActive)
-        // and endSession() awards + records the session total. Awarding here too DOUBLE-counted
-        // points and wrote a duplicate Practice History row. So only award per-save when NO
-        // session is active — which still covers plain dock-it-say-go SmartMotion (the
-        // 2026-06-29 "points disappeared" fix) and the drill flow (no session lifecycle).
-        const sessionActive = usePracticeSessionStore.getState().active != null;
-        // 2026-07-23 (QA — double-award fix) — awardPracticePoints has no idempotency, and this save
-        // path can fire twice for the SAME session (fast double-tap SAVE, or SAVE then NEW SET which
-        // calls persistReviewRef). The session already carries a creditedPractice flag (set at the end
-        // of this block) but it was never READ, so the same swings were counted twice — inflating
-        // total points + session count. Skip the award if this session was already credited.
-        const alreadyCredited = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.creditedPractice === true;
-        if (!sessionActive && !alreadyCredited) {
-          if (isDrill && drillId) {
-            // 2026-06-14 (Tim) — drill-launched: award + record under the drill's focus.
-            const drillLabel = typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null;
-            const pts = usePracticePointsStore.getState().awardPracticePoints({ key: drillId, label: drillLabel, swings, now: Date.now() });
-            usePracticeSessionStore.getState().recordCompletedSession({ kind: 'focus', focus: drillId, drillId, label: drillLabel, swingCount: swings, swingSamples: practiceSwingSamplesRef.current });
-            savedMsg = `Saved · +${pts} practice points`;
-          } else {
-            // 2026-06-29 (Tim — "my points/sessions disappeared") — PLAIN SmartMotion
-            // practice (the normal dock-it-say-go flow) now ALSO counts toward the
-            // dashboard, not only drill-launched sessions. Keyed by club so per-club
-            // practice accrues; honest generic label.
-            const clubKey = club ? clubIdLabel(club) : (isPutt ? 'Putting' : 'Practice');
-            const pts = usePracticePointsStore.getState().awardPracticePoints({ key: `smartmotion:${clubKey}`, label: clubKey, swings, now: Date.now() });
-            usePracticeSessionStore.getState().recordCompletedSession({ kind: 'open_range', focus: clubKey, label: clubKey, swingCount: swings, swingSamples: practiceSwingSamplesRef.current });
-            savedMsg = `Saved · +${pts} practice points`;
-          }
-        }
-        // Mark credited so the one-time backfill never double-counts this session — whether
-        // the points came from here (no session) or from endSession (session active).
-        useSwingSessionStore.getState().setSessionCreditedPractice(sid, true);
-        // 2026-07-07 — samples were credited with THIS set; clear so a go-again set
-        // doesn't re-stamp them (the accumulate-across-loop design predates per-set saves).
-        practiceSwingSamplesRef.current = [];
-      } catch { /* non-fatal */ }
-    }
-    return savedMsg;
+  /**
+   * 2026-10-27 (Phase SB4x, review "capture #1") — the credit waits for the set's READ: the review opens as soon
+   * as swing 1's own read lands, but the practice classifier runs at the end of the set's read, so crediting at
+   * the tap credited swings the read then demoted. services/practice/smartMotionPracticeCredit holds it until
+   * the read of that session ends and applies it once, without the demoted swings. The snapshot is taken at
+   * the tap: by the time the read ends, New Set has moved the screen (segments, club) on to the next set.
+   */
+  const creditPracticeRef = useRef<(sid: string, announce?: boolean) => string | null>(() => null);
+  creditPracticeRef.current = (sid: string, announce = true) => {
+    const snap: SetCreditSnapshot = {
+      swingCount: segmentsRef.current.length,
+      drillShotCount,
+      club: clubRef.current ?? null,
+      // 2026-06-14 (Tim) — drill-launched: credited under the drill's focus.
+      drill: isDrill && drillId ? { id: drillId, label: typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null } : null,
+      // 2026-06-29 (Tim — "my points/sessions disappeared") — plain SmartMotion counts too, keyed by club.
+      clubKey: club ? clubIdLabel(club) : (isPutt ? 'Putting' : 'Practice'),
+      announce,
+    };
+    const r = creditLedgerRef.current.request(sid, snap);
+    return !r.pending && typeof r.result === 'number' ? `Saved · +${r.result} practice points` : null;
   };
+  // The read on screen settled: a credit held for it lands now — after the review stamped swing 1 with what
+  // was measured on it (that effect is declared earlier, so it runs first in the same commit).
+  useEffect(() => {
+    if (readSettledSid) creditLedgerRef.current.flush(readSettledSid);
+  }, [readSettledSid]);
   // Leaving credits a saved set Save / New Set did not (C5). Points only; no toast on the next screen.
   useEffect(() => () => {
     const sid = ingestedSessionIdRef.current;
     const alreadyCredited = !!sid && useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.creditedPractice === true;
     if (sid && sessionFromCaptureRef.current && shouldCreditOnLeave({ sessionId: sid, alreadyCredited })) {
-      try { creditPracticeRef.current(sid); } catch { /* non-fatal */ }
+      try { creditPracticeRef.current(sid, false); } catch { /* non-fatal */ }
     }
   }, []);
   const confirmSave = useCallback(() => persistReviewToLibrary(true), [persistReviewToLibrary]);

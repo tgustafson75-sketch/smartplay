@@ -3188,8 +3188,10 @@ check('Practice points: conservative, per-drill, awarded on drill save → dashb
       // awarded on a DRILL save (now via the unified award so it also feeds the tier)
       // 2026-07-04 (drift reconcile) — the guard dropped the sid check (award moved
       // out of the session-scoped branch; drill saves award regardless).
-      /if \(isDrill && drillId\)/.test(sm) &&
-      /usePracticePointsStore\.getState\(\)\.awardPracticePoints\(\{/.test(sm) &&
+      // 2026-10-27 (Phase SB4x) — the award moved into services/practice/smartMotionPracticeCredit (it waits
+      // for the set's read now); the screen hands it the drill and asks for the credit.
+      /drill: isDrill && drillId \?/.test(sm) && /creditSmartMotionSet\(/.test(sm) &&
+      /usePracticePointsStore\.getState\(\)\.awardPracticePoints\(\{/.test(read('services/practice/smartMotionPracticeCredit.ts')) &&
       // surfaced on the dashboard, per-drill, hidden until earned
       /practiceTotal > 0 &&/.test(dash) &&
       saysToPlayer(dash, 'PRACTICE POINTS') &&
@@ -6141,8 +6143,10 @@ check('Open Range surface wired — Smart Motion stamps, screen + entry point ex
       // 2026-07-04 (drift reconcile) — the sample is built above the call now.
       // 2026-10-27 (capture audit C5) — exactly-once per SWING (session + index), not per clip; the rule is
       // services/practice/smartMotionPracticeCredit (behaviour: every-swing-of-a-set-earns-practice-credit).
-      /recordPracticeSwingIfActive\(o\.sample\)/.test(sm) &&         // smartmotion stamps swings
-      /samplesToStamp\(\{/.test(sm) &&                                // exactly-once per swing
+      // 2026-10-27 (Phase SB4x) — the stamping loop lives in the owner (stampSetSwings); the screen calls it.
+      /recordPracticeSwingIfActive\(o\.sample\)/.test(read('services/practice/smartMotionPracticeCredit.ts')) &&   // swings stamped
+      /samplesToStamp\(\{/.test(read('services/practice/smartMotionPracticeCredit.ts')) &&                        // exactly-once per swing
+      /stampSetSwings\(/.test(sm) && /creditSmartMotionSet\(/.test(sm) &&                                       // from SmartMotion
       /summarizeOpenRange\(active\.swings\)/.test(screen) &&        // screen shows the live read
       /name="practice\/open-range"/.test(layout) &&                // route registered
       // 2026-07-04 (elite-clean) — the old caddie.tsx entry lived inside the DEAD
@@ -7011,7 +7015,9 @@ check('Practice history: dashboard list → detail with per-club striation + tem
       /drillId\?: string \| null;/.test(ps) &&
       /swingCount\?: number \| null;/.test(ps);
     // drills get recorded into the unified history (separate from the award)
-    const drillHistory = /usePracticeSessionStore\.getState\(\)\.recordCompletedSession\(\{/.test(sm);
+    // 2026-10-27 (Phase SB4x) — recorded by SmartMotion's credit owner (it waits for the set's read).
+    const drillHistory = /usePracticeSessionStore\.getState\(\)\.recordCompletedSession\(\{/.test(read('services/practice/smartMotionPracticeCredit.ts'))
+      && /creditSmartMotionSet\(/.test(sm);
     // dashboard surfaces the history list and navigates to the detail route
     /**
      * 2026-09-13 (Tim — "A day doing work is a Session") — the list groups by DAY now, so this
@@ -7075,7 +7081,9 @@ check('Points: practice awards from every surface + feeds the visible tier',
       /awardPracticePoints\(\{ key, label, swings, now: Date\.now\(\) \}\)/.test(ps);
     // drill save uses the unified award (so drills also feed the tier) with a label
     // 2026-07-04 (drift reconcile) — the call went single-line.
-    const drillAward = /awardPracticePoints\(\{ key: drillId, label: drillLabel, swings, now: Date\.now\(\) \}\)/.test(sm);
+    // 2026-10-27 (Phase SB4x) — in SmartMotion's credit owner now.
+    const drillAward = /awardPracticePoints\(\{ key: snap\.drill\.id, label: snap\.drill\.label, swings, now: Date\.now\(\) \}\)/.test(read('services/practice/smartMotionPracticeCredit.ts'))
+      && /creditSmartMotionSet\(/.test(sm);
     // dashboard renders non-drill keys via the stored label
     const dashOk = /getDrillEntry\(id\)\?\.title \?\? rec\.label \?\? id/.test(dash);
     return unifiedAward && sessionAward && drillAward && dashOk;
@@ -8509,7 +8517,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // does NOT pop the club picker on a low-confidence auto read (only manual does).
   check('SmartMotion: club detection auto-fires every 3 cycles, silent + non-racing',
     /cycleCountRef\.current % 3 === 0\) clubScanDueRef\.current = true/.test(smSrc2) &&
-      /phase !== 'setup' \|\| !clubScanDueRef\.current \|\| scanningClub \|\| pendingStartRef\.current/.test(smSrc2) &&
+      // 2026-10-27 (Phase SB4x) — the timer lives in hooks/useAutoClubScan, and yields to a guided scan too.
+      /phase !== 'setup' \|\| !dueRef\.current \|\| scanningClub \|\| guidedScanActive \|\| pendingStartRef\.current/.test(read('hooks/useAutoClubScan.ts')) &&
+      /useAutoClubScan\(\{ phase, dueRef: clubScanDueRef, scanningClub, guidedScanActive: clubScanActive, pendingStartRef/.test(smSrc2) &&
       /detectClubFromCamera\(\{ auto: true \}\)/.test(smSrc2) &&
       /\} else if \(!auto\) \{[\s\S]{0,120}setClubMenuOpen\(true\)/.test(smSrc2),
     'a completed recording bumps the cycle count; every 3rd queues a club scan fired silently the next time we settle in setup (NOT during the hands-free auto-record relaunch, so no camera race); a low-confidence AUTO read keeps the current club silently while a MANUAL scan still opens the picker');

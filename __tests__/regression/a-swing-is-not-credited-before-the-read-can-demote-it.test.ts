@@ -28,8 +28,15 @@ describe('the swing on screen is credited only once the read could demote it', (
     expect(real.map((o) => o.sample)).toEqual([measured]);
   });
 
-  it('guard: leaving / saving mid-read (no `only`) still stamps the set — C5\'s Back credit is kept', () => {
+  /**
+   * 2026-10-27 (Phase SB4x, review "capture #1") — this guard used to pin the OPPOSITE: leaving / saving
+   * mid-read stamped the whole set at once, before the classifier could demote any of it. The set's
+   * credit now waits for the read (a-set-is-credited-once-its-read-has-settled); nothing is stamped mid-read.
+   */
+  it('leaving / saving mid-read (no `only`) stamps nothing yet — the set is stamped when the read settles', () => {
     const out = samplesToStamp({ sessionId: 's', swingCount: 3, shots, stamped: new Set(), club: '7i', readSettled: false });
-    expect(out.map((o) => o.index)).toEqual([0, 1, 2]);
+    expect(out).toEqual([]);
+    const settled = samplesToStamp({ sessionId: 's', swingCount: 3, shots, stamped: new Set(), club: '7i', readSettled: true });
+    expect(settled.map((o) => o.index)).toEqual([0, 1, 2]);
   });
 });

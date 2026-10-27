@@ -2408,6 +2408,7 @@
       "grant_access": "Grant access",
       "save": "SAVE",
       "new_set": "NEW SET",
+      "practice_points_after_read": "+{{points}} practice points — your set is read",
       "reading": "Reading…",
       "hold_the_club_sole_flat": "Hold the club SOLE flat in the box · keep it steady",
       "effort": "EFFORT",
