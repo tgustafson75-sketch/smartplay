@@ -50,34 +50,8 @@ export default async function handler(
   // fell back to the robot voice. 150 fits the warm burst + live TTS while still capping a curl loop.
   if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'voice', 150)) return;
 
-  // 2026-06-04 — Pre-warm. Client hits this endpoint with
-  // { mode: 'warmup' } after splash completes so OpenAI TTS SDK +
-  // network path are hot by the time the user actually taps to talk.
-  //
-  // Earlier shape (same-day) just returned 200 immediately, which
-  // warmed the Lambda runtime but NOT the OpenAI SDK + TLS handshake
-  // to api.openai.com — the dominant cold-start cost (~6-8s). This
-  // version runs the full SDK path with a minimal single-space input
-  // so the connection pool, auth, and first-call init are all hot.
-  // Audio is discarded after arrayBuffer() consumption so the HTTP
-  // connection releases back to the pool for the real speak() call.
-  // Cost: ~$0.0001 per warmup (gpt-4o-mini-tts at ~$0.015/1000 chars,
-  // ~5 chars including instructions overhead).
+  // Warmup spends $0 (2026-10-27 security audit): the request landing is the Lambda warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
-    try {
-      const mp3 = await openai.audio.speech.create({
-        model: 'gpt-4o-mini-tts',
-        voice: OPENAI_VOICES_BY_PERSONA.kevin,
-        input: ' ',
-        instructions: KEVIN_TTS_INSTRUCTIONS,
-      });
-      await mp3.arrayBuffer();
-      console.log('[voice] warmup completed (OpenAI TTS SDK hot)');
-    } catch (e) {
-      // Silent — warmup failure never surfaces to the user. Worst
-      // case is the user pays the cold-start cost on their first tap.
-      console.log('[voice] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
-    }
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
 

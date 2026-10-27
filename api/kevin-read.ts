@@ -145,11 +145,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2026-07-27 (24h audit) — skip the gate for the splash warmup (must always land); gate the real path.
   if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'kevin-read')) return;
 
-  // Mirrors api/kevin warmup pattern so services/voiceWarmup could
-  // optionally also warm this endpoint later. ~$0.00005 per warmup.
+  // Warmup spends $0 (2026-10-27 security audit): the request landing is the Lambda warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
-    const warmProvider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
-    await completeText(warmProvider, 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 }).catch(() => {});
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
 

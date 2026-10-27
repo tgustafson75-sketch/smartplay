@@ -14,18 +14,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!allowInference(req, res, 'briefing')) return;
 
-  // 2026-06-15 (Tim — pre-round brief fired ~25s late) — Pre-warm. The client
-  // pings this with { mode: 'warmup' } the instant "Start Round Here" is tapped,
-  // so the Lambda + provider SDK + TLS are hot by the time the hole-1 handoff
-  // actually generates the brief. Single 'ping', max_tokens:1 (~$0.0001 per warmup).
+  // Warmup spends $0 (2026-10-27 security audit): the request landing is the Lambda warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
-    const warmProvider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
-    try {
-      await completeText(warmProvider, 'quality', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
-      console.log(`[briefing] warmup completed (${warmProvider} SDK hot)`);
-    } catch (e) {
-      console.log('[briefing] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
-    }
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
 

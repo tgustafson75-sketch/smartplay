@@ -274,16 +274,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const provider: AiProvider = 'anthropic';
   if (requestedProvider !== provider) console.log(`[kevin] brain pinned to ${provider} (toggle requested ${requestedProvider})`);
 
+  // 2026-10-27 (security audit) — warmup spends $0. It used to fire a 1-token LLM call plus a TTS clip,
+  // before the rate limiter, so a loop could run up the bill. Landing here is the warm: the Lambda is up.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
-    await Promise.allSettled([
-      completeText(provider, 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 }),
-      openai.audio.speech.create({
-        model: 'gpt-4o-mini-tts',
-        voice: VOICE_BY_PERSONA.kevin,
-        input: ' ',
-      }).then(mp3 => mp3.arrayBuffer()),
-    ]);
-    console.log(`[kevin] warmup completed (${provider} + OpenAI TTS hot)`);
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
 

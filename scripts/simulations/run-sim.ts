@@ -18091,17 +18091,6 @@ check(
     'a surveyed pick and a database pick are both built by the pipeline alone, with its progress on the card');
 }
 
-// 2026-09-23 — from Tim's pasted Vercel logs: every voice-intent warmup ended "400 'messages' must
-// contain the word 'json'". json_object mode needs the word in the messages; the warmup sent "ping".
-{
-  const vi = read('api/voice-intent.ts');
-  const sys = /export const WARMUP_SYSTEM = '([^']*)';/.exec(vi)?.[1] ?? '';
-  const usr = /export const WARMUP_USER = '([^']*)';/.exec(vi)?.[1] ?? '';
-  check('VOICE-INTENT: the warmup is a request OpenAI json mode will accept',
-    /json/i.test(sys + usr) && /completeJSON\(warmProvider, 'fast', WARMUP_SYSTEM, \[\{ role: 'user', content: WARMUP_USER \}\]/.test(readCode('api/voice-intent.ts')),
-    'the warmup sent "ping" in json_object mode and 400ed on every launch — the classifier was never actually warmed');
-}
-
 // 2026-09-23 — a 200 with ZERO greens must not wipe the bundled coordinates a course already had.
 {
   const g = readCode('services/courseGeometryService.ts');

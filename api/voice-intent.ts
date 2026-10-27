@@ -752,8 +752,6 @@ Reminder of the catch-all rule above: greetings → social_greeting; ANY other n
 };
 
 /** Warmup prompt. Must name JSON: json_object mode rejects messages that do not (HTTP 400). */
-export const WARMUP_SYSTEM = 'Reply with the JSON object {}.';
-export const WARMUP_USER = 'ping (json)';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -762,23 +760,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2026-07-27 (24h audit) — skip the gate for the splash warmup (must always land); gate the real path.
   if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'voice-intent')) return;
 
-  // 2026-06-04 — Pre-warm. Client hits this with { mode: 'warmup' }
-  // after splash completes so the brain SDK (OpenAI or Gemini) + TLS
-  // are hot when the first real classification lands. Single 'ping'
-  // message, max_tokens:1 — minimal cost. Mirrors api/voice.ts pre-warm.
+  // Warmup spends $0 (2026-10-27 security audit): the request landing is the Lambda warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
-    const warmProvider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
-    try {
-      // 2026-09-23 — the word "json" must appear in the messages or OpenAI's json_object mode answers
-      // 400 — which is what EVERY warmup in the production logs did. The warmup never warmed anything.
-      // 2026-09-28 — and with the REAL schema. The live call uses strict json_schema, whose first use
-      // pays a one-time schema-processing cost; warming json_object mode left that cost on the first
-      // real ask. Five tokens of truncated output is fine: nothing reads it.
-      await completeJSON(warmProvider, 'fast', WARMUP_SYSTEM, [{ role: 'user', content: WARMUP_USER }], { maxTokens: 5, schema: VOICE_INTENT_SCHEMA });
-      console.log(`[voice-intent] warmup completed (${warmProvider} SDK hot)`);
-    } catch (e) {
-      console.log('[voice-intent] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
-    }
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
 

@@ -880,49 +880,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as Record<string, unknown>;
-    // 2026-05-27 — Fix EK: pre-warm short-circuit. Client hits this
-    // endpoint with { mode: 'warmup' } the moment a user opens
-    // SmartMotion / Cage Mode / Library upload — that warms the
-    // Vercel Lambda's runtime + provider SDK clients so the FIRST
-    // real swing analysis a few seconds later doesn't pay cold-start.
-    // Returns 200 in <50ms without doing AI work; ideal for fire-and-
-    // forget client calls.
+    // Warmup spends $0 (2026-10-27 security audit): the request landing is the Lambda warm.
     if (body.mode === 'warmup') {
-      // 2026-06-07 — Real-warm Gemini 2.5 Flash (1 token, no images)
-      // to actually open the HTTP/2 pool to Gemini. Prior path
-      // returned 200 in <50ms which warmed only the Lambda runtime,
-      // not the SDK's TLS+H2 connection — leaving the FIRST real
-      // swing-analysis paying ~0.5-2s of HTTPS setup.
-      // 2026-06-07 audit r4 — L1 regression revert: Vercel serverless
-      // runtime FREEZES the JS context the moment res.end() is called
-      // (no waitUntil here). The prior fire-and-forget attempt would
-      // never actually complete — defeated the warmup. Back to await
-      // so the H2 pool genuinely opens. ~500-2000ms cost on the
-      // warmup ping, which is the whole point — the client warmup
-      // budget (15s) absorbs it; the user's real first-swing call
-      // lands on a hot connection. waitUntil() from @vercel/functions
-      // is the right long-term fix; awaiting is the safe interim.
-      try {
-        if (gemini) {
-          // 5 s cap: warmup is a single-token ping — if it hangs longer the
-          // Lambda is unhealthy anyway and the real request will 502 cleanly.
-          await geminiWithTimeout(gemini.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: [{ role: 'user', parts: [{ text: 'warmup' }] }],
-            config: { maxOutputTokens: 1 },
-          }), 5_000);
-        }
-      } catch (e) {
-        console.log('[swing-analysis] warmup gemini ping failed (non-fatal):', e instanceof Error ? e.message : String(e));
-      }
-      return res.status(200).json({
-        warmed: true,
-        timestamp: Date.now(),
-        providers_configured: {
-          openai: !!process.env.OPENAI_API_KEY,
-          gemini: !!process.env.GOOGLE_API_KEY,
-        },
-      });
+      return res.status(200).json({ warmed: true, timestamp: Date.now() });
     }
     // 2026-05-27 — Fix EO Phase 2: ball-position detection. Client
     // sends a single address frame (`frames[0]`) + `mode: 'detect_ball'`.
