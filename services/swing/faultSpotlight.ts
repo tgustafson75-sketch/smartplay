@@ -222,20 +222,35 @@ export function issueJumpSec(faultMomentSec: number | null, askedSec?: number | 
   return typeof askedSec === 'number' && Number.isFinite(askedSec) ? askedSec : null;
 }
 
-type FaultRead = { primary_fault?: string | null; detected_issue?: string | null; issue_id?: string | null; severity?: string | null } | null | undefined;
+type FaultRead = { primary_fault?: string | null; detected_issue?: string | null; issue_id?: string | null; severity?: string | null; detected_in_shots?: readonly string[] | null } | null | undefined;
+type ShotOnScreen = { id: string; practice?: { reason: string; restoredByUser?: boolean } | null } | null | undefined;
 /**
  * The fault painted and timed on the swing ON SCREEN (library swing screen). Every swing — the first too —
  * uses its own per-swing read when it has one (audit R7: swing 1 showed the session headline, which can be
  * another swing's, so its own stored fault frame was discarded and SmartMotion named a different fault for
  * the same swing). The headline stands in only for a legacy first swing with no per-swing read.
  */
-export function swingFaultOnScreen(idx: number, sessionHeadline: FaultRead, shotRead: FaultRead): { faultId: string | null; severe: boolean } {
+export function swingFaultOnScreen(idx: number, sessionHeadline: FaultRead, shotRead: FaultRead, shot?: ShotOnScreen): { faultId: string | null; severe: boolean } {
   if (shotRead) {
     const own = shotRead.primary_fault ?? (shotRead.detected_issue && shotRead.detected_issue !== 'none' ? shotRead.detected_issue : null);
     return { faultId: own ?? null, severe: shotRead.severity === 'significant' };
   }
-  if (idx === 0) return { faultId: sessionHeadline?.primary_fault ?? sessionHeadline?.issue_id ?? null, severe: sessionHeadline?.severity === 'significant' };
+  if (headlineStandsIn(idx, sessionHeadline, shot)) return { faultId: sessionHeadline?.primary_fault ?? sessionHeadline?.issue_id ?? null, severe: sessionHeadline?.severity === 'significant' };
   return { faultId: null, severe: false };
+}
+
+/**
+ * 2026-10-27 (seam review of SB3a/b/d) — may the session headline stand in for swing 1's own read? Only for a
+ * legacy swing 1: not a demoted practice swing (SB3b skips its read, so it has none — the headline is the
+ * COUNTED swings'), and not when the headline names other swings only (SB3a clears every per-swing read at a
+ * Re-analyze, so a swing 1 whose new read failed has none either). An empty / missing detected_in_shots is
+ * unknown (an older build's headline): it still stands in.
+ */
+function headlineStandsIn(idx: number, headline: FaultRead, shot: ShotOnScreen): boolean {
+  if (idx !== 0 || !headline) return false;
+  if (shot?.practice && shot.practice.restoredByUser !== true) return false;
+  const named = headline.detected_in_shots;
+  return !shot || !Array.isArray(named) || named.length === 0 || named.includes(shot.id);
 }
 
 /**
@@ -297,8 +312,9 @@ export function swingBodyFaultRead(
   idx: number,
   sessionHeadline: FaultRead,
   shotRead: FaultRead,
+  shot?: ShotOnScreen,
 ): { primary_fault: string | null; detected_issue: string } | null {
   if (shotRead) return { primary_fault: shotRead.primary_fault ?? null, detected_issue: shotRead.detected_issue ?? 'none' };
-  if (idx === 0 && sessionHeadline) return { primary_fault: sessionHeadline.primary_fault ?? null, detected_issue: sessionHeadline.issue_id ?? 'none' };
+  if (sessionHeadline && headlineStandsIn(idx, sessionHeadline, shot)) return { primary_fault: sessionHeadline.primary_fault ?? null, detected_issue: sessionHeadline.issue_id ?? 'none' };
   return null;
 }

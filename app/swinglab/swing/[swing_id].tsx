@@ -782,7 +782,9 @@ export default function SwingDetail() {
   // 2026-10-27 (audit R7) — swing 1 too uses its OWN read when it has one (faultSpotlight.swingFaultOnScreen):
   // the session headline can be another swing's, which threw swing 1's own fault frame away and named a
   // different fault than SmartMotion's review of the same swing. The headline stands in for a legacy swing 1.
-  const onScreenFault = swingFaultOnScreen(selectedShotIdx, session?.primary_issue, shot?.perShotAnalysis);
+  // The swing actually shown (shownShotIdx: a re-split can leave fewer swings than the selection), and the shot
+  // itself: a practice swing 1, or one whose re-read failed, never wears the counted swings' headline.
+  const onScreenFault = swingFaultOnScreen(shownShotIdx, session?.primary_issue, shot?.perShotAnalysis, shot);
   const displayFault = onScreenFault.faultId;
   const displayFaultSevere = onScreenFault.severe;
   const overlayFaultJoints = faultJointsFor(displayFault);
@@ -3632,7 +3634,7 @@ export default function SwingDetail() {
                 const psa = shot?.perShotAnalysis;
                 // 2026-10-27 — the session headline only for a legacy swing 1 (faultSpotlight.swingBodyFaultRead, the
                 // rule of swingFaultOnScreen / audit R7): it stood in for EVERY swing, tinting swing 3's tiles.
-                const bodyAnalysis = swingBodyFaultRead(shownShotIdx, session.primary_issue, psa) as unknown as SwingAnalysis | null;
+                const bodyAnalysis = swingBodyFaultRead(shownShotIdx, session.primary_issue, psa, shot) as unknown as SwingAnalysis | null;
                 const items: BodyItem[] = activeBiomech
                   ? deriveBodyItems(bodyAnalysis, activeBiomech)
                   : ((shotMap?.bodyItems as BodyItem[] | undefined) ?? []);

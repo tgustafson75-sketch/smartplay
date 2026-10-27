@@ -1976,13 +1976,15 @@ export default function SmartMotion() {
    * is known (the club) when the set is saved or the player leaves. services/practice/smartMotionPracticeCredit.
    */
   const stampedSwingsRef = useRef<Set<string>>(new Set());
+  /** The session whose run's READ has settled (the practice classifier has run): the review stamp waits for it. */
+  const [readSettledSid, setReadSettledSid] = useState<string | null>(null);
   // True when the saved session is a set recorded HERE (not a clip opened for review): only those are credited on leave.
   const sessionFromCaptureRef = useRef(false);
   // 2026-06-30 (audit M4) — also COLLECT each per-swing sample for this Smart Motion open,
   // so the session-less save path (plain SmartMotion + drills → recordCompletedSession) can
   // stamp them and the practice-detail screen shows real striation + tempo, not just a count.
   const practiceSwingSamplesRef = useRef<Parameters<typeof recordPracticeSwingIfActive>[0][]>([]);
-  const stampPracticeSwings = useCallback((only?: number, measuredSample?: Parameters<typeof recordPracticeSwingIfActive>[0] | null) => {
+  const stampPracticeSwings = useCallback((only?: number, measuredSample?: Parameters<typeof recordPracticeSwingIfActive>[0] | null, readSettled?: boolean) => {
     const sid = ingestedSessionIdRef.current;
     if (!sid) return 0;
     const shots = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.shots ?? [];
@@ -1994,6 +1996,7 @@ export default function SmartMotion() {
       club: clubRef.current ?? null,
       only,
       measured: only != null && measuredSample ? { index: only, sample: measuredSample } : null,
+      readSettled,
     });
     for (const o of out) {
       stampedSwingsRef.current.add(o.key);
@@ -2015,7 +2018,7 @@ export default function SmartMotion() {
       tempoRatio: tempo?.ratio ?? null,
       divergenceDeg: signedDiv,
     };
-    if (stampPracticeSwings(0, sample) === 0) return;
+    if (stampPracticeSwings(0, sample, readSettledSid === sessionId) === 0) return;
     // 2026-07-07 (Tim — "tie the tracing into the caddie brain") — the same measured
     // signals also feed the CNS rolling tendencies, so the brain can cite YOUR real
     // tempo average / start-line % / contact pattern (was: computed but never learned).
@@ -2030,7 +2033,7 @@ export default function SmartMotion() {
         nowMs: Date.now(),
       });
     } catch { /* non-fatal — learning is additive */ }
-  }, [phase, clipUri, sessionId, selectedSwing, analysis, smartTrace, ballTrace, club, tempo, stampPracticeSwings]);
+  }, [phase, clipUri, sessionId, selectedSwing, analysis, smartTrace, ballTrace, club, tempo, stampPracticeSwings, readSettledSid]);
 
   // Camera strike-verification — did the ball actually leave its spot at
   // impact? Honest false-positive guard (TV/clap can't move YOUR ball) +
@@ -2548,6 +2551,7 @@ export default function SmartMotion() {
       // acoustic ball speed BEFORE calling this). reset()/startRecording clear them.
       analysisCacheRef.current = {};
       sessionRunRef.current += 1; // drop any prior session's in-flight results
+      setReadSettledSid(null);    // this run's read has not settled yet (the review stamp waits for it)
       for (const ws of Object.values(shotReadWaitersRef.current)) ws.forEach((w) => w(null));
       shotReadWaitersRef.current = {};
       locateDegradedByShotRef.current = {};
@@ -2713,6 +2717,7 @@ export default function SmartMotion() {
         }
       }).finally(() => {
         if (sessionRunRef.current !== myRun) return;
+        setReadSettledSid(sid);   // the classifier has run: the review may credit the swing on screen
         const left = shotReadWaitersRef.current;
         shotReadWaitersRef.current = {};
         Object.entries(left).forEach(([i, ws]) => ws.forEach((w) => w(analysisCacheRef.current[Number(i)] ?? null)));

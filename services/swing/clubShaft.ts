@@ -36,7 +36,8 @@ function bracket(P: readonly { t: number }[], t: number, maxGapMs: number): numb
 
 /**
  * @param head  the cleaned clubhead arc (the same points the trace is drawn through), frame pixels, ms.
- * @param grips the measured grips, frame pixels, ms — only the points that carry one.
+ * @param grips the measured grips, frame pixels, ms — only the points that carry one. A grip whose head is not
+ *              in `head` (rejected as a spike) is not used.
  */
 export function clubShaftAt(
   head: readonly ArcPoint[], grips: readonly GripSample[], tMs: number, maxGapMs = MAX_ARC_GAP_MS,
@@ -49,9 +50,14 @@ export function clubShaftAt(
   const h = catmullRomPoint(head[i - 1] ?? a, a, b, head[i + 2] ?? b, s);
   if (!Number.isFinite(h.x) || !Number.isFinite(h.y)) return null;
   let grip: ClubShaft['grip'] = null;
-  const j = bracket(grips, tMs, maxGapMs);
+  // 2026-10-27 (seam review) — a grip counts only where its HEAD was kept: `head` is the cleaned arc (a spike —
+  // the leg or a shadow taken for the head — is dropped there), and the grip measured from a bogus head is bogus
+  // too. Interpolating against it swung the shaft off the hands while the head was bridged across the hole.
+  const kept = new Set(head.map((p) => p.t));
+  const G = grips.filter((g) => kept.has(g.t));
+  const j = bracket(G, tMs, maxGapMs);
   if (j >= 0) {
-    const g0 = grips[j], g1 = grips[j + 1];
+    const g0 = G[j], g1 = G[j + 1];
     const u = g1.t > g0.t ? (tMs - g0.t) / (g1.t - g0.t) : 0;
     const g = { x: g0.x + (g1.x - g0.x) * u, y: g0.y + (g1.y - g0.y) * u };
     if (Number.isFinite(g.x) && Number.isFinite(g.y)) grip = g;

@@ -30,9 +30,17 @@ export interface StampInput {
   only?: number;
   /** What was measured on the swing on screen. */
   measured?: { index: number; sample: RangeSwingSample } | null;
+  /**
+   * 2026-10-27 (seam review of SB3b × SB3e) — false while the set's READ is still running. The review shows
+   * swing 1 as soon as ITS read lands, but the practice classifier runs only after every swing is read, so a
+   * swing-1 stamp then was credited before the read could demote it. The swing on screen waits for the read to
+   * settle (offline it settles at once, failed — still stamped). Absent = settled.
+   */
+  readSettled?: boolean;
 }
 
 export function samplesToStamp(input: StampInput): { key: string; index: number; sample: RangeSwingSample }[] {
+  if (input.only != null && input.readSettled === false) return [];
   const n = Math.max(1, input.swingCount, input.shots.length);
   const indexes = input.only != null ? [input.only] : Array.from({ length: n }, (_, i) => i);
   const out: { key: string; index: number; sample: RangeSwingSample }[] = [];
