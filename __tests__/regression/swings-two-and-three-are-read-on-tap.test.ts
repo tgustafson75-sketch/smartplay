@@ -186,7 +186,8 @@ describe('both review screens ask for the swing on screen', () => {
     expect(src).toMatch(/deriveVerdict\(analysis, phase === 'analyzing' \|\| \(phase === 'review' && !analysis && selectedBodyReadPending\)/);
   });
   it('the library asks for any swing past the first that the player selects', () => {
-    expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/if \(!\(selectedShotIdx > 0 \|\| showSkeleton \|\| traceAsked\)\) return;[\s\S]{0,400}return requestShotDetail\(swing_id, selShot\.id/);
+    // 2026-10-27 — the gate is faultSpotlight.shotDetailRequestFor (idx > 0 asks; behaviour in the-issue-chip-shows-the-issue).
+    expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/const ask = shotDetailRequestFor\(\{ idx: selectedShotIdx,[\s\S]{0,300}if \(!ask\) return;[\s\S]{0,200}requestShotDetail\(swing_id, id, \{/);
   });
 });
 

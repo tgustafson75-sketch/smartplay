@@ -67,7 +67,8 @@ describe('one swing, one headline, one club arc', () => {
 
   it('the detail screen asks the run, keyed on the shot — play/pause restarts nothing', () => {
     // 2026-10-10 — the arc level is the silent tracker pass unless the player turned the trace on.
-    const at = detail.indexOf("return requestShotDetail(swing_id, selShot.id, { arc: traceAsked ? true : 'tracker' });");
+    // 2026-10-27 — the ask (and its arc level) is faultSpotlight.shotDetailRequestFor.
+    const at = detail.indexOf('const off = requestShotDetail(swing_id, id, {');
     expect(at).toBeGreaterThan(-1);
     const open = detail.indexOf('}, [', at);
     const deps = detail.slice(open, detail.indexOf(']);\n', open));

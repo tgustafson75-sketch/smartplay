@@ -2614,7 +2614,10 @@
       "highlight_issue": "Highlight",
       "jump_to_issue": "Issue",
       "continue_play": "Continue",
-      "paused_on_issue": "Paused on the issue"
+      "paused_on_issue": "Paused on the issue",
+      "reading_body": "Reading your body position…",
+      "no_body_read": "No body read for this swing — Re-analyze to see where",
+      "reanalyze_to_see": "Re-analyze"
     },
     "accessibility_label": {
       "export_swing_report_pdf": "Export swing report PDF",

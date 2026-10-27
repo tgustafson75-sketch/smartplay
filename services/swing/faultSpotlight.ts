@@ -159,9 +159,8 @@ export function faultPauseTick(t: {
  * nothing but playing cleared it.
  *   atIssue  the replay stopped there, or the player jumped there — shown whether or not the review
  *            pauses (a player who switched the pause off and jumps to the fault still sees what is wrong);
- *   paused   merely paused on the fault frame — shown only while this review pauses on the fault, so
- *            turning the Issue chip OFF while stopped there takes the ring and card away (2026-10-16
- *            re-review: they used to stay until the player pressed play).
+ *   paused   merely paused on the fault frame — shown only while this review pauses on the fault (the
+ *            "Pause on issue" toggle; until 10-27 the Issue chip).
  */
 export function heldOnFault(h: { faultSec: number | null; posSec: number; paused: boolean; atIssue: boolean; pausing: boolean }): boolean {
   if (h.faultSec == null) return false;
@@ -169,13 +168,74 @@ export function heldOnFault(h: { faultSec: number | null; posSec: number; paused
 }
 
 /**
- * The Issue chip turns THIS review's fault pause on and off (Tim, 10-16: "you can't turn it off, so
- * every time you continue the swing it always stops again at the fault"). On → off: no more stops in
- * this review. Off → on: stops again, and the player is shown the fault now. The persisted setting
- * ("Pause on issue") stays the default for the next swing opened — the chip never writes it.
+ * 2026-10-27 (Tim: "Tapping Issue did not highlight the area") — THE ISSUE CHIP SHOWS THE ISSUE, every tap.
+ * It was a toggle for "stop on the fault this review" (10-16), and it starts ON: the first tap turned the
+ * review OFF (the chip struck through) and never jumped or highlighted — only a second tap did. Stopping on
+ * the fault during playback is the "Pause on issue" toggle's; the chip leaves the review's pause as it is.
  */
 export function issueChipPress(enabled: boolean): { enabled: boolean; jumpToFault: boolean } {
-  return enabled ? { enabled: false, jumpToFault: false } : { enabled: true, jumpToFault: true };
+  return { enabled, jumpToFault: true };
+}
+
+/** Why the screen is held on the fault: the replay stopped there, or the player asked to see it. */
+export type IssueHold = 'stop' | 'jump' | null;
+
+/**
+ * Whether the ring shows. Only held on the fault, and only over a real body read with the fault's joints
+ * (a ring on a guessed spot is worse than none). The saved Highlight setting governs the PASSIVE stop (the
+ * replay pausing there by itself); a player who asked to see the issue (Issue chip, Fault-moment pill)
+ * always gets the ring — a setting turned off weeks ago must not answer that tap with nothing.
+ */
+export function spotlightShows(s: { held: boolean; hold: IssueHold; highlight: boolean; hasPose: boolean; faultJoints: number }): boolean {
+  return s.held && s.hasPose && s.faultJoints > 0 && (s.hold === 'jump' || s.highlight);
+}
+
+/**
+ * What the library swing screen asks THE shot run for (orchestrator/shotDetail.requestShotDetail), or null
+ * for nothing. Only on the player's ask (the library is manual, Tim 06-15): a swing other than the first,
+ * Body / Swing Trace on — or the player asking to see the issue, since the ring is drawn from the body read
+ * and swing 1's was otherwise never asked for. An Issue ask wants the body read only: no arc, free or paid.
+ */
+export function shotDetailRequestFor(w: { idx: number; showSkeleton: boolean; traceAsked: boolean; issueAsked: boolean }): { arc?: boolean | 'tracker' } | null {
+  if (w.traceAsked) return { arc: true };
+  if (w.idx > 0 || w.showSkeleton) return { arc: 'tracker' };
+  return w.issueAsked ? {} : null;
+}
+
+/**
+ * The line a screen shows when the player wants the body (to ring the issue, or the skeleton) and there is
+ * none: the read is on the way, or it came back with nothing (the clip is gone, or no body was found) and
+ * the honest next step is Re-analyze. Never silence.
+ */
+export function bodyReadNote(n: { wanted: boolean; hasPose: boolean; pending: boolean }): 'reading' | 'no_read' | null {
+  if (!n.wanted || n.hasPose) return null;
+  return n.pending ? 'reading' : 'no_read';
+}
+
+/**
+ * The second a jump holds as the fault: the computed moment, else (the Fault-moment pill on a swing with no
+ * moment — no anchors yet, or the stored frame belongs to another fault) the time the player tapped. A bare
+ * seek there held nothing: no ring, no caption.
+ */
+export function issueJumpSec(faultMomentSec: number | null, askedSec?: number | null): number | null {
+  if (faultMomentSec != null) return faultMomentSec;
+  return typeof askedSec === 'number' && Number.isFinite(askedSec) ? askedSec : null;
+}
+
+type FaultRead = { primary_fault?: string | null; detected_issue?: string | null; issue_id?: string | null; severity?: string | null } | null | undefined;
+/**
+ * The fault painted and timed on the swing ON SCREEN (library swing screen). Every swing — the first too —
+ * uses its own per-swing read when it has one (audit R7: swing 1 showed the session headline, which can be
+ * another swing's, so its own stored fault frame was discarded and SmartMotion named a different fault for
+ * the same swing). The headline stands in only for a legacy first swing with no per-swing read.
+ */
+export function swingFaultOnScreen(idx: number, sessionHeadline: FaultRead, shotRead: FaultRead): { faultId: string | null; severe: boolean } {
+  if (shotRead) {
+    const own = shotRead.primary_fault ?? (shotRead.detected_issue && shotRead.detected_issue !== 'none' ? shotRead.detected_issue : null);
+    return { faultId: own ?? null, severe: shotRead.severity === 'significant' };
+  }
+  if (idx === 0) return { faultId: sessionHeadline?.primary_fault ?? sessionHeadline?.issue_id ?? null, severe: sessionHeadline?.severity === 'significant' };
+  return { faultId: null, severe: false };
 }
 
 /**

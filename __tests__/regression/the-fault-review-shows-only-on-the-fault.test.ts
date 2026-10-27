@@ -10,6 +10,11 @@
  *
  * One rule for both review screens now lives in services/swing/faultSpotlight (faultPauseTick,
  * heldOnFault, issueChipPress); the library screen and SmartMotion's review both call it.
+ *
+ * 2026-10-27 (Tim: "Tapping Issue did not highlight the area") — the Issue chip is no longer the pause's
+ * on/off: as a toggle that starts ON, its first tap turned the review off and showed nothing. The chip now
+ * always jumps, holds and rings (the-issue-chip-shows-the-issue); turning the stop off is the "Pause on
+ * issue" toggle's. The checks below that pinned the chip as the toggle are inverted, saying so.
  */
 import fs from 'fs';
 import path from 'path';
@@ -36,16 +41,19 @@ describe('the ring and the card show only on the fault', () => {
   it('pause off: a manual jump to the fault (atIssue) shows it', () => {
     expect(heldOnFault({ faultSec: F, posSec: F, paused: true, atIssue: true, pausing: false })).toBe(true);
   });
-  // 2026-10-16 (re-review) — but turning the chip OFF while stopped there takes them away at once (the
-  // chip clears atIssue; merely paused there no longer shows them without the pause on).
-  it('stopped on the fault, chip turned off: the ring and card go', () => {
+  // 2026-10-16 (re-review) — merely paused on the fault frame shows nothing once the pause is off (the
+  // "Pause on issue" toggle since 10-27; it was the chip).
+  it('paused on the fault frame, pause off, not held there: the ring and card go', () => {
     expect(heldOnFault({ faultSec: F, posSec: F, paused: true, atIssue: false, pausing: false })).toBe(false);
   });
 });
 
-describe('the Issue chip turns the fault review on and off', () => {
-  it('on → off: no jump', () => expect(issueChipPress(true)).toEqual({ enabled: false, jumpToFault: false }));
-  it('off → on: and show the fault now', () => expect(issueChipPress(false)).toEqual({ enabled: true, jumpToFault: true }));
+describe('the fault stop turns on and off — the Issue chip always shows the fault', () => {
+  // INVERTED 2026-10-27: 'on → off: no jump' was the defect (Tim's first tap turned the review off).
+  it('the chip jumps whether the review pauses or not, and leaves the pause as it is', () => {
+    expect(issueChipPress(true)).toEqual({ enabled: true, jumpToFault: true });
+    expect(issueChipPress(false)).toEqual({ enabled: false, jumpToFault: true });
+  });
 
   /** Play a pass from the window start through the end, 100ms ticks; return the stops. */
   const playPass = (state: { latched: boolean; last: number }, enabled: boolean, from = 4.3, to = 7.5) => {
@@ -81,7 +89,7 @@ describe('the Issue chip turns the fault review on and off', () => {
  * tap switched the founder's default review (stop on the fault) off for every future swing on both
  * screens. The chip now flips a per-review pause seeded from the setting on every swing opened.
  */
-describe('the Issue chip changes THIS review, never the saved default', () => {
+describe('the Issue chip never changes the pause — this review\'s or the saved default', () => {
   const root = path.join(__dirname, '..', '..');
   const lib = fs.readFileSync(path.join(root, 'app/swinglab/swing/[swing_id].tsx'), 'utf8');
   const sm = fs.readFileSync(path.join(root, 'app/swinglab/smartmotion.tsx'), 'utf8');
@@ -90,10 +98,12 @@ describe('the Issue chip changes THIS review, never the saved default', () => {
     ['library', lib, 'const onIssueChip', /const reviewShotKey = `\$\{swing_id\}:\$\{shot\?\.id \?\? ''\}`;\s*useEffect\(\(\) => \{ setReviewPause\(pauseOnIssue\); \}, \[pauseOnIssue, reviewShotKey\]\);/],
     ['SmartMotion', sm, 'const onReviewIssueChip', /const reviewShotKey = `\$\{cageSession\?\.id \?\? ''\}:\$\{cageSession\?\.shots\[selectedSwing\]\?\.id \?\? selectedSwing\}`;\s*useEffect\(\(\) => \{ setReviewPause\(pauseOnIssue\); \}, \[pauseOnIssue, reviewShotKey\]\);/],
   ] as const) {
-    it(`${label}: the chip flips the review's pause, not the setting`, () => {
-      const h = handler(src, name);
-      expect(h).toMatch(/issueChipPress\(reviewPause\)/);
-      expect(h).toMatch(/setReviewPause\(next\.enabled\)/);
+    // INVERTED 2026-10-27: the chip used to flip the review's pause (setReviewPause(next.enabled)).
+    it(`${label}: the chip jumps to the fault and touches neither pause`, () => {
+      const h = handler(src, name).split('\n  };')[0].split('\n  }, [')[0];
+      expect(h).toMatch(/issueChipPress\(reviewPause\)\.jumpToFault/);
+      expect(h).toMatch(/jumpTo(Review)?Issue\(\)/);
+      expect(h).not.toMatch(/setReviewPause/);
       expect(h).not.toMatch(/setPauseOnIssue/);
     });
     it(`${label}: every swing opens with the saved default, and the stop reads the review's pause`, () => {
@@ -107,10 +117,13 @@ describe('both review screens use the one rule', () => {
   const root = path.join(__dirname, '..', '..');
   const lib = fs.readFileSync(path.join(root, 'app/swinglab/swing/[swing_id].tsx'), 'utf8');
   const sm = fs.readFileSync(path.join(root, 'app/swinglab/smartmotion.tsx'), 'utf8');
-  it('the library: held-on-fault gate, Issue chip as the toggle', () => {
-    expect(lib).toMatch(/const onIssueFrame = heldOnFault\(\{ faultSec: faultMoment\?\.sec \?\? null, posSec: position, paused: !isPlaying, atIssue, pausing: reviewPause \}\);/);
+  it('the library: held-on-fault gate, the Issue chip', () => {
+    // 2026-10-27 — faultSec is the moment, else the Fault-moment pill's time held as the fault (issueJumpSec).
+    expect(lib).toMatch(/const faultSec = faultMoment\?\.sec \?\? askedFaultSec;/);
+    expect(lib).toMatch(/const onIssueFrame = heldOnFault\(\{ faultSec, posSec: position, paused: !isPlaying, atIssue, pausing: reviewPause \}\);/);
     expect(lib).toMatch(/onPress=\{onIssueChip\}/);
-    expect(lib).not.toMatch(/onPress=\{jumpToIssue\}/);
+    expect(lib).not.toMatch(/onPress=\{jumpToIssue\}/);   // (the press event would arrive as the pill's seconds)
+    expect(lib).not.toMatch(/!reviewPause && \{ textDecorationLine: 'line-through' \}/);   // the chip is not struck through
     expect(lib).toMatch(/faultPauseTick\(\{/);
     // the sticky gate is gone
     expect(lib).not.toMatch(/\(atIssue \|\| \(!isPlaying && Math\.abs\(position - faultMoment\.sec\) < 0\.08\)\)/);
@@ -120,6 +133,7 @@ describe('both review screens use the one rule', () => {
     expect(sm).toMatch(/atIssue: reviewAtIssue, pausing: reviewPause,/);
     expect(sm).toMatch(/onPress=\{onReviewIssueChip\}/);
     expect(sm).not.toMatch(/onPress=\{\(\) => void jumpToReviewIssue\(\)\}/);
+    expect(sm).not.toMatch(/!reviewPause && \{ textDecorationLine: 'line-through' \}/);
     expect(sm).toMatch(/faultPauseTick\(\{/);
     expect(sm).not.toMatch(/reviewAtIssue \|\| \(videoPaused && Math\.abs/);
   });

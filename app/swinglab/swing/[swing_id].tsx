@@ -38,7 +38,7 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { requestShotDetail, shotImpactHeard, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { requestShotDetail, shotImpactHeard, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
 // 2026-09-20 — this screen HAS pose frames (activeBiomech.frames) and was still asking the model
 // to find a ~6px clubhead in a full downscaled frame. See services/swing/bodyBounds.
 import { readClubPath } from '../../../services/swing/clubPathRead';
@@ -67,7 +67,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
-import { calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress } from '../../../services/swing/faultSpotlight';
+import { bodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, issueJumpSec, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, type IssueHold } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { drawableClubArc, overlayLayers, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
@@ -532,11 +532,31 @@ export default function SwingDetail() {
   useEffect(() => { setReviewPause(pauseOnIssue); }, [pauseOnIssue, reviewShotKey]);
   const pauseOnIssueRef = useRef(reviewPause);
   pauseOnIssueRef.current = reviewPause;
+  const highlightIssueRef = useRef(highlightIssue);
+  highlightIssueRef.current = highlightIssue;
   const issuePausedRef = useRef(false);
   const lastRawPosRef = useRef(-1);
   /** While our OWN seek back to the fault lands, its position report must not clear the latch. */
   const selfSeekUntilRef = useRef(0);
-  const [atIssue, setAtIssue] = useState(false);
+  /**
+   * Held on the fault, and why: 'stop' = the replay stopped there, 'jump' = the player asked to see it (the
+   * Issue chip, the Fault-moment pill). A jump rings the fault whatever the saved Highlight setting
+   * (faultSpotlight.spotlightShows). The ref lets the fault-moment effect re-jump when the moment moves.
+   */
+  const [issueHold, setIssueHoldState] = useState<IssueHold>(null);
+  const issueHoldRef = useRef<IssueHold>(null);
+  const setIssueHold = useCallback((h: IssueHold) => { issueHoldRef.current = h; setIssueHoldState(h); }, []);
+  const atIssue = issueHold !== null;
+  /**
+   * 2026-10-27 (Tim: "Tapping Issue did not highlight the area") — the player asked to see this swing's
+   * issue (or the replay stopped there with Highlight on): the ring needs the body read, so it is asked for
+   * (faultSpotlight.shotDetailRequestFor). Per swing on screen.
+   */
+  const [issueAsked, setIssueAsked] = useState(false);
+  /** The second a Fault-moment pill held as the fault when no moment could be computed (issueJumpSec). */
+  const [askedFaultSec, setAskedFaultSec] = useState<number | null>(null);
+  /** The shot whose body read this screen asked for and has not settled (the 'Reading…' line). */
+  const [bodyReadPendingShot, setBodyReadPendingShot] = useState<string | null>(null);
   // 2026-08-08 (Tim — "if it tries to do too much — mechanics, shot trace AND playback together — it
   // crashes. Addressed 50 times"). ROOT: with the overlay ON, position emits at 25×/s and EACH setPosition
   // re-renders the whole heavy screen + the SVG skeleton/trace; a render that can't finish inside the tick
@@ -740,12 +760,12 @@ export default function SwingDetail() {
   // always the session/primary swing. Painting swing-1's fault on swing-3's body is a visible lie. Shot
   // 0 uses the session headline; a non-primary swing uses ITS OWN per-shot read (perShotAnalysis, which
   // is conservative — 'none' → no heat, honest). No per-shot read yet → no heat rather than a wrong one.
-  const displayFault = selectedShotIdx === 0
-    ? (session?.primary_issue?.primary_fault ?? session?.primary_issue?.issue_id)
-    : (shot?.perShotAnalysis?.primary_fault ?? (shot?.perShotAnalysis?.detected_issue && shot.perShotAnalysis.detected_issue !== 'none' ? shot.perShotAnalysis.detected_issue : null));
-  const displayFaultSevere = selectedShotIdx === 0
-    ? session?.primary_issue?.severity === 'significant'
-    : shot?.perShotAnalysis?.severity === 'significant';
+  // 2026-10-27 (audit R7) — swing 1 too uses its OWN read when it has one (faultSpotlight.swingFaultOnScreen):
+  // the session headline can be another swing's, which threw swing 1's own fault frame away and named a
+  // different fault than SmartMotion's review of the same swing. The headline stands in for a legacy swing 1.
+  const onScreenFault = swingFaultOnScreen(selectedShotIdx, session?.primary_issue, shot?.perShotAnalysis);
+  const displayFault = onScreenFault.faultId;
+  const displayFaultSevere = onScreenFault.severe;
   const overlayFaultJoints = faultJointsFor(displayFault);
   const overlayFaultSevere = displayFaultSevere;
   const { capture: captureOverlayStill, element: overlayStillCaptureEl } = useSwingStillCapture({
@@ -879,13 +899,21 @@ export default function SwingDetail() {
     if (!selShot?.clipUri) return;
     // The trace is only ever on because the player turned it on, so it is his request (it may pay for the
     // arc); opening a settled swing with everything off still does no analysis work.
-    const traceAsked = showTrace;
-    if (!(selectedShotIdx > 0 || showSkeleton || traceAsked)) return;
     // 2026-10-10 — the arc for a swing the player pages to comes from the SILENT pass (the free on-device
     // tracker); only the Swing Trace toggle, turned on by the player, may ask the paid vision model.
-    return requestShotDetail(swing_id, selShot.id, { arc: traceAsked ? true : 'tracker' });
+    // 2026-10-27 — asking to see the issue asks for the body read (the ring is drawn from it). An old swing
+    // whose stored empty read predates today's body read (analysisVersion) is read again by the run.
+    const ask = shotDetailRequestFor({ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked });
+    if (!ask) return;
+    const id = selShot.id;
+    setBodyReadPendingShot(id);
+    const off = requestShotDetail(swing_id, id, {
+      ...ask,
+      onSettled: () => setBodyReadPendingShot((cur) => (cur === id ? null : cur)),
+    });
+    return () => { off(); setBodyReadPendingShot((cur) => (cur === id ? null : cur)); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the shot's identity, not every store write to the session
-  }, [swing_id, selectedShotIdx, session?.shots[selectedShotIdx]?.id, session?.shots[selectedShotIdx]?.clipUri, showSkeleton, showTrace]);
+  }, [swing_id, selectedShotIdx, session?.shots[selectedShotIdx]?.id, session?.shots[selectedShotIdx]?.clipUri, showSkeleton, showTrace, issueAsked]);
 
   // 2026-06-13 — Prewarm the TTS function WHILE the analysis is still running, so
   // the "Okay, I watched it…" read fires hot instead of paying cold-start on top
@@ -1085,7 +1113,9 @@ export default function SwingDetail() {
           playbackEmitRef.current.pos = f;
           playbackEmitRef.current.lastPosAt = Date.now();
           setPosition(f);
-          setAtIssue(true);
+          issueHoldRef.current = 'stop'; setIssueHoldState('stop');   // (stable setters: this callback is created once)
+          // Stopped there with Highlight on: the ring is wanted, so the body read is too.
+          if (highlightIssueRef.current) setIssueAsked(true);
         }
       }
       lastRawPosRef.current = posSec;
@@ -1222,38 +1252,59 @@ export default function SwingDetail() {
       windowEndSec: winEndSec,
     });
   }, [shot?.detected_issue_timestamps_sec, shot?.perShotAnalysis, displayFault, motionAnchors, winStartSec, winEndSec]);
-  useEffect(() => {
-    faultSecRef.current = faultMoment?.sec ?? null;
-    issuePausedRef.current = false;
-    setAtIssue(false);
-  }, [faultMoment?.sec, shot?.id]);
-  useEffect(() => { if (isPlaying) setAtIssue(false); }, [isPlaying]);
-  const issueCaption = useMemo(() => (faultMoment && displayFault ? faultCaption(displayFault) : null), [faultMoment, displayFault]);
-  /** Seek to the fault and hold it, exactly as if the replay had stopped there. */
-  const jumpToIssue = useCallback(() => {
-    const f = faultSecRef.current;
+  /** Seek to the fault and hold it, exactly as if the replay had stopped there — the player asked to see it.
+   *  `askedSec` is the Fault-moment pill's time, held as the fault when no moment is computed (issueJumpSec). */
+  const jumpToIssue = useCallback((askedSec?: number) => {
+    const f = issueJumpSec(faultSecRef.current, askedSec);
     if (f == null) return;
+    if (faultSecRef.current == null) { faultSecRef.current = f; setAskedFaultSec(f); }
+    setIssueAsked(true);
     issuePausedRef.current = true;
     selfSeekUntilRef.current = Date.now() + 800;
-    setAtIssue(true);
+    setIssueHold('jump');
     playbackEmitRef.current.pos = f;
     playbackEmitRef.current.lastPosAt = Date.now();
     setPosition(f);
     void scrubTo(f);
-  }, []);
+  }, [setIssueHold]);
+  // A new swing on screen is a new review: nothing asked, nothing held.
+  useEffect(() => {
+    issueHoldRef.current = null;
+    setIssueHoldState(null);
+    setIssueAsked(false);
+    setAskedFaultSec(null);
+  }, [swing_id, shot?.id]);
+  useEffect(() => {
+    faultSecRef.current = faultMoment?.sec ?? null;
+    issuePausedRef.current = false;
+    setAskedFaultSec(null);
+    // The moment moved under a player who asked to see it (the body read he asked for landed and gave the
+    // anchors): hold the new one, ring and all, instead of dropping what he asked for.
+    if (faultMoment && issueHoldRef.current === 'jump') { jumpToIssue(); return; }
+    setIssueHold(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the moment, not the callbacks
+  }, [faultMoment?.sec, shot?.id]);
+  useEffect(() => { if (isPlaying) setIssueHold(null); }, [isPlaying, setIssueHold]);
+  const faultSec = faultMoment?.sec ?? askedFaultSec;
+  const issueCaption = useMemo(() => (faultSec != null && displayFault ? faultCaption(displayFault) : null), [faultSec, displayFault]);
   // Held on the fault: stopped there by the replay, or paused within a frame or two of it — and only
   // there (2026-10-16: scrubbing to Address / Top / Finish no longer carries the ring and card along),
   // whether or not this review pauses there (a manual jump shows it too). One rule with SmartMotion:
   // faultSpotlight.heldOnFault.
-  const onIssueFrame = heldOnFault({ faultSec: faultMoment?.sec ?? null, posSec: position, paused: !isPlaying, atIssue, pausing: reviewPause });
-  /** The Issue chip turns the fault review on and off (faultSpotlight.issueChipPress). */
+  const onIssueFrame = heldOnFault({ faultSec, posSec: position, paused: !isPlaying, atIssue, pausing: reviewPause });
+  /** The Issue chip shows the issue: jump, hold, ring (faultSpotlight.issueChipPress). The pause is the toggle's. */
   const onIssueChip = useCallback(() => {
-    const next = issueChipPress(reviewPause);
-    setReviewPause(next.enabled);
-    if (!next.enabled) { issuePausedRef.current = false; setAtIssue(false); }
-    if (next.jumpToFault) jumpToIssue();
+    if (issueChipPress(reviewPause).jumpToFault) jumpToIssue();
   }, [reviewPause, jumpToIssue]);
-  const spotlightOn = onIssueFrame && highlightIssue && hasPose && overlayFaultJoints.length > 0;
+  const spotlightOn = spotlightShows({ held: onIssueFrame, hold: issueHold, highlight: highlightIssue, hasPose, faultJoints: overlayFaultJoints.length });
+  /** Asked to see the issue (or the body) with no body read: say so (faultSpotlight.bodyReadNote). */
+  const bodyReadPending = !!session && !!shot && bodyReadPendingShot === shot.id
+    && storedShotBiomech(session, shot, session.shots.find((x) => x.clipUri)?.id === shot.id) === undefined;
+  const issueBodyNote = bodyReadNote({
+    wanted: onIssueFrame && overlayFaultJoints.length > 0 && (issueHold === 'jump' || highlightIssue),
+    hasPose, pending: bodyReadPending,
+  });
+  const skeletonBodyNote = bodyReadNote({ wanted: showSkeleton, hasPose, pending: bodyReadPending });
   const layers = overlayLayers({
     userSkeleton: showSkeleton, userTrace: showTrace, motionOnly, spotlight: spotlightOn, hasPose, arc: clubArcPoints,
   });
@@ -2393,7 +2444,7 @@ export default function SwingDetail() {
                 // seek bar, so playback doesn't re-render the screen 25x/s for nothing.
                 // 2026-10-10 — 100ms while the replay has a fault to stop on, so the stop lands within a
                 // frame or two of it before the seek back (250ms overshot by a quarter of a swing).
-                progressUpdateIntervalMillis={hasPose && (showSkeleton || showTrace || motionOnly) ? 40 : (faultMoment && reviewPause ? 100 : 250)}
+                progressUpdateIntervalMillis={hasPose && (showSkeleton || showTrace || motionOnly) ? 40 : (faultSec != null && reviewPause ? 100 : 250)}
                 // 2026-06-11 — native controls OFF: tap-anywhere toggles play/pause
                 // (via ZoomableView) and a thin tap-to-seek bar replaces the native
                 // scrubber, so there's no native tap-handling competing with the
@@ -2506,6 +2557,12 @@ export default function SwingDetail() {
                     <Text style={styles.issueCalloutTag}>{t('swinglab_swing.swing_detail.paused_on_issue')}</Text>
                     <Text style={styles.issueCalloutName} numberOfLines={1}>{issueCaption.name}</Text>
                     {issueCaption.look ? <Text style={styles.issueCalloutLook} numberOfLines={2}>{issueCaption.look}</Text> : null}
+                    {/* 2026-10-27 — nothing to ring yet, or nothing to ring at all: said, never silent. */}
+                    {issueBodyNote ? (
+                      <Text style={styles.issueCalloutLook} numberOfLines={2}>
+                        {issueBodyNote === 'reading' ? t('swinglab_swing.swing_detail.reading_body') : t('swinglab_swing.swing_detail.no_body_read')}
+                      </Text>
+                    ) : null}
                   </View>
                   <TouchableOpacity
                     onPress={togglePlayPause}
@@ -2516,6 +2573,17 @@ export default function SwingDetail() {
                     <Ionicons name="play" size={14} color="#0B1220" />
                     <Text style={styles.issueCalloutBtnText}>{t('swinglab_swing.swing_detail.continue_play')}</Text>
                   </TouchableOpacity>
+                  {issueBodyNote === 'no_read' ? (
+                    <TouchableOpacity
+                      onPress={() => onReanalyzeRef.current?.()}
+                      style={styles.issueCalloutBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('swinglab_swing.swing_detail.reanalyze_to_see')}
+                    >
+                      <Ionicons name="refresh" size={14} color="#0B1220" />
+                      <Text style={styles.issueCalloutBtnText}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               )}
               {/* 2026-06-16 (Tim) — fade-on-pause wrapper for the on-frame controls
@@ -2628,15 +2696,12 @@ export default function SwingDetail() {
                     {faultMoment && (
                       <TouchableOpacity
                         onPress={onIssueChip}
-                        style={[styles.issueChip, reviewPause
-                          ? { borderColor: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }
-                          : { borderColor: colors.border, backgroundColor: 'transparent' }]}
-                        accessibilityRole="switch"
-                        accessibilityState={{ checked: reviewPause }}
+                        style={[styles.issueChip, { borderColor: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }]}
+                        accessibilityRole="button"
                         accessibilityLabel={t('swinglab_swing.swing_detail.jump_to_issue')}
                       >
-                        <Ionicons name={reviewPause ? 'alert-circle' : 'alert-circle-outline'} size={13} color={reviewPause ? (overlayFaultSevere ? '#EF4444' : '#FF6B2C') : colors.text_muted} />
-                        <Text style={[styles.issueChipText, { color: reviewPause ? (overlayFaultSevere ? '#EF4444' : '#FF6B2C') : colors.text_muted }, !reviewPause && { textDecorationLine: 'line-through' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
+                        <Ionicons name="alert-circle" size={13} color={overlayFaultSevere ? '#EF4444' : '#FF6B2C'} />
+                        <Text style={[styles.issueChipText, { color: overlayFaultSevere ? '#EF4444' : '#FF6B2C' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
                       </TouchableOpacity>
                     )}
                     {hasPose && swingStageChips.map((c) => (
@@ -2690,7 +2755,7 @@ export default function SwingDetail() {
                 </View>
               </View>
             )}
-            {faultMoment && (
+            {faultSec != null && (
               <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, pauseOnIssue && { backgroundColor: colors.accent }]}
@@ -2702,7 +2767,7 @@ export default function SwingDetail() {
                   <Ionicons name="pause-circle-outline" size={14} color={pauseOnIssue ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
                   <Text style={[styles.toggleText, pauseOnIssue && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.pause_on_issue')}</Text>
                 </TouchableOpacity>
-                {hasPose && overlayFaultJoints.length > 0 && (
+                {overlayFaultJoints.length > 0 && (
                   <TouchableOpacity
                     style={[styles.toggleBtn, { flexDirection: 'row' }, highlightIssue && { backgroundColor: colors.accent }]}
                     onPress={() => setHighlightIssue(!highlightIssue)}
@@ -2716,7 +2781,8 @@ export default function SwingDetail() {
                 )}
               </View>
             )}
-            {hasPose && (
+            {/* 2026-10-27 — always shown: Body is how a swing with no body read asks for one (it was hidden
+                exactly when it was needed). Motion only needs a read to show anything. */}
               <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, showSkeleton && { backgroundColor: colors.accent }]}
@@ -2747,6 +2813,7 @@ export default function SwingDetail() {
                     <Text style={[styles.toggleText, showTargets && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.targets')}</Text>
                   </TouchableOpacity>
                 )}
+                {hasPose && (
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, motionOnly && { backgroundColor: colors.accent }]}
                   onPress={() => setMotionOnly(v => !v)}
@@ -2756,6 +2823,18 @@ export default function SwingDetail() {
                   <Ionicons name="walk-outline" size={14} color={motionOnly ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
                   <Text style={[styles.toggleText, motionOnly && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.motion_only')}</Text>
                 </TouchableOpacity>
+                )}
+              </View>
+            {skeletonBodyNote && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, paddingHorizontal: 4 }}>
+                <Text style={{ color: colors.text_muted, fontSize: 12, flex: 1 }}>
+                  {skeletonBodyNote === 'reading' ? t('swinglab_swing.swing_detail.reading_body') : t('swinglab_swing.swing_detail.no_body_read')}
+                </Text>
+                {skeletonBodyNote === 'no_read' && (
+                  <TouchableOpacity onPress={() => onReanalyzeRef.current?.()} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.reanalyze_to_see')}>
+                    <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </>
@@ -2768,14 +2847,16 @@ export default function SwingDetail() {
         {/* 2026-10-16 — ONE fault time: the moment the replay stops on (faultMoment), on the transport's
             swing clock (services/swing/swingClock). It printed the raw stored read time in absolute clip
             seconds, while the stop could be the phase anchor and the deck counted from the window start. */}
-        {(faultMoment || issueTimestamps.length > 0) && session.primary_issue && (
+        {(faultMoment || issueTimestamps.length > 0) && (displayFault || session.primary_issue) && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.fault_moment')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
               {(faultMoment ? [faultMoment.sec] : issueTimestamps).map((ts, i) => (
                 <TouchableOpacity
                   key={i}
-                  onPress={() => (faultMoment ? jumpToIssue() : void scrubTo(ts))}
+                  // 2026-10-27 — always the held-on-fault path: with no computed moment the pill's own time is
+                  // held as the fault (issueJumpSec), so the ring / caption / body read follow — never a bare seek.
+                  onPress={() => jumpToIssue(ts)}
                   style={[styles.tsPill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}
                 >
                   <Text style={[styles.tsText, { color: colors.accent }]}>{swingClock(ts, winStartSec)}</Text>

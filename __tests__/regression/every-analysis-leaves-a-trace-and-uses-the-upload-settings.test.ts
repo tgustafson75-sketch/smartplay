@@ -133,7 +133,10 @@ describe('a saved swing: settled, its windows, and what opening it does', () => 
     expect(d).toContain('useEffect(() => { setShowTrace(false); }, [swing_id]);');
     expect(d).not.toMatch(/traceTouchedRef/);
     // everything off starts no run; a trace the player turned on is his request
-    expect(d).toMatch(/const traceAsked = showTrace;\s*if \(!\(selectedShotIdx > 0 \|\| showSkeleton \|\| traceAsked\)\) return;/);
+    // (2026-10-27: the gate is faultSpotlight.shotDetailRequestFor — all off, nothing asked → null, by behaviour in
+    // the-issue-chip-shows-the-issue; issueAsked is false on every swing opened.)
+    expect(d).toMatch(/const ask = shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\);\s*if \(!ask\) return;/);
+    expect(d).toMatch(/const \[issueAsked, setIssueAsked\] = useState\(false\);/);
   });
 
   it('only a window the PLAYER chose survives a re-analyze; the finder\'s own answer is re-found', () => {

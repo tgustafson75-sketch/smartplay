@@ -122,7 +122,8 @@ describe('the swing screen stops, rings and names it — the skeleton stays opt-
     expect(sd).toMatch(/lastPosSec: lastRawPosRef\.current/);
     expect(sd).toMatch(/selfSeeking: Date\.now\(\) <= selfSeekUntilRef\.current/);
     // the overlay draws at the fault frame, not the overshoot tick
-    expect(sd).toMatch(/playbackEmitRef\.current\.pos = f;\s*playbackEmitRef\.current\.lastPosAt = Date\.now\(\);\s*setPosition\(f\);\s*setAtIssue\(true\);/);
+    // 2026-10-27 — the hold says why it is held ('stop' = the replay), so a jump can ring regardless of Highlight.
+    expect(sd).toMatch(/playbackEmitRef\.current\.pos = f;\s*playbackEmitRef\.current\.lastPosAt = Date\.now\(\);\s*setPosition\(f\);\s*issueHoldRef\.current = 'stop'; setIssueHoldState\('stop'\);/);
     // every scrub lands on its frame
     expect(sd).toMatch(/await videoRef\.current\?\.setPositionAsync\(sec \* 1000, \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\);/);
     expect(sd).toMatch(/faultSecRef\.current = faultMoment\?\.sec \?\? null;/);
@@ -132,8 +133,10 @@ describe('the swing screen stops, rings and names it — the skeleton stays opt-
     expect(sd).toMatch(/const readMatches = !!displayFault && shotFault === displayFault;/);
     expect(sd).toMatch(/readTimestampsSec: readMatches && ts\.length <= 2 \? ts : \[\],/);
   });
-  it('the ring needs the highlight setting and the overlay mounts for it without the skeleton', () => {
-    expect(sd).toMatch(/const spotlightOn = onIssueFrame && highlightIssue && hasPose && overlayFaultJoints\.length > 0;/);
+  // 2026-10-27 (Tim: "Tapping Issue did not highlight the area") — INVERTED: the setting no longer gates an
+  // explicit jump. The rule is faultSpotlight.spotlightShows, tested by behaviour in the-issue-chip-shows-the-issue.
+  it('the ring is the one rule (the setting governs the passive stop) and mounts the overlay without the skeleton', () => {
+    expect(sd).toMatch(/const spotlightOn = spotlightShows\(\{ held: onIssueFrame, hold: issueHold, highlight: highlightIssue, hasPose, faultJoints: overlayFaultJoints\.length \}\);/);
     // 2026-10-26 — through overlayLayers, which mounts for the ring alone (the-blue-club-is-measured-and-opt-in).
     expect(sd).toMatch(/spotlight: spotlightOn/);
     expect(sd).toContain('{hasPose && layers.mount && (');
@@ -169,8 +172,8 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
     expect(sm).toMatch(/const anchors = reviewAnchors;/);
     expect(sm).toMatch(/!!reviewFaultId && shotFault === reviewFaultId && ts\.length <= 2 \? ts : \[\]/);
   });
-  it('the ring mounts the overlay without the skeleton, and needs the highlight setting', () => {
-    expect(sm).toMatch(/const reviewSpotlightOn = reviewOnIssueFrame && highlightIssue && poseReady && reviewFaultJoints\.length > 0;/);
+  it('the ring is the one rule (faultSpotlight.spotlightShows) and mounts the overlay without the skeleton', () => {
+    expect(sm).toMatch(/const reviewSpotlightOn = spotlightShows\(\{\s*held: reviewOnIssueFrame, hold: reviewIssueHold, highlight: highlightIssue, hasPose: poseReady, faultJoints: reviewFaultJoints\.length,\s*\}\);/);
     // 2026-10-26 — the mount is overlayLayers' (services/swing/overlayVisibility), which mounts for the ring alone
     // (behaviour: the-blue-club-is-measured-and-opt-in).
     expect(sm).toMatch(/spotlight: reviewSpotlightOn/);
@@ -180,7 +183,7 @@ describe('SmartMotion\'s review makes the same stop — the swing you just hit',
   it('the fault hooks sit above the permission gate (the 08-09 "more hooks" crash)', () => {
     const gate = sm.indexOf('if (!camPerm) {');
     expect(gate).toBeGreaterThan(-1);
-    for (const h of ['const [reviewPause, setReviewPause] = useState(', 'const reviewAnchors = useMemo(', 'const reviewStageTimes = useMemo(', 'const reviewFaultMoment = useMemo(', 'const jumpToReviewIssue = useCallback(', 'const [reviewAtIssue, setReviewAtIssue] = useState(']) {
+    for (const h of ['const [reviewPause, setReviewPause] = useState(', 'const reviewAnchors = useMemo(', 'const reviewStageTimes = useMemo(', 'const reviewFaultMoment = useMemo(', 'const jumpToReviewIssue = useCallback(', 'const [reviewIssueHold, setReviewIssueHold] = useState<IssueHold>(']) {
       const at = sm.indexOf(h);
       expect(at).toBeGreaterThan(-1);
       expect(at).toBeLessThan(gate);
@@ -206,8 +209,8 @@ describe('the arc is the player\'s to turn on; only the player can pay for one',
     expect(sd).not.toMatch(/if \(!showTrace \|\| !session \|\| !shot\) \{ setClubArcPoints\(null\)/);
   });
   it('a shot paged to asks the silent pass; only the player\'s trace asks for more', () => {
-    expect(sd).toMatch(/const traceAsked = showTrace;/);
-    expect(sd).toMatch(/arc: traceAsked \? true : 'tracker'/);
+    // 2026-10-27 — the ask is faultSpotlight.shotDetailRequestFor (behaviour: the-issue-chip-shows-the-issue).
+    expect(sd).toMatch(/const ask = shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\);/);
     expect(code('app/swinglab/smartmotion.tsx')).toMatch(/requestShotDetail\(sessionId, sh\.id, \{\s*arc: 'tracker',/);
   });
 

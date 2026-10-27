@@ -5999,7 +5999,9 @@ check('Library: a multi-swing reel is reviewable SWING-BY-SWING (own skeleton + 
       /const activeBiomech =/.test(detail) &&
       /if \(idx >= 0\) setSelectedShotIdx\(idx\)/.test(detail) &&
       // 2026-10-10 — the arc level: the silent tracker pass unless the player turned the trace on
-      /return requestShotDetail\(swing_id, selShot\.id, \{ arc: traceAsked \? true : 'tracker' \}\);/.test(detail) &&
+      // (2026-10-27: decided by faultSpotlight.shotDetailRequestFor, which also asks the body read for an Issue tap)
+      /const ask = shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\);/.test(detail) &&
+      /requestShotDetail\(swing_id, id, \{\s*\.\.\.ask,/.test(detail) &&
       /startMs: shot\.clipStartSeconds \* 1000, endMs: shot\.clipEndSeconds \* 1000/.test(read('services/swing/orchestrator/shotDetail.ts'))
     );
   })(),

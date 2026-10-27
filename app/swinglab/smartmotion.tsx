@@ -51,7 +51,7 @@ import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
 import { drawableClubArc, overlayLayers, type OverlayArcPoint } from '../../services/swing/overlayVisibility';
-import { calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress } from '../../services/swing/faultSpotlight';
+import { bodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, spotlightShows, type IssueHold } from '../../services/swing/faultSpotlight';
 import { anchorsFromPoseFrames, swingStageTimesMs, type SwingStageKey } from '../../services/swing/poseMotion';
 import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
@@ -4845,20 +4845,22 @@ export default function SmartMotion() {
   useEffect(() => { setReviewPause(pauseOnIssue); }, [pauseOnIssue, reviewShotKey]);
   const pauseOnIssueRef = useRef(reviewPause);
   pauseOnIssueRef.current = reviewPause;
-  const [reviewAtIssue, setReviewAtIssue] = useState(false);
+  /** Held on the fault, and why ('stop' = the replay, 'jump' = the player asked) — faultSpotlight.spotlightShows. */
+  const [reviewIssueHold, setReviewIssueHold] = useState<IssueHold>(null);
+  const reviewAtIssue = reviewIssueHold !== null;
   useEffect(() => {
     reviewFaultSecRef.current = reviewFaultMoment?.sec ?? null;
     reviewIssuePausedRef.current = false;
-    setReviewAtIssue(false);
+    setReviewIssueHold(null);
   }, [reviewFaultMoment?.sec, selectedSwing]);
-  useEffect(() => { if (!videoPaused) setReviewAtIssue(false); }, [videoPaused]);
+  useEffect(() => { if (!videoPaused) setReviewIssueHold(null); }, [videoPaused]);
   const jumpToReviewIssue = useCallback(async () => {
     const f = reviewFaultSecRef.current;
     if (f == null) return;
     reviewIssuePausedRef.current = true;
     reviewSelfSeekUntilRef.current = Date.now() + 800;
     setVideoPaused(true);
-    setReviewAtIssue(true);
+    setReviewIssueHold('jump');
     try { await videoRef.current?.pauseAsync(); } catch { /* released */ }
     try { await videoRef.current?.setPositionAsync(Math.round(f * 1000), { toleranceMillisBefore: 0, toleranceMillisAfter: 0 }); } catch { /* released */ }
     setPlaybackMs(Math.round(f * 1000));
@@ -4904,7 +4906,7 @@ export default function SmartMotion() {
           reviewIssuePausedRef.current = true;
           reviewSelfSeekUntilRef.current = Date.now() + 800;
           setVideoPaused(true);
-          setReviewAtIssue(true);
+          setReviewIssueHold('stop');
           void (async () => {
             try {
               await videoRef.current?.pauseAsync();
@@ -5083,15 +5085,21 @@ export default function SmartMotion() {
   const reviewOnIssueFrame = isReview && heldOnFault({
     faultSec: reviewFaultMoment?.sec ?? null, posSec: playbackMs / 1000, paused: videoPaused, atIssue: reviewAtIssue, pausing: reviewPause,
   });
-  /** The Issue chip turns the fault review on and off (faultSpotlight.issueChipPress). Not a hook: below the gate. */
+  /** The Issue chip shows the issue: jump, hold, ring (faultSpotlight.issueChipPress). The pause is the
+   *  Pause-on-issue toggle's. Not a hook: below the gate. */
   const onReviewIssueChip = () => {
-    const next = issueChipPress(reviewPause);
-    setReviewPause(next.enabled);
-    if (!next.enabled) { reviewIssuePausedRef.current = false; setReviewAtIssue(false); }
-    if (next.jumpToFault) void jumpToReviewIssue();
+    if (issueChipPress(reviewPause).jumpToFault) void jumpToReviewIssue();
   };
   const reviewFaultJoints = faultJointsFor(reviewFaultId);
-  const reviewSpotlightOn = reviewOnIssueFrame && highlightIssue && poseReady && reviewFaultJoints.length > 0;
+  const reviewSpotlightOn = spotlightShows({
+    held: reviewOnIssueFrame, hold: reviewIssueHold, highlight: highlightIssue, hasPose: poseReady, faultJoints: reviewFaultJoints.length,
+  });
+  // 2026-10-27 — held there with the ring wanted and no body read: say so (the selected swing's body read is
+  // always asked for in review — requestShotDetail above — so it is on the way, or it came back with nothing).
+  const reviewBodyNote = bodyReadNote({
+    wanted: reviewOnIssueFrame && reviewFaultJoints.length > 0 && (reviewIssueHold === 'jump' || highlightIssue),
+    hasPose: poseReady, pending: selectedBodyReadPending,
+  });
   const reviewLayers = overlayLayers({
     userSkeleton: showSkeleton, userTrace: showTrace, spotlight: reviewSpotlightOn, hasPose: poseReady,
     arc: clubArcPoints, shotConfirmed,
@@ -5130,12 +5138,11 @@ export default function SmartMotion() {
           <>
             <TactilePressable
               onPress={onReviewIssueChip}
-              style={[styles.scrubChip, { borderColor: reviewPause ? '#FF6B2C' : 'rgba(255,255,255,0.3)', borderWidth: 1 }]}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: reviewPause }}
+              style={[styles.scrubChip, { borderColor: '#FF6B2C', borderWidth: 1 }]}
+              accessibilityRole="button"
               accessibilityLabel={t('swinglab_swing.swing_detail.jump_to_issue')}
             >
-              <Text style={[styles.scrubChipText, { color: reviewPause ? '#FF6B2C' : 'rgba(255,255,255,0.6)' }, !reviewPause && { textDecorationLine: 'line-through' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
+              <Text style={[styles.scrubChipText, { color: '#FF6B2C' }]}>{t('swinglab_swing.swing_detail.jump_to_issue')}</Text>
             </TactilePressable>
             <TactilePressable
               onPress={() => setPauseOnIssue(!pauseOnIssue)}
@@ -5144,7 +5151,7 @@ export default function SmartMotion() {
               <Ionicons name="pause-circle-outline" size={13} color={pauseOnIssue ? colors.accent : '#fff'} />
               <Text style={[styles.skelToggleText, { color: pauseOnIssue ? colors.accent : '#fff' }]}>{t('swinglab_swing.swing_detail.pause_on_issue')}</Text>
             </TactilePressable>
-            {poseReady && reviewFaultJoints.length > 0 ? (
+            {reviewFaultJoints.length > 0 ? (
               <TactilePressable
                 onPress={() => setHighlightIssue(!highlightIssue)}
                 style={[styles.skelToggle, { borderColor: highlightIssue ? colors.accent : 'rgba(255,255,255,0.3)', backgroundColor: highlightIssue ? colors.accent_muted : 'rgba(0,0,0,0.4)' }]}
@@ -5472,11 +5479,22 @@ export default function SmartMotion() {
               <Text style={styles.issueCalloutTag}>{t('swinglab_swing.swing_detail.paused_on_issue')}</Text>
               <Text style={styles.issueCalloutName} numberOfLines={1}>{reviewCaption.name}</Text>
               {reviewCaption.look ? <Text style={styles.issueCalloutLook} numberOfLines={2}>{reviewCaption.look}</Text> : null}
+              {reviewBodyNote ? (
+                <Text style={styles.issueCalloutLook} numberOfLines={2}>
+                  {reviewBodyNote === 'reading' ? t('swinglab_swing.swing_detail.reading_body') : t('swinglab_swing.swing_detail.no_body_read')}
+                </Text>
+              ) : null}
             </View>
             <TactilePressable onPress={() => void togglePlay()} style={styles.issueCalloutBtn}>
               <Ionicons name="play" size={14} color="#0B1220" />
               <Text style={styles.issueCalloutBtnText}>{t('swinglab_swing.swing_detail.continue_play')}</Text>
             </TactilePressable>
+            {reviewBodyNote === 'no_read' ? (
+              <TactilePressable onPress={() => reanalyze()} style={styles.issueCalloutBtn} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.reanalyze_to_see')}>
+                <Ionicons name="refresh" size={14} color="#0B1220" />
+                <Text style={styles.issueCalloutBtnText}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
+              </TactilePressable>
+            ) : null}
           </View>
         ) : null}
 
