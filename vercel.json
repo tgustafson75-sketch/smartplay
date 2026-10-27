@@ -66,13 +66,6 @@
       }
     },
     {
-      "src": "api/owner-triage.ts",
-      "use": "@vercel/node",
-      "config": {
-        "maxDuration": 30
-      }
-    },
-    {
       "src": "api/meta-voice.ts",
       "use": "@vercel/node",
       "config": {
@@ -609,10 +602,6 @@
     {
       "src": "/api/kevin-read",
       "dest": "/api/kevin-read.ts"
-    },
-    {
-      "src": "/api/owner-triage",
-      "dest": "/api/owner-triage.ts"
     },
     {
       "src": "/api/usage",
