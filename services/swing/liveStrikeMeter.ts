@@ -25,8 +25,18 @@ export type LiveStrikeReading = {
   hit: boolean;
 };
 
-export function createLiveStrikeMeter(thresholdDb: number) {
+/**
+ * 2026-10-27 (capture audit C8) — `levelDropDb`: the SESSION levelling practice segmentation applies
+ * (strikeDetector.levelStrikes), live. PRACTICE takes the acoustics as final and drops a strike more than
+ * LEVEL_DROP_DB under the session's loudest, so without this the badge lit for a next-bay strike the set
+ * would then not count. The screen passes it exactly where it levels the set (practice, chip sensitivity
+ * off). Live cannot see the future: a neighbour BEFORE your first strike still lights, as levelStrikes'
+ * retroactive drop has no live equivalent.
+ */
+export function createLiveStrikeMeter(thresholdDb: number, opts?: { levelDropDb?: number }) {
   const win: { t: number; dB: number }[] = [];
+  const dropDb = opts?.levelDropDb;
+  let loudestHitDb = -Infinity;
   return {
     push(timeMs: number, dB: number): LiveStrikeReading {
       // The floor is measured BEFORE this sample joins, so a strike never raises its own bar.
@@ -34,10 +44,15 @@ export function createLiveStrikeMeter(thresholdDb: number) {
       const floorDb = win.length ? median(win.map((s) => s.dB)) : dB;
       win.push({ t: timeMs, dB });
       const above = dB - floorDb;
+      let hit = win.length > 1 && above >= thresholdDb;
+      if (hit && dropDb != null) {
+        loudestHitDb = Math.max(loudestHitDb, dB);
+        hit = dB >= loudestHitDb - dropDb;
+      }
       return {
         floorDb,
         level: Math.max(0, Math.min(1, above / thresholdDb)),
-        hit: win.length > 1 && above >= thresholdDb,
+        hit,
       };
     },
   };

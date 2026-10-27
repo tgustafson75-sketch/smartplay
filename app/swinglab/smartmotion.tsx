@@ -65,6 +65,7 @@ import { detectBallPath } from '../../services/swing/ballPath';
 // SCREEN can crop too. See that file: three of four ran full-frame, including the persist pass.
 import { frameToContainerNorm } from '../../services/swing/overlayCoords';
 import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../store/practiceSessionStore';
+import { samplesToStamp, creditedSwingCount, shouldCreditOnLeave } from '../../services/practice/smartMotionPracticeCredit';
 // Type-only — erased at runtime, so it never loads the vision-camera native module.
 // The component is lazy-required ONLY when the runtime toggle is on (a vision build),
 // keeping this file's JS OTA-safe on a build that doesn't link vision-camera.
@@ -78,6 +79,7 @@ import { estimateCarryYards } from '../../services/swing/carryEstimate';
 
 import * as Haptics from 'expo-haptics';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
+import { TalkToCaddieButton } from '../../components/smartmotion/TalkToCaddieButton';
 import { useTheme } from '../../contexts/ThemeContext';
 import { probeDurationMs, type SwingAnalysis } from '../../services/poseDetection';
 import { reconcileSwingValidity, type MeasuredSwingEvidence } from '../../services/swingValidity';
@@ -91,7 +93,7 @@ import {
 } from '../../services/swingMetricsService';
 import { deriveSwingTempo, type PoseFrame, type SwingBiomechanics, type SwingTempo } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
-import { detectStrikes, levelStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
+import { detectStrikes, levelStrikes, LEVEL_DROP_DB, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { createLiveStrikeMeter } from '../../services/swing/liveStrikeMeter';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, reanalyzeSegment, type SwingSegment } from '../../services/swing/swingSegmentation';
@@ -131,10 +133,11 @@ import { useClubStatsStore, clubIdToClubName, CLUB_ORDER } from '../../store/clu
 import { speak, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
+import { createCaptureLife, waitUntilFree, type CaptureFailure, type CaptureLife } from '../../services/capture/captureLife';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 import { getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { ensureSwingThumbnail } from '../../services/videoUpload';
-import { subscribeSmartMotionCommand, setSmartMotionActive, setSmartMotionRecording, subscribeDrillConfig, emitSmartMotionVoiceEvent, emitSmartMotionUtterance, isSmartMotionRecording, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
+import { subscribeSmartMotionCommand, setSmartMotionActive, setSmartMotionRecording, subscribeDrillConfig, emitSmartMotionVoiceEvent, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { setScreenContext, clearScreenContext } from '../../services/screenContext';
 import { reconcileFeel } from '../../services/swing/feelReconcile';
 import { type PuttingAnalysis } from '../../services/puttingAnalysisService';
@@ -1267,23 +1270,10 @@ export default function SmartMotion() {
     finally { setDictating(null); }
   }, [dictating]);
 
-  // 2026-06-29 (Tim — "single brain everywhere") — TALK TO THE CADDIE from the
-  // SmartMotion screen. Captures one utterance and hands it to the ONE caddie brain
-  // (emit → caddie.tsx → pipecat): it replies AND dispatches tools, so "record my
-  // swing" starts THIS screen's capture, "driver, 3 swings" configures the drill, and
-  // a conversational "what should I work on" stays dialogue-first. Setup phase only /
-  // never while recording (the camera has the mic then).
-  const [caddieListening, setCaddieListening] = useState(false);
-  const askCaddie = useCallback(async () => {
-    if (caddieListening) { endCaptureEarly(); return; }
-    if (isSmartMotionRecording()) return;
-    setCaddieListening(true);
-    try {
-      const text = await captureUtterance(8000, getApiBaseUrl(), 'en');
-      if (text && text.trim()) emitSmartMotionUtterance(text.trim());
-    } catch { /* mic/transcribe failed — no-op, no fake text */ }
-    finally { setCaddieListening(false); }
-  }, [caddieListening]);
+  // 2026-06-29 (Tim — "single brain everywhere") — TALK TO THE CADDIE from the SmartMotion screen.
+  // 2026-10-27 (audit C7) — the button is now the caddie badge's tap (components/smartmotion/
+  // TalkToCaddieButton → listeningSession.toggle), which owns the offline / failed-transcribe reply; its
+  // private capture discarded every empty result, so offline it was silent.
   const [playbackMs, setPlaybackMs] = useState(0);
   // Last-committed playback ms (synchronous) so the 25×/s status callback only setStates on a real move.
   const playbackMsEmitRef = useRef(-1);
@@ -1548,6 +1538,11 @@ export default function SmartMotion() {
   // drag is in flight, so the horizontal card pager freezes and can't steal the drag gesture.
   const [targetsDragging, setTargetsDragging] = useState(false);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
+  /**
+   * 2026-10-27 (capture-half audit C1/C3/C4/C6) — "is this start / scan / follow-up still wanted after
+   * that await?" One owner (services/capture/captureLife), consulted after every await below.
+   */
+  const captureLifeRef = useRef<CaptureLife>(createCaptureLife());
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 2026-06-10 — end-of-window audible cue: the recording window length used,
@@ -1944,16 +1939,43 @@ export default function SmartMotion() {
   // dedup set. The tier is captured from the best-known read at review time; a late
   // async departure upgrade isn't retro-applied — conservative (never over-claims
   // flight). Divergence is signed (L negative) so the session's spread is directional.
-  const stampedClipsRef = useRef<Set<string>>(new Set());
+  /**
+   * 2026-10-27 (audit C5) — stamped per SWING (session + index), not per clip: a 5-swing set stamped once.
+   * And on the read SETTLING (review), not on a cloud analysis: a swing recorded with no signal was never
+   * stamped. The swing on screen carries what was measured on it; the rest of the set is stamped with what
+   * is known (the club) when the set is saved or the player leaves. services/practice/smartMotionPracticeCredit.
+   */
+  const stampedSwingsRef = useRef<Set<string>>(new Set());
+  // True when the saved session is a set recorded HERE (not a clip opened for review): only those are credited on leave.
+  const sessionFromCaptureRef = useRef(false);
   // 2026-06-30 (audit M4) — also COLLECT each per-swing sample for this Smart Motion open,
   // so the session-less save path (plain SmartMotion + drills → recordCompletedSession) can
   // stamp them and the practice-detail screen shows real striation + tempo, not just a count.
-  // Accumulates across the go-again loop within one mount; resets naturally on next open.
   const practiceSwingSamplesRef = useRef<Parameters<typeof recordPracticeSwingIfActive>[0][]>([]);
+  const stampPracticeSwings = useCallback((only?: number, measuredSample?: Parameters<typeof recordPracticeSwingIfActive>[0] | null) => {
+    const sid = ingestedSessionIdRef.current;
+    if (!sid) return 0;
+    const shots = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.shots ?? [];
+    const out = samplesToStamp({
+      sessionId: sid,
+      swingCount: segmentsRef.current.length,
+      shots,
+      stamped: stampedSwingsRef.current,
+      club: clubRef.current ?? null,
+      only,
+      measured: only != null && measuredSample ? { index: only, sample: measuredSample } : null,
+    });
+    for (const o of out) {
+      stampedSwingsRef.current.add(o.key);
+      recordPracticeSwingIfActive(o.sample);
+      practiceSwingSamplesRef.current.push(o.sample);
+    }
+    return out.length;
+  }, []);
   useEffect(() => {
-    if (phase !== 'review' || !clipUri || analysis == null) return;
-    if (stampedClipsRef.current.has(clipUri)) return;
-    stampedClipsRef.current.add(clipUri);
+    // Swing 1 only: paging to swing N shows swing 1's tempo/trace until N's are recomputed, so a measured
+    // stamp there could carry the wrong swing's numbers (the shot-map live commit has the same guard).
+    if (phase !== 'review' || !clipUri || !sessionId || selectedSwing !== 0) return;
     const signedDiv = ballTrace
       ? (ballTrace.side === 'left' ? -1 : 1) * ballTrace.divergenceDeg
       : null;
@@ -1963,8 +1985,7 @@ export default function SmartMotion() {
       tempoRatio: tempo?.ratio ?? null,
       divergenceDeg: signedDiv,
     };
-    recordPracticeSwingIfActive(sample);
-    practiceSwingSamplesRef.current.push(sample);
+    if (stampPracticeSwings(0, sample) === 0) return;
     // 2026-07-07 (Tim — "tie the tracing into the caddie brain") — the same measured
     // signals also feed the CNS rolling tendencies, so the brain can cite YOUR real
     // tempo average / start-line % / contact pattern (was: computed but never learned).
@@ -1979,7 +2000,7 @@ export default function SmartMotion() {
         nowMs: Date.now(),
       });
     } catch { /* non-fatal — learning is additive */ }
-  }, [phase, clipUri, analysis, smartTrace, ballTrace, club, tempo]);
+  }, [phase, clipUri, sessionId, selectedSwing, analysis, smartTrace, ballTrace, club, tempo, stampPracticeSwings]);
 
   // Camera strike-verification — did the ball actually leave its spot at
   // impact? Honest false-positive guard (TV/clap can't move YOUR ball) +
@@ -2443,7 +2464,12 @@ export default function SmartMotion() {
 
   // Cleanup on unmount — stop an in-flight recording + metering + ALL speech.
   useEffect(() => {
+    const life = captureLifeRef.current;
+    life.mount();
     return () => {
+      // C1 — the stop handler / read still in flight save the swing, but may no longer speak, open the
+      // mic, narrate or navigate for this screen.
+      life.end();
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       if (recordTimeoutRef.current) clearTimeout(recordTimeoutRef.current);
       stoppingRef.current = true;
@@ -2619,7 +2645,7 @@ export default function SmartMotion() {
       if (feelTextRef.current.trim()) { try { store.setSessionFeel(sid, feelTextRef.current.trim()); } catch { /* non-fatal */ } }
       ingestedSessionIdRef.current = sid;
       setSessionId(sid);
-      if (!reuse && tempoReturnRef.current && segmentsRef.current.length <= 1) {
+      if (!reuse && tempoReturnRef.current && segmentsRef.current.length <= 1 && captureLifeRef.current.isAlive()) {
         const dest = tempoReturnRef.current;
         tempoReturnRef.current = null; // one-shot
         const tempoMode = puttModeRef.current ? 'putt' : 'full_swing';
@@ -2731,8 +2757,8 @@ export default function SmartMotion() {
         if (sess?.analysis_status === 'ok' && sess.putting_analysis) {
           const putt = sess.putting_analysis;
           setPuttAnalysis(putt);
-          // A putt is just as "voice-first" as a swing: speak the read the card shows.
-          void import('../../services/puttingAnalysisService')
+          // A putt is just as "voice-first" as a swing: speak the read the card shows — on this screen only (C1).
+          if (captureLifeRef.current.isAlive()) void import('../../services/puttingAnalysisService')
             .then((m) => m.speakPuttRead(putt))
             .catch(() => { /* non-fatal — the card still stands */ });
         } else {
@@ -3005,6 +3031,7 @@ export default function SmartMotion() {
             setSegments([seg]);
             setSelectedSwing(0);
             segmentsRef.current = [seg];
+            sessionFromCaptureRef.current = false;
             void runAnalysis(clipUriParam, seg);
             return;
           }
@@ -3265,7 +3292,7 @@ export default function SmartMotion() {
   // reel's rate-limit posture. Fire-and-forget; only runs for multi-swing sessions.
   const pipelineNarrate = useCallback(
     async (uri: string, segs: SwingSegment[]) => {
-      if (segs.length < 2 || pipelineNarratedRef.current) return;
+      if (segs.length < 2 || pipelineNarratedRef.current || !captureLifeRef.current.isAlive()) return;
       pipelineNarratedRef.current = true;
       pipelineAbortRef.current = false; // fresh narration for this session
       // 2026-06-16 — per-run cancellation token. A NEW session (reset/unmount) bumps
@@ -3274,7 +3301,7 @@ export default function SmartMotion() {
       // an old narration could read a NEW session's analysisCacheRef and speak the
       // wrong swing. cancelled() is the single source of truth for "still mine".
       const myRun = ++pipelineRunRef.current;
-      const cancelled = () => pipelineAbortRef.current || myRun !== pipelineRunRef.current;
+      const cancelled = () => pipelineAbortRef.current || myRun !== pipelineRunRef.current || !captureLifeRef.current.isAlive();
       const st = useSettingsStore.getState();
       const speakLine = async (line: string) => {
         if (!st.voiceEnabled || cancelled()) return;
@@ -3385,11 +3412,36 @@ export default function SmartMotion() {
     prefetchSwing(selectedSwing + 1);
   }, [analysis, selectedSwing, segments.length, prefetchSwing]);
 
+  /**
+   * 2026-10-27 (audit C6) — a capture that failed before there was anything to review goes back to setup,
+   * where analysisError is never drawn: the player saw the camera come back and nothing else. Say it, and
+   * drop a go-again queued during the last read so the next review does not auto-save and re-record.
+   */
+  const failCapture = useCallback((kind: CaptureFailure) => {
+    const msg = captureLifeRef.current.captureFailed(kind);
+    setSmartMotionRecording(false);
+    setMeteringActive(false);
+    setAnalysisError(null);
+    setPhase('setup');
+    if (captureLifeRef.current.isAlive()) { try { useToastStore.getState().show(msg); } catch { /* non-fatal */ } }
+  }, []);
+
   const startRecording = useCallback(async () => {
     if (!cameraRef.current || recordingPromiseRef.current) return;
+    /**
+     * 2026-10-27 (audits C3/C4) — this start may be superseded during any await below: a Stop while the
+     * meter opens, a second start (tap + voice), or leaving. Every await is followed by stillWanted();
+     * a superseded start cancels what it opened and leaves. Beginning a start also cancels a club scan.
+     */
+    const startTok = captureLifeRef.current.beginStart();
+    const stillWanted = () => captureLifeRef.current.startStillWanted(startTok);
+    setClubScanActive(false);
+    setClubScanCount(0);
     if (!micPerm?.granted) {
       const r = await requestMicPerm();
+      if (!stillWanted()) return;
       if (!r.granted) {
+        captureLifeRef.current.cancelStart();
         /**
          * 2026-09-17 — same dead end as the camera gate above, and worse for being invisible: the
          * preview renders normally and the Record button looks live, so a player who declined the
@@ -3419,6 +3471,23 @@ export default function SmartMotion() {
     try {
       await (require('../../services/voiceService') as typeof import('../../services/voiceService')).stopSpeaking('screen:swinglab-smartmotion');
     } catch { /* best-effort — never block the capture */ }
+    /**
+     * 2026-10-27 (audit C7) — and take the MIC back. A caddie turn the player opened (the badge or the
+     * talk button) or a dictation can still hold a Recording, and the metered track then fails "Only one
+     * Recording object" — the set records with no ears. The player chose to record: close the listen and
+     * wait (bounded) for the recorder to unload.
+     */
+    try {
+      const ls = require('../../services/listeningSession') as typeof import('../../services/listeningSession');
+      const st = ls.getSessionState();
+      if (st === 'listening' || st === 'opening') ls.forceCloseSession();
+      const vs = require('../../services/voiceService') as typeof import('../../services/voiceService');
+      if (vs.isCapturing()) {
+        await vs.stopCapture();
+        await waitUntilFree(() => vs.isCapturing(), 1500);
+      }
+    } catch { /* best-effort — never block the capture */ }
+    if (!stillWanted()) return;
     // 2026-06-12 (analysis speed) — warm the fault-read Lambda the MOMENT recording starts.
     // The open record window (up to 60s) is free warm time, so the first swing's read lands
     // on a HOT Lambda instead of eating a cold start → no more cold-first-swing NO READ.
@@ -3516,11 +3585,14 @@ export default function SmartMotion() {
         // component up to 20×/s. Throttle the React state to ~120ms (still smooth
         // for the meter bar) — detection is unaffected (it runs inside
         // startMeteredRecording, not off this display state).
+        // C8 — level the badge exactly where the set is levelled (practice, chip sensitivity off), so it
+        // never lights for a next-bay strike the set will not count.
         const liveMeter = createLiveStrikeMeter(
           strikeThresholdDb(chipOnStart, useAcousticCalibrationStore.getState().appliedCalibration, captureMode) ?? DEFAULT_STRIKE_THRESHOLD_DB,
+          captureMode === 'sim' && !chipOnStart ? { levelDropDb: LEVEL_DROP_DB } : undefined,
         );
         lastLiveHitAtRef.current = 0;
-        meteringRef.current = await startMeteredRecording((s) => {
+        const meter = await startMeteredRecording((s) => {
           const now = Date.now();
           const r = liveMeter.push(s.timeMs, s.dB);
           // A hit bypasses the throttle so a single-sample strike is never skipped, and holds the
@@ -3531,9 +3603,13 @@ export default function SmartMotion() {
             setLiveRead({ level: r.level, hit: now - lastLiveHitAtRef.current < 1500 });
           }
         });
+        // C3 — Stopped (or left, or superseded) while the meter opened: close it, record nothing.
+        if (!stillWanted()) { void meter.cancel().catch(() => undefined); return; }
+        meteringRef.current = meter;
       } catch {
         meteringRef.current = null;
       }
+      if (!stillWanted()) return;
     } else {
       meteringRef.current = null;
     }
@@ -3545,17 +3621,19 @@ export default function SmartMotion() {
     recordedClipFpsRef.current = useCaptureEngineStore.getState().capturedFps;
     // Assign the camera promise BEFORE arming timers (avoid the stop race).
     try {
+      if (!cameraRef.current) throw new Error('camera unmounted');
       recordingPromiseRef.current = cameraRef.current.recordAsync({ maxDuration: maxSec }) as Promise<{ uri: string } | undefined>;
     } catch (e) {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;
       void meteringRef.current?.cancel().catch(() => undefined);
       meteringRef.current = null;
-      setSmartMotionRecording(false);
-      setAnalysisError(e instanceof Error ? e.message : String(e));
-      setPhase('setup');
+      captureLifeRef.current.cancelStart();
+      console.log('[smartmotion] recordAsync refused:', e instanceof Error ? e.message : String(e));
+      failCapture('camera_refused');
       return;
     }
+    captureLifeRef.current.commitStart(startTok);
 
     const startedAt = Date.now();
     recordWindowSecRef.current = maxSec; // for the end-of-window audible cue
@@ -3565,10 +3643,23 @@ export default function SmartMotion() {
     // 2026-06-10 — When the window auto-ends (vs a manual stop), flag it so
     // stopRecording can play an audible "that's time, analyzing" cue.
     recordTimeoutRef.current = setTimeout(() => { autoStopAtLimitRef.current = true; void stopRecordingRef.current(); }, maxSec * 1000);
-  }, [micPerm, requestMicPerm, t]);
+  }, [micPerm, requestMicPerm, t, failCapture]);
 
   const stopRecording = useCallback(async () => {
     if (stoppingRef.current) return;
+    /**
+     * 2026-10-27 (audit C3) — Stop while Record is still opening the meter: there is no recording to stop
+     * and nothing to analyse. Abandon the start (it cancels its own meter when its await returns) and go
+     * back to setup, quietly — the player asked for exactly this.
+     */
+    if (captureLifeRef.current.isStarting()) {
+      captureLifeRef.current.cancelStart();
+      setSmartMotionRecording(false);
+      setMeteringActive(false);
+      setLiveRead(null);
+      setPhase('setup');
+      return;
+    }
     stoppingRef.current = true;
     setSmartMotionRecording(false); // mic released → voice/listen takes over from here
     if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
@@ -3825,8 +3916,7 @@ export default function SmartMotion() {
       recordingPromiseRef.current = null;
       if (!recorded?.uri) {
         stoppingRef.current = false;
-        setAnalysisError('Recording produced no file.');
-        setPhase('setup');
+        failCapture('no_file');
         return;
       }
       setClipUri(recorded.uri);
@@ -4214,13 +4304,16 @@ export default function SmartMotion() {
       try { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch { /* non-fatal */ }
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
+      sessionFromCaptureRef.current = true;
       void runAnalysis(recorded.uri, firstSeg);
       // 2026-06-15 (Tim) — multi-swing PIPELINE: narrate each swing in order with a
       // one-ahead head start (swing N+1 reads while swing N is spoken). Skips putts
       // (a "Swing N, fault" read doesn't fit a putt). Single swing → no pipeline.
-      if (segsForAnalysis.length > 1 && !puttModeRef.current) {
+      // C1 — the swing is saved and read whether or not the player is still here; what follows talks to them.
+      const follow = captureLifeRef.current.followUps({ swingCount: segsForAnalysis.length, putt: puttModeRef.current });
+      if (follow.narrateSet) {
         void pipelineNarrate(recorded.uri, segsForAnalysis);
-      } else if (segsForAnalysis.length === 1 && !puttModeRef.current) {
+      } else if (follow.announceDone) {
         // Single-swing session — pipeline doesn't run, so emit session_complete here
         // so subscribers (e.g. voice UI) receive the event.
         setScreenContext({ screen: 'Smart Motion — just finished a session', focus: SESSION_DONE_FOCUS });
@@ -4238,7 +4331,7 @@ export default function SmartMotion() {
       // already in state with a Re-analyze affordance, so land on 'review' instead.
       setPhase('review');
     }
-  }, [runAnalysis, appliedCalibration, pipelineNarrate, drillShotCount, setReviewedClipFps]);
+  }, [runAnalysis, appliedCalibration, pipelineNarrate, drillShotCount, setReviewedClipFps, failCapture]);
   // Keep the auto-stop ref pointed at the current stopRecording (audit H1).
   stopRecordingRef.current = stopRecording;
 
@@ -4260,13 +4353,20 @@ export default function SmartMotion() {
     // recordAsync can hiccup the video session. The periodic auto scan especially must
     // never fire into a recording the user just started.
     if (recordingPromiseRef.current || stoppingRef.current) return;
+    // 2026-10-27 (audit C4) — and never INTO one that starts while this scan is in flight: a start cancels
+    // the scan, and the scan re-checks before the photo, and before it applies or speaks its result.
+    const scanTok = captureLifeRef.current.beginScan(!!recordingPromiseRef.current);
+    if (scanTok == null) return;
+    const scanWanted = () => captureLifeRef.current.scanStillWanted(scanTok, !!recordingPromiseRef.current);
     setScanningClub(true);
     try {
       const apiUrl = getApiBaseUrl();
       const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.5, skipProcessing: true });
+      if (!scanWanted()) return;
       const b64 = pic?.base64;
       if (!apiUrl || !b64) { if (!auto) setClubMenuOpen(true); return; }
       const res = await recognizeClubFromBase64(b64, apiUrl);
+      if (!scanWanted()) return;
       if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
         setClub(res.club_id);
         // 2026-07-01 (Tim — on-course "record this club": show the sole while recording so it
@@ -4283,6 +4383,7 @@ export default function SmartMotion() {
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
+          if (!scanWanted()) return;
           const ack = getDialog('coach', newlyRegistered ? 'club_added' : 'club_recognised', { club: clubLabel(res.club_id) });
           await speak(ack, s.voiceGender, s.language, apiUrl, { userInitiated: true });
         } catch { /* speech non-fatal */ }
@@ -4307,20 +4408,29 @@ export default function SmartMotion() {
   const startClubScan = useCallback(async () => {
     if (scanningClub || clubScanActive) return;
     if (recordingPromiseRef.current || stoppingRef.current) return;
+    // 2026-10-27 (audit C4) — Record during the 3-2-1 (or the read) cancels this scan: no photo into the
+    // recording, no "Got it, 7-iron" into the clip's audio, no club or putt-mode change mid-capture.
+    const scanTok = captureLifeRef.current.beginScan(!!recordingPromiseRef.current);
+    if (scanTok == null) return;
+    const scanWanted = () => captureLifeRef.current.scanStillWanted(scanTok, !!recordingPromiseRef.current);
     setClubScanActive(true);
     try {
       // Countdown 3 → 2 → 1 (≈0.7s each) so the user can present + steady the sole.
       for (let n = 3; n >= 1; n--) {
+        if (!scanWanted()) return;
         setClubScanCount(n);
         await new Promise((r) => setTimeout(r, 700));
       }
+      if (!scanWanted()) return;
       setClubScanCount(0); // "Reading…"
       setScanningClub(true);
       const apiUrl = getApiBaseUrl();
       const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.75, skipProcessing: false });
+      if (!scanWanted()) return;
       const b64 = pic?.base64;
       if (!apiUrl || !b64) { setClubMenuOpen(true); return; }
       const res = await recognizeClubFromBase64(b64, apiUrl);
+      if (!scanWanted()) return;
       if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
         setClub(res.club_id);
         applyPuttMode(res.club_id === 'PT', 'user');
@@ -4331,6 +4441,7 @@ export default function SmartMotion() {
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
+          if (!scanWanted()) return;
           const ack = getDialog('coach', alreadyInBag ? 'club_recognised' : 'club_added', { club: clubLabel(res.club_id) });
           await speak(ack, s.voiceGender, s.language, apiUrl, { userInitiated: true });
         } catch { /* speech non-fatal */ }
@@ -4425,8 +4536,8 @@ export default function SmartMotion() {
     if (Number.isFinite(secs) && secs > 0) startCountdown(Math.min(10, Math.round(secs)));
     else void startRecordingRef.current();
   }, [countdownParam, startCountdown]);
-  // Set when the player asks to go again DURING analysis (see beginNextRecording's analyzing branch).
-  const queuedGoAgainRef = useRef(false);
+  // A go-again asked for DURING analysis is queued on captureLife (see beginNextRecording's analyzing
+  // branch); a failed capture or a new start drops it (audit C6).
   // Ref indirection: persistReviewToLibrary is defined below (it needs the full review
   // state); beginNextRecording only fires from user taps, long after both exist.
   const persistReviewRef = useRef<(navigate: boolean) => void>(() => {});
@@ -4461,7 +4572,7 @@ export default function SmartMotion() {
        * Queue it instead of dropping it. The read finishes, the set auto-saves as it always does,
        * and the next recording starts — the player never waits on the phone to catch up.
        */
-      queuedGoAgainRef.current = true;
+      captureLifeRef.current.queueGoAgain();
       try { useToastStore.getState().show('Next set queued — starting when this read lands'); } catch { /* non-fatal */ }
     } else if (phase !== 'recording') {
       void startRecording();
@@ -4470,8 +4581,7 @@ export default function SmartMotion() {
 
   // Fire the queued go-again the moment the read lands. Ref-guarded so it runs once per queue.
   useEffect(() => {
-    if (phase !== 'review' || !queuedGoAgainRef.current) return;
-    queuedGoAgainRef.current = false;
+    if (phase !== 'review' || !captureLifeRef.current.takeQueuedGoAgain()) return;
     beginNextRecording();
   }, [phase, beginNextRecording]);
 
@@ -4619,12 +4729,27 @@ export default function SmartMotion() {
     // 2026-06-13 (Tim) — award CONSERVATIVE practice points for a completed drill
     // session (a captureKind:'drill' save). Surfaces on the dashboard; the data is
     // the practice side of the future practice→on-course-improvement ledger.
-    let savedMsg = 'Saved to your Swing Library';
-    if (sid) {
+    const savedMsg = (sid ? creditPracticeRef.current(sid) : null) ?? 'Saved to your Swing Library';
+    useToastStore.getState().show(navigate ? savedMsg : `${savedMsg} — fresh set rolling`);
+    if (navigate) router.push('/swinglab/library' as never);
+  }, [coachNote, feelText, router, tempo, biomech, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, bodyItems, effectiveMode]);
+  /**
+   * The credit core, shared by Save, New Set and LEAVING (audit C5 — Back used to leave the set in the
+   * library with no points). Stamps any swing of the set not yet stamped, then awards once per session.
+   * Returns the toast line when points were awarded here, null otherwise.
+   */
+  const creditPracticeRef = useRef<(sid: string) => string | null>(() => null);
+  creditPracticeRef.current = (sid: string) => {
+    let savedMsg: string | null = null;
+    {
       try {
+        stampPracticeSwings();
         // 2026-10-26 — a swing the read demoted as practice earns no credit (services/swing/practiceSwings).
-        const demoted = (useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.shots ?? []).filter(isPracticeSwing).length;
-        const swings = Math.max(1, (segmentsRef.current.length || drillShotCount || 1) - demoted);
+        const swings = creditedSwingCount({
+          swingCount: segmentsRef.current.length,
+          drillShotCount,
+          shots: useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.shots ?? [],
+        });
         // 2026-06-30 (audit M1 — double-count fix) — when an Open Range / Focus / SmartPlan
         // SESSION is active, this swing was already stamped into it (recordPracticeSwingIfActive)
         // and endSession() awards + records the session total. Awarding here too DOUBLE-counted
@@ -4664,9 +4789,16 @@ export default function SmartMotion() {
         practiceSwingSamplesRef.current = [];
       } catch { /* non-fatal */ }
     }
-    useToastStore.getState().show(navigate ? savedMsg : `${savedMsg} — fresh set rolling`);
-    if (navigate) router.push('/swinglab/library' as never);
-  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, isPutt, bodyItems, effectiveMode]);
+    return savedMsg;
+  };
+  // Leaving credits a saved set Save / New Set did not (C5). Points only; no toast on the next screen.
+  useEffect(() => () => {
+    const sid = ingestedSessionIdRef.current;
+    const alreadyCredited = !!sid && useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.creditedPractice === true;
+    if (sid && sessionFromCaptureRef.current && shouldCreditOnLeave({ sessionId: sid, alreadyCredited })) {
+      try { creditPracticeRef.current(sid); } catch { /* non-fatal */ }
+    }
+  }, []);
   const confirmSave = useCallback(() => persistReviewToLibrary(true), [persistReviewToLibrary]);
   persistReviewRef.current = persistReviewToLibrary;
 
@@ -5662,14 +5794,11 @@ export default function SmartMotion() {
             "what should I work on" and the one brain replies + acts. Setup phase
             (top-left, where the targeting eye sits in review). */}
         {phase === 'setup' ? (
-          <TactilePressable
-            onPress={askCaddie}
-            style={[styles.targetingToggle, { top: insets.top + 76, backgroundColor: caddieListening ? colors.accent : 'rgba(6,15,9,0.72)' }]}
-            accessibilityRole="button"
-            accessibilityLabel={caddieListening ? 'Listening — tap to stop' : 'Talk to your caddie'}
-          >
-            <Ionicons name={caddieListening ? 'mic' : 'mic-outline'} size={18} color={caddieListening ? '#06140b' : colors.accent} />
-          </TactilePressable>
+          <TalkToCaddieButton
+            Touchable={TactilePressable}
+            accent={colors.accent}
+            style={[styles.targetingToggle, { top: insets.top + 76 }]}
+          />
         ) : null}
 
         {/* 2026-06-26 (Tim) — DRILL banner relocated from the top to the bottom

@@ -204,6 +204,13 @@ export function findOrphanExports(): string[] {
  * you still remember what it was for — which is the entire point of this file.
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
+  // ── 2026-10-27: SmartMotion talk button is the badge's tap (capture audit C7) ────────────────
+  'services/smartMotionRecordBus.ts :: emitSmartMotionUtterance':
+    'DUPE. Its only emitter was SmartMotion\'s talk button, which ran a private captureUtterance and ' +
+    'discarded every empty result (offline: silence). The button now calls listeningSession.toggle() — the ' +
+    'same tap as the CaddieMicBadge beside it, which owns the failure reply, the mic handover and the ' +
+    'recording-stop chokepoint. Kept with its caddie.tsx subscriber only so a typed SmartMotion entry can ' +
+    'reuse it; delete both if none is wired by 2.0.',
   // ── 2026-10-14: SmartBay exchange v1 ────────────────────────────────────────
   // parseBayLesson + importBayLesson are wired since 2026-10-24: app/swinglab/smartbay.tsx imports a hosted lesson.
   'services/bayExchange.ts :: parsePlayer':

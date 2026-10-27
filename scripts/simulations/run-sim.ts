@@ -3356,8 +3356,10 @@ check('Smart Motion: pipelined per-swing narration with one-ahead head start',
       /const runWindowedAnalysis = useCallback/.test(sm) &&
       /const pipelineNarrate = useCallback/.test(sm) &&
       /function swingNarrationLine/.test(sm) &&
-      /segsForAnalysis\.length > 1 && !puttModeRef\.current/.test(sm) &&
-      /void pipelineNarrate\(recorded\.uri, segsForAnalysis\)/.test(sm)
+      // 2026-10-27 (capture audit C1) — the multi/single/putt split is captureLife.followUps now, which also
+      // stands it down once the player has left (behaviour: __tests__/regression/a-capture-ends-with-the-screen).
+      /captureLifeRef\.current\.followUps\(\{ swingCount: segsForAnalysis\.length, putt: puttModeRef\.current \}\)/.test(sm) &&
+      /if \(follow\.narrateSet\) \{\s*void pipelineNarrate\(recorded\.uri, segsForAnalysis\)/.test(sm)
     );
   })(),
   'multi-swing reads narrate in order with a background head start; single/putt sessions unaffected');
@@ -6136,8 +6138,10 @@ check('Open Range surface wired — Smart Motion stamps, screen + entry point ex
     const caddie = read('app/(tabs)/caddie.tsx');
     return (
       // 2026-07-04 (drift reconcile) — the sample is built above the call now.
-      /recordPracticeSwingIfActive\(sample\)/.test(sm) &&           // smartmotion stamps swings
-      /stampedClipsRef\.current\.has\(clipUri\)/.test(sm) &&        // exactly-once per clip
+      // 2026-10-27 (capture audit C5) — exactly-once per SWING (session + index), not per clip; the rule is
+      // services/practice/smartMotionPracticeCredit (behaviour: every-swing-of-a-set-earns-practice-credit).
+      /recordPracticeSwingIfActive\(o\.sample\)/.test(sm) &&         // smartmotion stamps swings
+      /samplesToStamp\(\{/.test(sm) &&                                // exactly-once per swing
       /summarizeOpenRange\(active\.swings\)/.test(screen) &&        // screen shows the live read
       /name="practice\/open-range"/.test(layout) &&                // route registered
       // 2026-07-04 (elite-clean) — the old caddie.tsx entry lived inside the DEAD
@@ -14954,11 +14958,12 @@ check('Smart Motion: "go again" asked DURING analysis is queued, never dropped',
   (() => {
     const sm = readCode('app/swinglab/smartmotion.tsx');
     return (
-      /const queuedGoAgainRef = useRef\(false\)/.test(sm) &&
+      // 2026-10-27 (capture audit C6) — the queue lives on captureLife, which a failed capture or a new start
+      // clears (behaviour: __tests__/regression/a-capture-ends-with-the-screen).
       // the analyzing branch QUEUES rather than falling through to nothing
-      /\} else if \(phase === 'analyzing'\) \{[\s\S]{0,400}?queuedGoAgainRef\.current = true;/.test(sm) &&
+      /\} else if \(phase === 'analyzing'\) \{[\s\S]{0,1600}?captureLifeRef\.current\.queueGoAgain\(\);/.test(sm) &&
       // and a review-phase effect drains it, once, into the real go-again
-      /if \(phase !== 'review' \|\| !queuedGoAgainRef\.current\) return;\s*queuedGoAgainRef\.current = false;\s*beginNextRecording\(\);/.test(sm) &&
+      /if \(phase !== 'review' \|\| !captureLifeRef\.current\.takeQueuedGoAgain\(\)\) return;\s*beginNextRecording\(\);/.test(sm) &&
       // the NEW SET control itself still exists and still auto-saves the set it leaves
       /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.new_set_saves_this_set'\)\}/.test(sm) &&
       /persistReviewRef\.current\(false\)/.test(sm)
