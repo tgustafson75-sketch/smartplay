@@ -38,9 +38,10 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, shownSwingNeverRead, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { sessionBodyRead, sessionsToCompare, shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, shownSwingNeverRead, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
 import { useShotDetailRequest } from '../../../hooks/useShotDetailRequest';
 import { useIssueAsk } from '../../../hooks/useIssueAsk';
+import { useBodyAsk } from '../../../hooks/useBodyAsk';
 // 2026-09-20 — this screen HAS pose frames (activeBiomech.frames) and was still asking the model
 // to find a ~6px clubhead in a full downscaled frame. See services/swing/bodyBounds.
 import { readClubPath } from '../../../services/swing/clubPathRead';
@@ -81,6 +82,7 @@ import CompareReferencePickerSheet from '../../../components/swinglab/CompareRef
 import ComparisonResultSheet from '../../../components/swinglab/ComparisonResultSheet';
 import type { SimilarMatch, ReferenceSwing } from '../../../services/swingDatabase';
 import type { PoseEstimate } from '../../../services/poseEstimator';
+import type { SwingBiomechanics } from '../../../services/poseAnalysisApi';
 import type { SwingComparison } from '../../../services/swingComparisonEngine';
 import { getApiBaseUrl } from '../../../services/apiBase';
 import { titleForUpload } from '../../../services/swing/swingTitle';
@@ -204,6 +206,9 @@ export default function SwingDetail() {
   }, [shotMapSaved, shownShotIdx, shotCount]));
   // The biomech to render (shotDetail.shownShotBiomech): this shot's own, or swing 1's session-level read.
   const activeBiomech = shownShotBiomech(session, selectedShotIdx);
+  // 2026-10-27 (SB5, recheck R2-2) — what Compare and the auto-suggested references read: the session's read
+  // only when today's code stored it (shotDetail.sessionBodyRead), never an older build's under its note.
+  const compareBiomech = sessionBodyRead(session);
 
   // 2026-06-23 (Tim — "always able to TOUCH and correct who hit this swing")
   // — golfer attribution editor. The session.player_id resolves to a display
@@ -373,17 +378,11 @@ export default function SwingDetail() {
   );
   // 2026-07-27 (Tim — "compare two swings from different DATES with a different analysis metric") — the
   // engine (compareSwings self_vs_self) + the result sheet already exist for reference-compare; this just
-  // adds a DATE-oriented entry. comparableSessions = your other swings that HAVE biomechanics (so a metric
-  // diff is real), newest first. Picking one runs the same self_vs_self pass → per-metric better/worse/same.
+  // adds a DATE-oriented entry. comparableSessions = your other swings that HAVE a body read today's code
+  // stored (so a metric diff is real — shotDetail.sessionBodyRead), newest first. Picking one runs the same
+  // self_vs_self pass → per-metric better/worse/same.
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const comparableSessions = useMemo(
-    () => allSessions
-      .filter(x => x.id !== swing_id && !!x.biomechanics && !x.putting_analysis)
-      .slice()
-      .sort((a, b) => (b.date ?? 0) - (a.date ?? 0))
-      .slice(0, 40),
-    [allSessions, swing_id],
-  );
+  const comparableSessions = useMemo(() => sessionsToCompare(allSessions, swing_id), [allSessions, swing_id]);
   // 2026-05-23 — Comparison result sheet state. Holds the resolved
   // SwingComparison + ReferenceSwing pair. When both are non-null
   // the result sheet animates up with the side-by-side metric bars.
@@ -397,7 +396,8 @@ export default function SwingDetail() {
   // without opening the picker. Tap a chip to lock in that reference
   // via the same compareSwings pass.
   const [autoSuggestions, setAutoSuggestions] = useState<SimilarMatch[] | null>(null);
-  const autoSuggestComputedFor = useRef<string | null>(null);
+  /** The read the suggestions were computed from (one pass per read). */
+  const autoSuggestComputedFor = useRef<SwingBiomechanics | null>(null);
   const isComparing = leftCompareShotId != null && rightCompareShotId != null;
   const isPickingCompareTarget = leftCompareShotId != null && rightCompareShotId == null;
   const actionShot = actionShotId
@@ -577,9 +577,8 @@ export default function SwingDetail() {
   const reviewKey = `${swing_id ?? ''}|${layoutKey}|${shot?.id ?? ''}`;
   const { issueAsked, markIssueAsked, faultSecRef, askedFaultSec, holdAskedFault, clearAskedFault } = useIssueAsk(reviewKey);
   // 2026-10-27 (SB4x seam) — "Read it again" on a swing holding an older build's body read: keyed to the swing
-  // on screen like the issue ask, so it never carries to the next one (faultSpotlight.olderBodyReadNote).
-  const [bodyAskedKey, setBodyAskedKey] = useState<string | null>(null);
-  const bodyAsked = bodyAskedKey === reviewKey;
+  // on screen, every tap a new ask (hooks/useBodyAsk, faultSpotlight.olderBodyReadNote).
+  const { bodyAsked, bodyAskTaps, askBody } = useBodyAsk(reviewKey);
   /** The shot whose body read this screen asked for and has not settled (the 'Reading…' line). */
   const [bodyReadPendingShot, setBodyReadPendingShot] = useState<string | null>(null);
   // 2026-08-08 (Tim — "if it tries to do too much — mechanics, shot trace AND playback together — it
@@ -876,22 +875,25 @@ export default function SwingDetail() {
   // start off and appear only once the analysis has pose frames; the player turns them on.
 
   // 2026-05-23 — Auto-suggest 1-2 relevant comparisons once analysis
-  // completes and biomechanics is present. Idempotent per swing_id;
+  // completes and biomechanics is present. Idempotent per read;
   // failures collapse to no-suggestion (the manual Compare button
   // still works).
+  // 2026-10-27 (SB5, recheck R2-2) — from the read on screen (compareBiomech), once per read: a Re-analyze's
+  // new read is suggested for again, never left showing the matches of the read it replaced.
+  const suggestClub = session?.club;
   useEffect(() => {
-    if (!swing_id || autoSuggestComputedFor.current === swing_id) return;
-    if (!session?.biomechanics) return;
-    if ((session.analysis_status ?? 'pending') !== 'ok') return;
-    autoSuggestComputedFor.current = swing_id;
+    if (!compareBiomech || autoSuggestComputedFor.current === compareBiomech) return;
+    if (analysisStatus !== 'ok') return;
+    autoSuggestComputedFor.current = compareBiomech;
+    setAutoSuggestions(null);
     void (async () => {
       try {
         const dbMod = await import('../../../services/swingDatabase');
         const current: PoseEstimate = {
           source: 'video',
           confidence: 75,
-          frames: session.biomechanics?.frames ?? [],
-          biomechanics: session.biomechanics ?? null,
+          frames: compareBiomech.frames ?? [],
+          biomechanics: compareBiomech,
           swingVerdict: null,
           reason: 'auto-suggest comparison',
           age_band: 'adult',
@@ -899,14 +901,14 @@ export default function SwingDetail() {
           joint_confidence: { hip: 0.8, shoulder: 0.8, knee: 0.6, wrist: 0.6, ankle: 0.6, head: 0.7 },
           partial_view: false,
         };
-        const matches = await dbMod.searchSimilarSwings(current, 2, session.club ? { club: session.club } : undefined);
-        setAutoSuggestions(matches);
+        const matches = await dbMod.searchSimilarSwings(current, 2, suggestClub ? { club: suggestClub } : undefined);
+        if (autoSuggestComputedFor.current === compareBiomech) setAutoSuggestions(matches);
       } catch (e) {
         console.log('[swing-detail] auto-suggest failed (non-fatal):', e);
-        setAutoSuggestions([]);
+        if (autoSuggestComputedFor.current === compareBiomech) setAutoSuggestions([]);
       }
     })();
-  }, [swing_id, session?.biomechanics, session?.analysis_status, session?.club]);
+  }, [compareBiomech, analysisStatus, suggestClub]);
 
   // 2026-10-04 (orchestrator phase 3) — the on-open biomech backfill that lived here is gone. It was
   // gated off by a constant (LIBRARY_AUTO_PROCESS = false, Tim 06-15: "the library is manual"), so it
@@ -934,7 +936,7 @@ export default function SwingDetail() {
     shotId: selShot?.clipUri ? selShot.id : null,
     ask: shotDetailRequestFor({ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked }),
     unread: !!session && !!selShot && storedShotBiomech(session, selShot, session.shots.find((x) => x.clipUri)?.id === selShot.id) === undefined,
-    retrigger: `${selectedShotIdx}|${selShot?.clipUri ?? ''}|${showSkeleton}|${showTrace}|${issueAsked}|${bodyAsked}`,
+    retrigger: `${selectedShotIdx}|${selShot?.clipUri ?? ''}|${showSkeleton}|${showTrace}|${issueAsked}|${bodyAskTaps}`,
     setPending: setBodyReadPendingShot,
   });
 
@@ -2130,7 +2132,7 @@ export default function SwingDetail() {
   // when the user locks in a reference, at which point we run the full
   // swingComparisonEngine pass and surface the per-metric result.
   const onCompareTo = () => {
-    if (!session?.biomechanics) {
+    if (!compareBiomech) {
       useToastStore.getState().show('No biomechanics on this swing yet — analyze first.');
       return;
     }
@@ -2140,12 +2142,12 @@ export default function SwingDetail() {
   // Wraps the session's biomechanics as a PoseEstimate so the sheet
   // (and the engine) can consume it cleanly. Kept here so both the
   // sheet's search and the post-pick comparison see the same shape.
-  const currentPoseForCompare: PoseEstimate | null = session?.biomechanics
+  const currentPoseForCompare: PoseEstimate | null = compareBiomech
     ? {
         source: 'video',
         confidence: 75,
-        frames: session.biomechanics.frames ?? [],
-        biomechanics: session.biomechanics,
+        frames: compareBiomech.frames ?? [],
+        biomechanics: compareBiomech,
         swingVerdict: null,
         reason: 'swing detail compare-to action',
         age_band: 'adult',
@@ -2216,7 +2218,7 @@ export default function SwingDetail() {
   // coil, tilt) → better/worse/same. Mirrors onCompareToSelect but builds the reference from a real
   // SwingSession instead of the reference DB. Reuses the same self_vs_self engine + ComparisonResultSheet.
   const compareToSession = (os: SwingSession) => {
-    const bio = os.biomechanics;
+    const bio = sessionBodyRead(os);
     if (!currentPoseForCompare || !bio) {
       useToastStore.getState().show("That swing doesn't have mechanics yet — analyze it first.");
       return;
@@ -3598,7 +3600,7 @@ export default function SwingDetail() {
                     </TouchableOpacity>
                   ) : null}
                   {olderReadNote === 'older_read' && (
-                    <TouchableOpacity onPress={() => setBodyAskedKey(reviewKey)} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.read_again')}>
+                    <TouchableOpacity onPress={askBody} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.read_again')}>
                       <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.read_again')}</Text>
                     </TouchableOpacity>
                   )}
@@ -3789,7 +3791,7 @@ export default function SwingDetail() {
                   with scale-down feedback on tap. Hidden when no
                   matches or still loading silently — never blocks
                   the reanalyze flow. */}
-              {session.biomechanics && !session.putting_analysis && autoSuggestions && autoSuggestions.length > 0 && (
+              {compareBiomech && !session.putting_analysis && autoSuggestions && autoSuggestions.length > 0 && (
                 <AutoSuggestCard
                   matches={autoSuggestions}
                   onSelect={onCompareToSelect}
@@ -3801,7 +3803,7 @@ export default function SwingDetail() {
                   biomechanics. Fires searchSimilarSwings → opens a
                   bottom-sheet picker (next sprint UI) OR auto-runs vs
                   tour-median archetype when no other refs exist. */}
-              {session.biomechanics && !session.putting_analysis && (
+              {compareBiomech && !session.putting_analysis && (
                 <TouchableOpacity
                   style={[styles.reanalyzeBtn, { borderColor: colors.accent, marginTop: 8 }]}
                   onPress={onCompareTo}
@@ -3815,7 +3817,7 @@ export default function SwingDetail() {
               )}
               {/* 2026-07-27 (Tim) — compare THIS swing to an EARLIER one of yours (by date) on every
                   metric. Only when there's another analyzed swing to diff against. */}
-              {session.biomechanics && !session.putting_analysis && comparableSessions.length > 0 && (
+              {compareBiomech && !session.putting_analysis && comparableSessions.length > 0 && (
                 <TouchableOpacity
                   style={[styles.reanalyzeBtn, { borderColor: colors.accent, marginTop: 8 }]}
                   onPress={() => setDatePickerOpen(true)}

@@ -9,7 +9,26 @@
  *
  * Now the held credit is also on the swing session, and the launch applies it once — without the swings a
  * read demoted. Driven through the real ledger, the real launch sweep and the real stores.
+ *
+ * 2026-10-27 (recheck "the launch credits swings the read never got to demote") — this test demoted swing b
+ * BEFORE the simulated kill, which a real kill does not do: the classifier runs at the END of the set's read,
+ * the kill cut that read short, and nothing resumes it. At launch the sweep "waited for the live read" — none
+ * exists at boot — and credited all three swings for good. Now the kill comes first, and the launch READS
+ * the set (the one run, here stubbed: it runs the classifier as the real read does) before crediting it.
  */
+const mockReads: { id: string; extras: unknown }[] = [];
+let mockReadOutcome: 'classified' | 'offline' = 'classified';
+jest.mock('../../services/swing/orchestrator/uploadRun', () => ({
+  runSwingAnalysis: async (id: string, extras?: unknown) => {
+    mockReads.push({ id, extras });
+    await new Promise((r) => setTimeout(r, 5));        // the read takes time: the credit must wait for it
+    const { useSwingSessionStore: st } = jest.requireActual('../../store/swingSessionStore');
+    if (mockReadOutcome === 'offline') { st.getState().setSessionAnalysisStatus(id, 'failed', 'no signal'); return { readFailed: 'no signal' }; }
+    mockDemoteB();                                      // the set's classifier, at the end of its read
+    st.getState().setSessionAnalysisStatus(id, 'ok');
+    return { primary_issue: null, drill_recommendation: null, analyses: {} };
+  },
+}));
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
@@ -27,7 +46,7 @@ function seed(): void {
   usePracticeSessionStore.setState({ active: null, history: [] } as never);
   usePracticePointsStore.setState({ total: 0, byDrill: {} } as never);
 }
-const demoteB = () => {
+const mockDemoteB = () => {
   const shots = useSwingSessionStore.getState().sessionHistory[0].shots;
   useSwingSessionStore.getState().setShotPracticeMarks('s', classifyPracticeSwings(shots as never, {
     a: { ball_struck: 'yes' }, b: { ball_struck: 'no' }, c: { ball_struck: 'yes' },
@@ -43,15 +62,15 @@ const launch = (): Promise<string[]> => {
 };
 
 let books: SetCreditBooks;
-beforeEach(() => { seed(); books = { stamped: new Set(), samples: new Map() }; });
+beforeEach(() => { seed(); books = { stamped: new Set(), samples: new Map() }; mockReads.length = 0; mockReadOutcome = 'classified'; });
 
 describe('a set\'s held practice credit survives the app being killed', () => {
-  it('THE REPORT: Save mid-read, the app dies, the read had demoted swing b — the next launch credits a and c once', async () => {
+  it('THE REPORT: Save mid-read, the app dies before the classifier — the launch reads the set, then credits a and c once', async () => {
     const l = credit.createSetCreditLedger((sid, s) => credit.creditSmartMotionSet(sid, s, books));
     l.readStarted('s');
     expect(l.request('s', snap).pending).toBe(true);   // Save: "Saved to your Swing Library"
-    demoteB();                                           // the set's classifier ran before the kill
-    // -- killed: the ledger is gone, its flush never runs --
+    // -- killed mid-read: the classifier never ran, the ledger is gone, its flush never runs --
+    expect(sess().shots.some((x) => (x as { practice?: unknown }).practice)).toBe(false);
     expect(credited()).toEqual([]);
     expect(sess().creditedPractice).not.toBe(true);
     // What is written to disk carries the held credit (the store's own partialize).
@@ -59,6 +78,8 @@ describe('a set\'s held practice credit survives the app being killed', () => {
     expect(disk.sessionHistory[0].practiceCreditPending).toEqual(snap);
 
     expect(await launch()).toEqual(['s']);
+    // The set was read first (its first read to reach the end, not a second look), and b was not credited.
+    expect(mockReads).toEqual([{ id: 's', extras: { deferredRead: true } }]);
     expect(credited()).toEqual([2]);
     expect(usePracticePointsStore.getState().total).toBeGreaterThan(0);
     expect(sess().creditedPractice).toBe(true);
@@ -68,13 +89,49 @@ describe('a set\'s held practice credit survives the app being killed', () => {
     expect(await launch()).toEqual([]);                  // and never twice
     expect(credited()).toEqual([2]);
     expect(usePracticePointsStore.getState().total).toBe(pts);
+    expect(mockReads).toHaveLength(1);
+  });
+
+  it('killed after the read reached its end (status ok, classifier ran) but before the credit: credited at once, no read', async () => {
+    const l = credit.createSetCreditLedger((sid, s) => credit.creditSmartMotionSet(sid, s, books));
+    l.readStarted('s');
+    l.request('s', snap);
+    mockDemoteB();
+    useSwingSessionStore.getState().setSessionAnalysisStatus('s', 'ok');
+    // -- killed before readEnded / flush --
+    expect(await launch()).toEqual(['s']);
+    expect(mockReads).toEqual([]);
+    expect(credited()).toEqual([2]);
+  });
+
+  it('the launch read cannot be done (no signal): credited as the screen credits an offline set, once', async () => {
+    mockReadOutcome = 'offline';
+    const l = credit.createSetCreditLedger((sid, s) => credit.creditSmartMotionSet(sid, s, books));
+    l.readStarted('s');
+    l.request('s', snap);
+    expect(await launch()).toEqual(['s']);
+    expect(mockReads).toHaveLength(1);
+    expect(credited()).toEqual([3]);
+    expect(await launch()).toEqual([]);
+    expect(mockReads).toHaveLength(1);
+  });
+
+  it('a hold that outlived its credit is cleared at launch, and no read is spent on it', async () => {
+    const l = credit.createSetCreditLedger((sid, s) => credit.creditSmartMotionSet(sid, s, books));
+    l.readStarted('s');
+    l.request('s', snap);
+    useSwingSessionStore.getState().setSessionCreditedPractice('s', true);
+    expect(await launch()).toEqual([]);
+    expect(mockReads).toEqual([]);
+    expect(credited()).toEqual([]);
+    expect(held() ?? null).toBeNull();
   });
 
   it('the app lives: the ledger applies the credit when the read settles and nothing is left held for the launch', async () => {
     const l = credit.createSetCreditLedger((sid, s) => credit.creditSmartMotionSet(sid, s, books));
     l.readStarted('s');
     l.request('s', snap);
-    demoteB();
+    mockDemoteB();
     l.readEnded('s');
     expect(l.flush('s')).toBe(true);
     expect(credited()).toEqual([2]);

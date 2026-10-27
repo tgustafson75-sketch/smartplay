@@ -356,8 +356,9 @@ export type ReadExtras = {
    */
   secondLook?: boolean;
   /**
-   * 2026-10-27 (SB4x) — the read that WAITED FOR A CONNECTION (orchestrator/readWhenOnline): the first read
-   * of these swings, not a second look. A live capture's swings did not move, and what was measured on the
+   * 2026-10-27 (SB4x) — the read that WAITED FOR A CONNECTION (orchestrator/readWhenOnline), or (SB5) the read
+   * a kill cut short, taken up at launch for a held set credit (practice/smartMotionPracticeCredit
+   * applyHeldSetCredits): the first read of these swings to reach its end, not a second look. A live capture's swings did not move, and what was measured on the
    * device meanwhile (swings 2+'s body reads and arcs) is kept (uploadRun.invalidateForReanalysis).
    */
   deferredRead?: boolean;

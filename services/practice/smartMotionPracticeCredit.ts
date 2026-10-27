@@ -208,10 +208,18 @@ const hydrated = (store: Persisted): Promise<void> => new Promise((resolve) => {
 
 /**
  * 2026-10-27 (Phase SB5) — AT LAUNCH: every set whose credit was held for a read the app did not live to see
- * settle is credited now, once, without the swings a read demoted (creditSmartMotionSet). A read of it still
- * going (the read that waited for a connection) is waited for first. Every store it writes has loaded first:
- * points awarded into a store that was still loading would be overwritten by what it loads. Returns the sets
- * credited. Called once at boot (app/_layout).
+ * settle is credited now, once, without the swings a read demoted (creditSmartMotionSet). Every store it
+ * writes has loaded first: points awarded into a store that was still loading would be overwritten by what
+ * it loads. Returns the sets credited. Called once at boot (app/_layout).
+ *
+ * 2026-10-27 (Phase SB5, recheck "credited before the read could demote it, through the kill") — the same
+ * hold-until-settled rule as the screen's ledger. The practice classifier runs at the END of the set's read,
+ * and a read the kill cut short is never resumed (nothing re-reads it but readWhenOnline, and only a swing
+ * that waited for a connection). So waiting for a live run waited for nothing at boot: every swing was
+ * credited, a practice swing included, for good. Now a set whose read never reached its end (its status is
+ * not 'ok', the status the read writes only after the classifier) is READ first, through the one run, and
+ * credited when that read settles — offline it settles at once, failed, and is credited as the screen
+ * credits an offline set. One read at a time.
  */
 export async function applyHeldSetCredits(): Promise<string[]> {
   const { useSwingSessionStore } = require('../../store/swingSessionStore') as typeof import('../../store/swingSessionStore');
@@ -222,9 +230,18 @@ export async function applyHeldSetCredits(): Promise<string[]> {
   const { swingRunKey } = require('../swing/orchestrator/shotDetail') as typeof import('../swing/orchestrator/shotDetail');
   const held = () => useSwingSessionStore.getState().sessionHistory.filter((x) => x.practiceCreditPending != null);
   const out: string[] = [];
+  const find = (id: string) => useSwingSessionStore.getState().sessionHistory.find((x) => x.id === id);
   for (const { id } of held()) {
-    await liveRun(swingRunKey(id))?.done;
-    const s = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === id);
+    // Already credited (the hold outlived it): nothing to read for, nothing to credit.
+    if (find(id)?.creditedPractice === true) { useSwingSessionStore.getState().setSessionPracticeCreditPending(id, null); continue; }
+    const live = liveRun(swingRunKey(id));
+    if (live) await live.done;
+    else if (find(id)?.analysis_status !== 'ok') {
+      const { runSwingAnalysis } = require('../swing/orchestrator/uploadRun') as typeof import('../swing/orchestrator/uploadRun');
+      // The first read of these swings to reach its end, not a second look: what was read before the kill stays.
+      await runSwingAnalysis(id, { deferredRead: true }).catch(() => undefined);
+    }
+    const s = find(id);
     const snap = s?.practiceCreditPending;
     if (!s || !snap) continue;
     if (s.creditedPractice === true) { useSwingSessionStore.getState().setSessionPracticeCreditPending(id, null); continue; }

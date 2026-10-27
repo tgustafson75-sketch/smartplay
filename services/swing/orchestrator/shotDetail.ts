@@ -159,6 +159,27 @@ export function shownSwingNeverRead(s: SwingSession | null | undefined, selected
   return rawShotBiomech(s, shot, s.shots.find((x) => x.clipUri)?.id === shot.id) === undefined;
 }
 
+/**
+ * 2026-10-27 (Phase SB5, recheck R2-2) — THE SESSION'S BODY READ A COMPARISON MAY USE (Compare to a
+ * reference swing / an earlier swing, the auto-suggested references, the earlier swings offered): the
+ * session-level read, only when today's code stored it. They read raw `biomechanics`, so on an old swing
+ * they compared an older build's metrics right under "This swing's body read is from an older version, so
+ * it isn't shown" — and offered other swings whose only read was an older build's.
+ */
+export function sessionBodyRead(s: Pick<SwingSession, 'biomechanics' | 'analysis_version'> | null | undefined): SwingBiomechanics | null {
+  return s && bodyReadIsCurrent(s.analysis_version) ? s.biomechanics ?? null : null;
+}
+
+/** The player's other swings a swing may be compared to (sessionBodyRead), newest first. Putting has its own card. */
+export function sessionsToCompare<T extends Pick<SwingSession, 'id' | 'date' | 'biomechanics' | 'analysis_version' | 'putting_analysis'>>(
+  all: readonly T[], swingId: string | null | undefined,
+): T[] {
+  return all
+    .filter((x) => x.id !== swingId && !!sessionBodyRead(x) && !x.putting_analysis)
+    .sort((a, b) => (b.date ?? 0) - (a.date ?? 0))
+    .slice(0, 40);
+}
+
 /** True when this platform can only produce a vision arc — a stored one is then as good as it gets. */
 function trackerUnavailable(): boolean {
   try { return (require('react-native') as typeof import('react-native')).Platform.OS !== 'android'; } catch { return true; }

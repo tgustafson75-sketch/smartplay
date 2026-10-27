@@ -418,7 +418,8 @@ function isReanalysis(sessionId: string): boolean {
  */
 function invalidateForReanalysis(sessionId: string, extras?: ReadExtras): void {
   if (!isReanalysis(sessionId)) return;
-  // 2026-10-27 (SB4x) — the read that waited for a connection is this swing's FIRST read, not a second look.
+  // 2026-10-27 (SB4x) — the read that waited for a connection (or, SB5, the read a kill cut short, taken up at
+  // launch for a held set credit) is this swing's FIRST read, not a second look.
   // A live capture's windows are the microphone's and do not move, and its swings 2+ were read on the
   // device meanwhile: wiping them threw that work away (swing 1 is read again by the run regardless). An
   // upload is still cleared — its swings are split online, so the windows may move.
