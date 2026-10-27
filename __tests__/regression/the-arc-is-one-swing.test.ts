@@ -145,8 +145,8 @@ describe('the one arc runner tracks only that swing', () => {
       sessionHistory: [{
         id: 'sm1', source: 'live_capture', club: 'driver', upload: { duration_sec: null }, analysis_status: 'ok',
         shots: [
-          { id: 'sm1_a_cage_shot', clipUri: 'file:///c.mp4', clipStartSeconds: 2, clipEndSeconds: 6, detectionMethod: 'manual', detectionOffsetSeconds: 4.5, biomechanics: { frames: [] } },
-          { id: 'sm1_b_cage_shot', clipUri: 'file:///c.mp4', clipStartSeconds: 14, clipEndSeconds: 18, detectionMethod: 'manual', detectionOffsetSeconds: 16.5, biomechanics: bio },
+          { id: 'sm1_a_cage_shot', clipUri: 'file:///c.mp4', clipStartSeconds: 2, clipEndSeconds: 6, detectionMethod: 'manual', detectionOffsetSeconds: 4.5, biomechanics: { frames: [] }, analysis_version: 1 },
+          { id: 'sm1_b_cage_shot', clipUri: 'file:///c.mp4', clipStartSeconds: 14, clipEndSeconds: 18, detectionMethod: 'manual', detectionOffsetSeconds: 16.5, biomechanics: bio, analysis_version: 1 },
         ],
       }] as never,
     });

@@ -295,3 +295,15 @@ export function correlateStrikesWithVideo(
   }
   return segmentsFromStrikes(pseudo, durationMs, opts);
 }
+
+/**
+ * 2026-10-26 (audit C2) — THE SWING A RE-ANALYZE WAITS ON is the one on screen. SmartMotion's re-analyze
+ * always handed the run swing 1's segment, so with swing 3 selected the screen waited for — and showed —
+ * swing 1's verdict. The run reads every swing; the screen waits on the selected one, numbered by its
+ * place in the reel (the session's shots are in the same order).
+ */
+export function reanalyzeSegment(segments: readonly SwingSegment[], selected: number): SwingSegment | undefined {
+  if (!segments.length) return undefined;
+  const i = Number.isInteger(selected) && selected >= 0 && selected < segments.length ? selected : 0;
+  return { ...segments[i], index: i + 1 };
+}

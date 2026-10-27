@@ -202,7 +202,7 @@ describe('the arc shows by itself; only the player can pay for one', () => {
   const seed = () => useSwingSessionStore.setState({
     activeSession: null,
     sessionHistory: [{ id: 's1', source: 'uploaded_video', analysis_status: 'ok', shots: [
-      { id: 'a', clipUri: `file:///a${++clip}.mp4`, clipStartSeconds: 5, clipEndSeconds: 7.5, biomechanics: { frames: [{ timestampMs: 5200, keypoints: [] }, { timestampMs: 7000, keypoints: [] }] } },
+      { id: 'a', clipUri: `file:///a${++clip}.mp4`, clipStartSeconds: 5, clipEndSeconds: 7.5, biomechanics: { frames: [{ timestampMs: 5200, keypoints: [] }, { timestampMs: 7000, keypoints: [] }] }, analysis_version: 1 },
     ] }] as never,
   });
   const runOnce = async (arc: true | 'tracker') => {

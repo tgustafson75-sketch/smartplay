@@ -167,7 +167,7 @@ describe('the cloud read down: swings 2+ still get the measured verdict', () => 
   });
 
   it('a swing whose body read is already stored gets its verdict on tap with no decode at all', async () => {
-    useSwingSessionStore.setState((st) => ({ sessionHistory: st.sessionHistory.map((s) => ({ ...s, analysis_status: 'failed', shots: s.shots.map((sh, i) => (i === 2 ? { ...sh, biomechanics: bio(), club_arc_source: 'tracker' } : sh)) })) }) as never);
+    useSwingSessionStore.setState((st) => ({ sessionHistory: st.sessionHistory.map((s) => ({ ...s, analysis_status: 'failed', shots: s.shots.map((sh, i) => (i === 2 ? { ...sh, biomechanics: bio(), analysis_version: 1, club_arc_source: 'tracker', club_arc_version: 1 } : sh)) })) }) as never);
     requestShotDetail(SID, shotId(2), { arc: 'tracker' });
     await tick(20);
     expect(mockDecodes).toHaveLength(0);

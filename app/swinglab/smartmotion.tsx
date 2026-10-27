@@ -93,7 +93,7 @@ import { startMeteredRecording, type MeteringHandle } from '../../services/swing
 import { detectStrikes, levelStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { createLiveStrikeMeter } from '../../services/swing/liveStrikeMeter';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
-import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, reanalyzeSegment, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { NO_SWING_FOUND } from '../../services/swing/orchestrator/uploadRun';
 import { requestShotDetail, shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
 import { CONTACT_ISSUE_IDS, mishitFromFeel, noLaunchIssue } from '../../services/swing/contactVerdict';
@@ -4472,7 +4472,8 @@ export default function SmartMotion() {
   const reanalyze = useCallback(() => {
     if (!clipUri || phase === 'analyzing') return;
     // The swing already saved — re-read it, never ingest a duplicate into the library.
-    void runAnalysis(clipUri, segmentsRef.current[0], { reuseSessionId: ingestedSessionIdRef.current });
+    // The swing on screen (audit C2): segments[0] put swing 1's verdict over whichever swing was selected.
+    void runAnalysis(clipUri, reanalyzeSegment(segmentsRef.current, selectedSwingRef.current), { reuseSessionId: ingestedSessionIdRef.current });
   }, [clipUri, phase, runAnalysis]);
 
   /**

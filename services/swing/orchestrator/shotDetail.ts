@@ -24,6 +24,7 @@ import { getOrStartRun, liveRun, liveRunKeys, whenStageSettled, type AnalysisRun
 import { liveSessionStore } from './liveSessionStore';
 import { useSwingSessionStore, type SwingSession, type SwingShot } from '../../../store/swingSessionStore';
 import type { PoseFrame, SwingBiomechanics } from '../../poseAnalysisApi';
+import { CLUB_ARC_VERSION, bodyReadIsCurrent, clubArcIsCurrent } from '../analysisVersion';
 
 type In = { sessionId: string; shotId: string; force: boolean; arc: boolean; trackerOnly: boolean };
 
@@ -87,10 +88,14 @@ function lookup(sessionId: string, shotId: string): { s: SwingSession; shot: Swi
   return { s, shot, first: s.shots.find((x) => x.clipUri)?.id === shotId };
 }
 
-/** The biomechanics already stored for this shot (`undefined` = never computed, `null` = computed, none). */
+/**
+ * The biomechanics already stored for this shot (`undefined` = never computed, `null` = computed, none).
+ * 2026-10-26 — computed BY TODAY'S CODE: a read an older build stored (older or no analysis_version) is
+ * unread, so the swing is read again when it is next shown and no verdict is minted from its skeleton.
+ */
 export function storedShotBiomech(s: SwingSession, shot: SwingShot, first: boolean): SwingBiomechanics | null | undefined {
-  if (shot.biomechanics !== undefined) return shot.biomechanics;
-  return first ? s.biomechanics : undefined;
+  if (shot.biomechanics !== undefined) return bodyReadIsCurrent(shot.analysis_version) ? shot.biomechanics : undefined;
+  return first && bodyReadIsCurrent(s.analysis_version) ? s.biomechanics : undefined;
 }
 
 /** True when this platform can only produce a vision arc — a stored one is then as good as it gets. */
@@ -106,12 +111,25 @@ function trackerUnavailable(): boolean {
  */
 const answered = new Set<string>();
 const answerKey = (s: SwingSession, shot: SwingShot) =>
-  `${s.id}|${shot.id}|${shot.clipUri}|${shot.clipStartSeconds ?? ''}|${shot.clipEndSeconds ?? ''}`;
+  `${s.id}|${shot.id}|${shot.clipUri}|${shot.clipStartSeconds ?? ''}|${shot.clipEndSeconds ?? ''}|v${CLUB_ARC_VERSION}`;
+
+/**
+ * 2026-10-26 — a RE-ANALYSIS forgets this launch's answers for the session (uploadRun.runSwingAnalysis),
+ * so swings 2+ are tracked again by the new analysis instead of being "already answered".
+ */
+export function clearAnswered(sessionId: string): void {
+  for (const k of [...answered]) if (k.startsWith(`${sessionId}|`)) answered.delete(k);
+}
 
 function hasFinalArc(s: SwingSession, shot: SwingShot, first: boolean): boolean {
   if (answered.has(answerKey(s, shot))) return true;
+  // 2026-10-26 — only an arc TODAY'S code stored is final: an older build's (older or no club_arc_version)
+  // is tracked again. "Re-tracking gives the same answer" held only while the tracker never changed.
+  const own = shot.club_arc_source !== undefined || shot.club_arc !== undefined;
+  const version = own ? shot.club_arc_version : (first ? s.club_arc_version : undefined);
+  if (!clubArcIsCurrent(version)) return false;
   const src = shot.club_arc_source ?? (first ? s.club_arc_source : undefined);
-  if (src === 'tracker') return true;   // tracked, found or honestly empty — re-tracking gives the same answer
+  if (src === 'tracker') return true;   // tracked by today's tracker, found or honestly empty
   // A stored VISION answer (an arc, or an honest "no arc") is final where the tracker cannot run: asking
   // the paid model again about the same frames cannot change it — across app launches too.
   return src === 'vision' && trackerUnavailable();
@@ -160,6 +178,12 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
   const hit = lookup(input.sessionId, input.shotId);
   if (!hit) return null;
   const { s, shot, first } = hit;
+  /**
+   * 2026-10-26 — a FORCED run is a new analysis: what is stored belongs to the old one. It goes back to
+   * unread NOW, so a body read that throws or overruns its budget can never leave the old skeleton standing
+   * as this analysis's (only "nothing could look" used to clear it, below).
+   */
+  if (input.force) liveSessionStore(signal).clearShotBiomechanics(input.sessionId, input.shotId, first);
   const { traceStep } = require('../../analysisTrace') as typeof import('../../analysisTrace');
   const vu = require('../../videoUpload') as typeof import('../../videoUpload');
   const pd = require('../../poseDetection') as typeof import('../../poseDetection');
@@ -349,12 +373,21 @@ async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomec
       zoomed: bodyBoundsFromPose(frames) != null,
     }, 'diag');
   } catch { /* a diagnostic never breaks the run */ }
-  if (!arc) return null;   // no answer at all (no copy / no network) — asked again next time
+  const store = liveSessionStore(signal);
+  if (!arc) {
+    // No answer at all (no copy / no network) — asked again next time. 2026-10-26 — on a FORCED run (a new
+    // analysis, maybe a new window and a new body read) the old arc goes too: it must never be drawn against
+    // the new skeleton as if it were this window's.
+    if (input.force) store.clearShotClubArc(input.sessionId, input.shotId, first);
+    return null;
+  }
   answered.add(answerKey(s, shot));
   if (arc.points.length < 3 && arc.rejected?.reason === 'too_few') sayClubheadUnreadableOnce();
   const pts = arc.points.length >= 3 ? arc.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + startMs })) : [];
   const frame = pts.length ? { w: arc.frameW ?? null, h: arc.frameH ?? null } : null;
-  const store = liveSessionStore(signal);
+  // A forced run's answer replaces the old one outright, even an empty one (the setters keep a good arc
+  // over an empty re-run otherwise).
+  if (input.force) store.clearShotClubArc(input.sessionId, input.shotId, first);
   store.setShotClubArc(input.sessionId, input.shotId, pts, frame, arc.source);
   if (first) store.setSessionClubArc(input.sessionId, pts, frame, arc.source);
   return { points: pts.length };

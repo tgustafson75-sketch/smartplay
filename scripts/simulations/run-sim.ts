@@ -3137,8 +3137,11 @@ check('Smart Motion: re-analyze the kept clip + auto-update on cold start (Tim)'
     return (
       // re-analyze the existing clip (not re-record)
       /const reanalyze = useCallback\(\(\) => \{/.test(sm) &&
-      // 2026-10-05 — and it re-reads the swing ALREADY saved (never a duplicate library entry)
-      /void runAnalysis\(clipUri, segmentsRef\.current\[0\], \{ reuseSessionId: ingestedSessionIdRef\.current \}\)/.test(sm) &&
+      // 2026-10-05 — and it re-reads the swing ALREADY saved (never a duplicate library entry).
+      // 2026-10-26 (audit C2) — and waits on the swing ON SCREEN: segments[0] put swing 1's verdict over
+      // whichever swing was selected (behaviour: smartmotion-reanalyzes-the-swing-on-screen.test.ts).
+      /void runAnalysis\(clipUri, reanalyzeSegment\(segmentsRef\.current, selectedSwingRef\.current\), \{ reuseSessionId: ingestedSessionIdRef\.current \}\)/.test(sm) &&
+      !/void runAnalysis\(clipUri, segmentsRef\.current\[0\], \{ reuseSessionId/.test(sm) &&
       /onPress=\{reanalyze\}/.test(sm) &&
       /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.re_analyze_this_swing'\)\}/.test(sm) &&
       /**

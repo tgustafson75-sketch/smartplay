@@ -61,7 +61,7 @@ describe('the club stage waits for pose', () => {
   });
 
   it('the answer is remembered per clip + window, never a bare swing index', () => {
-    expect(runner).toMatch(/`\$\{s\.id\}\|\$\{shot\.id\}\|\$\{shot\.clipUri\}\|\$\{shot\.clipStartSeconds \?\? ''\}\|\$\{shot\.clipEndSeconds \?\? ''\}`/);
+    expect(runner).toMatch(/`\$\{s\.id\}\|\$\{shot\.id\}\|\$\{shot\.clipUri\}\|\$\{shot\.clipStartSeconds \?\? ''\}\|\$\{shot\.clipEndSeconds \?\? ''\}\|v\$\{CLUB_ARC_VERSION\}`/);
   });
 
   it('the arc reports its anchor and result into the run\'s trace', () => {

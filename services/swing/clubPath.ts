@@ -492,8 +492,10 @@ async function trackedClubPath(
     return skip('tracker failed', { error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 });
   }
   const raw = r.points
-    .filter((p) => p.t >= startMs - 120 && p.t <= endMs + 120 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
-    .map((p) => ({ x: p.x, y: p.y, tMs: Math.max(0, p.t - startMs) }));
+    // 2026-10-26 — a detection before the window is outside it: dropped, never clamped to tMs 0 (the old
+    // 120ms slack stacked two or three clubhead positions on the window's first instant).
+    .filter((p) => p.t >= startMs && p.t <= endMs + 120 && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
+    .map((p) => ({ x: p.x, y: p.y, tMs: p.t - startMs }));
   const { rejection, points } = classifyTrackedArc(raw);
   trace('club track (on-device)', { frames: r.frames, seen: raw.length, kept: rejection ? 0 : points.length, rejected: rejection, ms: Date.now() - t0 });
   console.log('[clubTrack]', JSON.stringify({ frames: r.frames, seen: raw.length, rejection, ms: Date.now() - t0 }));

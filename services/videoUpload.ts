@@ -328,11 +328,11 @@ export async function probeVideo(uri: string): Promise<{ has_audio: boolean; dur
  * Phase V — emits analysis-status transitions throughout so the swing
  * detail surface can render real progress copy and surface failures.
  */
-export function runPhaseKOnSession(sessionId: string): Promise<ReadOutcome> {
+export function runPhaseKOnSession(sessionId: string, extras?: ReadExtras): Promise<ReadOutcome> {
   // 2026-10-04 — every caller goes through the orchestrator's upload run (window → read → pose), which
   // also makes it one run per swing: a second trigger joins the run already going.
   const { runUploadAnalysis } = require('./swing/orchestrator/uploadRun') as typeof import('./swing/orchestrator/uploadRun');
-  return runUploadAnalysis(sessionId);
+  return runUploadAnalysis(sessionId, extras);
 }
 
 /**
@@ -349,6 +349,12 @@ export type ReadExtras = {
   angle?: 'down_the_line' | 'face_on';
   /** Each swing's read as it lands — the SmartMotion pager shows and speaks them one by one. */
   onShotRead?: (shotId: string, analysis: import('./poseDetection').SwingAnalysis, locateDegraded: 'dead_host' | 'ceiling' | 'unknown' | null) => void;
+  /**
+   * 2026-10-26 — the player asked for a SECOND LOOK at an inconclusive read (the swing screen's "want a
+   * second look?" card): only then does the read carry the previous headline as prior_analyzed_fault, which
+   * tells the model to look past it. Every other re-analyze is a fresh, unsteered read by today's code.
+   */
+  secondLook?: boolean;
 };
 
 export type ReadOutcome = {
@@ -717,7 +723,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     // Phase 502 — Reanalyze "look for something else" signal (see
     // longer comment below in commit-2 batch closure).
     const priorAnalyzedFault: string | null =
-      (session.primary_issue && typeof session.primary_issue.primary_fault === 'string')
+      (extras?.secondLook === true && session.primary_issue && typeof session.primary_issue.primary_fault === 'string')
         ? session.primary_issue.primary_fault
         : null;
 
@@ -998,6 +1004,10 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
             fraction: r.fault_frame_fraction ?? null,
           });
         }
+      } else {
+        // 2026-10-26 — this read named no moment for the swing: the previous analysis's must not stand
+        // (the spotlight paused on the old fault's time).
+        liveSessionStore(signal).setShotIssueTimestamps(sessionId, swing.id, []);
       }
     };
 

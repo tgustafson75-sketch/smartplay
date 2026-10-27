@@ -24,19 +24,25 @@ describe('a club-arc window is retried only when it was never answered', () => {
   });
 
   it('remembers the answer, even when it was "no arc"', () => {
-    expect(code).toMatch(/if \(!arc\) return null;[^\n]*\n\s*answered\.add\(answerKey\(s, shot\)\);/);
+    // 2026-10-26 — the no-answer branch is a block now (a FORCED run also clears the old arc there), then
+    // returns before the answer is remembered.
+    expect(code).toMatch(/if \(!arc\) \{[\s\S]{0,200}?return null;\s*\}\s*answered\.add\(answerKey\(s, shot\)\);/);
     expect(code).toMatch(/if \(answered\.has\(answerKey\(s, shot\)\)\) return true;/);
-    // a tracked answer, found or honestly empty, is final across app restarts too
-    expect(code).toMatch(/if \(src === 'tracker'\) return true;/);
+    // a tracked answer, found or honestly empty, is final across app restarts too — 2026-10-26: when TODAY's
+    // tracker stored it (an older or missing club_arc_version is tracked again; see
+    // reanalyze-recomputes-every-swing for the behaviour).
+    expect(code).toMatch(/if \(!clubArcIsCurrent\(version\)\) return false;[\s\S]{0,200}if \(src === 'tracker'\) return true;/);
   });
 
   it('still retries when there was no answer at all', () => {
     // `if (!arc) return null` comes BEFORE the answer is remembered — a null never closes the window.
-    expect(code.indexOf('if (!arc) return null;')).toBeLessThan(code.indexOf('answered.add('));
+    expect(code.indexOf('if (!arc) {')).toBeGreaterThan(-1);
+    expect(code.indexOf('if (!arc) {')).toBeLessThan(code.indexOf('answered.add('));
   });
 
   it('the answer key names clip and window, so a DIFFERENT swing (or a trimmed one) is tried', () => {
-    expect(code).toMatch(/`\$\{s\.id\}\|\$\{shot\.id\}\|\$\{shot\.clipUri\}\|\$\{shot\.clipStartSeconds \?\? ''\}\|\$\{shot\.clipEndSeconds \?\? ''\}`/);
+    // 2026-10-26 — and the arc code's version: an answer by an older tracker is not today's answer.
+    expect(code).toMatch(/`\$\{s\.id\}\|\$\{shot\.id\}\|\$\{shot\.clipUri\}\|\$\{shot\.clipStartSeconds \?\? ''\}\|\$\{shot\.clipEndSeconds \?\? ''\}\|v\$\{CLUB_ARC_VERSION\}`/);
   });
 
   it('a new analysis (force) asks again — the window may have moved', () => {

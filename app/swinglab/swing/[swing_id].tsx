@@ -1950,7 +1950,11 @@ export default function SwingDetail() {
     onReanalyze();
   };
 
-  const onReanalyze = () => {
+  // 2026-10-26 — `secondLook` only from the "want a second look?" card (the read then looks past the
+  // inconclusive answer); every other Analyze / Re-analyze is a fresh read. Bound as onPress, the press
+  // event arrives here: only an explicit `true` counts.
+  const onReanalyze = (opts?: unknown) => {
+    const secondLook = !!opts && typeof opts === 'object' && (opts as { secondLook?: unknown }).secondLook === true;
     if (!swing_id || reanalyzing || analyzeInFlightRef.current) return;
     analyzeInFlightRef.current = true;
     // (body continues below — see onReanalyzeRef refresh right after this declaration)
@@ -2003,7 +2007,7 @@ export default function SwingDetail() {
       // retryable failure instead of a stuck 'pending'. The terminal-status effect still clears it too
       // (belt + suspenders).
       try {
-        await runPhaseKOnSession(swing_id);
+        await runPhaseKOnSession(swing_id, secondLook ? { secondLook: true } : undefined);
       } catch (e) {
         uploadLog('reanalyze-error', { error: String(e) }, swing_id);
         // The run threw (e.g. an aborted/timed-out locate) — surface a RETRYABLE failure instead of a
@@ -3313,7 +3317,7 @@ export default function SwingDetail() {
                   <View style={styles.failedBtnRow}>
                     <TouchableOpacity
                       style={[styles.failedBtn, { borderColor: '#f59e0b', opacity: reanalyzing ? 0.5 : 1 }]}
-                      onPress={onReanalyze}
+                      onPress={() => onReanalyze({ secondLook: true })}
                       disabled={reanalyzing}
                     >
                       <Text style={[styles.failedBtnText, { color: '#f59e0b' }]}>{t('swinglab_swing.swing_detail.re_analyze_this_swing')}</Text>

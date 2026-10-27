@@ -13,7 +13,7 @@
  */
 import { cancelRunsWithPrefix, getOrStartRun, liveRun, liveRunKeys, whenStageSettled, type StageDef } from './engine';
 import { useSwingSessionStore } from '../../../store/swingSessionStore';
-import { retireSessionShotRuns, retiredBy, retirementOf, runShotDetail, shotImpactMs, shotRunKey, swingRunKey } from './shotDetail';
+import { clearAnswered, retireSessionShotRuns, retiredBy, retirementOf, runShotDetail, shotImpactMs, shotRunKey, swingRunKey } from './shotDetail';
 import type { ReadExtras } from '../../videoUpload';
 
 /**
@@ -205,6 +205,9 @@ function stages(): StageDef<In>[] {
           useSwingSessionStore.getState().setSessionAnalysisStatus(input.sessionId, 'ok');
           return 'no_launch';
         }
+        // 2026-10-26 — a failed RE-read must not leave the previous read's verdict as the headline (the
+        // library row and the detail header read primary_issue whatever the status says).
+        useSwingSessionStore.getState().clearSessionHeadline(input.sessionId);
         useSwingSessionStore.getState().setSessionAnalysisStatus(input.sessionId, 'failed', failed);
         traceStep('read failed and the body read found nothing → failed', { reason: failed.slice(0, 80) }, { sessionId: input.sessionId });
         return 'failed';
@@ -381,6 +384,38 @@ function capturedAt(s: { id: string; date?: number | null }): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * 2026-10-26 (Tim: "Re-analyze must run the CURRENT code on every swing; old issues must not survive") —
+ * IS THIS RUN A RE-ANALYSIS? The session already ran this launch, or has a terminal status, or carries
+ * anything an earlier analysis derived. (The swing screen flips the status to 'pending' before it asks, so
+ * the status alone cannot say.) A first analysis has nothing derived: every writer of these fields is an
+ * analysis stage.
+ */
+function isReanalysis(sessionId: string): boolean {
+  if (analysedThisLaunch.has(sessionId)) return true;
+  const s = session(sessionId);
+  if (!s) return false;
+  if (s.analysis_status === 'ok' || s.analysis_status === 'failed') return true;
+  if (s.primary_issue != null || s.biomechanics !== undefined || s.club_arc != null || s.fault_frame_uri) return true;
+  return s.shots.some((sh) => sh.perShotAnalysis != null || sh.biomechanics !== undefined || sh.club_arc != null
+    || (sh.detected_issue_timestamps_sec?.length ?? 0) > 0);
+}
+
+/**
+ * THE ONE INVALIDATION OWNER. Every caller (the swing screen's Re-analyze / Analyze at position / angle
+ * chip, trim, SmartMotion's re-analyze, the practice summary and overlay, ingest, readWhenOnline) starts its
+ * run here, so a re-analysis clears every swing's derived results — not just the first swing's, which was
+ * all the forced body read ever recomputed — and forgets this launch's arc answers for the session.
+ */
+function invalidateForReanalysis(sessionId: string): void {
+  if (!isReanalysis(sessionId)) return;
+  useSwingSessionStore.getState().resetDerivedAnalysis(sessionId);
+  clearAnswered(sessionId);
+  try {
+    (require('../../analysisTrace') as typeof import('../../analysisTrace')).traceStep('re-analysis: every swing\'s previous body read, arc and fault moments cleared', {}, { sessionId });
+  } catch { /* observation */ }
+}
+
 /** Test seam: forget which sessions have run (a new app launch). */
 export function _resetAnalysedForTest(): void { analysedThisLaunch.clear(); }
 
@@ -406,6 +441,8 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
     runWindow.set(sessionId, windowOf());
     // A new analysis may have moved the window: the swing's shot runs (body + arc) start over.
     cancelRunsWithPrefix(`shot:${sessionId}:`);
+    // Before retireEarlierCaptures, which marks the session as run this launch.
+    invalidateForReanalysis(sessionId);
     retireEarlierCaptures(sessionId);
     // 2026-10-04 — one issue-log trace per run (services/analysisTrace; Owner Tools → Analysis).
     const traceId = `swing:${sessionId}:${Date.now()}`;
@@ -451,4 +488,4 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
 }
 
 /** The pre-10-05 name — every caller of videoUpload.runPhaseKOnSession still lands here. */
-export const runUploadAnalysis = (sessionId: string) => runSwingAnalysis(sessionId);
+export const runUploadAnalysis = (sessionId: string, extras?: ReadExtras) => runSwingAnalysis(sessionId, extras);

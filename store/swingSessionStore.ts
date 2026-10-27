@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import { practiceLog } from '../services/practiceTelemetry';
+import { BODY_READ_VERSION, CLUB_ARC_VERSION, bodyReadIsCurrent, clubArcIsCurrent } from '../services/swing/analysisVersion';
+
+/** A shot or session without its club arc (the arc, its frame, its source and its version). */
+function withoutArc<T extends { club_arc?: unknown; club_arc_frame?: unknown; club_arc_source?: unknown; club_arc_version?: unknown }>(x: T): T {
+  const { club_arc: _a, club_arc_frame: _f, club_arc_source: _s, club_arc_version: _v, ...rest } = x;
+  return rest as T;
+}
 
 // ─── TYPES ────────────────────────────────
 
@@ -109,6 +116,10 @@ export interface SwingShot {
    * tracked again when the player turns the trace on.
    */
   club_arc_source?: 'tracker' | 'vision';
+  /** 2026-10-26 — which code produced `biomechanics` / `club_arc` (services/swing/analysisVersion). An older
+   *  or missing stamp is UNREAD: the swing is read again by today's code the next time it is shown. */
+  analysis_version?: number;
+  club_arc_version?: number;
 
   // Phase BZ-v1 — user annotations on a captured swing. All optional; absence
   // = no opinion logged. `isGoodRep` true marks the swing as a keeper for
@@ -308,6 +319,9 @@ export interface SwingSession {
    * tracked again when the player turns the trace on.
    */
   club_arc_source?: 'tracker' | 'vision';
+  /** 2026-10-26 — see SwingShot.analysis_version / club_arc_version (the session's own body read and arc). */
+  analysis_version?: number;
+  club_arc_version?: number;
   /** 2026-05-22 — PuttingLab result attached to this session when the
    *  session was classified as putting (analyzer-router routed glasses
    *  POV / putt/chip tag through puttingAnalysisService instead of
@@ -755,6 +769,20 @@ interface SwingSessionState {
   /** 2026-10-25 — forget a shot's body read (back to UNREAD, not "read, nobody there"), and the session's
    *  too when `andSession`: a new analysis that could not read the body must not leave the old window's. */
   clearShotBiomechanics: (sessionId: string, shotId: string, andSession: boolean) => void;
+  /** 2026-10-26 — forget a shot's club arc (and the session's when `andSession`): a forced re-track that got
+   *  no answer must not leave the previous analysis's arc drawn against the new body read. */
+  clearShotClubArc: (sessionId: string, shotId: string, andSession: boolean) => void;
+  /**
+   * 2026-10-26 (Tim: "Re-analyze must run the CURRENT code on every swing; old issues must not survive") —
+   * a RE-ANALYSIS starts from nothing derived: every shot's body read, arc, fault moments and read row, and
+   * the session's body read, arc and fault frame, go back to unread. The headline / drill, the player's
+   * feel and coach notes, windows and labels stay (the run replaces the headline or settles it).
+   * Called by one owner only: services/swing/orchestrator/uploadRun.runSwingAnalysis.
+   */
+  resetDerivedAnalysis: (sessionId: string) => void;
+  /** 2026-10-26 — drop the headline + drill without touching the status (a failed re-read: the old verdict
+   *  must not stand as this read's). */
+  clearSessionHeadline: (sessionId: string) => void;
   /** 2026-06-02 — Fix GN: walk every session and flip any non-terminal
    *  analysis_status ('pending' / 'analyzing_*') older than maxAgeMs
    *  to 'failed' with a "stale" error. Called once on app boot via
@@ -1732,8 +1760,9 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           const hasFrames = (b: typeof biomechanics | undefined) => !!(b && Array.isArray(b.frames) && b.frames.length > 0);
           const apply = (session: SwingSession): SwingSession => {
             if (session.id !== sessionId) return session;
-            if (!hasFrames(biomechanics) && hasFrames(session.biomechanics)) return session; // keep the good read
-            return { ...session, biomechanics };
+            // 2026-10-26 — only a read by TODAY's code is "the good read": an older build's skeleton is replaced.
+            if (!hasFrames(biomechanics) && hasFrames(session.biomechanics) && bodyReadIsCurrent(session.analysis_version)) return session; // keep the good read
+            return { ...session, biomechanics, analysis_version: BODY_READ_VERSION };
           };
           return {
             activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
@@ -1766,8 +1795,8 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             // 2026-10-04 — a TRACKED result is authoritative over a vision-model arc, even when shorter:
             // the old arcs were mostly wrong, and keeping one because it had 3 points kept it forever.
             const trackedOverVision = source === 'tracker' && session.club_arc_source !== 'tracker';
-            if (!trackedOverVision && incomingLen < 3 && existingLen >= 3) return session;
-            return { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null, club_arc_source: source ?? session.club_arc_source };
+            if (!trackedOverVision && incomingLen < 3 && existingLen >= 3 && clubArcIsCurrent(session.club_arc_version)) return session;
+            return { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null, club_arc_source: source ?? session.club_arc_source, club_arc_version: CLUB_ARC_VERSION };
           };
           // 2026-07-30 (analysis audit P4) — dual-patch activeSession so a write that lands before
           // endSession isn't lost.
@@ -1790,8 +1819,8 @@ export const useSwingSessionStore = create<SwingSessionState>()(
               ...session,
               shots: session.shots.map(sh => {
                 if (sh.id !== shotId) return sh;
-                if (!hasFrames(biomechanics) && hasFrames(sh.biomechanics)) return sh;
-                return { ...sh, biomechanics };
+                if (!hasFrames(biomechanics) && hasFrames(sh.biomechanics) && bodyReadIsCurrent(sh.analysis_version)) return sh;
+                return { ...sh, biomechanics, analysis_version: BODY_READ_VERSION };
               }),
             };
           return {
@@ -1812,8 +1841,8 @@ export const useSwingSessionStore = create<SwingSessionState>()(
                 const incomingLen = Array.isArray(arc) ? arc.length : 0;
                 const existingLen = Array.isArray(sh.club_arc) ? sh.club_arc.length : 0;
                 const trackedOverVision = source === 'tracker' && sh.club_arc_source !== 'tracker';
-                if (!trackedOverVision && incomingLen < 3 && existingLen >= 3) return sh;
-                return { ...sh, club_arc: arc, club_arc_frame: frame ?? sh.club_arc_frame ?? null, club_arc_source: source ?? sh.club_arc_source };
+                if (!trackedOverVision && incomingLen < 3 && existingLen >= 3 && clubArcIsCurrent(sh.club_arc_version)) return sh;
+                return { ...sh, club_arc: arc, club_arc_frame: frame ?? sh.club_arc_frame ?? null, club_arc_source: source ?? sh.club_arc_source, club_arc_version: CLUB_ARC_VERSION };
               }),
             };
           };
@@ -1876,13 +1905,53 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             if (session.id !== sessionId) return session;
             const shots = session.shots.map(sh => {
               if (sh.id !== shotId || sh.biomechanics === undefined) return sh;
-              const { biomechanics: _drop, ...rest } = sh;
+              const { biomechanics: _drop, analysis_version: _v, ...rest } = sh;
               return rest as SwingShot;
             });
             if (!andSession || session.biomechanics === undefined) return { ...session, shots };
-            const { biomechanics: _dropS, ...restS } = session;
+            const { biomechanics: _dropS, analysis_version: _vS, ...restS } = session;
             return { ...(restS as SwingSession), shots };
           };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
+
+      clearShotClubArc: (sessionId, shotId, andSession) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession => {
+            if (session.id !== sessionId) return session;
+            const shots = session.shots.map(sh => (sh.id !== shotId ? sh : withoutArc(sh)));
+            return { ...(andSession ? withoutArc(session) : session), shots };
+          };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
+
+      resetDerivedAnalysis: (sessionId) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession => {
+            if (session.id !== sessionId) return session;
+            const shots = session.shots.map(sh => {
+              const { biomechanics: _b, analysis_version: _v, detected_issue_timestamps_sec: _t, perShotAnalysis: _p, ...rest } = withoutArc(sh);
+              return rest as SwingShot;
+            });
+            const { biomechanics: _b, analysis_version: _v, ...rest } = withoutArc(session);
+            return { ...(rest as SwingSession), shots, fault_frame_uri: null, fault_frame_index: null, fault_frame_fraction: null };
+          };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
+
+      clearSessionHeadline: (sessionId) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession =>
+            session.id !== sessionId ? session : { ...session, primary_issue: null, drill_recommendation: null };
           return {
             activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
             sessionHistory: s.sessionHistory.map(apply),
@@ -1990,8 +2059,22 @@ export const useSwingSessionStore = create<SwingSessionState>()(
               locatedImpactSec: w.impactSec,
               detectionOffsetSeconds: w.startSec,
               detectionMethod: 'manual' as const,
+              // 2026-10-26 — the finder carved these windows; nothing the player chose for the whole clip.
+              clipWindowSource: 'auto' as const,
               aiAnalysis: null,
               perShotAnalysis: null,
+              // 2026-10-26 — NOTHING derived from the single shot's window rides into the swings: each new
+              // swing inherited swing 1's OLD skeleton, arc and fault moment, which (being stored) were never
+              // read again — swings 2+ showed another window's body and arc.
+              biomechanics: undefined,
+              analysis_version: undefined,
+              club_arc: undefined,
+              club_arc_frame: undefined,
+              club_arc_source: undefined,
+              club_arc_version: undefined,
+              detected_issue_timestamps_sec: undefined,
+              review_labels: undefined,
+              review_transcript: undefined,
             }));
             return { ...session, shots };
           }),
