@@ -38,7 +38,9 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { requestShotDetail, shotImpactHeard, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { shotImpactHeard, shownShotBiomech, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { useShotDetailRequest } from '../../../hooks/useShotDetailRequest';
+import { useIssueAsk } from '../../../hooks/useIssueAsk';
 // 2026-09-20 — this screen HAS pose frames (activeBiomech.frames) and was still asking the model
 // to find a ~6px clubhead in a full downscaled frame. See services/swing/bodyBounds.
 import { readClubPath } from '../../../services/swing/clubPathRead';
@@ -197,12 +199,8 @@ export default function SwingDetail() {
     useCaptureEngineStore.getState().setSwingOnScreen(swingOnScreenFromShotMap(shotMapSaved, shownShotIdx, shotCount));
     return () => { useCaptureEngineStore.getState().setSwingOnScreen(null); };
   }, [shotMapSaved, shownShotIdx, shotCount]));
-  const shotBio = shot?.biomechanics;
-  // The biomech to render: this shot's own if present; for shot 0 fall back to the session-level read
-  // (legacy sessions + the primary write). Non-primary with nothing yet → null (until backfilled).
-  const activeBiomech = shotBio !== undefined
-    ? shotBio
-    : (selectedShotIdx === 0 ? (session?.biomechanics ?? null) : null);
+  // The biomech to render (shotDetail.shownShotBiomech): this shot's own, or swing 1's session-level read.
+  const activeBiomech = shownShotBiomech(session, selectedShotIdx);
 
   // 2026-06-23 (Tim — "always able to TOUCH and correct who hit this swing")
   // — golfer attribution editor. The session.player_id resolves to a display
@@ -538,8 +536,8 @@ export default function SwingDetail() {
    * The status callback is created once, so it reads the fault moment and the setting through refs.
    * `issuePausedRef` is the one-stop-per-pass latch: set when the replay stops on the fault (or the
    * player jumps to it), cleared when playback goes back before it — the tail loop, a restart, a scrub.
+   * The fault time itself (faultSecRef) is held per swing on screen by useIssueAsk, below.
    */
-  const faultSecRef = useRef<number | null>(null);
   /**
    * 2026-10-16 (review of S1b) — THIS REVIEW's fault pause. The persisted setting is the default every
    * swing opens with; the Issue chip flips only this one (it used to flip the persisted setting, so one
@@ -571,9 +569,10 @@ export default function SwingDetail() {
    * issue (or the replay stopped there with Highlight on): the ring needs the body read, so it is asked for
    * (faultSpotlight.shotDetailRequestFor). Per swing on screen.
    */
-  const [issueAsked, setIssueAsked] = useState(false);
-  /** The second a Fault-moment pill held as the fault when no moment could be computed (issueJumpSec). */
-  const [askedFaultSec, setAskedFaultSec] = useState<number | null>(null);
+  // The second a Fault-moment pill held as the fault when no moment could be computed (issueJumpSec), and the
+  // fault time the replay stops on — both per swing on screen (hooks/useIssueAsk).
+  const { issueAsked, markIssueAsked, faultSecRef, askedFaultSec, holdAskedFault, clearAskedFault } =
+    useIssueAsk(`${swing_id ?? ''}|${layoutKey}|${shot?.id ?? ''}`);
   /** The shot whose body read this screen asked for and has not settled (the 'Reading…' line). */
   const [bodyReadPendingShot, setBodyReadPendingShot] = useState<string | null>(null);
   // 2026-08-08 (Tim — "if it tries to do too much — mechanics, shot trace AND playback together — it
@@ -914,27 +913,23 @@ export default function SwingDetail() {
    * Body / Swing Trace view turned on (Tim: both off by default, the library is manual). The first
    * swing's comes with the analysis run; the run waits for a live read before it decodes anything.
    */
-  useEffect(() => {
-    if (!swing_id) return;
-    const selShot = session?.shots[selectedShotIdx];
-    if (!selShot?.clipUri) return;
+  const selShot = session?.shots[selectedShotIdx];
     // The trace is only ever on because the player turned it on, so it is his request (it may pay for the
     // arc); opening a settled swing with everything off still does no analysis work.
     // 2026-10-10 — the arc for a swing the player pages to comes from the SILENT pass (the free on-device
     // tracker); only the Swing Trace toggle, turned on by the player, may ask the paid vision model.
     // 2026-10-27 — asking to see the issue asks for the body read (the ring is drawn from it). An old swing
     // whose stored empty read predates today's body read (analysisVersion) is read again by the run.
-    const ask = shotDetailRequestFor({ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked });
-    if (!ask) return;
-    const id = selShot.id;
-    setBodyReadPendingShot(id);
-    const off = requestShotDetail(swing_id, id, {
-      ...ask,
-      onSettled: () => setBodyReadPendingShot((cur) => (cur === id ? null : cur)),
-    });
-    return () => { off(); setBodyReadPendingShot((cur) => (cur === id ? null : cur)); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the shot's identity, not every store write to the session
-  }, [swing_id, selectedShotIdx, session?.shots[selectedShotIdx]?.id, session?.shots[selectedShotIdx]?.clipUri, showSkeleton, showTrace, issueAsked]);
+  // Asked again when the swing's body read goes back to unread under the screen (a Re-analyze clears every
+  // swing's read but re-reads only swing 1): hooks/useShotDetailRequest.
+  useShotDetailRequest({
+    sessionId: swing_id,
+    shotId: selShot?.clipUri ? selShot.id : null,
+    ask: shotDetailRequestFor({ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked }),
+    unread: !!session && !!selShot && storedShotBiomech(session, selShot, session.shots.find((x) => x.clipUri)?.id === selShot.id) === undefined,
+    retrigger: `${selectedShotIdx}|${selShot?.clipUri ?? ''}|${showSkeleton}|${showTrace}|${issueAsked}`,
+    setPending: setBodyReadPendingShot,
+  });
 
   // 2026-06-13 — Prewarm the TTS function WHILE the analysis is still running, so
   // the "Okay, I watched it…" read fires hot instead of paying cold-start on top
@@ -1136,7 +1131,7 @@ export default function SwingDetail() {
           setPosition(f);
           issueHoldRef.current = 'stop'; setIssueHoldState('stop');   // (stable setters: this callback is created once)
           // Stopped there with Highlight on: the ring is wanted, so the body read is too.
-          if (highlightIssueRef.current) setIssueAsked(true);
+          if (highlightIssueRef.current) markIssueAsked();
         }
       }
       lastRawPosRef.current = posSec;
@@ -1182,7 +1177,7 @@ export default function SwingDetail() {
     // top when at end). Autoplay was also what left the controls dead — it ran
     // the clip to the end on open, so the user's first tap hit a finished video
     // and did nothing.
-  }, []);
+  }, [faultSecRef, markIssueAsked]);   // both stable (hooks/useIssueAsk): still created once
 
   // 2026-08-07 (Tim — the video-loop crash keeps coming back). ROOT CAUSE, made structural: EVERY prop
   // passed to the native <Video> must be referentially STABLE, or a re-render (the position updates 25×/s
@@ -1278,8 +1273,8 @@ export default function SwingDetail() {
   const jumpToIssue = useCallback((askedSec?: number) => {
     const f = issueJumpSec(faultSecRef.current, askedSec);
     if (f == null) return;
-    if (faultSecRef.current == null) { faultSecRef.current = f; setAskedFaultSec(f); }
-    setIssueAsked(true);
+    if (faultSecRef.current == null) holdAskedFault(f);
+    markIssueAsked();
     issuePausedRef.current = true;
     selfSeekUntilRef.current = Date.now() + 800;
     setIssueHold('jump');
@@ -1287,19 +1282,18 @@ export default function SwingDetail() {
     playbackEmitRef.current.lastPosAt = Date.now();
     setPosition(f);
     void scrubTo(f);
-  }, [setIssueHold]);
-  // A new swing on screen is a new review: nothing asked, nothing held. Keyed on the layout too — a re-split
-  // reuses `_shot_0` for a different swing, so the id alone would carry the old swing's ask across.
+  }, [setIssueHold, holdAskedFault, markIssueAsked, faultSecRef]);
+  // A new swing on screen is a new review: nothing held. Keyed on the layout too — a re-split reuses
+  // `_shot_0` for a different swing, so the id alone would carry the old swing's hold across. (The ask and a
+  // pill-held fault time are keyed to the swing on screen by useIssueAsk.)
   useEffect(() => {
     issueHoldRef.current = null;
     setIssueHoldState(null);
-    setIssueAsked(false);
-    setAskedFaultSec(null);
   }, [swing_id, shot?.id, layoutKey]);
   useEffect(() => {
     faultSecRef.current = faultMoment?.sec ?? null;
     issuePausedRef.current = false;
-    setAskedFaultSec(null);
+    clearAskedFault();
     // The moment moved under a player who asked to see it (the body read he asked for landed and gave the
     // anchors): hold the new one, ring and all, instead of dropping what he asked for.
     if (faultMoment && issueHoldRef.current === 'jump') { jumpToIssue(); return; }

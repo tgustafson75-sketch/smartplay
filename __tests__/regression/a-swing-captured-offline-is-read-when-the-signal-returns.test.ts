@@ -211,3 +211,58 @@ describe('a waiting read never competes with a live swing', () => {
   });
 });
 
+
+/**
+ * 2026-10-27 (Phase SB4x — review finding "reanalyze #2"). The waiting read went through the one run like a
+ * Re-analyze, and the run's invalidation (uploadRun.invalidateForReanalysis) wiped every swing's body read
+ * and arc. A live capture's swings did not move — its split fused what the microphone heard — and its
+ * swings 2+ were read on the device while the phone had no signal; only swing 1 is read again by the run.
+ * The read that waited is the FIRST read of those swings, not a second look at them.
+ */
+describe('the waiting read keeps what the capture already measured', () => {
+  const read = { frames: [{ timestampMs: 1, keypoints: [] }, { timestampMs: 2, keypoints: [] }], angle: 'down_the_line' };
+  const arc = [{ x: 0.1, y: 0.2, t: 1 }];
+  const seedTwoSwings = (source: 'live_capture' | 'uploaded_video') => {
+    const { BODY_READ_VERSION, CLUB_ARC_VERSION } = require('../../services/swing/analysisVersion');
+    useSwingSessionStore.setState({
+      activeSession: null, hasHydrated: true,
+      sessionHistory: [{
+        id: 'w', date: 1, source, analysis_status: 'failed', club: '7i', read_awaits_connection: true,
+        shots: [0, 1].map((i) => ({
+          id: `w_shot_${i}`, club: '7i', clipUri: 'https://clips/w.mp4', clipStartSeconds: 1 + i * 4, clipEndSeconds: 3 + i * 4,
+          biomechanics: read, analysis_version: BODY_READ_VERSION,
+          club_arc: arc, club_arc_source: 'tracker', club_arc_version: CLUB_ARC_VERSION,
+        })),
+      }] as never,
+    });
+  };
+  const shot1 = () => session('w')?.shots[1] as unknown as { biomechanics?: unknown; club_arc?: unknown };
+
+  it('THE REPORT: a live capture\'s swing 2 keeps its body read and arc when the signal comes back', async () => {
+    seedTwoSwings('live_capture');
+    mockRead = 'ok';
+    await readAwaitingSwings();
+    for (let i = 0; i < 50 && liveRunKeys().length > 0; i++) await tick(20);
+    expect(mockReads).toContain('https://clips/w.mp4');
+    expect(session('w')?.read_awaits_connection).toBe(false);
+    expect(shot1().biomechanics).toEqual(read);
+    expect(shot1().club_arc).toEqual(arc);
+  });
+
+  it('a Re-analyze the player asks for still clears every swing (it is a second look)', async () => {
+    seedTwoSwings('live_capture');
+    mockRead = 'ok';
+    const p = runSwingAnalysis('w');
+    expect(shot1().biomechanics).toBeUndefined();
+    await p;
+  });
+
+  it('an upload that waited is still cleared: its swings are split online, so its windows may move', async () => {
+    seedTwoSwings('uploaded_video');
+    mockRead = 'ok';
+    const p = readAwaitingSwings();
+    await tick(0);
+    expect(shot1().biomechanics).toBeUndefined();
+    await p;
+  });
+});

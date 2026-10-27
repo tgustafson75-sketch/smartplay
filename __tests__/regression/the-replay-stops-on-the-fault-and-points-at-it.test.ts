@@ -210,8 +210,8 @@ describe('the arc is the player\'s to turn on; only the player can pay for one',
   });
   it('a shot paged to asks the silent pass; only the player\'s trace asks for more', () => {
     // 2026-10-27 — the ask is faultSpotlight.shotDetailRequestFor (behaviour: the-issue-chip-shows-the-issue).
-    expect(sd).toMatch(/const ask = shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\);/);
-    expect(code('app/swinglab/smartmotion.tsx')).toMatch(/requestShotDetail\(sessionId, sh\.id, \{\s*arc: 'tracker',/);
+    expect(sd).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\),/);
+    expect(code('app/swinglab/smartmotion.tsx')).toMatch(/useShotDetailRequest\(\{\s*sessionId,\s*shotId: cageSession\?\.shots\[selectedSwing\]\?\.id \?\? null,\s*ask: phase === 'review' \? \{ arc: 'tracker' \} : null,/);
   });
 
   // A fresh clip per test: an answered window is remembered for the app session (shotDetail `answered`).

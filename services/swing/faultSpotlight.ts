@@ -199,7 +199,8 @@ export function spotlightShows(s: { held: boolean; hold: IssueHold; highlight: b
 export function shotDetailRequestFor(w: { idx: number; showSkeleton: boolean; traceAsked: boolean; issueAsked: boolean }): { arc?: boolean | 'tracker' } | null {
   if (w.traceAsked) return { arc: true };
   if (w.idx > 0 || w.showSkeleton) return { arc: 'tracker' };
-  return w.issueAsked ? {} : null;
+  // `{}` meant arc: undefined, which the shot run reads as `true` — the PAID fallback (shotDetail.runShotDetail).
+  return w.issueAsked ? { arc: false } : null;
 }
 
 /**

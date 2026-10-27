@@ -68,12 +68,13 @@ describe('one swing, one headline, one club arc', () => {
   it('the detail screen asks the run, keyed on the shot — play/pause restarts nothing', () => {
     // 2026-10-10 — the arc level is the silent tracker pass unless the player turned the trace on.
     // 2026-10-27 — the ask (and its arc level) is faultSpotlight.shotDetailRequestFor.
-    const at = detail.indexOf('const off = requestShotDetail(swing_id, id, {');
+    // 2026-10-27 (SB4x) — through hooks/useShotDetailRequest: a new ask only when its retrigger (the shot and
+    // the player's toggles) changes, or the read goes back to unread.
+    const at = detail.indexOf('useShotDetailRequest({\n    sessionId: swing_id,');
     expect(at).toBeGreaterThan(-1);
-    const open = detail.indexOf('}, [', at);
-    const deps = detail.slice(open, detail.indexOf(']);\n', open));
-    expect(deps).toContain('showTrace');
-    expect(deps).not.toMatch(/isPlaying/);
+    const call = detail.slice(at, detail.indexOf('});', at));
+    expect(call).toMatch(/retrigger: `[^`]*\$\{showTrace\}[^`]*`/);
+    expect(call).not.toMatch(/isPlaying/);
   });
 });
 

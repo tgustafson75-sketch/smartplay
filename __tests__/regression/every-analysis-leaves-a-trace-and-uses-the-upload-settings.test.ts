@@ -135,8 +135,10 @@ describe('a saved swing: settled, its windows, and what opening it does', () => 
     // everything off starts no run; a trace the player turned on is his request
     // (2026-10-27: the gate is faultSpotlight.shotDetailRequestFor — all off, nothing asked → null, by behaviour in
     // the-issue-chip-shows-the-issue; issueAsked is false on every swing opened.)
-    expect(d).toMatch(/const ask = shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\);\s*if \(!ask\) return;/);
-    expect(d).toMatch(/const \[issueAsked, setIssueAsked\] = useState\(false\);/);
+    // 2026-10-27 (SB4x) — through hooks/useShotDetailRequest (a null ask asks nothing) and the per-swing hooks/useIssueAsk
+    // (asked only on the swing it was asked on; behaviour: components/the-shown-swing-is-asked-for-again).
+    expect(d).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\),/);
+    expect(d).toMatch(/useIssueAsk\(`\$\{swing_id \?\? ''\}\|\$\{layoutKey\}\|\$\{shot\?\.id \?\? ''\}`\)/);
   });
 
   it('only a window the PLAYER chose survives a re-analyze; the finder\'s own answer is re-found', () => {

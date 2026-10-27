@@ -355,6 +355,12 @@ export type ReadExtras = {
    * tells the model to look past it. Every other re-analyze is a fresh, unsteered read by today's code.
    */
   secondLook?: boolean;
+  /**
+   * 2026-10-27 (SB4x) — the read that WAITED FOR A CONNECTION (orchestrator/readWhenOnline): the first read
+   * of these swings, not a second look. A live capture's swings did not move, and what was measured on the
+   * device meanwhile (swings 2+'s body reads and arcs) is kept (uploadRun.invalidateForReanalysis).
+   */
+  deferredRead?: boolean;
 };
 
 export type ReadOutcome = {

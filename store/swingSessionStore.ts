@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import { practiceLog } from '../services/practiceTelemetry';
 import { BODY_READ_VERSION, CLUB_ARC_VERSION, bodyReadIsCurrent, clubArcIsCurrent } from '../services/swing/analysisVersion';
+import { isPracticeSwing } from '../services/swing/practiceSwings';
 
 /** A shot or session without its club arc (the arc, its frame, its source and its version). */
 function withoutArc<T extends { club_arc?: unknown; club_arc_frame?: unknown; club_arc_source?: unknown; club_arc_version?: unknown }>(x: T): T {
@@ -1523,7 +1524,8 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : {
               ...session,
-              shots: session.shots.map(shot => (shot.perShotAnalysis === undefined ? shot : { ...shot, perShotAnalysis: undefined })),
+              // A demoted practice swing is not part of the new read (videoUpload's work filter): its row stays.
+              shots: session.shots.map(shot => (shot.perShotAnalysis === undefined || isPracticeSwing(shot) ? shot : { ...shot, perShotAnalysis: undefined })),
             },
           ),
         })),
@@ -2028,6 +2030,11 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             if (session.id !== sessionId) return session;
             const shots = session.shots.map(sh => {
               const { biomechanics: _b, analysis_version: _v, detected_issue_timestamps_sec: _t, perShotAnalysis: _p, ...rest } = withoutArc(sh);
+              // 2026-10-27 (SB4x) — a demoted practice swing is not read again (its paid read is skipped), so
+              // its last read is the only one it has: kept, so "count it" restores a swing WITH its read.
+              if (isPracticeSwing(sh)) {
+                return { ...rest, ...(_p !== undefined ? { perShotAnalysis: _p } : {}), ...(_t !== undefined ? { detected_issue_timestamps_sec: _t } : {}) } as SwingShot;
+              }
               return rest as SwingShot;
             });
             const { biomechanics: _b, analysis_version: _v, ...rest } = withoutArc(session);

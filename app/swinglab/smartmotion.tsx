@@ -102,7 +102,8 @@ import { ReplayMarkupModal, freezeReplayForMarkup } from '../../components/smart
 import { usePagerKeepsPage } from '../../hooks/usePagerKeepsPage';
 import { isPracticeSwing } from '../../services/swing/practiceSwings';
 import { NO_SWING_FOUND } from '../../services/swing/orchestrator/uploadRun';
-import { requestShotDetail, shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
+import { shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
+import { useShotDetailRequest } from '../../hooks/useShotDetailRequest';
 import { CONTACT_ISSUE_IDS, mishitFromFeel, noLaunchIssue } from '../../services/swing/contactVerdict';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
@@ -2851,18 +2852,17 @@ export default function SmartMotion() {
     const first = cageSession.shots.find((x) => x.clipUri)?.id === sh.id;
     return storedShotBiomech(cageSession, sh, first);
   }, [cageSession, selectedSwing]);
-  useEffect(() => {
-    if (phase !== 'review' || !sessionId) return;
-    const sh = useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId)?.shots[selectedSwing];
-    if (!sh) return;
-    setBodyReadPendingShot(sh.id);
-    // The arc on this screen comes from the silent pass (free on-device tracker); never a paid call
-    // for paging to a swing.
-    return requestShotDetail(sessionId, sh.id, {
-      arc: 'tracker',
-      onSettled: () => setBodyReadPendingShot((cur) => (cur === sh.id ? null : cur)),
-    });
-  }, [phase, sessionId, selectedSwing]);
+  // The arc on this screen comes from the silent pass (free on-device tracker); never a paid call for paging
+  // to a swing. Asked again when the swing's body read goes back to unread under the review (SmartMotion's
+  // re-analyze clears every swing's read but re-reads only swing 1): hooks/useShotDetailRequest.
+  useShotDetailRequest({
+    sessionId,
+    shotId: cageSession?.shots[selectedSwing]?.id ?? null,
+    ask: phase === 'review' ? { arc: 'tracker' } : null,
+    unread: selectedShotBio === undefined,
+    retrigger: `${selectedSwing}`,
+    setPending: setBodyReadPendingShot,
+  });
   useEffect(() => {
     if (selectedShotBio === undefined) {
       // Not read yet for THIS swing — never leave the previous swing's skeleton and numbers over it.

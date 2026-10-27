@@ -56,7 +56,7 @@ export function readAwaitingSwings(): Promise<void> {
           (require('../../analysisTrace') as typeof import('../../analysisTrace'))
             .traceStep('connection back — reading the swing that waited for it', {}, { sessionId: id });
         } catch { /* a trace never blocks the read */ }
-        await runSwingAnalysis(id).catch(() => undefined);
+        await runSwingAnalysis(id, { deferredRead: true }).catch(() => undefined);
       }
     } finally {
       draining = null;

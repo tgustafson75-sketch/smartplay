@@ -39,7 +39,8 @@ describe('the duration is known before any branch decides what to do', () => {
     // read, and the review asks for the selected swing's on its own — no tap, no duration gate (the
     // runner probes the clip itself).
     // 2026-10-10 — with the arc from the silent pass (free tracker only).
-    expect(sm).toMatch(/if \(phase !== 'review' \|\| !sessionId\) return;[\s\S]{0,400}return requestShotDetail\(sessionId, sh\.id, \{\s*arc: 'tracker',/);
+    // 2026-10-27 (SB4x) — through hooks/useShotDetailRequest.
+    expect(sm).toMatch(/useShotDetailRequest\(\{\s*sessionId,\s*shotId: cageSession\?\.shots\[selectedSwing\]\?\.id \?\? null,\s*ask: phase === 'review' \? \{ arc: 'tracker' \} : null,/);
   });
 
   it('the per-branch seeds remain — they are harmless and cover the re-entry paths', () => {

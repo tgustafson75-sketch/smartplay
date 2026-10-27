@@ -182,12 +182,13 @@ describe('both review screens ask for the swing on screen', () => {
   const read = (p: string) => require('fs').readFileSync(require('path').join(__dirname, '..', '..', p), 'utf8') as string;
   it("SmartMotion asks on every page and says ANALYZING while that swing's body read is coming", () => {
     const src = read('app/swinglab/smartmotion.tsx');
-    expect(src).toMatch(/return requestShotDetail\(sessionId, sh\.id, \{\s*arc: 'tracker',\s*onSettled:/);
+    // 2026-10-27 (SB4x) — both screens ask through hooks/useShotDetailRequest (behaviour: components/the-shown-swing-is-asked-for-again).
+    expect(src).toMatch(/useShotDetailRequest\(\{\s*sessionId,\s*shotId: cageSession\?\.shots\[selectedSwing\]\?\.id \?\? null,\s*ask: phase === 'review' \? \{ arc: 'tracker' \} : null,/);
     expect(src).toMatch(/deriveVerdict\(analysis, phase === 'analyzing' \|\| \(phase === 'review' && !analysis && selectedBodyReadPending\)/);
   });
   it('the library asks for any swing past the first that the player selects', () => {
     // 2026-10-27 — the gate is faultSpotlight.shotDetailRequestFor (idx > 0 asks; behaviour in the-issue-chip-shows-the-issue).
-    expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/const ask = shotDetailRequestFor\(\{ idx: selectedShotIdx,[\s\S]{0,300}if \(!ask\) return;[\s\S]{0,200}requestShotDetail\(swing_id, id, \{/);
+    expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\),/);
   });
 });
 

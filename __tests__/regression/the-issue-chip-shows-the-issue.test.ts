@@ -53,8 +53,8 @@ describe('asking to see the issue asks for the body read', () => {
   it('swing 1, everything off, Issue tapped: the body read is requested', () => {
     expect(shotDetailRequestFor({ idx: 0, showSkeleton: false, traceAsked: false, issueAsked: true })).not.toBeNull();
   });
-  it('...and only the body read — no tracker or paid arc for an Issue tap', () => {
-    expect(shotDetailRequestFor({ idx: 0, showSkeleton: false, traceAsked: false, issueAsked: true })?.arc).toBeFalsy();
+  it('...and only the body read — no tracker or paid arc for an Issue tap (explicitly false: undefined means the paid arc)', () => {
+    expect(shotDetailRequestFor({ idx: 0, showSkeleton: false, traceAsked: false, issueAsked: true })).toEqual({ arc: false });
   });
   it('opening a settled swing with nothing asked still does no analysis work', () => {
     expect(shotDetailRequestFor({ idx: 0, showSkeleton: false, traceAsked: false, issueAsked: false })).toBeNull();

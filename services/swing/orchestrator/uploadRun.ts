@@ -416,8 +416,13 @@ function isReanalysis(sessionId: string): boolean {
  * run here, so a re-analysis clears every swing's derived results — not just the first swing's, which was
  * all the forced body read ever recomputed — and forgets this launch's arc answers for the session.
  */
-function invalidateForReanalysis(sessionId: string): void {
+function invalidateForReanalysis(sessionId: string, extras?: ReadExtras): void {
   if (!isReanalysis(sessionId)) return;
+  // 2026-10-27 (SB4x) — the read that waited for a connection is this swing's FIRST read, not a second look.
+  // A live capture's windows are the microphone's and do not move, and its swings 2+ were read on the
+  // device meanwhile: wiping them threw that work away (swing 1 is read again by the run regardless). An
+  // upload is still cleared — its swings are split online, so the windows may move.
+  if (extras?.deferredRead && session(sessionId)?.source !== 'uploaded_video') return;
   useSwingSessionStore.getState().resetDerivedAnalysis(sessionId);
   clearAnswered(sessionId);
   try {
@@ -451,7 +456,7 @@ export function runSwingAnalysis(sessionId: string, extras?: ReadExtras): Promis
     // A new analysis may have moved the window: the swing's shot runs (body + arc) start over.
     cancelRunsWithPrefix(`shot:${sessionId}:`);
     // Before retireEarlierCaptures, which marks the session as run this launch.
-    invalidateForReanalysis(sessionId);
+    invalidateForReanalysis(sessionId, extras);
     retireEarlierCaptures(sessionId);
     // 2026-10-04 — one issue-log trace per run (services/analysisTrace; Owner Tools → Analysis).
     const traceId = `swing:${sessionId}:${Date.now()}`;

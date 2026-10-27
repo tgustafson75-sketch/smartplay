@@ -16,6 +16,7 @@ import { BODY_READ_VERSION } from '../../services/swing/analysisVersion';
 import { shotDetailRequestFor } from '../../services/swing/faultSpotlight';
 
 let mockPoseCalls = 0;
+let mockArcCalls = 0;
 jest.mock('../../services/swingLibrary', () => ({ getAnalyzerKind: () => 'full_swing' }));
 jest.mock('../../services/videoUpload', () => ({
   _runPhaseKRead: async () => ({ primary_issue: null, drill_recommendation: null, analyses: {} }),
@@ -34,7 +35,7 @@ jest.mock('../../services/poseAnalysisApi', () => ({
 }));
 jest.mock('../../services/swing/poseSwingRead', () => ({ buildPoseSwingRead: () => ({ faults: [], headline: 'h' }) }));
 jest.mock('../../services/swing/poseReadVerdict', () => ({ poseReadToPrimaryIssue: () => null }));
-jest.mock('../../services/swing/clubPath', () => ({ detectClubPath: async () => null }));
+jest.mock('../../services/swing/clubPath', () => ({ detectClubPath: async () => { mockArcCalls++; return null; } }));
 jest.mock('../../services/relationshipEngine', () => ({ processSwingAnalysis: () => undefined }));
 jest.mock('../../store/toastStore', () => ({ useToastStore: { getState: () => ({ show: () => undefined }) } }));
 
@@ -63,7 +64,7 @@ const askForIssue = () => new Promise<void>((res) => {
 });
 
 beforeEach(() => {
-  _clearRunsForTest(); _resetAnalysedForTest(); clearAnswered('s1'); mockPoseCalls = 0;
+  _clearRunsForTest(); _resetAnalysedForTest(); clearAnswered('s1'); mockPoseCalls = 0; mockArcCalls = 0;
 });
 afterEach(() => { _clearRunsForTest(); });
 
@@ -73,6 +74,12 @@ describe('asking to see the issue reads an old empty body read again', () => {
     await askForIssue();
     expect(mockPoseCalls).toBe(1);
     expect(shot0().biomechanics?.frames.length).toBe(2);
+  });
+  it('an Issue tap asks for the body read ONLY: no arc is tracked or paid for (SB4x — `{}` was arc: true)', async () => {
+    seed(null);
+    await askForIssue();
+    expect(mockPoseCalls).toBe(1);
+    expect(mockArcCalls).toBe(0);
   });
   it('stored { frames: [] } by an older build: read again, frames land', async () => {
     seed({ frames: [], angle: 'down_the_line' });

@@ -98,6 +98,19 @@ export function storedShotBiomech(s: SwingSession, shot: SwingShot, first: boole
   return first && bodyReadIsCurrent(s.analysis_version) ? s.biomechanics : undefined;
 }
 
+/**
+ * The body read the library swing screen DRAWS for the swing shown (skeleton, ring, Swing Breakdown rows):
+ * the shot's own, or for swing 1 the session's — 2026-10-27 (SB4x) only one TODAY'S code stored, exactly as
+ * SmartMotion's review draws it (storedShotBiomech). An old build's read is unread: nothing is drawn from
+ * it, and the screen says "Reading…" while the run reads the swing again. The shown swing is the clamped one
+ * (a re-split can leave the selection out of range; swing 1 is then shown, with swing 1's read).
+ */
+export function shownShotBiomech(s: SwingSession | null | undefined, selectedShotIdx: number): SwingBiomechanics | null {
+  const shot = s?.shots[selectedShotIdx] ?? s?.shots[0];
+  if (!s || !shot) return null;
+  return storedShotBiomech(s, shot, s.shots.find((x) => x.clipUri)?.id === shot.id) ?? null;
+}
+
 /** True when this platform can only produce a vision arc — a stored one is then as good as it gets. */
 function trackerUnavailable(): boolean {
   try { return (require('react-native') as typeof import('react-native')).Platform.OS !== 'android'; } catch { return true; }
