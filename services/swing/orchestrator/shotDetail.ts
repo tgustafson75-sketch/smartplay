@@ -111,6 +111,19 @@ export function shownShotBiomech(s: SwingSession | null | undefined, selectedSho
   return storedShotBiomech(s, shot, s.shots.find((x) => x.clipUri)?.id === shot.id) ?? null;
 }
 
+/**
+ * 2026-10-27 (SB4x seam) — the swing shown (clamped, as shownShotBiomech) holds a body read an OLDER build
+ * stored: one with frames that is not drawn because it is unread. An old empty read (null) was never drawn.
+ */
+export function shownSwingHoldsOlderRead(s: SwingSession | null | undefined, selectedShotIdx: number): boolean {
+  const shot = s?.shots[selectedShotIdx] ?? s?.shots[0];
+  if (!s || !shot) return false;
+  const first = s.shots.find((x) => x.clipUri)?.id === shot.id;
+  if (storedShotBiomech(s, shot, first) !== undefined) return false;
+  const raw = shot.biomechanics !== undefined ? shot.biomechanics : (first ? s.biomechanics : undefined);
+  return raw != null;
+}
+
 /** True when this platform can only produce a vision arc — a stored one is then as good as it gets. */
 function trackerUnavailable(): boolean {
   try { return (require('react-native') as typeof import('react-native')).Platform.OS !== 'android'; } catch { return true; }

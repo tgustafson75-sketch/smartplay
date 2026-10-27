@@ -38,7 +38,7 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { shotImpactHeard, shownShotBiomech, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
 import { useShotDetailRequest } from '../../../hooks/useShotDetailRequest';
 import { useIssueAsk } from '../../../hooks/useIssueAsk';
 // 2026-09-20 — this screen HAS pose frames (activeBiomech.frames) and was still asking the model
@@ -69,7 +69,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
-import { bodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, issueJumpSec, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
+import { bodyReadNote, olderBodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, issueJumpSec, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { drawableClubArc, overlayLayers, swingTraceNote, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
@@ -574,8 +574,12 @@ export default function SwingDetail() {
    */
   // The second a Fault-moment pill held as the fault when no moment could be computed (issueJumpSec), and the
   // fault time the replay stops on — both per swing on screen (hooks/useIssueAsk).
-  const { issueAsked, markIssueAsked, faultSecRef, askedFaultSec, holdAskedFault, clearAskedFault } =
-    useIssueAsk(`${swing_id ?? ''}|${layoutKey}|${shot?.id ?? ''}`);
+  const reviewKey = `${swing_id ?? ''}|${layoutKey}|${shot?.id ?? ''}`;
+  const { issueAsked, markIssueAsked, faultSecRef, askedFaultSec, holdAskedFault, clearAskedFault } = useIssueAsk(reviewKey);
+  // 2026-10-27 (SB4x seam) — "Read it again" on a swing holding an older build's body read: keyed to the swing
+  // on screen like the issue ask, so it never carries to the next one (faultSpotlight.olderBodyReadNote).
+  const [bodyAskedKey, setBodyAskedKey] = useState<string | null>(null);
+  const bodyAsked = bodyAskedKey === reviewKey;
   /** The shot whose body read this screen asked for and has not settled (the 'Reading…' line). */
   const [bodyReadPendingShot, setBodyReadPendingShot] = useState<string | null>(null);
   // 2026-08-08 (Tim — "if it tries to do too much — mechanics, shot trace AND playback together — it
@@ -928,9 +932,9 @@ export default function SwingDetail() {
   useShotDetailRequest({
     sessionId: swing_id,
     shotId: selShot?.clipUri ? selShot.id : null,
-    ask: shotDetailRequestFor({ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked }),
+    ask: shotDetailRequestFor({ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked }),
     unread: !!session && !!selShot && storedShotBiomech(session, selShot, session.shots.find((x) => x.clipUri)?.id === selShot.id) === undefined,
-    retrigger: `${selectedShotIdx}|${selShot?.clipUri ?? ''}|${showSkeleton}|${showTrace}|${issueAsked}`,
+    retrigger: `${selectedShotIdx}|${selShot?.clipUri ?? ''}|${showSkeleton}|${showTrace}|${issueAsked}|${bodyAsked}`,
     setPending: setBodyReadPendingShot,
   });
 
@@ -1326,6 +1330,10 @@ export default function SwingDetail() {
   const skeletonBodyNote = bodyReadNote({ wanted: showSkeleton, hasPose, pending: bodyReadPending });
   const layers = overlayLayers({
     userSkeleton: showSkeleton, userTrace: showTrace, motionOnly, spotlight: spotlightOn, hasPose, arc: clubArcPoints,
+  });
+  const olderReadNote = olderBodyReadNote({
+    shown: activeBiomech != null, olderRead: shownSwingHoldsOlderRead(session, selectedShotIdx),
+    pending: !!shot && bodyReadPendingShot === shot.id, asked: bodyAsked,
   });
   // 2026-10-27 (SB4x) — a lit Swing Trace chip that draws nothing says why (overlayVisibility.swingTraceNote).
   // The overlay mounts only over a body read here, so that is part of "drawn".
@@ -3576,6 +3584,26 @@ export default function SwingDetail() {
                   pose API was configured AND returned at least one
                   usable frame, AND this is NOT a putting session
                   (those use PuttingAnalysisCard above). */}
+              {/* SB4x seam — an older build's read is not drawn; say so and offer the read (never a silent gap). */}
+              {olderReadNote && !session.putting_analysis ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingHorizontal: 4 }}>
+                  <Text style={{ color: colors.text_muted, fontSize: 12, flex: 1 }}>
+                    {olderReadNote === 'reading' ? t('swinglab_swing.swing_detail.reading_body')
+                      : olderReadNote === 'no_read' ? t('swinglab_swing.swing_detail.no_body_read')
+                      : t('swinglab_swing.swing_detail.older_body_read')}
+                  </Text>
+                  {olderReadNote === 'no_read' ? (
+                    <TouchableOpacity onPress={() => onReanalyzeRef.current?.()} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.reanalyze_to_see')}>
+                      <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {olderReadNote === 'older_read' && (
+                    <TouchableOpacity onPress={() => setBodyAskedKey(reviewKey)} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.read_again')}>
+                      <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.read_again')}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : null}
               {activeBiomech && !session.putting_analysis && (
                 <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <Text style={[styles.biomechLabel, { color: colors.accent }]}>{t('swinglab_swing.biomech.heading')}{session.shots.length > 1 ? t('swinglab_swing.biomech.swing_suffix', { n: selectedShotIdx + 1 }) : ''}</Text>

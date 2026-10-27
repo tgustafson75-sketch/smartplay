@@ -137,8 +137,11 @@ describe('a saved swing: settled, its windows, and what opening it does', () => 
     // the-issue-chip-shows-the-issue; issueAsked is false on every swing opened.)
     // 2026-10-27 (SB4x) — through hooks/useShotDetailRequest (a null ask asks nothing) and the per-swing hooks/useIssueAsk
     // (asked only on the swing it was asked on; behaviour: components/the-shown-swing-is-asked-for-again).
-    expect(d).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\),/);
-    expect(d).toMatch(/useIssueAsk\(`\$\{swing_id \?\? ''\}\|\$\{layoutKey\}\|\$\{shot\?\.id \?\? ''\}`\)/);
+    expect(d).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked \}\),/);
+    // (SB4x seam: the key is also "Read it again"'s — bodyAsked is keyed to the same swing; opening asks nothing,
+    // by behaviour in components/an-old-swing-one-says-its-read-is-older-and-reads-on-tap.)
+    expect(d).toMatch(/const reviewKey = `\$\{swing_id \?\? ''\}\|\$\{layoutKey\}\|\$\{shot\?\.id \?\? ''\}`;[\s\S]{0,200}?useIssueAsk\(reviewKey\)/);
+    expect(d).toMatch(/const bodyAsked = bodyAskedKey === reviewKey;/);
   });
 
   it('only a window the PLAYER chose survives a re-analyze; the finder\'s own answer is re-found', () => {

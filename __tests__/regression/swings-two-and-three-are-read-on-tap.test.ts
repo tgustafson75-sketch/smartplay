@@ -188,7 +188,7 @@ describe('both review screens ask for the swing on screen', () => {
   });
   it('the library asks for any swing past the first that the player selects', () => {
     // 2026-10-27 — the gate is faultSpotlight.shotDetailRequestFor (idx > 0 asks; behaviour in the-issue-chip-shows-the-issue).
-    expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked \}\),/);
+    expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked \}\),/);
   });
 });
 

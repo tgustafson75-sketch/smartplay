@@ -196,11 +196,27 @@ export function spotlightShows(s: { held: boolean; hold: IssueHold; highlight: b
  * Body / Swing Trace on — or the player asking to see the issue, since the ring is drawn from the body read
  * and swing 1's was otherwise never asked for. An Issue ask wants the body read only: no arc, free or paid.
  */
-export function shotDetailRequestFor(w: { idx: number; showSkeleton: boolean; traceAsked: boolean; issueAsked: boolean }): { arc?: boolean | 'tracker' } | null {
+export function shotDetailRequestFor(w: { idx: number; showSkeleton: boolean; traceAsked: boolean; issueAsked: boolean; bodyAsked?: boolean }): { arc?: boolean | 'tracker' } | null {
   if (w.traceAsked) return { arc: true };
   if (w.idx > 0 || w.showSkeleton) return { arc: 'tracker' };
   // `{}` meant arc: undefined, which the shot run reads as `true` — the PAID fallback (shotDetail.runShotDetail).
-  return w.issueAsked ? { arc: false } : null;
+  // 2026-10-27 (SB4x seam) — "Read it again" on an older build's read (olderBodyReadNote) is the same body-only ask.
+  return w.issueAsked || w.bodyAsked ? { arc: false } : null;
+}
+
+/**
+ * 2026-10-27 (SB4x seam) — the line where the library's body read used to be, when the swing shown holds a
+ * read an OLDER build stored (shotDetail.shownSwingHoldsOlderRead). That read is unread (analysisVersion), so
+ * nothing is drawn from it; swing 1 with everything off asks for nothing (the library is manual), so without
+ * this line the Biomechanics card, the body tiles and the Swing Breakdown simply vanished on every swing read
+ * before 10-26. 'older_read' offers "Read it again" (shotDetailRequestFor bodyAsked); 'reading' while it is out.
+ */
+export function olderBodyReadNote(n: { shown: boolean; olderRead: boolean; pending: boolean; asked?: boolean }): 'older_read' | 'reading' | 'no_read' | null {
+  if (n.shown) return null;
+  if (n.pending && (n.olderRead || n.asked)) return 'reading';
+  if (n.olderRead) return 'older_read';
+  // Read again on his tap and today's code found no body: say so, never just drop the line.
+  return n.asked ? 'no_read' : null;
 }
 
 /**

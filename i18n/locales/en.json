@@ -2623,7 +2623,9 @@
       "tracing_clubhead": "Tracing the clubhead…",
       "no_clubhead_seen": "The clubhead could not be seen in this swing.",
       "shot_map_older_save": "This set was saved by an older version that didn't record which swing its tempo and shot map came from, so they aren't shown.",
-      "reanalyze_to_see": "Re-analyze"
+      "reanalyze_to_see": "Re-analyze",
+      "older_body_read": "This swing's body read is from an older version, so it isn't shown.",
+      "read_again": "Read it again"
     },
     "accessibility_label": {
       "export_swing_report_pdf": "Export swing report PDF",
