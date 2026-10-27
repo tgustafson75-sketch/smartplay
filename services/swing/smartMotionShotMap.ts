@@ -13,6 +13,9 @@
  *    was read; otherwise null (write nothing).
  *  - shotMapForShot: the saved snapshot is shown only on swing 1. Every other swing has no saved tempo or
  *    launch of its own, and showing swing 1's there is presenting another swing's numbers as this one's.
+ *
+ * 2026-10-27 (SB4x) — a snapshot records its swing (swingIndex). One saved before that, by a build whose Save
+ * was not guarded, may be ANY swing's: on a set of more than one swing it is nobody's (isUnknownSwingMap).
  */
 import type { SmartMotionShotMap } from '../../store/swingSessionStore';
 
@@ -42,6 +45,7 @@ export function shotMapToPersist(src: ShotMapSource, selectedSwing: number): Sma
     || (src.isPractice && src.practiceCanvasFeet != null) || !!src.tempo || src.hasBiomech;
   if (!anything) return null;
   return {
+    swingIndex: SHOT_MAP_SWING_INDEX,
     estCarry: src.estCarry ?? null,
     effortPct: src.effortPct ?? null,
     trace: src.ballTrace ? { side: src.ballTrace.side, divergenceDeg: src.ballTrace.divergenceDeg } : null,
@@ -59,10 +63,19 @@ export function shotMapToPersist(src: ShotMapSource, selectedSwing: number): Sma
   };
 }
 
-/** The saved snapshot as the swing at `shotIdx` may show it: swing 1's own, nobody else's. */
+/** An older build's snapshot on a set of more than one swing: which swing it was read from is unknown. */
+export function isUnknownSwingMap(map: SmartMotionShotMap | null | undefined, shotCount: number): boolean {
+  return !!map && typeof map.swingIndex !== 'number' && shotCount > 1;
+}
+
+/** The saved snapshot as the swing at `shotIdx` may show it: swing 1's own, nobody else's — and never an
+ *  unstamped one on a multi-swing set (it may be swing 3's). */
 export function shotMapForShot(
   map: SmartMotionShotMap | null | undefined,
   shotIdx: number,
+  shotCount: number,
 ): SmartMotionShotMap | null {
-  return shotIdx === SHOT_MAP_SWING_INDEX ? (map ?? null) : null;
+  if (shotIdx !== SHOT_MAP_SWING_INDEX || !map || isUnknownSwingMap(map, shotCount)) return null;
+  if (typeof map.swingIndex === 'number' && map.swingIndex !== SHOT_MAP_SWING_INDEX) return null;
+  return map;
 }

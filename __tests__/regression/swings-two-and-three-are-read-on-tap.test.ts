@@ -183,7 +183,7 @@ describe('both review screens ask for the swing on screen', () => {
   it("SmartMotion asks on every page and says ANALYZING while that swing's body read is coming", () => {
     const src = read('app/swinglab/smartmotion.tsx');
     // 2026-10-27 (SB4x) — both screens ask through hooks/useShotDetailRequest (behaviour: components/the-shown-swing-is-asked-for-again).
-    expect(src).toMatch(/useShotDetailRequest\(\{\s*sessionId,\s*shotId: cageSession\?\.shots\[selectedSwing\]\?\.id \?\? null,\s*ask: phase === 'review' \? \{ arc: 'tracker' \} : null,/);
+    expect(src).toMatch(/useShotDetailRequest\(\{\s*sessionId,\s*shotId: cageSession\?\.shots\[selectedSwing\]\?\.id \?\? null,[\s\S]{0,160}?ask: reviewShotDetailAsk\(\{ review: phase === 'review', traceAsked: showTrace \}\),/);
     expect(src).toMatch(/deriveVerdict\(analysis, phase === 'analyzing' \|\| \(phase === 'review' && !analysis && selectedBodyReadPending\)/);
   });
   it('the library asks for any swing past the first that the player selects', () => {

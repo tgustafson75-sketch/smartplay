@@ -31,7 +31,7 @@ describe('a club-arc window is retried only when it was never answered', () => {
     // a tracked answer, found or honestly empty, is final across app restarts too — 2026-10-26: when TODAY's
     // tracker stored it (an older or missing club_arc_version is tracked again; see
     // reanalyze-recomputes-every-swing for the behaviour).
-    expect(code).toMatch(/if \(!clubArcIsCurrent\(version\)\) return false;[\s\S]{0,200}if \(src === 'tracker'\) return true;/);
+    expect(code).toMatch(/if \(!arcIsCurrent\(version, src\)\) return false;\s*if \(src === 'tracker'\) return true;/);
   });
 
   it('still retries when there was no answer at all', () => {

@@ -12,15 +12,24 @@ import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import VideoAnnotationOverlay from '../swinglab/VideoAnnotationOverlay';
 
-/** Freeze the review replay for markup; returns the moment (ms) to show. */
+/**
+ * Freeze the review replay for markup; returns the moment (ms) to show — the paused player's own position.
+ * 2026-10-27 (SB4x): the screen's playbackMs is the last status callback it kept (every 250 ms with the
+ * skeleton off, the default), up to a quarter second behind the frame the player froze on. It stands in only
+ * when the player reports no position.
+ */
 export async function freezeReplayForMarkup(input: {
   video: { pauseAsync: () => Promise<unknown> } | null | undefined;
   setVideoPaused: (paused: boolean) => void;
   playbackMs: number;
 }): Promise<number> {
   input.setVideoPaused(true);
-  try { await input.video?.pauseAsync(); } catch { /* an unloaded player is already still */ }
-  return Math.max(0, Math.round(input.playbackMs));
+  let at = input.playbackMs;
+  try {
+    const st = (await input.video?.pauseAsync()) as { isLoaded?: boolean; positionMillis?: number } | null | undefined;
+    if (st && st.isLoaded && typeof st.positionMillis === 'number' && Number.isFinite(st.positionMillis)) at = st.positionMillis;
+  } catch { /* an unloaded player is already still */ }
+  return Math.max(0, Math.round(at));
 }
 
 export function ReplayMarkupModal(props: {

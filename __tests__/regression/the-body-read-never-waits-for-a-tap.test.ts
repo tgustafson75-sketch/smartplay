@@ -40,7 +40,7 @@ describe('the duration is known before any branch decides what to do', () => {
     // runner probes the clip itself).
     // 2026-10-10 — with the arc from the silent pass (free tracker only).
     // 2026-10-27 (SB4x) — through hooks/useShotDetailRequest.
-    expect(sm).toMatch(/useShotDetailRequest\(\{\s*sessionId,\s*shotId: cageSession\?\.shots\[selectedSwing\]\?\.id \?\? null,\s*ask: phase === 'review' \? \{ arc: 'tracker' \} : null,/);
+    expect(sm).toMatch(/useShotDetailRequest\(\{\s*sessionId,\s*shotId: cageSession\?\.shots\[selectedSwing\]\?\.id \?\? null,[\s\S]{0,160}?ask: reviewShotDetailAsk\(\{ review: phase === 'review', traceAsked: showTrace \}\),/);
   });
 
   it('the per-branch seeds remain — they are harmless and cover the re-entry paths', () => {

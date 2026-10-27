@@ -78,10 +78,10 @@ describe('the session shot map is written from swing 1 only', () => {
 describe('the library shows the snapshot on swing 1 only', () => {
   const saved = shotMapToPersist(swing3, 0);
   it('swings 2 and 3 do not show swing 1\'s tempo and launch as their own', () => {
-    expect(shotMapForShot(saved, 1)).toBeNull();
-    expect(shotMapForShot(saved, 2)).toBeNull();
-    expect(shotMapForShot(saved, 0)).toBe(saved);
-    expect(shotMapForShot(null, 0)).toBeNull();
+    expect(shotMapForShot(saved, 1, 3)).toBeNull();
+    expect(shotMapForShot(saved, 2, 3)).toBeNull();
+    expect(shotMapForShot(saved, 0, 3)).toBe(saved);
+    expect(shotMapForShot(null, 0, 3)).toBeNull();
   });
 });
 

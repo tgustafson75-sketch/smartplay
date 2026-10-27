@@ -19,3 +19,11 @@ export const bodyReadIsCurrent = (v: number | null | undefined): boolean =>
 
 export const clubArcIsCurrent = (v: number | null | undefined): boolean =>
   typeof v === 'number' && v >= CLUB_ARC_VERSION;
+
+/**
+ * 2026-10-27 (SB4x) — an arc is current by WHAT produced it. CLUB_ARC_VERSION 2 is the tracker's grip; a
+ * vision arc never carries a grip and the vision path did not change, so asking again returns the same kind
+ * of arc (on iOS, for money). A vision arc of any version stays current; a tracker arc must be today's.
+ */
+export const arcIsCurrent = (v: number | null | undefined, source: unknown): boolean =>
+  source === 'vision' || clubArcIsCurrent(v);

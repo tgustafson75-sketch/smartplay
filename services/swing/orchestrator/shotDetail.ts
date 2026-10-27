@@ -24,7 +24,7 @@ import { getOrStartRun, liveRun, liveRunKeys, whenStageSettled, type AnalysisRun
 import { liveSessionStore } from './liveSessionStore';
 import { useSwingSessionStore, type SwingSession, type SwingShot } from '../../../store/swingSessionStore';
 import type { PoseFrame, SwingBiomechanics } from '../../poseAnalysisApi';
-import { CLUB_ARC_VERSION, bodyReadIsCurrent, clubArcIsCurrent } from '../analysisVersion';
+import { CLUB_ARC_VERSION, arcIsCurrent, bodyReadIsCurrent } from '../analysisVersion';
 
 type In = { sessionId: string; shotId: string; force: boolean; arc: boolean; trackerOnly: boolean };
 
@@ -139,9 +139,10 @@ function hasFinalArc(s: SwingSession, shot: SwingShot, first: boolean): boolean 
   // 2026-10-26 — only an arc TODAY'S code stored is final: an older build's (older or no club_arc_version)
   // is tracked again. "Re-tracking gives the same answer" held only while the tracker never changed.
   const own = shot.club_arc_source !== undefined || shot.club_arc !== undefined;
+  // 2026-10-27 (SB4x) — by its source: the grip version is the tracker's, a vision arc of any version is current.
   const version = own ? shot.club_arc_version : (first ? s.club_arc_version : undefined);
-  if (!clubArcIsCurrent(version)) return false;
   const src = shot.club_arc_source ?? (first ? s.club_arc_source : undefined);
+  if (!arcIsCurrent(version, src)) return false;
   if (src === 'tracker') return true;   // tracked by today's tracker, found or honestly empty
   // A stored VISION answer (an arc, or an honest "no arc") is final where the tracker cannot run: asking
   // the paid model again about the same frames cannot change it — across app launches too.

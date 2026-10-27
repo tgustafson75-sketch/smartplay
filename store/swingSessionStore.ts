@@ -252,6 +252,9 @@ export interface SmartMotionShotMap {
    *  library renders the same multi-card. Image asset refs are dropped (rebuilt from
    *  the icon fallback) to stay rebuild-safe. */
   bodyItems?: { key: string; label: string; tone: 'good' | 'warn' | 'bad' | 'neutral'; icon?: string }[] | null;
+  /** 2026-10-27 (SB4x) — the swing (0-based) the snapshot was read from. Missing = an older build's save,
+   *  which may be any swing of the set (services/swing/smartMotionShotMap). */
+  swingIndex?: number;
 }
 
 export interface SwingSession {

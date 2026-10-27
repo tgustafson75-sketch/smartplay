@@ -30,6 +30,19 @@ describe('R6 — the markup freezes the moment the player tapped', () => {
     expect(at).toBe(2346);
   });
 
+  it('SB4x: opens on the frame the player actually froze on, not the screen\'s last (throttled) position', async () => {
+    // The review's playbackMs updates from status callbacks every 250 ms with the skeleton off (the default):
+    // the paused player's own position is the frame on screen.
+    const pauseAsync = jest.fn(async () => ({ isLoaded: true, positionMillis: 2580.4 }));
+    const at = await freezeReplayForMarkup({ video: { pauseAsync }, setVideoPaused: jest.fn(), playbackMs: 2346 });
+    expect(at).toBe(2580);
+  });
+
+  it('a pause status with no position falls back to the screen\'s position', async () => {
+    const at = await freezeReplayForMarkup({ video: { pauseAsync: async () => ({ isLoaded: false }) }, setVideoPaused: jest.fn(), playbackMs: 2346 });
+    expect(at).toBe(2346);
+  });
+
   it('a player that will not pause still freezes the review state', async () => {
     const setVideoPaused = jest.fn();
     const at = await freezeReplayForMarkup({ video: { pauseAsync: async () => { throw new Error('unloaded'); } }, setVideoPaused, playbackMs: 900 });

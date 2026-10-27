@@ -204,6 +204,17 @@ export function shotDetailRequestFor(w: { idx: number; showSkeleton: boolean; tr
 }
 
 /**
+ * What SmartMotion's review asks THE shot run for the swing shown: always its body read, and the silent free
+ * tracker pass for the arc — unless the player turned Swing Trace on, which is his ask and may pay (as on the
+ * library). 2026-10-27 (SB4x): it asked 'tracker' whatever the chip said, which on iOS (no tracker) is no
+ * ask at all, so the chip lit and toggled to nothing.
+ */
+export function reviewShotDetailAsk(w: { review: boolean; traceAsked: boolean }): { arc: boolean | 'tracker' } | null {
+  if (!w.review) return null;
+  return { arc: w.traceAsked ? true : 'tracker' };
+}
+
+/**
  * The line a screen shows when the player wants the body (to ring the issue, or the skeleton) and there is
  * none: the read is on the way, or it came back with nothing (the clip is gone, or no body was found) and
  * the honest next step is Re-analyze. Never silence.

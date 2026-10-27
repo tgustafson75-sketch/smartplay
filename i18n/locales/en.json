@@ -2620,6 +2620,9 @@
       "paused_on_issue": "Paused on the issue",
       "reading_body": "Reading your body position…",
       "no_body_read": "No body read for this swing — Re-analyze to see where",
+      "tracing_clubhead": "Tracing the clubhead…",
+      "no_clubhead_seen": "The clubhead could not be seen in this swing.",
+      "shot_map_older_save": "This set was saved by an older version that didn't record which swing its tempo and shot map came from, so they aren't shown.",
       "reanalyze_to_see": "Re-analyze"
     },
     "accessibility_label": {

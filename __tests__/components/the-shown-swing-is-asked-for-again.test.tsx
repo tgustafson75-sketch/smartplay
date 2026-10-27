@@ -28,7 +28,7 @@ import { useState } from 'react';
 import { useSwingSessionStore, type SwingSession } from '../../store/swingSessionStore';
 import { storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
 import { BODY_READ_VERSION } from '../../services/swing/analysisVersion';
-import { shotDetailRequestFor } from '../../services/swing/faultSpotlight';
+import { reviewShotDetailAsk, shotDetailRequestFor } from '../../services/swing/faultSpotlight';
 import { swingLayoutKey } from '../../services/swing/practiceSwings';
 import { useShotDetailRequest } from '../../hooks/useShotDetailRequest';
 import { useIssueAsk } from '../../hooks/useIssueAsk';
@@ -68,14 +68,14 @@ function useLibrary(p: { idx: number; showSkeleton: boolean; showTrace: boolean 
 }
 
 /** Exactly what SmartMotion's review wires. */
-function useSmartMotion(p: { swing: number }) {
+function useSmartMotion(p: { swing: number; showTrace?: boolean }) {
   const cage = useSwingSessionStore((s) => s.sessionHistory.find((x) => x.id === 's1') ?? null);
   const sh = cage?.shots[p.swing];
   const bio = cage && sh ? storedShotBiomech(cage, sh, cage.shots.find((x) => x.clipUri)?.id === sh.id) : undefined;
   const [, setPending] = useState<string | null>(null);
   useShotDetailRequest({
-    sessionId: 's1', shotId: sh?.id ?? null, ask: { arc: 'tracker' }, unread: bio === undefined,
-    retrigger: `${p.swing}`, setPending,
+    sessionId: 's1', shotId: sh?.id ?? null, ask: reviewShotDetailAsk({ review: true, traceAsked: !!p.showTrace }), unread: bio === undefined,
+    retrigger: `${p.swing}|${!!p.showTrace}`, setPending,
   });
 }
 
@@ -98,6 +98,13 @@ describe('Re-analyze: the swing on screen is asked for again', () => {
     expect(asksFor('s1_shot_2')).toHaveLength(1);
     act(() => { useSwingSessionStore.getState().resetDerivedAnalysis('s1'); });
     expect(asksFor('s1_shot_2')).toHaveLength(2);
+  });
+
+  it('SB4x: SmartMotion\'s Swing Trace chip is a new ask that may pay; paging with it off stays the free pass', () => {
+    const { rerender } = renderHook((p: { showTrace: boolean }) => useSmartMotion({ swing: 1, showTrace: p.showTrace }), { initialProps: { showTrace: false } });
+    expect(asksFor('s1_shot_1').map((a) => a.arc)).toEqual(['tracker']);
+    rerender({ showTrace: true });
+    expect(asksFor('s1_shot_1').map((a) => a.arc)).toEqual(['tracker', true]);
   });
 
   it('a read LANDING is not a new ask (no second run when the answer arrives)', () => {

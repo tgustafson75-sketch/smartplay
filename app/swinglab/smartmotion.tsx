@@ -48,8 +48,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
-import { drawableClubArc, overlayLayers, type OverlayArcPoint } from '../../services/swing/overlayVisibility';
-import { bodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, spotlightShows, type IssueHold } from '../../services/swing/faultSpotlight';
+import { drawableClubArc, overlayLayers, swingTraceNote, type OverlayArcPoint } from '../../services/swing/overlayVisibility';
+import { bodyReadNote, reviewShotDetailAsk, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, spotlightShows, type IssueHold } from '../../services/swing/faultSpotlight';
 import { anchorsFromPoseFrames, swingStageTimesMs, type SwingStageKey } from '../../services/swing/poseMotion';
 import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
@@ -2874,9 +2874,10 @@ export default function SmartMotion() {
   useShotDetailRequest({
     sessionId,
     shotId: cageSession?.shots[selectedSwing]?.id ?? null,
-    ask: phase === 'review' ? { arc: 'tracker' } : null,
+    // The Swing Trace chip is the player's ask (it may pay, as on the library); paging stays the free pass.
+    ask: reviewShotDetailAsk({ review: phase === 'review', traceAsked: showTrace }),
     unread: selectedShotBio === undefined,
-    retrigger: `${selectedSwing}`,
+    retrigger: `${selectedSwing}|${showTrace}`,
     setPending: setBodyReadPendingShot,
   });
   useEffect(() => {
@@ -5221,6 +5222,14 @@ export default function SmartMotion() {
     userSkeleton: showSkeleton, userTrace: showTrace, spotlight: reviewSpotlightOn, hasPose: poseReady,
     arc: clubArcPoints, shotConfirmed,
   });
+  // 2026-10-27 (SB4x) — a lit Swing Trace chip that draws nothing says why, as on the library swing
+  // (overlayVisibility.swingTraceNote). Never a silent chip.
+  const reviewShotId = cageSession?.shots[selectedSwing]?.id ?? null;
+  const reviewTraceNote = swingTraceNote({
+    wanted: showTrace && shotConfirmed, drawn: reviewLayers.trace,
+    hasArc: !!clubArcPoints && clubArcPoints.length >= 3, hasBody: poseReady,
+    pending: reviewShotId != null && bodyReadPendingShot === reviewShotId,
+  });
   const reviewCaption = reviewOnIssueFrame && reviewFaultId ? faultCaption(reviewFaultId) : null;
   const skeletonRow =
     isReview ? (
@@ -5245,6 +5254,20 @@ export default function SmartMotion() {
             <Ionicons name="analytics-outline" size={13} color={showTrace ? colors.accent : '#fff'} />
             <Text style={[styles.skelToggleText, { color: showTrace ? colors.accent : '#fff' }]}>{t('swinglab_swing.swing_detail.swing_trace')}</Text>
           </TactilePressable>
+        ) : null}
+        {reviewTraceNote ? (
+          <View style={{ flexBasis: '100%', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={[styles.skelToggleText, { color: '#fff', flex: 1, fontWeight: '600' }]}>
+              {reviewTraceNote === 'tracing' ? t('swinglab_swing.swing_detail.tracing_clubhead')
+                : reviewTraceNote === 'no_body' ? t('swinglab_swing.swing_detail.no_body_read')
+                : t('swinglab_swing.swing_detail.no_clubhead_seen')}
+            </Text>
+            {reviewTraceNote !== 'tracing' ? (
+              <TactilePressable onPress={() => reanalyze()} style={styles.scrubChip} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.reanalyze_to_see')}>
+                <Text style={styles.scrubChipText}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
+              </TactilePressable>
+            ) : null}
+          </View>
         ) : null}
         {showSkeleton && poseReady ? P_SCRUB.map((p) => (
           <TactilePressable key={p.key} onPress={() => void seekToPosition(p.key)} style={styles.scrubChip}>

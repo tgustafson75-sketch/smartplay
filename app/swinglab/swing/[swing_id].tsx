@@ -72,7 +72,7 @@ import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/S
 import { bodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, issueJumpSec, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
-import { drawableClubArc, overlayLayers, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
+import { drawableClubArc, overlayLayers, swingTraceNote, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
 import { buildPoseSwingRead, signedWeightDisplay } from '../../../services/swing/poseSwingRead';
 import { BodyAnalysisRow, TempoBar, deriveBodyItems, type BodyItem, SwingBreakdownCard } from '../../../components/smartmotion/SmartMotionHud';
 import type { SwingAnalysis } from '../../../services/poseDetection';
@@ -86,7 +86,8 @@ import { getApiBaseUrl } from '../../../services/apiBase';
 import { titleForUpload } from '../../../services/swing/swingTitle';
 import { swingClock, swingClockSec } from '../../../services/swing/swingClock';
 import { countedShots, isPracticeSwing, swingIsDoubtful, swingLayoutKey } from '../../../services/swing/practiceSwings';
-import { shotMapForShot } from '../../../services/swing/smartMotionShotMap';
+import { isUnknownSwingMap, shotMapForShot } from '../../../services/swing/smartMotionShotMap';
+import { grabFrameStill } from '../../../services/swing/grabFrameStill';
 import { swingOnScreenFromShotMap } from '../../../services/swing/swingOnScreen';
 import { useCaptureEngineStore } from '../../../store/captureEngineStore';
 import { useTranslation } from 'react-i18next';
@@ -189,7 +190,9 @@ export default function SwingDetail() {
    * as its own (services/swing/smartMotionShotMap). Indexed by the swing actually shown (the clamp above).
    */
   const shownShotIdx = session?.shots[selectedShotIdx] ? selectedShotIdx : 0;
-  const shotMap = shotMapForShot(session?.smart_motion_shot_map, shownShotIdx);
+  const shotMap = shotMapForShot(session?.smart_motion_shot_map, shownShotIdx, session?.shots.length ?? 0);
+  /** An older build's map on a multi-swing set: it names no swing, so it is shown on none (SB4x). */
+  const shotMapSwingUnknown = isUnknownSwingMap(session?.smart_motion_shot_map, session?.shots.length ?? 0);
   // What the caddie is told is on screen (caddie_request swing_on_screen): swing 1's saved numbers, or that this
   // swing has none saved. Cleared when the page goes.
   // Published while this page is focused, so the screen under it (SmartMotion's review) re-publishes its own on return.
@@ -1324,6 +1327,12 @@ export default function SwingDetail() {
   const layers = overlayLayers({
     userSkeleton: showSkeleton, userTrace: showTrace, motionOnly, spotlight: spotlightOn, hasPose, arc: clubArcPoints,
   });
+  // 2026-10-27 (SB4x) — a lit Swing Trace chip that draws nothing says why (overlayVisibility.swingTraceNote).
+  // The overlay mounts only over a body read here, so that is part of "drawn".
+  const traceNote = swingTraceNote({
+    wanted: showTrace, drawn: hasPose && layers.trace, hasArc: !!clubArcPoints && clubArcPoints.length >= 3, hasBody: hasPose,
+    pending: !!shot && bodyReadPendingShot === shot.id,
+  });
 
   // 2026-07-10 (Tim — "missing play rewind and forward and slider controls in swing
   // library") — a real transport deck below the frame: jog ±2s, single-frame step
@@ -1721,18 +1730,14 @@ export default function SwingDetail() {
         isPlayingRef.current = false;
         try { await videoRef.current?.pauseAsync(); } catch { /* best-effort */ }
       }
-      const overlayOn = hasPose && (showSkeleton || showTrace || motionOnly);
-      let outUri: string | null = null;
-      if (overlayOn) {
-        // What is on screen, not every layer: a layer the player turned off is not in his photo.
-        outUri = await captureOverlayStill(uri, timeMs, { showSkeleton: layers.skeleton, showTrace: layers.trace });
-      }
-      if (!outUri) {
-        const { uri: thumbUri } = await VideoThumbnails.getThumbnailAsync(uri, { time: timeMs, quality: 1 });
-        outUri = thumbUri;
-      }
-      await MediaLibrary.saveToLibraryAsync(outUri);
-      useToastStore.getState().show(overlayOn && outUri ? 'Frame + overlay saved to your Photos' : 'Frame saved to your Photos');
+      // What is on screen, not every layer; and the toast says what the photo holds (grabFrameStill).
+      const still = await grabFrameStill({
+        hasPose, layers,
+        capture: (l) => captureOverlayStill(uri, timeMs, l),
+        thumbnail: async () => (await VideoThumbnails.getThumbnailAsync(uri, { time: timeMs, quality: 1 })).uri,
+      });
+      await MediaLibrary.saveToLibraryAsync(still.uri);
+      useToastStore.getState().show(still.baked ? 'Frame + overlay saved to your Photos' : 'Frame saved to your Photos');
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       logExportFailure('grab_frame', reason, { hasClip: !!shot?.clipUri });
@@ -2842,6 +2847,21 @@ export default function SwingDetail() {
                 </TouchableOpacity>
                 )}
               </View>
+            {/* Body on says "no body read" already: one line for one reason. */}
+            {traceNote && !(traceNote === 'no_body' && skeletonBodyNote) && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, paddingHorizontal: 4 }}>
+                <Text style={{ color: colors.text_muted, fontSize: 12, flex: 1 }}>
+                  {traceNote === 'tracing' ? t('swinglab_swing.swing_detail.tracing_clubhead')
+                    : traceNote === 'no_body' ? t('swinglab_swing.swing_detail.no_body_read')
+                    : t('swinglab_swing.swing_detail.no_clubhead_seen')}
+                </Text>
+                {traceNote !== 'tracing' && (
+                  <TouchableOpacity onPress={() => onReanalyzeRef.current?.()} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.reanalyze_to_see')}>
+                    <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             {skeletonBodyNote && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, paddingHorizontal: 4 }}>
                 <Text style={{ color: colors.text_muted, fontSize: 12, flex: 1 }}>
@@ -3712,8 +3732,10 @@ export default function SwingDetail() {
                 </View>
               ) : null}
               {/* Not silent: a later swing of a SmartMotion set says why it has no tempo / shot map. */}
-              {!shotMap && session.smart_motion_shot_map && shownShotIdx > 0 ? (
-                <Text style={[styles.biomechSub, { color: colors.text_muted, marginTop: 12 }]}>{t('swinglab_swing.swing_detail.shot_map_swing_one_only')}</Text>
+              {!shotMap && session.smart_motion_shot_map && (shotMapSwingUnknown || shownShotIdx > 0) ? (
+                <Text style={[styles.biomechSub, { color: colors.text_muted, marginTop: 12 }]}>
+                  {shotMapSwingUnknown ? t('swinglab_swing.swing_detail.shot_map_older_save') : t('swinglab_swing.swing_detail.shot_map_swing_one_only')}
+                </Text>
               ) : null}
               {/* 2026-06-30 (Tim — audit) — the player's stated FEEL was captured
                   (setSessionFeel) but never shown anywhere. Surface it with the read. */}

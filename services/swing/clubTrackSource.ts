@@ -123,7 +123,7 @@ export const CLUB_TRACK_JS = String.raw`/* Clubhead tracker — pure functions o
   // the inner end of the moving shaft that ends at the head. From the head, walk the straight line of
   // moving pixels back toward the hands, trying directions either side of the hands (pose comes ~20 times
   // a swing, so the interpolated hands can be a hand-width off through the downswing); the longest unbroken
-  // run is the shaft and its inner end is the grip. Never longer than the head-to-hands distance (+15%):
+  // run is the shaft and its inner end is the grip. Never longer than the head-to-hands distance:
   // through impact the lead arm continues the shaft's line and must not be read as more club. A run under
   // 40% of that distance is not a shaft we saw: null, and nothing is drawn for it.
   function shaftInnerEnd(md, w, h, px, py, hx, hy) {

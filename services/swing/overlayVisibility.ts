@@ -11,7 +11,7 @@
  *     swing whose arc today's tracker stored. Off is off: no arc, no club, no head dot.
  * The ball-flight trace (shot tracer) is a different thing and is not decided here.
  */
-import { clubArcIsCurrent } from './analysisVersion';
+import { arcIsCurrent } from './analysisVersion';
 
 /** A stored clubhead point as the screens hand it to the overlay: full-frame normalized, tMs in the clip,
  *  and the MEASURED grip (the inner end of the moving shaft) when the tracker saw one. */
@@ -36,7 +36,9 @@ export function drawableClubArc(
   const first = session.shots.find((x) => x.clipUri)?.id === shot.id;
   const own = shot.club_arc_source !== undefined || shot.club_arc !== undefined;
   const holder: ArcHolder | null = own ? shot : (first ? session : null);
-  if (!holder || !clubArcIsCurrent(holder.club_arc_version)) return null;
+  // Current by its source (analysisVersion.arcIsCurrent), read the way the shot run reads it (hasFinalArc).
+  const source = shot.club_arc_source ?? (first ? session.club_arc_source : undefined);
+  if (!holder || !arcIsCurrent(holder.club_arc_version, source)) return null;
   const arc = holder.club_arc;
   if (!arc || arc.length < 3) return null;
   return arc.map((p) => {
@@ -70,6 +72,23 @@ export type OverlayLayers<A> = {
   /** What the overlay's clubArc prop gets: null unless the trace is on — so the blue club goes with it. */
   clubArc: A[] | null;
 };
+
+/**
+ * 2026-10-27 (SB4x) — the line under a lit Swing Trace chip that draws nothing, on both review screens.
+ * Never a silent chip: the run is out ("Tracing the clubhead…"), or it settled with no clubhead to draw
+ * (with Re-analyze), or there is an arc but no body read to draw it against.
+ *   drawn:   the arc is on screen (the screen's own mount rule);
+ *   hasArc:  a drawable arc exists (drawableClubArc);
+ *   hasBody: the swing has a body read (the arc is found FROM it, and the library draws over it);
+ *   pending: the screen's ask for this swing is out (useShotDetailRequest).
+ * With no body read the honest reason is the body, not the clubhead.
+ */
+export type SwingTraceNote = 'tracing' | 'no_clubhead' | 'no_body' | null;
+export function swingTraceNote(n: { wanted: boolean; drawn: boolean; hasArc: boolean; hasBody: boolean; pending: boolean }): SwingTraceNote {
+  if (!n.wanted || n.drawn) return null;
+  if (n.pending) return 'tracing';
+  return n.hasArc || !n.hasBody ? 'no_body' : 'no_clubhead';
+}
 
 export function overlayLayers<A>(i: OverlayLayersIn<A>): OverlayLayers<A> {
   const skeleton = i.hasPose && (i.userSkeleton || !!i.motionOnly);

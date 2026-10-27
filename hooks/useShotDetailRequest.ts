@@ -7,7 +7,7 @@
  * (uploadRun.invalidateForReanalysis) but only re-reads swing 1, and the selection, the ids and the toggles
  * all stay the same, so nothing else would ask for swing 2's read again. A read LANDING does not ask again.
  */
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { requestShotDetail, type ArcRequest } from '../services/swing/orchestrator/shotDetail';
 
 export type ShotDetailAsk = { arc?: ArcRequest };
@@ -38,7 +38,9 @@ export function useShotDetailRequest(r: {
   const asking = r.ask != null;
   const arcKey = r.ask ? String(r.ask.arc) : '';
   const { sessionId, shotId, retrigger } = r;
-  useEffect(() => {
+  // 2026-10-27 (SB4x) — a LAYOUT effect: the "pending" mark lands before the frame is painted, so a screen
+  // that says what the ask is doing ("Tracing the clubhead…") never flashes "could not be seen" first.
+  useLayoutEffect(() => {
     const ask = askRef.current;
     if (!sessionId || !shotId || !ask) return;
     const id = shotId;
