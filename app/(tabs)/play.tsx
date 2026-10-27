@@ -53,7 +53,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // /tournament with the course pre-filled (saves the free-text typing).
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, resolveDiscoveredCourseId, type AiCourseResult } from '../../services/golfCourseApi';
-import { probeReachability, unreachableMessage } from '../../services/reachability';
+import { probeReachability, unreachableMessage, isProvenOffline } from '../../services/reachability';
 import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { composeYourCourses, decideAutoPick, chooseDefaultCourse } from '../../services/yourCourses';
@@ -1273,7 +1273,10 @@ export default function PlayTab() {
         if (res.failure) {
           // We do NOT know what is nearby — that is different from knowing there is nothing. Leave any
           // previously-found list untouched and come back to it rather than rendering a confident empty.
-          if (attempt < 3) {
+          // A probe-proven offline phone will not be online in 8 seconds; retrying just re-proves it.
+          // The position effect re-runs on the next move, and the connectivity banner already says why.
+          const provenOffline = !!res.net && isProvenOffline(res.net);
+          if (attempt < 3 && !provenOffline) {
             retryTimer = setTimeout(() => { void run(); }, attempt * 8000);
           } else {
             console.log('[play] course discovery gave up after', attempt, 'attempts —', res.failure);

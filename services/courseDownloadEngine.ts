@@ -217,7 +217,14 @@ async function locateNearbyCoursesInner(
     return { courses: cached, failure: null };
   }
 
-  logLocate('course_locate_failed', { reason: out.failure, ...(out.net ? { net: out.net } : {}), lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 });
+  /**
+   * 2026-10-26 (Tim's issue log, Apple Valley) — six course_locate_failed in one minute, every one
+   * `net: offline`. The probe had already proven the phone had no internet: that is the player's
+   * signal, not a defect, and mailing it as analysis_error six times is the alert channel firing on
+   * an answered question. Still recorded (as a diag) so a report can say why discovery was empty.
+   */
+  const provenOffline = !!out.net && isProvenOffline(out.net);
+  logLocate('course_locate_failed', { reason: out.failure, ...(out.net ? { net: out.net } : {}), lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 }, provenOffline);
   return out;
 }
 
@@ -242,10 +249,10 @@ const LOCATE_DIAGNOSTIC_STAGES = new Set([
 ]);
 
 /** Best-effort issue-log breadcrumb — discovery failures were previously invisible. Never throws. */
-function logLocate(stage: string, details: Record<string, unknown>): void {
+function logLocate(stage: string, details: Record<string, unknown>, diagnostic = false): void {
   try {
     require('../store/issueLogStore').useIssueLogStore.getState()
-      .addAppEvent(stage, details, LOCATE_DIAGNOSTIC_STAGES.has(stage) ? 'diag' : 'analysis_error');
+      .addAppEvent(stage, details, diagnostic || LOCATE_DIAGNOSTIC_STAGES.has(stage) ? 'diag' : 'analysis_error');
   } catch { /* best-effort */ }
 }
 

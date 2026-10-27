@@ -133,6 +133,14 @@ describe('course locate failure', () => {
     expect((res as { net?: string }).net).toBe('internet_ok');
     expect(failedEvent('course_locate_failed')).toMatchObject({ net: 'internet_ok' });
   });
+
+  it('a proven-offline phone is a diag, not an emailed analysis_error', async () => {
+    install({ ours: 'down', internet: 'down' });
+    const res = await locateNearbyCourses(34.49, -117.27);
+    expect((res as { net?: string }).net).toBe('offline');
+    expect(failedEvent('course_locate_failed')).toBeUndefined();
+    expect(mockAddAppEvent.mock.calls.some((c) => c[0] === 'course_locate_failed' && c[2] === 'diag')).toBe(true);
+  });
 });
 
 describe('offline banner', () => {
