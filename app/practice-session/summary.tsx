@@ -28,6 +28,8 @@ import { practiceLog } from '../../services/practiceTelemetry';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useTranslation } from 'react-i18next';
 import { goToTab } from '../../services/safeBack';
+// 2026-10-27 — the issue card's "of N swings" counts what the swing detail counts (no practice swings).
+import { countedShots } from '../../services/swing/practiceSwings';
 // 2026-07-24 (full-app audit) — session ids whose summary has already credited points/relationship,
 // so a remount (e.g. re-triggered by the voice end_session intent) can't double-award.
 const creditedCageSummaries = new Set<string>();
@@ -264,7 +266,7 @@ export default function CageSummary() {
         )}
         <PrimaryIssueCard
           issue={primaryIssue ?? session.primary_issue ?? null}
-          totalShots={session.shots.length}
+          totalShots={countedShots(session.shots).length}
         />
         <DrillCard recommendation={drillRec ?? session.drill_recommendation ?? null} />
 

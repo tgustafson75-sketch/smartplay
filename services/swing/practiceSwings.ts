@@ -80,9 +80,22 @@ export function classifyPracticeSwings(
   return out;
 }
 
+/**
+ * 2026-10-27 (Phase SB4x, review "practice #1") — the finder that split an upload, stamped on the session
+ * (`swings_split_version`) by both splitters. A split carries nothing of the player's, so without the stamp
+ * every Re-analyze split it again: the finder ran again, every practice mark was dropped and the demoted
+ * swing's read was paid for again. Only a split an OLDER finder made (no stamp, or a lower one) is looked at
+ * again. Bump this when services/poseDetection.locateSwings changes what it finds.
+ */
+export const UPLOAD_FINDER_VERSION = 1;
+
 type SessionLike = {
   id: string;
   source?: string;
+  /** The finder that made this split (UPLOAD_FINDER_VERSION); absent = an older finder. */
+  swings_split_version?: number;
+  /** The player removed a swing from this upload: its swing list is theirs now, never re-split. */
+  swings_edited_by_user?: boolean;
   shots: readonly (ShotLike & {
     clipUri?: string | null;
     clipStartSeconds?: number;
@@ -92,25 +105,35 @@ type SessionLike = {
     review_labels?: unknown;
     review_transcript?: string | null;
     feel_narration_transcript?: string;
+    feel?: string | null;
+    shape?: string | null;
+    contact?: string | null;
+    direction?: string | null;
   })[];
 };
 
 const said = (v: unknown) => typeof v === 'string' && v.trim().length > 0;
 
-/** Something the PLAYER put on this swing — a re-split would hang it on a different swing. */
+/**
+ * Something the PLAYER put on this swing — a re-split would hang it on a different swing. 2026-10-27 — the
+ * feel / shape / contact / direction tags too (the swing action sheet writes them per swing).
+ */
 export function shotHasUserContent(sh: SessionLike['shots'][number]): boolean {
   return sh.isGoodRep != null || said(sh.userNotes) || sh.review_labels != null || said(sh.review_transcript)
-    || said(sh.feel_narration_transcript) || sh.practice?.restoredByUser != null;
+    || said(sh.feel_narration_transcript) || sh.practice?.restoredByUser != null
+    || sh.feel != null || sh.shape != null || sh.contact != null || sh.direction != null;
 }
 
 /**
  * May a Re-analyze look for this session's swings again? Only an upload (a live capture's split fused what
  * the microphone heard), only when the finder carved EVERY window — today's 'auto', or the pre-10-26 shape
- * of the same thing (`${id}_shot_i`, one clip, 'manual', no window source) — and only when the player has
- * put nothing on any swing.
+ * of the same thing (`${id}_shot_i`, one clip, 'manual', no window source) — only when an OLDER finder made
+ * the split (UPLOAD_FINDER_VERSION), and only when the player has put nothing on any swing and removed none.
  */
 export function resplitEligible(session: SessionLike): boolean {
   if (session.source !== 'uploaded_video' || session.shots.length === 0) return false;
+  if (typeof session.swings_split_version === 'number' && session.swings_split_version >= UPLOAD_FINDER_VERSION) return false;
+  if (session.swings_edited_by_user === true) return false;
   const clip = session.shots[0].clipUri;
   if (!clip) return false;
   return session.shots.every((sh, i) =>

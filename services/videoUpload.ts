@@ -1116,6 +1116,17 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
       }
     }
 
+    /**
+     * 2026-10-27 (Phase SB4x, review "practice #5") — the swing a fallback reads or names: the first one that
+     * COUNTS, by the marks the classifier just wrote (`swings` predates them). A practice swing never becomes
+     * the tentative read or the headline's swing; with none counted, there is no fallback read.
+     */
+    const firstCountedSwing = () => {
+      const live = liveSessionStore(signal).sessionHistory.find(s => s.id === sessionId);
+      const byId = new Map((live?.shots ?? []).map(sh => [sh.id, sh] as const));
+      return swings.find(s => !!s.clipUri && !isPracticeSwing(byId.get(s.id) ?? s));
+    };
+
     if (faultCandidates.length > 0) {
       const byIndex = [...faultCandidates].sort((a, b) => a.index - b.index);
       const chosen = byIndex.find(c => c.uri) ?? byIndex[0];
@@ -1177,7 +1188,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
         swings_to_retry: swings.length,
       });
 
-      const firstSwingWithClip = swings.find(s => s.clipUri);
+      const firstSwingWithClip = firstCountedSwing();
       /**
        * 2026-10-05 (sweep 2) — NO second network read after the first could not reach the server or hung:
        * the tentative is another POST to the same API, and on Tim's 5:01 AM read it added 55s to a 63s
@@ -1323,7 +1334,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
         // and high confidence — NOT as a tentative observation. Uses
         // the first swing's actual observation text when present so
         // the player gets the model's real read, not a placeholder.
-        const firstSwingWithClip = swings.find(s => s.clipUri);
+        const firstSwingWithClip = firstCountedSwing();
         const firstResult = results[0];
         const observation = (firstResult?.analysis.observation ?? '').trim();
         V6('STAGE 5 FINAL — no clear fault (model read OK, no tendency)', {
@@ -1348,7 +1359,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           confidence: 'high',
         };
       } else if (allInconclusive) {
-        const firstSwingWithClip = swings.find(s => s.clipUri);
+        const firstSwingWithClip = firstCountedSwing();
         if (firstSwingWithClip?.clipUri) {
           V6('STAGE 5 — all results inconclusive, attempting tentative fallback', {
             swing_id: firstSwingWithClip.id,
@@ -1396,7 +1407,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     // low-confidence read from the richest observation we have. Repeat swings then
     // climb the confidence ladder via classifySession's consensus (more reps = higher).
     if (!primary_issue && results.length > 0) {
-      const firstSwingWithClip = swings.find(s => s.clipUri);
+      const firstSwingWithClip = firstCountedSwing();
       const obs = results
         .map(r => (r.analysis.observation ?? '').trim())
         .filter(Boolean)

@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import { practiceLog } from '../services/practiceTelemetry';
 import { BODY_READ_VERSION, CLUB_ARC_VERSION, bodyReadIsCurrent, clubArcIsCurrent } from '../services/swing/analysisVersion';
-import { isPracticeSwing } from '../services/swing/practiceSwings';
+import { isPracticeSwing, UPLOAD_FINDER_VERSION } from '../services/swing/practiceSwings';
 
 /** A shot or session without its club arc (the arc, its frame, its source and its version). */
 function withoutArc<T extends { club_arc?: unknown; club_arc_frame?: unknown; club_arc_source?: unknown; club_arc_version?: unknown }>(x: T): T {
@@ -407,6 +407,11 @@ export interface SwingSession {
   /** 2026-10-26 — when a Re-analyze last split this upload into swings again (replaceUploadSwings): the shot
    *  ids are reused for different swings, so a screen holding per-swing state keys on this. */
   swings_split_at?: number;
+  /** 2026-10-27 — the finder that split this upload into swings (practiceSwings.UPLOAD_FINDER_VERSION). A
+   *  split only an older finder made is looked at again on Re-analyze. Absent = an older finder (or none). */
+  swings_split_version?: number;
+  /** 2026-10-27 — the player deleted a swing of this upload: its swing list is theirs, never re-split. */
+  swings_edited_by_user?: boolean;
   /** 2026-05-24 — 0-based index into the 5-frame sample the vision
    *  model received. Mirrors the analysis's `fault_frame_index`
    *  promoted to session level so consumers don't have to dig into
@@ -894,6 +899,7 @@ function carveUploadSwings(sessionId: string, base: SwingShot, windows: UploadSw
     biomechanics: _b, analysis_version: _v, club_arc: _a, club_arc_frame: _f, club_arc_source: _s, club_arc_version: _cv,
     detected_issue_timestamps_sec: _t, review_labels: _rl, review_transcript: _rt, practice: _p, locateConfidence: _lc,
     commentary_transcript: _ct, feel_narration_transcript: _fn, isGoodRep: _g, userNotes: _n,
+    feel: _fe, shape: _sh, contact: _co, direction: _di,
     ...inherit
   } = base;
   const heard = new Map<number, string[]>();
@@ -917,11 +923,17 @@ function carveUploadSwings(sessionId: string, base: SwingShot, windows: UploadSw
       ...(base.feel_narration_transcript ? { feel_narration_transcript: base.feel_narration_transcript } : {}),
       ...(base.isGoodRep != null ? { isGoodRep: base.isGoodRep } : {}),
       ...(base.userNotes ? { userNotes: base.userNotes } : {}),
+      // 2026-10-27 — the player's tags on the single upload were on the whole clip, like its notes.
+      ...(base.feel != null ? { feel: base.feel } : {}),
+      ...(base.shape != null ? { shape: base.shape } : {}),
+      ...(base.contact != null ? { contact: base.contact } : {}),
+      ...(base.direction != null ? { direction: base.direction } : {}),
     }
     : {};
   return windows.map((w, i) => {
     const said = (heard.get(i) ?? []).join(' ').trim();
     return {
+      feel: null, shape: null, contact: null, direction: null,
       ...inherit,
       ...clipWide,
       id: `${sessionId}_shot_${i}`,
@@ -1616,6 +1628,8 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             session.id !== sessionId ? session : {
               ...session,
               shots: session.shots.filter(shot => shot.id !== shotId),
+              // 2026-10-27 — an upload's swing list the player edited is never re-split (practiceSwings.resplitEligible).
+              ...(session.source === 'uploaded_video' && session.shots.some(shot => shot.id === shotId) ? { swings_edited_by_user: true } : {}),
               clubSegments: session.clubSegments?.map(seg => ({
                 ...seg,
                 shot_ids: seg.shot_ids.filter(id => id !== shotId),
@@ -2149,7 +2163,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             if (session.id !== sessionId) return session;
             const base = session.shots[0];
             if (!base || windows.length < 2) return session; // nothing to expand
-            return { ...session, shots: carveUploadSwings(sessionId, base, windows, []) };
+            return { ...session, shots: carveUploadSwings(sessionId, base, windows, []), swings_split_version: UPLOAD_FINDER_VERSION };
           }),
         })),
 
@@ -2159,7 +2173,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             if (session.id !== sessionId) return session;
             const base = session.shots[0];
             if (!base || windows.length < 1) return session;
-            return { ...session, shots: carveUploadSwings(sessionId, base, windows, session.shots), swings_split_at: Date.now() };
+            return { ...session, shots: carveUploadSwings(sessionId, base, windows, session.shots), swings_split_at: Date.now(), swings_split_version: UPLOAD_FINDER_VERSION };
           }),
         })),
 
