@@ -29,17 +29,29 @@ import type { DetectedStrike } from './strikeDetector';
  */
 export const MIN_SWING_SEP_SEC = 2.5;
 
+/**
+ * 2026-10-26 (Tim: "practice swings still show") — `passes`: how many locate passes ANSWERED. With two
+ * (S2m's half-step union), a swing only ONE pass saw is kept — losing a real swing between frames is the
+ * worse mistake — but at confidence 'low', so the reel shows it as unsure and the practice classifier
+ * (services/swing/practiceSwings) can weigh it. Detections without a `pass` are never downgraded.
+ */
 export function mergeSwingDetections(
-  raw: { timeSec: number; confidence: 'high' | 'low' }[],
+  raw: { timeSec: number; confidence: 'high' | 'low'; pass?: number }[],
   minSepSec: number = MIN_SWING_SEP_SEC,
+  passes = 1,
 ): { timeSec: number; confidence: 'high' | 'low' }[] {
-  if (raw.length <= 1) return raw;
+  const seenBy = (g: { pass?: number }[]) => new Set(g.map((x) => x.pass)).size;
+  const onePassOnly = (g: { pass?: number }[]) => passes >= 2 && g.every((x) => typeof x.pass === 'number') && seenBy(g) < passes;
+  if (raw.length === 0) return [];
+  if (raw.length === 1) {
+    return [{ timeSec: raw[0].timeSec, confidence: onePassOnly(raw) ? 'low' : raw[0].confidence }];
+  }
   const sorted = [...raw].sort((a, b) => a.timeSec - b.timeSec);
   const out: { timeSec: number; confidence: 'high' | 'low' }[] = [];
-  let group: { timeSec: number; confidence: 'high' | 'low' }[] = [sorted[0]];
+  let group: { timeSec: number; confidence: 'high' | 'low'; pass?: number }[] = [sorted[0]];
   const flush = () => {
     const mid = group[Math.floor(group.length / 2)]; // median time ≈ impact
-    const conf: 'high' | 'low' = group.some((g) => g.confidence === 'high') ? 'high' : 'low';
+    const conf: 'high' | 'low' = !onePassOnly(group) && group.some((g) => g.confidence === 'high') ? 'high' : 'low';
     out.push({ timeSec: mid.timeSec, confidence: conf });
   };
   for (let i = 1; i < sorted.length; i++) {

@@ -5846,7 +5846,8 @@ check('Segmentation: rebounds filtered, sessions can\'t cross-poison, anchors ke
       cascade.length === 2 && cascade[0].timeMs === 1000 && cascade[1].timeMs === 3400; // 2nd swing survives
     // (b) merge separation scales with the coarse frame interval on long clips, but is CAPPED at 3.5s
     //     (detection root-cause #4) so a 120s clip's ~5s interval can't collapse two real ~4s-apart swings.
-    const scaled = /mergeSwingDetections\(raw, Math\.min\(3\.5, Math\.max\(2\.5, frameIntervalSec\)\)\)/.test(read('services/poseDetection.ts'));
+    // 2026-10-26 — plus the number of passes that answered (a swing only one of two saw is kept at 'low').
+    const scaled = /mergeSwingDetections\(raw, Math\.min\(3\.5, Math\.max\(2\.5, frameIntervalSec\)\), answered\.length\)/.test(read('services/poseDetection.ts'));
     // (c) session token + in-flight dedupe on the per-swing analysis cache.
     const sm = read('app/swinglab/smartmotion.tsx');
     // 2026-10-05 — the reads come from THE run; a superseded session's reads are dropped by the token and
@@ -7546,7 +7547,8 @@ check('Cage-session context build is throw-proof AND shape-proof',
   // that is a string does not throw, it reports a character count.
   (() => {
     const b = readCode('services/caddieRequestBody.ts');
-    return /Array\.isArray\(s\.shots\) \? s\.shots\.length : 0/.test(b) &&
+    // 2026-10-26 — the count is of SWINGS (a demoted practice swing is out), still shape-checked first.
+    return /Array\.isArray\(s\.shots\) \? [^\n]*countedShots\(s\.shots as object\[\]\)\.length : 0/.test(b) &&
       /Array\.isArray\(c\.sessionHistory\) \? c\.sessionHistory : \[\]/.test(b) &&
       /recentCageSessions: safe\(/.test(b);
   })(),
@@ -13101,7 +13103,8 @@ check('LOCK: NO surface drops a located swing before the evidence for it has arr
     // The honest-maybe surface is what REPLACES deletion, so it is part of this invariant: a low swing
     // becomes confirmed:false and the reel tints that chip with the warning colour.
     const shownAsUnconfirmed = /confirmed: s\.confidence !== 'low'/.test(seg)
-      && /const tone = s\.confidence === 'low' \? colors\.warning : colors\.accent/.test(sm);
+      // 2026-10-26 — a swing the read demoted as practice is greyed instead (still shown, restorable).
+      && /const tone = practice \? colors\.text_muted : s\.confidence === 'low' \? colors\.warning : colors\.accent/.test(sm);
     // And the reason all of this matters: locateSwings is BINARY. `!== 'low'` is "high only", never a
     // middle grade, so any such filter on locator output is far harsher than it reads.
     const locatorIsBinary = /confidence: \(s\.confidence === 'high' \? 'high' : 'low'\)/.test(det);

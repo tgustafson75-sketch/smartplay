@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
+import { countedShots } from '../../services/swing/practiceSwings';
 import { analyzeSession, getDominantMissLabel } from '../../services/patternEngine';
 import { useTranslation } from 'react-i18next';
 
@@ -115,7 +116,7 @@ export default function CageHistory() {
                     {pattern.flushRate + '%'}
                   </Text>
                   <Text style={styles.sessionShots}>
-                    {session.shots.length + ' shots'}
+                    {countedShots(session.shots).length + ' shots'}
                   </Text>
                 </View>
 

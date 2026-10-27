@@ -546,12 +546,19 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
   // locator call on 15-25s single-swing uploads. Practice/rehearsal swings are
   // now filtered at the locator prompt, so expansion tracks real ball-strikes.
   const MULTI_SWING_UPLOAD_MIN_MS = 15_000;
-  if (
-    swings.length === 1 &&
+  const firstSplit = swings.length === 1 &&
     swings[0].clipStartSeconds == null &&
-    swings[0].clipUri &&
-    session.source !== 'live_capture'
-  ) {
+    !!swings[0].clipUri &&
+    session.source !== 'live_capture';
+  /**
+   * 2026-10-26 (Tim: "practice swings still show on old uploads") — AN OLD UPLOAD IS SPLIT AGAIN. The split
+   * above ran only on an upload's FIRST read, so the windows an older finder carved (practice swings and
+   * all) were re-read on every Re-analyze for good. Now a Re-analyze looks again — only when the finder
+   * carved every window and the player has put nothing on any swing (services/swing/practiceSwings).
+   */
+  const { resplitEligible, classifyPracticeSwings, isPracticeSwing } = require('./swing/practiceSwings') as typeof import('./swing/practiceSwings');
+  const resplit = !firstSplit && resplitEligible(session);
+  if ((firstSplit || resplit) && swings[0]?.clipUri) {
     try {
       const pose = await import('./poseDetection');
       // 2026-07-04 (elite-clean audit) — the picker flow already probed this
@@ -583,12 +590,29 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           found: found.length,
           unconfirmed: segs.filter(sg => sg.confidence === 'low').length,
         }, sessionId);
-        if (found.length > 1) {
-          store.expandUploadIntoSwings(sessionId, segs.map(seg => ({
-            startSec: seg.startMs / 1000,
-            endSec: seg.endMs / 1000,
-            impactSec: seg.strikeMs / 1000,
-          })));
+        // The finder's confidence rides on each swing (high / low; the video finder has no 'medium').
+        const windows = segs.map(seg => ({
+          startSec: seg.startMs / 1000,
+          endSec: seg.endMs / 1000,
+          impactSec: seg.strikeMs / 1000,
+          confidence: (seg.confidence === 'low' ? 'low' : 'high') as 'high' | 'low',
+        }));
+        if (resplit) {
+          // Nothing found is a failed look, not evidence: the stored swings stand.
+          if (found.length >= 1) {
+            store.replaceUploadSwings(sessionId, windows);
+            // Anything this launch remembers about the old swings (answered arcs, live shot runs) is another swing's now.
+            const { clearAnswered } = require('./swing/orchestrator/shotDetail') as typeof import('./swing/orchestrator/shotDetail');
+            const { cancelRunsWithPrefix } = require('./swing/orchestrator/engine') as typeof import('./swing/orchestrator/engine');
+            clearAnswered(sessionId);
+            cancelRunsWithPrefix(`shot:${sessionId}:`);
+            const fresh = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
+            if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
+            uploadLog('upload-resplit', { swings_found: found.length, shots: swings.length }, sessionId);
+            V6('STAGE 0 — old upload split again', { found: found.length, shots: swings.length });
+          }
+        } else if (found.length > 1) {
+          store.expandUploadIntoSwings(sessionId, windows);
           const fresh = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
           uploadLog('upload-multi-swing-expand', { swings_found: found.length, shots: swings.length }, sessionId);
@@ -662,7 +686,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     // so in parallel mode whichever swing FINISHED LAST won — the featured frame was
     // chosen by completion order, not swing order. Collect candidates here and pick
     // deterministically (first swing with a real display frame) after all swings run.
-    const faultCandidates: { index: number; uri: string | null; frameIndex: number | null; fraction: number | null }[] = [];
+    const faultCandidates: { index: number; swing_id: string; uri: string | null; frameIndex: number | null; fraction: number | null }[] = [];
 
     store.setSessionAnalysisStatus(sessionId, 'analyzing_pose');
     uploadLog('pose-detection-start', { swings_to_analyze: swings.length }, sessionId);
@@ -825,9 +849,10 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     // Build the per-swing work item once so both sequential and
     // parallel paths share the same closure (zero behavior drift).
     type SwingWork = { swing: typeof swings[number]; index: number };
+    // 2026-10-26 — a swing already demoted as practice is not paid for again, unless the player restored it.
     const work: SwingWork[] = swings
       .map((swing, index) => ({ swing, index }))
-      .filter(w => !!w.swing.clipUri);
+      .filter(w => !!w.swing.clipUri && !isPracticeSwing(w.swing));
 
     const runOne = async ({ swing, index: i }: SwingWork): Promise<void> => {
       // Phase BW — clipBoundaries for multi-swing master videos.
@@ -999,6 +1024,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
         if (r.fault_frame_display_uri || r.analysis.fault_frame_index != null) {
           faultCandidates.push({
             index: i,
+            swing_id: swing.id,
             uri: r.fault_frame_display_uri ?? null,
             frameIndex: r.analysis.fault_frame_index ?? null,
             fraction: r.fault_frame_fraction ?? null,
@@ -1057,6 +1083,30 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     // parallel completion order.
     // Replaced or over budget: nothing below may run — no paid tentative, no memory notes, no club stats.
     if (signal?.aborted) return { primary_issue: null, drill_recommendation: null, analyses, readFailed: 'cancelled' };
+
+    /**
+     * 2026-10-26 (Tim: "practice swings still show") — THE PRACTICE CLASSIFIER, for every source. A swing the
+     * read saw made with no ball is DEMOTED (shot.practice), never deleted, and nothing session-wide (the
+     * headline, its occurrence count, the featured frame) is built from it. services/swing/practiceSwings.
+     */
+    {
+      const cur = liveSessionStore(signal).sessionHistory.find(s => s.id === sessionId);
+      if (cur) {
+        const reads: Record<string, unknown> = {};
+        for (const r of results) reads[r.swing_id] = r.analysis;
+        const marks = classifyPracticeSwings(cur.shots, reads);
+        liveSessionStore(signal).setShotPracticeMarks(sessionId, marks);
+        const demoted = new Set(Object.keys(marks).filter(id => isPracticeSwing({ practice: marks[id] })));
+        if (demoted.size > 0) {
+          const kept = results.filter(r => !demoted.has(r.swing_id));
+          results.splice(0, results.length, ...kept);
+          const keptCandidates = faultCandidates.filter(c => !demoted.has(c.swing_id));
+          faultCandidates.splice(0, faultCandidates.length, ...keptCandidates);
+          uploadLog('practice-swings-demoted', { demoted: demoted.size, counted: cur.shots.length - demoted.size }, sessionId);
+          V6('STAGE 4 — practice swings demoted', { demoted: [...demoted] });
+        }
+      }
+    }
 
     if (faultCandidates.length > 0) {
       const byIndex = [...faultCandidates].sort((a, b) => a.index - b.index);

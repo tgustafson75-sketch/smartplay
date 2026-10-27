@@ -94,6 +94,7 @@ import { detectStrikes, levelStrikes, type DetectedStrike } from '../../services
 import { createLiveStrikeMeter } from '../../services/swing/liveStrikeMeter';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, reanalyzeSegment, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { isPracticeSwing } from '../../services/swing/practiceSwings';
 import { NO_SWING_FOUND } from '../../services/swing/orchestrator/uploadRun';
 import { requestShotDetail, shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
 import { CONTACT_ISSUE_IDS, mishitFromFeel, noLaunchIssue } from '../../services/swing/contactVerdict';
@@ -1546,6 +1547,19 @@ export default function SmartMotion() {
   const recordWindowSecRef = useRef(RECORDING_MAX_SECONDS);
   const autoStopAtLimitRef = useRef(false);
   const ingestedSessionIdRef = useRef<string | null>(null);
+  /**
+   * 2026-10-26 (Tim: "practice swings still show") — the read's practice call on each swing of the saved
+   * capture ('p' practice, 'r' restored by the player, '-' a swing), in reel order. The reel marks a practice
+   * swing (never drops it) and the practice credit does not count it. Empty until the capture is saved.
+   */
+  const reelShots = useSwingSessionStore((st) => {
+    const sid = ingestedSessionIdRef.current;
+    return sid ? st.sessionHistory.find((x) => x.id === sid)?.shots : undefined;
+  });
+  const reelPracticeKey = useMemo(
+    () => (reelShots ? reelShots.map((sh) => (isPracticeSwing(sh) ? 'p' : sh.practice ? 'r' : '-')).join('') : ''),
+    [reelShots],
+  );
   const stoppingRef = useRef(false);
   const meteringRef = useRef<MeteringHandle | null>(null);
   const audioUriRef = useRef<string | null>(null);
@@ -2562,6 +2576,8 @@ export default function SmartMotion() {
                 clipStartSeconds: s.startMs / 1000,
                 clipEndSeconds: s.endMs / 1000,
                 detectionMethod: (s.peakDb ?? 0) !== 0 ? 'audio_transient' as const : 'manual' as const,
+                // 2026-10-26 — the reel's amber "unsure" swing stays unsure in the library (it was dropped at save).
+                locateConfidence: s.confirmed === false || s.confidence === 'low' ? 'low' as const : 'high' as const,
               })),
               captureKind: isDrill ? 'drill' : 'smart_motion',
             })
@@ -4596,7 +4612,9 @@ export default function SmartMotion() {
     let savedMsg = 'Saved to your Swing Library';
     if (sid) {
       try {
-        const swings = Math.max(1, segmentsRef.current.length || drillShotCount || 1);
+        // 2026-10-26 — a swing the read demoted as practice earns no credit (services/swing/practiceSwings).
+        const demoted = (useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.shots ?? []).filter(isPracticeSwing).length;
+        const swings = Math.max(1, (segmentsRef.current.length || drillShotCount || 1) - demoted);
         // 2026-06-30 (audit M1 — double-count fix) — when an Open Range / Focus / SmartPlan
         // SESSION is active, this swing was already stamped into it (recordPracticeSwingIfActive)
         // and endSession() awards + records the session total. Awarding here too DOUBLE-counted
@@ -5118,22 +5136,42 @@ export default function SmartMotion() {
   const reel =
     isReview && segments.length > 1 ? (
       <View style={styles.reelWrap}>
-        <Text style={[styles.reelLabel, { color: '#fff' }]}>{t('swinglab_smartmotion.smart_motion.swings', { length: segments.length })}</Text>
+        <Text style={[styles.reelLabel, { color: '#fff' }]}>
+          {t('swinglab_smartmotion.smart_motion.swings', { length: segments.length })}
+          {reelPracticeKey.length === segments.length && reelPracticeKey.includes('p') ? ` · ${reelPracticeKey.split('p').length - 1} PRACTICE` : ''}
+        </Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
           {segments.map((s, i) => {
             const sel = i === selectedSwing;
-            const tone = s.confidence === 'low' ? colors.warning : colors.accent;
+            const practice = reelPracticeKey.length === segments.length && reelPracticeKey[i] === 'p';
+            const tone = practice ? colors.text_muted : s.confidence === 'low' ? colors.warning : colors.accent;
             return (
               <Pressable
                 key={i}
                 onPress={() => void selectSwing(i)}
-                style={[styles.reelChip, { borderColor: sel ? tone : 'rgba(255,255,255,0.3)', backgroundColor: sel ? tone : 'rgba(0,0,0,0.5)' }]}
+                style={[styles.reelChip, { borderColor: sel ? tone : 'rgba(255,255,255,0.3)', backgroundColor: sel ? tone : 'rgba(0,0,0,0.5)', opacity: practice && !sel ? 0.55 : 1 }]}
+                accessibilityLabel={practice ? `Swing ${s.index}, practice swing` : `Swing ${s.index}`}
               >
-                <Text style={[styles.reelChipText, { color: sel ? '#06281b' : '#fff' }]} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{s.index}</Text>
+                <Text style={[styles.reelChipText, { color: sel ? '#06281b' : '#fff', textDecorationLine: practice ? 'line-through' : 'none' }]} maxFontSizeMultiplier={HUD_MAX_FONT_SCALE}>{s.index}</Text>
               </Pressable>
             );
           })}
         </ScrollView>
+        {reelPracticeKey.length === segments.length && reelPracticeKey[selectedSwing] && reelPracticeKey[selectedSwing] !== '-' ? (
+          <Pressable
+            onPress={() => {
+              const sid = ingestedSessionIdRef.current;
+              const sh = sid ? useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.shots[selectedSwing] : undefined;
+              if (sid && sh) useSwingSessionStore.getState().setPracticeSwingRestored(sid, sh.id, reelPracticeKey[selectedSwing] === 'p');
+            }}
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.reelLabel, { color: colors.accent, marginTop: 4 }]}>
+              {reelPracticeKey[selectedSwing] === 'p' ? 'PRACTICE SWING — NO BALL SEEN · COUNT IT' : 'COUNTED BY YOU · MARK AS PRACTICE'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     ) : null;
 

@@ -57,6 +57,7 @@ import { getApiBaseUrl } from '../../services/apiBase';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
 import { useTranslation } from 'react-i18next';
 import { goToTab } from '../../services/safeBack';
+import { countedShots } from '../../services/swing/practiceSwings';
 
 const COACH_TUTORIAL_KEY = 'coach_mode';
 
@@ -136,11 +137,11 @@ export default function CoachMode() {
   // hero. Honest substitutions for un-producible mockup bits: "day streak" → a real
   // Sessions count; no fabricated biomech %.
   const totalSwingsLogged = useMemo(
-    () => sessionHistory.reduce((a, s) => a + (s.shots?.length ?? 0), 0),
+    () => sessionHistory.reduce((a, s) => a + countedShots(s.shots).length, 0),   // not demoted practice swings
     [sessionHistory],
   );
   const playerSwingCount = useMemo(
-    () => playerSwings.reduce((a, s) => a + (s.shots?.length ?? 0), 0),
+    () => playerSwings.reduce((a, s) => a + countedShots(s.shots).length, 0),
     [playerSwings],
   );
   const lastCaptureLabel = useMemo(() => {

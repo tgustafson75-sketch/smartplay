@@ -151,6 +151,7 @@ const SWING_ANALYSIS_SCHEMA = {
     follow_up_question: { type: ['string', 'null'] },
     strengths: { type: 'array', items: { type: 'string' } },
     contact_read: { type: 'string', enum: ['clean', 'fat', 'thin', 'topped', 'unknown'] },
+    ball_struck: { type: 'string', enum: ['yes', 'no', 'unknown'] },
     // 2026-09-29 — which phases the model actually SAW; enforced in code (api/_swingCoverage).
     phases_visible: {
       type: 'object',
@@ -168,7 +169,7 @@ const SWING_ANALYSIS_SCHEMA = {
     'detected_issue', 'severity', 'confidence', 'primary_fault',
     'valid_swing', 'fault_frame_index', 'observation', 'cause', 'fix',
     'drill', 'evidence', 'layman_explanation', 'strengths', 'contact_read',
-    'phases_visible',
+    'ball_struck', 'phases_visible',
   ],
   additionalProperties: false,
 } as const;
@@ -193,6 +194,7 @@ const SWING_ANALYSIS_GEMINI_SCHEMA = {
     follow_up_question: { type: Type.STRING, nullable: true },
     strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
     contact_read: { type: Type.STRING, enum: ['clean', 'fat', 'thin', 'topped', 'unknown'] },
+    ball_struck: { type: Type.STRING, enum: ['yes', 'no', 'unknown'] },
     phases_visible: {
       type: Type.OBJECT,
       properties: {
@@ -208,7 +210,7 @@ const SWING_ANALYSIS_GEMINI_SCHEMA = {
     'detected_issue', 'severity', 'confidence', 'primary_fault',
     'valid_swing', 'fault_frame_index', 'observation', 'cause', 'fix',
     'drill', 'evidence', 'layman_explanation', 'strengths', 'contact_read',
-    'phases_visible',
+    'ball_struck', 'phases_visible',
   ],
 };
 
@@ -280,6 +282,10 @@ type SwingAnalysisResponse = {
   // it so the verdict never celebrates a mishit as a good swing. Separate from the
   // biomech fault fields on purpose (contact quality ≠ a motion fault).
   contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
+  // 2026-10-26 (Tim: "practice swings still show") — did THIS swing strike a ball? 'no' only on visible
+  // evidence of a practice / rehearsal swing; 'unknown' by default. The client demotes a 'no' swing as a
+  // practice swing (services/swing/practiceSwings) and treats a missing field as unknown.
+  ball_struck?: 'yes' | 'no' | 'unknown';
   // 2026-09-29 — which swing phases the frames actually showed, as the model reported them, and the
   // fault (if any) refused because its phase was not seen. See api/_swingCoverage.
   phases_visible?: PhasesVisible | null;
@@ -540,7 +546,8 @@ Output ONLY a JSON object:
   "drill": "<one specific actionable drill. For no_dominant_fault: maintenance/consistency drill or one targeting the named tendency. Empty string '' only when primary_fault is 'inconclusive'.>",
   "evidence": "<string in the format 'Frame N: <what is visible that earned the call>'. REQUIRED for every diagnostic primary_fault including no_dominant_fault. Empty string '' only when primary_fault is 'inconclusive'.>",
   "strengths": ["<0-2 short strings naming what this player did WELL in THIS swing — see STRENGTHS rules. Empty array [] when nothing is genuinely observable, or when valid_swing is false.>"],
-  "phases_visible": { "address": true | false, "top": true | false, "impact": true | false, "finish": true | false }
+  "phases_visible": { "address": true | false, "top": true | false, "impact": true | false, "finish": true | false },
+  "ball_struck": "yes" | "no" | "unknown"
 }
 
 STRENGTHS — what the player did WELL (2026-06-14, CRITICAL — the app's coaching balance).
@@ -576,6 +583,7 @@ Rules:
 - Default to NAMING what you see at low confidence rather than returning 'none'. The player can rule out a low-confidence read; they cannot act on silence.
 - 'none' is reserved for: unreadable frames OR a swing whose MOTION genuinely looks clean across all the frames (no recognizable tendency at all). CRITICAL: 'none' means the MOTION looks clean — it does NOT mean the shot was good. You are judging body/club motion; you usually CANNOT see the quality of ball contact (fat/thin) from these frames. Never write an observation, layman_explanation, or strength that claims the shot, strike, or contact was "good", "clean", "solid", or "pure" — you did not see the ball being struck. Praise only what is visible in the motion (posture, tempo, balance, sequence).
 - contact_read: an HONEST strike read. Set it to 'unknown' by DEFAULT — from body-motion frames you almost never see contact. ONLY set 'fat' when there is clear visible evidence the club hit the ground behind the ball (a divot opening up before the ball, the clubhead visibly digging into the turf behind the ball, a steep decelerating chop into the ground); 'thin'/'topped' only when you can see the club catch the ball high / above center or the ball squirting low along the ground. If you cannot actually see the strike, it is 'unknown' — do NOT infer 'clean' from clean-looking motion. 'clean' requires seeing a centered, ball-first strike, which is rare from these angles. When in any doubt: 'unknown'.
+- ball_struck: did THIS swing hit a ball? 'unknown' by DEFAULT. 'no' ONLY when the frames clearly show a PRACTICE / rehearsal swing: a full swing motion with no ball at address in front of the club, or the club swishing past beside / short of a ball that is still sitting there in the finish frame. 'yes' only when you can see the ball leave, a divot taken on the ball line, or the ball gone from its spot after impact. A net that catches the ball, a ball out of frame or too small to see, or a mat you cannot read: 'unknown', never 'no'. Never 'no' when valid_swing is false.
 - The observation field is the single sentence the user will hear ("Your hips are moving toward the ball through impact"). Specific, factual, no jargon.
 - fault_frame_index: when detected_issue is anything other than 'none', return the integer index of the frame that most clearly shows the tendency. When detected_issue is 'none', return -1.
 - Voice / cadence: when a caddie name is provided in the user context, write the observation in that caddie's voice. Kevin = neutral conversational technical ("Your weight is still on your back foot at impact"). Serena = precise instructor ("At impact your weight has not transferred forward — about 60 percent still on the trail side"). Harry = warm encouraging ("I can see you're hanging back a bit at impact — that's a common one"). Default (no caddie_name) = neutral technical.
@@ -694,6 +702,10 @@ export function normalizeAnalysis(
   }
   if (parsed.valid_swing === false) {
     parsed.contact_read = 'unknown';
+  }
+  // 2026-10-26 — ball_struck is evidence for demoting a practice swing: off-enum or no valid swing → unknown.
+  if (!['yes', 'no', 'unknown'].includes(parsed.ball_struck as string) || parsed.valid_swing === false) {
+    parsed.ball_struck = 'unknown';
   }
   if (typeof parsed.primary_fault !== 'string' || !PRIMARY_FAULTS.includes(parsed.primary_fault as PrimaryFault)) {
     parsed.primary_fault = 'inconclusive';

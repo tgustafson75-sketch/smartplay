@@ -805,8 +805,10 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       // hook carried before this derivation moved here, and it moved with it. safe() below makes
       // this throw-proof; only Array.isArray makes it SHAPE-proof, and those are different claims.
       return (Array.isArray(c.sessionHistory) ? c.sessionHistory : []).slice(-3)
+        // 2026-10-26 — swings, not practice swings the read demoted (services/swing/practiceSwings).
         .map((s: { date: number; club: string; shots?: unknown }) => ({
-          date: s.date, club: s.club, shots: Array.isArray(s.shots) ? s.shots.length : 0,
+          date: s.date, club: s.club,
+          shots: Array.isArray(s.shots) ? (require('./swing/practiceSwings') as typeof import('./swing/practiceSwings')).countedShots(s.shots as object[]).length : 0,
         }));
     }, []),
     recent_analyses_snippet: safe(() => {

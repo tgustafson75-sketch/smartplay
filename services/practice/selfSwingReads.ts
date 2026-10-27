@@ -71,7 +71,8 @@ export function collectSelfTrendSwings(
     if (resolvePlayerName(sess.player_id, '__self__') !== '__self__') continue;
     const tempoRatio = num(sess.tempo_result?.ratio);
 
-    const perShot = (sess.shots ?? []).filter((sh) => sh.biomechanics);
+    // 2026-10-26 — a demoted practice swing is not one of the player's swings.
+    const perShot = (require('../swing/practiceSwings') as typeof import('../swing/practiceSwings')).countedShots(sess.shots).filter((sh) => sh.biomechanics);
     if (perShot.length > 0) {
       for (const sh of perShot) {
         swings.push({

@@ -123,6 +123,11 @@ export type SwingAnalysis = {
   // as a good swing. Absent on legacy server deploys → treated as 'unknown'.
   contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
   /**
+   * 2026-10-26 — did this swing strike a ball ('no' = a practice swing the read saw). Absent on a server
+   * deployed before this: UNKNOWN, never 'no' (services/swing/practiceSwings).
+   */
+  ball_struck?: 'yes' | 'no' | 'unknown';
+  /**
    * 2026-09-29 — which swing phases the model actually SAW in the frames it was sent. Null when the
    * server did not report it (older deploy, or a non-swing read such as a setup check). The server
    * enforces it before this arrives: no top AND no impact caps confidence at 'low', and a fault whose
@@ -1273,11 +1278,13 @@ async function locateSwingsImpl(
       return [];
     }
     const durSec = durationMs / 1000;
-    const raw = answered.flat()
+    // Each answer keeps which pass gave it: a swing only one pass saw stays, at 'low' (mergeSwingDetections).
+    const raw = answered.flatMap((list, pass) => list.map((s) => ({ ...s, pass })))
       .filter((s) => typeof s.time_sec === 'number' && Number.isFinite(s.time_sec))
       .map((s) => ({
         timeSec: Math.max(0, Math.min(durSec, s.time_sec as number)),
         confidence: (s.confidence === 'high' ? 'high' : 'low') as 'high' | 'low',
+        pass: s.pass,
       }));
     // 2026-06-11 — Collapse the model's over-detections (one swing's phases
     // labeled as multiple swings on ~1-1.5s-spaced coarse frames). Verified on
@@ -1293,7 +1300,7 @@ async function locateSwingsImpl(
     // (normal range cadence) into one. Cap the adaptive separation at a plausible two-swing gap so a long
     // clip can't merge distinct swings; the floor still scales up from 2.5s for genuinely sparse frames.
     const frameIntervalSec = durationMs / 1000 / Math.max(1, frames.length);
-    const out = mergeSwingDetections(raw, Math.min(3.5, Math.max(2.5, frameIntervalSec)));
+    const out = mergeSwingDetections(raw, Math.min(3.5, Math.max(2.5, frameIntervalSec)), answered.length);
     logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length, passes: answered.length, half_frames: framesHalf.length });
     return out;
   } catch (e) {

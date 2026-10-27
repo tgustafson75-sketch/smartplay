@@ -156,7 +156,8 @@ export function evaluateCageEnd(): void {
   // analysis are skipped (insufficient signal).
   const dominantIssues: string[] = [];
   for (const session of recent) {
-    const issues = (session.shots ?? [])
+    // 2026-10-26 — a demoted practice swing is not evidence of a fault.
+    const issues = (require('./swing/practiceSwings') as typeof import('./swing/practiceSwings')).countedShots(session.shots)
       .map((s) => s.perShotAnalysis?.detected_issue)
       .filter((i): i is string => typeof i === 'string' && i.length > 0);
     if (issues.length === 0) return; // not enough signal anywhere — bail

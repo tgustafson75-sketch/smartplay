@@ -1,0 +1,132 @@
+/**
+ * 2026-10-26 (Tim: "Practice swings still show on old uploads") — THE ONE OWNER of "is this a swing?".
+ *
+ * The swing finder is told to lean permissive (a net-caught or out-of-frame strike must not be lost), and
+ * since S2m its two passes are UNIONED, so a practice swing either pass saw is carved as a swing. Nothing
+ * downstream ever asked again. This module is the second look, and every reader of a swing list asks it:
+ *
+ *  - classifyPracticeSwings: run by the read (services/videoUpload) for every source. It DEMOTES a swing
+ *    (shot.practice) — never deletes it. Only positive evidence demotes: the per-swing read saw the swing
+ *    made with no ball (`ball_struck: 'no'`). A missing or 'unknown' answer (a server not yet deployed, a
+ *    ball out of frame) changes nothing. A heard strike is never demoted. The last swing standing is never
+ *    demoted. A swing the player restored stays restored.
+ *  - isPracticeSwing / countedShots: what the detail strip, the library count, the SmartMotion reel, the
+ *    practice credit and the caddie use instead of `shots.length`.
+ *  - resplitEligible: whether a Re-analyze may look for an old upload's swings again — only when the finder
+ *    carved every window and the player has put nothing on any swing.
+ *
+ * Not a demotion signal (a product call): the camera's ball-departure check. A ball that never left is a
+ * duff — a real swing, scored as fat — not a practice swing, and it is not persisted per swing anyway.
+ */
+export type PracticeReason = 'no_ball_seen';
+export interface PracticeMark { reason: PracticeReason; restoredByUser?: boolean }
+export type BallStruck = 'yes' | 'no' | 'unknown';
+
+type ShotLike = {
+  id: string;
+  practice?: PracticeMark | null;
+  detectionMethod?: 'audio_transient' | 'manual';
+  locateConfidence?: 'high' | 'low';
+};
+
+/** Demoted and not restored by the player. */
+export function isPracticeSwing(shot: { practice?: PracticeMark | null } | null | undefined): boolean {
+  return !!shot?.practice && shot.practice.restoredByUser !== true;
+}
+
+/** The swings that count — the list a reader shows as "N swings". */
+export function countedShots<T extends object>(shots: readonly T[] | null | undefined): T[] {
+  return Array.isArray(shots) ? shots.filter((s) => !isPracticeSwing(s as { practice?: PracticeMark | null })) : [];
+}
+
+/** A swing the finder was unsure of and no microphone vouched for: shown as doubtful, never hidden. */
+export function swingIsDoubtful(shot: ShotLike): boolean {
+  return shot.locateConfidence === 'low' && shot.detectionMethod !== 'audio_transient' && !isPracticeSwing(shot);
+}
+
+function ballStruck(read: unknown): BallStruck {
+  const v = (read as { ball_struck?: unknown } | null | undefined)?.ball_struck;
+  return v === 'yes' || v === 'no' ? v : 'unknown';
+}
+
+/**
+ * Each shot's practice mark after this read. `reads` holds the read's answer per shot id; a shot with no
+ * read (not read this time, or the read failed) keeps what it had.
+ */
+export function classifyPracticeSwings(
+  shots: readonly ShotLike[],
+  reads: Record<string, unknown>,
+): Record<string, PracticeMark | null> {
+  const out: Record<string, PracticeMark | null> = {};
+  const fresh = new Set<string>();
+  for (const sh of shots) {
+    const prior = sh.practice ?? null;
+    if (prior?.restoredByUser === true) { out[sh.id] = prior; continue; }
+    if (sh.detectionMethod === 'audio_transient') { out[sh.id] = null; continue; }
+    const b = Object.prototype.hasOwnProperty.call(reads, sh.id) ? ballStruck(reads[sh.id]) : 'unknown';
+    if (b === 'no') {
+      out[sh.id] = prior ?? { reason: 'no_ball_seen' };
+      if (!prior) fresh.add(sh.id);
+    } else if (b === 'yes') {
+      out[sh.id] = null;
+    } else {
+      out[sh.id] = prior;
+    }
+  }
+  // Never empty a session: if nothing would count, this read's new demotions are not applied.
+  if (shots.length > 0 && shots.every((sh) => isPracticeSwing({ practice: out[sh.id] }))) {
+    for (const id of fresh) out[id] = null;
+  }
+  return out;
+}
+
+type SessionLike = {
+  id: string;
+  source?: string;
+  shots: readonly (ShotLike & {
+    clipUri?: string | null;
+    clipStartSeconds?: number;
+    clipWindowSource?: 'auto' | 'user';
+    isGoodRep?: boolean | null;
+    userNotes?: string | null;
+    review_labels?: unknown;
+    review_transcript?: string | null;
+    feel_narration_transcript?: string;
+  })[];
+};
+
+const said = (v: unknown) => typeof v === 'string' && v.trim().length > 0;
+
+/** Something the PLAYER put on this swing — a re-split would hang it on a different swing. */
+export function shotHasUserContent(sh: SessionLike['shots'][number]): boolean {
+  return sh.isGoodRep != null || said(sh.userNotes) || sh.review_labels != null || said(sh.review_transcript)
+    || said(sh.feel_narration_transcript) || sh.practice?.restoredByUser != null;
+}
+
+/**
+ * May a Re-analyze look for this session's swings again? Only an upload (a live capture's split fused what
+ * the microphone heard), only when the finder carved EVERY window — today's 'auto', or the pre-10-26 shape
+ * of the same thing (`${id}_shot_i`, one clip, 'manual', no window source) — and only when the player has
+ * put nothing on any swing.
+ */
+export function resplitEligible(session: SessionLike): boolean {
+  if (session.source !== 'uploaded_video' || session.shots.length === 0) return false;
+  const clip = session.shots[0].clipUri;
+  if (!clip) return false;
+  return session.shots.every((sh, i) =>
+    sh.id === `${session.id}_shot_${i}`
+    && sh.clipUri === clip
+    && typeof sh.clipStartSeconds === 'number'
+    && (sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && sh.detectionMethod === 'manual'))
+    && !shotHasUserContent(sh));
+}
+
+/**
+ * Which swings a session holds. A re-split reuses the shot ids (`${id}_shot_i`) for different swings, so a
+ * screen holding per-swing state (the selected swing, compare picks) keys on this — the ids AND when the
+ * session was last split — never on the windows (a trim moves one swing's window; it is still that swing).
+ */
+export function swingLayoutKey(session: { shots?: readonly { id: string }[] | null; swings_split_at?: number } | null | undefined): string {
+  if (!session || !Array.isArray(session.shots)) return '';
+  return `${session.swings_split_at ?? 0}|${session.shots.map((s) => s.id).join(',')}`;
+}

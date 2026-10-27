@@ -88,6 +88,7 @@ import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
+import { countedShots } from '../../services/swing/practiceSwings';
 
 // 2026-07-08 (Tim — the get-to-know can't be an interrogation; "answer, don't interview")
 // — primes the caddie to INVITE the golfer to talk and then LISTEN, not run a Q&A. What
@@ -380,7 +381,7 @@ export default function Dashboard() {
         // only for self (null / 'account_holder' / the profile email), a member firstName
         // otherwise, so this keeps just the self-owned sessions.
         .filter((s) => resolvePlayerName(s.player_id, '__self__') === '__self__')
-        .map((s) => ({ startedAt: s.date, swings: s.shots.length })),
+        .map((s) => ({ startedAt: s.date, swings: countedShots(s.shots).length })),   // a demoted practice swing earns nothing
       rounds: realRounds.filter((r) => r.scoreVsPar != null).map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar as number })),
       nowMs: Date.now(),
       sinceMs: pointsBaselineMs ?? undefined, // clean-start baseline (live build)
@@ -485,7 +486,7 @@ export default function Dashboard() {
         .filter((sess) => resolvePlayerName(sess.player_id, '__self__') === '__self__')
         .map((sess) => {
           let clean = 0, graded = 0;
-          for (const shot of sess.shots ?? []) {
+          for (const shot of countedShots(sess.shots)) {   // not demoted practice swings
             const c = shot.perShotAnalysis?.contact_read;
             if (!c || c === 'unknown') continue; // ungraded lowers neither the rate nor the confidence
             graded += 1;

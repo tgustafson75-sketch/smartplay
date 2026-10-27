@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
+import { countedShots } from '../../services/swing/practiceSwings';
 // 2026-05-21 — Consolidation 1 / Merge C: watch-connected state moved
 // from settingsStore to watchStore (the dedicated watch store) so
 // there's one source of truth when the native SDK lands.
@@ -272,7 +273,7 @@ export default function CageIndex() {
           <View style={styles.lastSession}>
             <Text style={styles.lastSessionLabel}>{t('practice_session.cage_index.last_session')}</Text>
             <Text style={styles.lastSessionText}>
-              {lastSession.club + ' · ' + lastSession.shots.length + ' shots' +
+              {lastSession.club + ' · ' + countedShots(lastSession.shots).length + ' shots' +
                 (lastSession.dominantMiss ? ' · Miss: ' + lastSession.dominantMiss : '')}
             </Text>
           </View>

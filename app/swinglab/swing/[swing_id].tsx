@@ -82,6 +82,7 @@ import type { SwingComparison } from '../../../services/swingComparisonEngine';
 import { getApiBaseUrl } from '../../../services/apiBase';
 import { titleForUpload } from '../../../services/swing/swingTitle';
 import { swingClock, swingClockSec } from '../../../services/swing/swingClock';
+import { countedShots, isPracticeSwing, swingIsDoubtful, swingLayoutKey } from '../../../services/swing/practiceSwings';
 import { useTranslation } from 'react-i18next';
 import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
 
@@ -175,7 +176,7 @@ export default function SwingDetail() {
   // back to the session-level read for shot 0). Non-primary swings show their OWN per-shot biomech
   // (persisted at capture / lazily backfilled below).
   const [selectedShotIdx, setSelectedShotIdx] = useState(0);
-  const shot = session?.shots[selectedShotIdx] ?? session?.shots[0];
+  const shot = session?.shots[selectedShotIdx] ?? session?.shots[0];   // clamped: a re-split can leave fewer swings
   const shotBio = shot?.biomechanics;
   // The biomech to render: this shot's own if present; for shot 0 fall back to the session-level read
   // (legacy sessions + the primary write). Non-primary with nothing yet → null (until backfilled).
@@ -316,6 +317,23 @@ export default function SwingDetail() {
   } | null>(null);
   const [leftCompareShotId, setLeftCompareShotId] = useState<string | null>(null);
   const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
+  /**
+   * 2026-10-26 — a Re-analyze can SPLIT an old upload again: the shot ids are reused (`${id}_shot_i`) for
+   * different swings, and there may be fewer of them. Everything this screen holds per swing — the selected
+   * swing, the compare picks, the open action sheet — pointed at a swing that is gone or is now another
+   * one, so it is dropped when the swings themselves change (not on a new swing_id: that has its own reset).
+   */
+  const layoutKey = swingLayoutKey(session);
+  const layoutSeenRef = useRef<{ id: string | undefined; key: string } | null>(null);
+  useEffect(() => {
+    const prev = layoutSeenRef.current;
+    layoutSeenRef.current = { id: swing_id, key: layoutKey };
+    if (!prev || prev.id !== swing_id || prev.key === layoutKey) return;
+    setSelectedShotIdx(0);
+    setLeftCompareShotId(null);
+    setRightCompareShotId(null);
+    setActionShotId(null);
+  }, [swing_id, layoutKey]);
   // 2026-06-23 (RP-1) — compare panes must re-anchor stored clipUris too, exactly
   // like the main player (lines ~139-152). Without this, persisted absolute paths
   // break after iOS regenerates the container UUID on reinstall and both compare
@@ -2915,7 +2933,12 @@ export default function SwingDetail() {
                 {isPickingCompareTarget
                   ? `PICK A SWING TO COMPARE`
                   : session.shots.length > 1
-                    ? `${session.shots.length} SWINGS · TAP TO JUMP`
+                    ? (() => {
+                        // 2026-10-26 — a demoted practice swing is listed (marked, restorable) but not counted.
+                        const n = countedShots(session.shots).length;
+                        const practice = session.shots.length - n;
+                        return `${n} ${n === 1 ? 'SWING' : 'SWINGS'}${practice > 0 ? ` · ${practice} PRACTICE` : ''} · TAP TO JUMP`;
+                      })()
                     : `THIS SWING`}
               </Text>
               {session.shots.map((s, idx) => {
@@ -2961,8 +2984,12 @@ export default function SwingDetail() {
                 // with the observation. Tolerates absence gracefully.
                 const faultUri = a?.visual_reference_path ?? null;
                 const observation = a?.observation ?? '';
+                // 2026-10-26 — the practice classifier's call, shown (never hidden) and the player's to overturn.
+                const practice = isPracticeSwing(s);
+                const restored = s.practice?.restoredByUser === true;
+                const doubtful = swingIsDoubtful(s);
                 return (
-                  <View key={s.id} style={[styles.shotRow, { borderColor: !isPickingCompareTarget && idx === selectedShotIdx ? colors.accent : colors.border, backgroundColor: !isPickingCompareTarget && idx === selectedShotIdx ? 'rgba(136,247,0,0.06)' : 'transparent', opacity: isPickingCompareTarget && isLeftPick ? 0.4 : 1 }]}>
+                  <View key={s.id} style={[styles.shotRow, { borderColor: !isPickingCompareTarget && idx === selectedShotIdx ? colors.accent : colors.border, backgroundColor: !isPickingCompareTarget && idx === selectedShotIdx ? 'rgba(136,247,0,0.06)' : 'transparent', opacity: isPickingCompareTarget && isLeftPick ? 0.4 : practice ? 0.55 : 1 }]}>
                     <TouchableOpacity
                       onPress={() => void handleRowTap(s)}
                       style={styles.shotRowTap}
@@ -2974,7 +3001,7 @@ export default function SwingDetail() {
                       <View style={{ flex: 1 }}>
                         <View style={styles.shotIssueRow}>
                           <Text style={[styles.shotIssue, { color: colors.text_primary }]} numberOfLines={1}>
-                            {issueLabel}
+                            {practice ? 'Practice swing — no ball seen' : issueLabel}
                           </Text>
                           {goodRepIcon && (
                             <Ionicons name={goodRepIcon} size={14} color={s.isGoodRep ? '#f59e0b' : colors.text_muted} />
@@ -2992,8 +3019,22 @@ export default function SwingDetail() {
                               : formatMmSs(start),
                             conf ? `${conf} conf` : null,
                             s.detectionMethod ? (s.detectionMethod === 'audio_transient' ? 'auto' : 'manual') : null,
+                            doubtful ? 'not sure a ball was hit' : null,
+                            restored ? 'counted by you' : null,
                           ].filter(Boolean).join(' · ')}
                         </Text>
+                        {s.practice && (
+                          <TouchableOpacity
+                            onPress={() => useSwingSessionStore.getState().setPracticeSwingRestored(session.id, s.id, !restored)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel={restored ? 'Mark this as a practice swing' : 'Count this as a swing'}
+                          >
+                            <Text style={[styles.shotMeta, { color: colors.accent, fontWeight: '700' }]}>
+                              {restored ? 'Mark as practice swing' : 'It was a real swing — count it'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
                         {observation && (
                           <Text style={[styles.shotObservation, { color: colors.text_muted }]} numberOfLines={2}>
                             {observation}
@@ -3291,7 +3332,7 @@ export default function SwingDetail() {
               {(!session.putting_analysis || session.primary_issue) && (
                 <PrimaryIssueCard
                   issue={session.primary_issue ?? null}
-                  totalShots={session.shots.length}
+                  totalShots={countedShots(session.shots).length}
                 />
               )}
               {/* 2026-06-02 — Fix GO: valid_swing safety net (Option C).

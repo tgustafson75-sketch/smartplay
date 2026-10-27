@@ -8,6 +8,7 @@
  */
 
 import { useSwingSessionStore, type SwingSession, type SwingSource, type CaptureKind } from '../store/swingSessionStore';
+import { countedShots } from './swing/practiceSwings';
 
 // 2026-09-01 — 'cage' renamed to 'practice'. This is a LOCAL filter id (CaptureKind never carried
 // 'cage'), so nothing persisted has to move; the label the player reads changes with it.
@@ -131,7 +132,8 @@ export function getLibrary(filter: LibraryFilter = 'all'): LibraryEntry[] {
         captureKind: getCaptureKind(session),
         date_ms: session.date,
         primary_issue_name: session.primary_issue?.name ?? null,
-        swing_count: session.shots.length,
+        // 2026-10-26 — a demoted practice swing is not a swing (services/swing/practiceSwings).
+        swing_count: countedShots(session.shots).length,
         display_label: describe(session),
         // 2026-06-12 — fall back past the analysis fault-frame to the persisted
         // display fault frame, then to a lazily-generated frame screenshot, so

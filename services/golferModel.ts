@@ -173,7 +173,7 @@ export function buildGolferModel(force = false): GolferModel {
     ...(round.isSimRound ? [] : round.shots), // current round (never a sim round's narrated shots)
     ...recentRounds.flatMap(r => r.shots ?? []),
   ];
-  const cageShots = recentSessions.flatMap(s => s.shots ?? []);
+  const cageShots = recentSessions.flatMap(s => (require('./swing/practiceSwings') as typeof import('./swing/practiceSwings')).countedShots(s.shots));   // 2026-10-26 — not demoted practice swings
 
   // ─── Direction distribution (recent shots, decayed) ──────────────────
   const directionDist = buildDistribution(

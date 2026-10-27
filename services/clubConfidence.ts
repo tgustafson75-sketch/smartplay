@@ -22,7 +22,7 @@ export function updateClubConfidenceFromCage(club: string | null | undefined): v
     for (let i = sessions.length - 1; i >= 0 && contacts.length < WINDOW; i--) {
       const s = sessions[i];
       if (s.club !== club) continue;
-      for (const shot of s.shots) {
+      for (const shot of (require('./swing/practiceSwings') as typeof import('./swing/practiceSwings')).countedShots(s.shots)) {   // not demoted practice swings
         const c = shot.perShotAnalysis?.contact_read;
         if (c && c !== 'unknown') contacts.push(c); // 'clean' | 'fat' | 'thin' | 'topped'
       }

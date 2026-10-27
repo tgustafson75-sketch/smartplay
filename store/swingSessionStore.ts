@@ -59,6 +59,18 @@ export interface SwingShot {
    * can never be re-read forever.
    */
   clipWindowSource?: 'auto' | 'user';
+  /**
+   * 2026-10-26 — the swing finder's own confidence that this window holds a BALL-STRIKING swing ('low' =
+   * it could not tell, or only one of its two passes saw it). Written by both splitters (an upload's split,
+   * a live capture's ingest). Absent on records saved before this: unknown, never 'low'.
+   */
+  locateConfidence?: 'high' | 'low';
+  /**
+   * 2026-10-26 — DEMOTED as a practice swing (services/swing/practiceSwings): the read saw it made with no
+   * ball. Never deleted — every swing list shows it marked, and the player can restore it (restoredByUser),
+   * which counts it again and is never overridden by a later read.
+   */
+  practice?: import('../services/swing/practiceSwings').PracticeMark | null;
   /** 2026-08-09 (verification wave C1) — the vision locator's IMPACT estimate (seconds, absolute in the
    *  clip). Threading this into the pose pass selects the correct strike-anchored sampling branch —
    *  without it, "impact" was a fixed 65% window fraction that lands ~1.1s after the ball. Optional:
@@ -391,6 +403,9 @@ export interface SwingSession {
    *  Coexists with PrimaryIssue.visual_reference_path (wire-quality,
    *  legacy field used by the per-shot review card). */
   fault_frame_uri?: string | null;
+  /** 2026-10-26 — when a Re-analyze last split this upload into swings again (replaceUploadSwings): the shot
+   *  ids are reused for different swings, so a screen holding per-swing state keys on this. */
+  swings_split_at?: number;
   /** 2026-05-24 — 0-based index into the 5-frame sample the vision
    *  model received. Mirrors the analysis's `fault_frame_index`
    *  promoted to session level so consumers don't have to dig into
@@ -617,6 +632,8 @@ interface SwingSessionState {
       clipStartSeconds: number;
       clipEndSeconds: number;
       detectionMethod: 'audio_transient' | 'manual';
+      /** 2026-10-26 — the finder's confidence in this swing ('low' = unconfirmed). Absent = unknown. */
+      locateConfidence?: 'high' | 'low';
     }[];
     /** 2026-06-13 — 'drill' when this session was launched from a drill card. */
     captureKind?: CaptureKind;
@@ -806,7 +823,17 @@ interface SwingSessionState {
    *  several swings; once the video locator finds them, replace the session's
    *  single shot with one windowed shot per swing so each gets its own analysis
    *  + per-swing card (mirrors the live multi-swing path). No-op if <2 windows. */
-  expandUploadIntoSwings: (sessionId: string, windows: { startSec: number; endSec: number; impactSec?: number }[]) => void;
+  expandUploadIntoSwings: (sessionId: string, windows: UploadSwingWindow[]) => void;
+  /**
+   * 2026-10-26 — an OLD upload's finder-carved swings replaced by the finder's answer today (Re-analyze;
+   * services/swing/practiceSwings.resplitEligible decides). One window is enough. Every per-swing result
+   * goes; the clip's commentary follows the swing it was spoken over.
+   */
+  replaceUploadSwings: (sessionId: string, windows: UploadSwingWindow[]) => void;
+  /** 2026-10-26 — the practice classifier's answer per shot id (null = counts). */
+  setShotPracticeMarks: (sessionId: string, marks: Record<string, import('../services/swing/practiceSwings').PracticeMark | null>) => void;
+  /** 2026-10-26 — the player counts a demoted swing again (true) or agrees it was practice (false). */
+  setPracticeSwingRestored: (sessionId: string, shotId: string, restored: boolean) => void;
   /** Phase R — delete a session from the library. */
   deleteSession: (sessionId: string) => void;
   /** Phase J — set the distance calibration for the current cage. Pass yards.
@@ -850,6 +877,67 @@ interface SwingSessionState {
 // sessions/shots are created in the SAME millisecond (rapid ingest, multi-swing detect); every
 // mutator keys by id, so an edit / delete / analysis-attach on one would then silently hit the
 // OTHER record too. A short random suffix makes each id unique.
+/** 2026-10-26 — one swing the finder carved out of an uploaded clip. */
+export type UploadSwingWindow = { startSec: number; endSec: number; impactSec?: number; confidence?: 'high' | 'low' };
+
+/**
+ * The shots for an upload split into `windows`: each inherits the clip, club and session-level fields of
+ * `base`, and NOTHING derived from any earlier window (2026-10-26 — swings 2+ inherited swing 1's old
+ * skeleton, arc and fault moment, which, being stored, were never read again). On a re-split, `previous`
+ * hands its commentary to the new swing it was spoken over (the transcription service will not hear the
+ * clip again); nothing else of an old swing survives — its read, its practice mark and its window are
+ * another swing's.
+ */
+function carveUploadSwings(sessionId: string, base: SwingShot, windows: UploadSwingWindow[], previous: SwingShot[]): SwingShot[] {
+  const {
+    biomechanics: _b, analysis_version: _v, club_arc: _a, club_arc_frame: _f, club_arc_source: _s, club_arc_version: _cv,
+    detected_issue_timestamps_sec: _t, review_labels: _rl, review_transcript: _rt, practice: _p, locateConfidence: _lc,
+    commentary_transcript: _ct, feel_narration_transcript: _fn, isGoodRep: _g, userNotes: _n,
+    ...inherit
+  } = base;
+  const heard = new Map<number, string[]>();
+  for (const old of previous) {
+    const text = (old.commentary_transcript ?? '').trim();
+    if (!text) continue;
+    const at = old.locatedImpactSec ?? (old.clipStartSeconds ?? 0);
+    let best = 0;
+    let bestD = Infinity;
+    windows.forEach((w, i) => {
+      const d = at < w.startSec ? w.startSec - at : at > w.endSec ? at - w.endSec : 0;
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    heard.set(best, [...(heard.get(best) ?? []), text]);
+  }
+  // A FIRST split: what the player and the clip said about the single upload rides on every swing, as it
+  // always has. A RE-split only runs when no swing carries anything of the player's (resplitEligible).
+  const clipWide: Partial<SwingShot> = previous.length === 0
+    ? {
+      ...(base.commentary_transcript ? { commentary_transcript: base.commentary_transcript } : {}),
+      ...(base.feel_narration_transcript ? { feel_narration_transcript: base.feel_narration_transcript } : {}),
+      ...(base.isGoodRep != null ? { isGoodRep: base.isGoodRep } : {}),
+      ...(base.userNotes ? { userNotes: base.userNotes } : {}),
+    }
+    : {};
+  return windows.map((w, i) => {
+    const said = (heard.get(i) ?? []).join(' ').trim();
+    return {
+      ...inherit,
+      ...clipWide,
+      id: `${sessionId}_shot_${i}`,
+      clipStartSeconds: w.startSec,
+      clipEndSeconds: w.endSec,
+      locatedImpactSec: w.impactSec,
+      detectionOffsetSeconds: w.startSec,
+      detectionMethod: 'manual' as const,
+      clipWindowSource: 'auto' as const,
+      ...(w.confidence ? { locateConfidence: w.confidence } : {}),
+      ...(said ? { commentary_transcript: said } : {}),
+      aiAnalysis: null,
+      perShotAnalysis: null,
+    };
+  });
+}
+
 function uid(kind: string): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${kind}`;
 }
@@ -1329,6 +1417,9 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           detectionOffsetSeconds: evt.detectionOffsetSeconds,
           detectionMethod: evt.detectionMethod,
           correlationId: evt.correlationId,
+          // 2026-10-26 — the capture's finder carved these; its doubt about a swing is kept, not dropped.
+          clipWindowSource: 'auto' as const,
+          ...(evt.locateConfidence ? { locateConfidence: evt.locateConfidence } : {}),
           perShotAnalysis: null,
         }));
         const session: SwingSession = {
@@ -2051,34 +2142,56 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             if (session.id !== sessionId) return session;
             const base = session.shots[0];
             if (!base || windows.length < 2) return session; // nothing to expand
-            const shots: SwingShot[] = windows.map((w, i) => ({
-              ...base, // inherit clipUri, club, etc. from the single uploaded shot
-              id: `${sessionId}_shot_${i}`,
-              clipStartSeconds: w.startSec,
-              clipEndSeconds: w.endSec,
-              locatedImpactSec: w.impactSec,
-              detectionOffsetSeconds: w.startSec,
-              detectionMethod: 'manual' as const,
-              // 2026-10-26 — the finder carved these windows; nothing the player chose for the whole clip.
-              clipWindowSource: 'auto' as const,
-              aiAnalysis: null,
-              perShotAnalysis: null,
-              // 2026-10-26 — NOTHING derived from the single shot's window rides into the swings: each new
-              // swing inherited swing 1's OLD skeleton, arc and fault moment, which (being stored) were never
-              // read again — swings 2+ showed another window's body and arc.
-              biomechanics: undefined,
-              analysis_version: undefined,
-              club_arc: undefined,
-              club_arc_frame: undefined,
-              club_arc_source: undefined,
-              club_arc_version: undefined,
-              detected_issue_timestamps_sec: undefined,
-              review_labels: undefined,
-              review_transcript: undefined,
-            }));
-            return { ...session, shots };
+            return { ...session, shots: carveUploadSwings(sessionId, base, windows, []) };
           }),
         })),
+
+      replaceUploadSwings: (sessionId, windows) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session => {
+            if (session.id !== sessionId) return session;
+            const base = session.shots[0];
+            if (!base || windows.length < 1) return session;
+            return { ...session, shots: carveUploadSwings(sessionId, base, windows, session.shots), swings_split_at: Date.now() };
+          }),
+        })),
+
+      setShotPracticeMarks: (sessionId, marks) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession => {
+            if (session.id !== sessionId) return session;
+            let changed = false;
+            const shots = session.shots.map(sh => {
+              if (!Object.prototype.hasOwnProperty.call(marks, sh.id)) return sh;
+              const next = marks[sh.id] ?? null;
+              const cur = sh.practice ?? null;
+              if (JSON.stringify(cur) === JSON.stringify(next)) return sh;
+              changed = true;
+              if (next == null) { const { practice: _p, ...rest } = sh; return rest as SwingShot; }
+              return { ...sh, practice: next };
+            });
+            return changed ? { ...session, shots } : session;
+          };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
+
+      setPracticeSwingRestored: (sessionId, shotId, restored) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(sh =>
+                sh.id !== shotId || !sh.practice ? sh : { ...sh, practice: { ...sh.practice, restoredByUser: restored } },
+              ),
+            };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
 
       deleteSession: (sessionId) =>
         set(s => ({
