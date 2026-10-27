@@ -601,6 +601,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           // Nothing found is a failed look, not evidence: the stored swings stand.
           if (found.length >= 1) {
             store.replaceUploadSwings(sessionId, windows);
+            (require('./swing/orchestrator/uploadRun') as typeof import('./swing/orchestrator/uploadRun')).adoptRunWindow(sessionId);
             // Anything this launch remembers about the old swings (answered arcs, live shot runs) is another swing's now.
             const { clearAnswered } = require('./swing/orchestrator/shotDetail') as typeof import('./swing/orchestrator/shotDetail');
             const { cancelRunsWithPrefix } = require('./swing/orchestrator/engine') as typeof import('./swing/orchestrator/engine');
@@ -613,6 +614,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           }
         } else if (found.length > 1) {
           store.expandUploadIntoSwings(sessionId, windows);
+          (require('./swing/orchestrator/uploadRun') as typeof import('./swing/orchestrator/uploadRun')).adoptRunWindow(sessionId);
           const fresh = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
           uploadLog('upload-multi-swing-expand', { swings_found: found.length, shots: swings.length }, sessionId);

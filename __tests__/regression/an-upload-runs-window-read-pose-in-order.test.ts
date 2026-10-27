@@ -167,6 +167,38 @@ describe('a swing runs window → read → body → arc, once', () => {
     expect(mockOrder.filter((x) => x === 'read')).toHaveLength(1);
   });
 
+  /**
+   * 2026-10-27 (seam review of SB3) — the READ splits an upload into swings (first read, or an old upload
+   * split again on Re-analyze). That moves shot 0's window, and the restart rule took the run's own move
+   * for a new request: a second trigger mid-read (readWhenOnline, a second tap) started a parallel read.
+   */
+  it('the read splitting the upload is the run\'s own move — a second trigger mid-read still joins', async () => {
+    seed(42);
+    let release!: () => void;
+    mockReadHold = new Promise<void>((r) => { release = r; });
+    const first = runUploadAnalysis('s1');
+    await tick(5);                        // the read is running
+    // what _runPhaseKRead does when it splits the upload: move the windows, then adopt them
+    useSwingSessionStore.getState().expandUploadIntoSwings('s1', [
+      { startSec: 3, endSec: 6, impactSec: 5, confidence: 'high' },
+      { startSec: 20, endSec: 23, impactSec: 22, confidence: 'high' },
+    ] as never);
+    require('../../services/swing/orchestrator/uploadRun').adoptRunWindow('s1');
+    const second = runUploadAnalysis('s1');
+    release();
+    await Promise.all([first, second]);
+    expect(mockOrder.filter((x) => x === 'read')).toHaveLength(1);
+  });
+
+  it('every split inside the read adopts the window (the wire the test above relies on)', () => {
+    const up = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'services/videoUpload.ts'), 'utf8') as string;
+    for (const split of ['replaceUploadSwings(sessionId, windows);', 'expandUploadIntoSwings(sessionId, windows);']) {
+      const at = up.indexOf(split);
+      expect(at).toBeGreaterThan(-1);
+      expect(up.slice(at, at + 260)).toMatch(/adoptRunWindow\(sessionId\)/);
+    }
+  });
+
   it('a putt runs the read only — no swing window, no body read, no arc', async () => {
     mockKind = 'putting';
     seed(6);

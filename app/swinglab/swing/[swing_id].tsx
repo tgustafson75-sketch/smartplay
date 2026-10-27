@@ -1288,13 +1288,14 @@ export default function SwingDetail() {
     setPosition(f);
     void scrubTo(f);
   }, [setIssueHold]);
-  // A new swing on screen is a new review: nothing asked, nothing held.
+  // A new swing on screen is a new review: nothing asked, nothing held. Keyed on the layout too — a re-split
+  // reuses `_shot_0` for a different swing, so the id alone would carry the old swing's ask across.
   useEffect(() => {
     issueHoldRef.current = null;
     setIssueHoldState(null);
     setIssueAsked(false);
     setAskedFaultSec(null);
-  }, [swing_id, shot?.id]);
+  }, [swing_id, shot?.id, layoutKey]);
   useEffect(() => {
     faultSecRef.current = faultMoment?.sec ?? null;
     issuePausedRef.current = false;

@@ -335,6 +335,15 @@ function windowKey(sessionId: string): string {
   return `${sh?.clipStartSeconds ?? ''}|${sh?.clipEndSeconds ?? ''}`;
 }
 
+/**
+ * The read itself moved the windows (an upload split into swings, or an old one split again). That is the
+ * live run's OWN move, not a new request — without this a second runSwingAnalysis during the read sees a
+ * changed window and starts a parallel run instead of joining.
+ */
+export function adoptRunWindow(sessionId: string): void {
+  if (runWindow.has(sessionId)) runWindow.set(sessionId, windowKey(sessionId));
+}
+
 function report(key: string, stage: string, error: string): void {
   try {
     // A read that never finished is settled by the settle stage (after the body read has had its turn) —
