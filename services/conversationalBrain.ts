@@ -218,7 +218,7 @@ function historyCommit(text: string, seedHistory: boolean): () => void {
   return () => {
     if (done) return;
     done = true;
-    if (seedHistory) setConversationHistory([...getConversationHistory(), { role: 'assistant', content: text }]);
+    if (seedHistory) setConversationHistory([...getConversationHistory(), { role: 'assistant', content: text, at: Date.now() }]);
   };
 }
 

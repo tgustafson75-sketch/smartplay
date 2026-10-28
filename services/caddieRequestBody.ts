@@ -560,14 +560,15 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     /**
      * 2026-10-27 (Brain review F5) — the loaded course's card, on every route. It was null here and
      * filled only by useVoiceCaddie's follow-up loop, so no primary turn ever carried COURSE LOADED.
-     * services/courseContextCache owns it; a miss starts the one fetch it needs for next turn.
+     * services/courseContextCache owns it; the warm (the API course's fuller summary) is started on
+     * every turn because the round's own card stands in until it lands — it runs once, and a failed one
+     * is not retried every turn.
      */
     courseContext: safe(() => {
       if (!isRoundActive || !activeCourseId) return null;
       const cc = require('./courseContextCache') as typeof import('./courseContextCache');
-      const card = cc.getCourseContextSync(activeCourseId);
-      if (!card) void cc.warmCourseContext(activeCourseId);
-      return card;
+      void cc.warmCourseContext(activeCourseId);
+      return cc.getCourseContextSync(activeCourseId);
     }, null),
     courseIntelligence: safe(() => {
       if (!isRoundActive || !activeCourseId) return null;
@@ -1639,28 +1640,42 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * turns, so the caddie's memory of the conversation depended on which surface you last used:
        * talk on the tab mic, then through the earbuds, and the first half was gone.
        *
-       * That is the same split as the payloads, one layer down, and it is why this reads BOTH and
-       * merges by timestamp order. conversationState is deliberately left in place — it also drives
-       * follow-up detection (isAwaitingFollowUp) on a 3-minute decay window, which is a different
-       * job from feeding the prompt.
+       * That is the same split as the payloads, one layer down, and it is why this reads BOTH.
+       * conversationState is deliberately left in place — it also drives follow-up detection
+       * (isAwaitingFollowUp) on a 3-minute decay window, which is a different job from feeding the prompt.
+       *
+       * 2026-10-28 (Brain review r2) — and merges them IN THE ORDER THEY WERE SAID. This comment
+       * claimed timestamp order while the code concatenated brain turns first and buffer turns after,
+       * so a command the router answered ("5 on this hole" → "Got it, 5") always read as the LATEST
+       * exchange, even after a newer brain turn — and api/kevin resolves "and the wind?" against the
+       * last exchange it sees. Both lists now carry times; a history entry written without one (a
+       * server-replaced history) takes the time of the entry before it, so it keeps its place.
        */
       const { getConversationHistory } = require('./voice/conversationHistory') as typeof import('./voice/conversationHistory');
       const { getRecentTurns } = require('./conversationState') as typeof import('./conversationState');
 
-      const fromPipecat = (getConversationHistory() ?? []).map(
-        (m: { role: string; content: string }) => ({ role: m.role === 'assistant' ? 'kevin' : 'user', text: m.content }),
-      );
-      const fromBuffer = (getRecentTurns() ?? []).map((t) => ({ role: t.role as 'user' | 'kevin', text: t.text }));
+      let prevAt = 0;
+      const fromHistory = (getConversationHistory() ?? []).map((m) => {
+        prevAt = typeof m.at === 'number' ? m.at : prevAt;
+        return { role: m.role === 'assistant' ? 'kevin' : 'user', text: m.content, at: prevAt };
+      });
+      const fromBuffer = (getRecentTurns() ?? []).map((t) => ({ role: t.role as string, text: t.text, at: t.timestamp }));
 
-      // Same turn can land in both (a mic turn writes conversationState AND caddieBrain writes
-      // pipecatHistory), so drop exact role+text repeats rather than telling the caddie twice.
+      const ordered = [...fromHistory, ...fromBuffer]
+        .map((t, i) => ({ ...t, i }))
+        .sort((a, b) => a.at - b.at || a.i - b.i);
+
+      // Same turn can land in both (a mic turn writes conversationState AND caddieBrain writes the
+      // history), so drop role+text repeats rather than telling the caddie twice. conversationState
+      // trims what it stores, so compare trimmed.
       const seen = new Set<string>();
       const merged: { role: string; text: string }[] = [];
-      for (const t of [...fromPipecat, ...fromBuffer]) {
-        const key = `${t.role}:${t.text}`;
-        if (!t.text?.trim() || seen.has(key)) continue;
+      for (const t of ordered) {
+        const text = t.text?.trim();
+        const key = `${t.role}:${text}`;
+        if (!text || seen.has(key)) continue;
         seen.add(key);
-        merged.push(t);
+        merged.push({ role: t.role, text: t.text });
       }
       return merged.slice(-12);
     }, []),

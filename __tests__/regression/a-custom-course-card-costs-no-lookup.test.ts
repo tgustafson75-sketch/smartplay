@@ -56,6 +56,12 @@ describe('the course card the caddie reads', () => {
     expect(calls.filter((u) => /course-proxy/.test(u))).toHaveLength(1);
   });
 
+  it('a real course whose fetch failed still has the round\'s card', async () => {
+    const c = cache();
+    await c.warmCourseContext('12345', 10_000_000);               // offline / quota spent
+    expect(c.getCourseContextSync('12345')).toBe('Hole 1: Par 4, 380 yds. Hole 2: Par 3, 160 yds.');
+  });
+
   it('it tries again after the retry window, and on a new round', async () => {
     const c = cache();
     const t0 = 10_000_000;

@@ -9,7 +9,7 @@
  *
  * Now the payload builder reads it here, synchronously, on every route. A bundled course is built
  * from the round's own card on the spot; a golfcourseapi course is summarised once, after a warm
- * (the builder starts one on a miss, so at worst the first turn of a round goes without it).
+ * (the builder starts it), and reads the round's card until then.
  *
  * 2026-10-28 (Brain review r2) — a course he BUILT ('custom:') is on the device like a bundled one,
  * and is read the same way (courseCard.loadCourseCard already groups the two). It used to fall to the
@@ -45,11 +45,18 @@ function localCard(): string | null {
   return holes.map((h) => `Hole ${h.hole}: Par ${h.par}, ${h.distance} yds`).join('. ') + '.';
 }
 
-/** The card for the course being played, or null when it is not known yet. Never fetches. */
+/**
+ * The card for the course being played, or null when nothing is known. Never fetches.
+ *
+ * A golfcourseapi course reads its fuller summary (tee, hazards, rating) once warmed; until then — and
+ * when the warm fails (offline, the daily quota spent) — the round's own card, which the round store
+ * holds for every course. A miss here used to leave him with no par for the whole round. The caller
+ * starts the warm on every turn regardless; warmCourseContext is a no-op once it has run.
+ */
 export function getCourseContextSync(courseId: string | null | undefined): string | null {
   if (!courseId) return null;
   if (isOnDevice(courseId)) return localCard();
-  return summaries.get(courseId) ?? null;
+  return summaries.get(courseId) ?? localCard();
 }
 
 /**

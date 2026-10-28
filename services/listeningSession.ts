@@ -1,6 +1,6 @@
 import { Vibration } from 'react-native';
 
-import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
+import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS, COLD_BRAIN_FETCH_TIMEOUT_MS as COLD_KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, isCapturing, isExternalMicActive, isSpeaking, isSpeakingUserInitiated, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
@@ -63,7 +63,6 @@ const GOTIT_EARCON_MS = 180;
 // 2026-07-25 (Tim — "first ask errors every time") — cold-aware brain timeout, mirroring useVoiceCaddie.
 // The FIRST turn after launch is cold on the Lambda + provider SDK + tool rounds; a fixed 30s aborts it.
 // Give the brain a longer budget until the connection is confirmed warm; warm turns keep the tight bound.
-const COLD_KEVIN_FETCH_TIMEOUT_MS = 48000;
 // 2026-09-28 — per FUNCTION, like transcribe since 08-20. isConnectionWarmed() is flipped by the boot
 // ping and by ANY success, so a never-touched brain or classifier got the warm budget and aborted cold.
 const kevinTimeout = (): number => (isEndpointWarmed('/api/kevin') ? KEVIN_FETCH_TIMEOUT_MS : COLD_KEVIN_FETCH_TIMEOUT_MS);

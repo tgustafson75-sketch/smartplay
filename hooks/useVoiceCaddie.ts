@@ -6,7 +6,7 @@ import { prewarmVoice, abortVoiceWarmup } from '../services/voiceWarmup';
 import { noteUserTurn } from '../services/userTurnClock';
 import { noteCaddieTurn } from '../services/funnelEvents';
 import { mayTalkToCaddie, takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
-import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
+import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS, COLD_BRAIN_FETCH_TIMEOUT_MS as COLD_BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
 import { endsAsQuestion } from '../services/voice/endsAsQuestion';
 import {
@@ -180,7 +180,6 @@ const HEDGE_AFTER_MS = 2_500;
 // 30s and abort → the guaranteed first-ask error. Give the brain a longer budget ONLY while the
 // connection isn't yet confirmed warm; every warm turn keeps the tight 30s. Abort still falls back to
 // the local responder, so a genuinely dead network still fails fast enough.
-const COLD_BRAIN_TIMEOUT_MS = 48000;
 // 2026-09-28 — per function: the boot ping flipped the shared flag, so the cold brain got the warm budget.
 const brainTimeoutMs = (): number => (isEndpointWarmed('/api/kevin') ? BRAIN_TIMEOUT_MS : COLD_BRAIN_TIMEOUT_MS);
 // 2026-06-23 — 25s → 30s. Kevin's per-round AI timeout is now 12s and the

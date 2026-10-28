@@ -25,7 +25,9 @@
  */
 
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
-import { askCaddie } from '../caddieBrain';
+import { askCaddie, type NoAnswerReason } from '../caddieBrain';
+import { isEndpointWarmed } from '../apiBase';
+import { BRAIN_FETCH_TIMEOUT_MS, COLD_BRAIN_FETCH_TIMEOUT_MS } from '../../constants/voiceTimeouts';
 
 /**
  * 2026-08-23 — the module-level `const apiUrl = getApiBaseUrl()` that used to live here is gone with
@@ -143,14 +145,23 @@ export const inRoundDiagnosticHandler: IntentHandler = {
         } catch { return null; }
       })();
 
+      let noAnswer: NoAnswerReason | null = null;
       const turn = await askCaddie({
         message: patternText,
+        heard: intent.raw_text?.trim() || patternText,
         language: ctx.language ?? 'en',
         liveBlock: live,
         // The evidence-order doctrine, so the cloud read reasons in the SAME order the offline gate
         // does (lie → flight → strike → grass → setup → motion; one cause + one fix).
         contextSuffix: EVIDENCE_ORDER_HINT,
-        timeoutMs: 15_000,
+        /**
+         * 2026-10-28 (Brain review r2) — the shared brain budget, warm or cold. A flat 15s here was the
+         * odd one out: api/kevin lets a turn run to ~22s, and this Sonnet coach read (a cold Lambda, a
+         * full cache write, a tool round) can pass 15s. The phone gave up while the server finished and
+         * billed the turn — and the caddie tab then asked the brain the same question again.
+         */
+        timeoutMs: isEndpointWarmed('/api/kevin') ? BRAIN_FETCH_TIMEOUT_MS : COLD_BRAIN_FETCH_TIMEOUT_MS,
+        onNoAnswer: (reason) => { noAnswer = reason; },
         // The caller speaks this reply through the voice layer, so the server need not render audio.
         skipTts: true,
         overrides: {
@@ -161,9 +172,31 @@ export const inRoundDiagnosticHandler: IntentHandler = {
         },
       });
       if (!turn) {
+        /**
+         * 2026-10-28 (Brain review r2) — WHAT A FAILED READ MEANS TO THE ROUTE THAT ASKED.
+         *
+         * A non-success result with a line used to be the "hit a snag — try once more?" reply; but the
+         * caddie-tab mic treats any non-success as "not a command" and hands the words to the brain, so
+         * that line was never spoken there — a SECOND full Sonnet turn was sent instead.
+         *
+         * Our timer firing means the server is still working on (and billing) this read: asking again
+         * pays twice and makes him wait a second window. So a timeout is answered HERE, by the one
+         * failure owner (services/caddieFailureReply), as a handled turn every route speaks. A failure
+         * that came back fast is the brain's to own — no line, so every route takes it to the caddie.
+         */
+        if (noAnswer === 'timeout') {
+          const failure = require('../caddieFailureReply') as typeof import('../caddieFailureReply');
+          const reply = await failure.caddieFailureReply({ heard: intent.raw_text ?? patternText, language: ctx.language });
+          return {
+            success: true,
+            voice_response: reply.text,
+            side_effects: ['in_round_diagnostic:timeout:' + reply.source],
+            follow_up_needed: false,
+          };
+        }
         return {
           success: false,
-          voice_response: 'I tried to dig into that and hit a snag — try once more?',
+          voice_response: null,
           side_effects: ['in_round_diagnostic:no_answer'],
           follow_up_needed: false,
         };
@@ -185,9 +218,11 @@ export const inRoundDiagnosticHandler: IntentHandler = {
       };
     } catch (e) {
       console.log('[inRoundDiagnostic] brain call threw:', e);
+      // askCaddie owns its own errors, so a throw is ours, before or after it; the caddie path owns
+      // the failure line (it had a hard-coded English one here).
       return {
         success: false,
-        voice_response: 'Lost the connection on that one. Try again in a sec.',
+        voice_response: null,
         side_effects: ['in_round_diagnostic:exception'],
         follow_up_needed: false,
       };

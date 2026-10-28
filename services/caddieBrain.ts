@@ -76,6 +76,8 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
   // The player's own words: what the history keeps and the style learner hears. `message` may carry a
   // reshape meant only for the model (see CaddieRequestExtras.heard).
   const heard = extras.heard?.trim() ? extras.heard : extras.message;
+  // When he asked — the history orders this exchange against the router's turns by it.
+  const askedAt = Date.now();
 
   const controller = new AbortController();
   let timedOut = false;
@@ -150,7 +152,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
 
     // ONE conversation, whichever surface asked. Written here so no caller can forget it — the
     // reason the caddie used to lose the thread when the player switched from earbud to typing.
-    appendConversationTurn(heard, text);
+    appendConversationTurn(heard, text, askedAt);
 
     /**
      * 2026-09-11 — THE CADDIE ASKING IN HIS OWN WORDS COUNTS AS ASKING.

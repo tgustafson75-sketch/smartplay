@@ -19,3 +19,10 @@
 // the 27s server cascade with headroom while still failing fast on a truly dead network
 // (transcribe already caps at 12s and the spoken fallback fires on abort).
 export const BRAIN_FETCH_TIMEOUT_MS = 30_000;
+/**
+ * 2026-07-25 — the same bound while /api/kevin is not yet confirmed warm (apiBase.isEndpointWarmed): a
+ * cold Lambda + provider SDK init + tool rounds can pass 30s on the FIRST turn after launch.
+ * 2026-10-28 (Brain review r2) — one number. It was a 48000 literal in useVoiceCaddie and in
+ * listeningSession, and the in-round diagnostic handler had neither (a flat 15s).
+ */
+export const COLD_BRAIN_FETCH_TIMEOUT_MS = 48_000;

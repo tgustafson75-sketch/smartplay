@@ -24,6 +24,9 @@
  *      mic never writes it, so the app could reload under the first ask.
  */
 
+/** What was said, by whom — the history also stamps when (2026-10-28), which these tests do not pin. */
+const said = (h: Array<{ role: string; content: string }>) => h.map(({ role, content }) => ({ role, content }));
+
 /* ────────────────────────────────────────────────────────────────────────────────────────────── */
 /*  1-3. Warmth                                                                                   */
 /* ────────────────────────────────────────────────────────────────────────────────────────────── */
@@ -174,7 +177,7 @@ describe('a proactive line whose moment passed stays silent and leaves the threa
     const r = await env.brain.generateProactiveOpener();
     expect(r.stale).toBe(true);
     expect(r.text).toBeNull();
-    expect(env.hist.getConversationHistory()).toEqual([
+    expect(said(env.hist.getConversationHistory())).toEqual([
       { role: 'user', content: 'what club from 150' },
       { role: 'assistant', content: 'Smooth 8-iron.' },
     ]);
@@ -190,7 +193,7 @@ describe('a proactive line whose moment passed stays silent and leaves the threa
     expect(r.text).toBe('Morning. Whenever you are ready, I am here.');
     r.commit?.();
     r.commit?.(); // idempotent
-    expect(env.hist.getConversationHistory()).toEqual([
+    expect(said(env.hist.getConversationHistory())).toEqual([
       { role: 'assistant', content: 'Morning. Whenever you are ready, I am here.' },
     ]);
   });
@@ -206,7 +209,7 @@ describe('a proactive line whose moment passed stays silent and leaves the threa
     const env = setup(() => undefined);
     env.hist.appendConversationTurn('earlier', 'earlier answer');
     await env.brain.generateProactiveLine('Say something about hole 3.');
-    expect(env.hist.getConversationHistory()).toEqual([
+    expect(said(env.hist.getConversationHistory())).toEqual([
       { role: 'user', content: 'earlier' },
       { role: 'assistant', content: 'earlier answer' },
     ]);
@@ -401,7 +404,7 @@ describe('a proactive line that FALLS BACK still yields to the player', () => {
     const p = await env.brain.proactiveLineOrFallback('Say hi.', 'Fixed line.', { seedHistory: true });
     expect(hist.getConversationHistory()).toEqual([]); // not before the caller decides to say it
     p!.commit();
-    expect(hist.getConversationHistory()).toEqual([{ role: 'assistant', content: 'Fixed line.' }]);
+    expect(said(hist.getConversationHistory())).toEqual([{ role: 'assistant', content: 'Fixed line.' }]);
   });
 });
 

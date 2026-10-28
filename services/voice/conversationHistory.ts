@@ -18,6 +18,12 @@
 export interface ConversationMessage {
   role: string;
   content: string;
+  /**
+   * When it was said (ms). 2026-10-28 (Brain review r2) — the payload builder merges this thread with
+   * services/conversationState (which holds the router's command replies) and must put the two in the
+   * order they happened; without a time, every command turn landed after every brain turn.
+   */
+  at?: number;
 }
 
 /** Keep the last ~6 exchanges (12 messages) — matches the old per-path caps. */
@@ -34,12 +40,12 @@ export function setConversationHistory(next: ConversationMessage[] | undefined |
   history = Array.isArray(next) ? next.slice(-MAX_MESSAGES) : [];
 }
 
-/** Append one user+assistant exchange when the server didn't return a full history. */
-export function appendConversationTurn(userText: string, assistantText: string): void {
+/** Append one user+assistant exchange: the question when it was asked, the answer when it came. */
+export function appendConversationTurn(userText: string, assistantText: string, askedAt: number = Date.now(), answeredAt: number = Date.now()): void {
   history = [
     ...history,
-    { role: 'user', content: userText },
-    { role: 'assistant', content: assistantText },
+    { role: 'user', content: userText, at: askedAt },
+    { role: 'assistant', content: assistantText, at: answeredAt },
   ].slice(-MAX_MESSAGES);
 }
 
