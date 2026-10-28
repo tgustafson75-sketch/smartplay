@@ -12,7 +12,7 @@
  */
 
 import { router } from 'expo-router';
-import { searchSong } from './songPortal';
+import { searchSong, SongSearchUnavailable } from './songPortal';
 import { detectPlaySongRequest } from './musicIntent';
 
 export { detectPlaySongRequest };
@@ -47,12 +47,23 @@ export function _setSongRoutineCandidate(c: RoutineSongCandidate | null): void {
 /**
  * If `raw` is a play-song request, search + open the clean player and return the
  * spoken confirmation. Returns null when it isn't a play request (caller continues
- * to the brain). Best-effort: honest line when no match / search fails.
+ * to the brain) — and when the search could not be made at all, so the failure owner answers.
+ * Honest line when there is no such song.
  */
 export async function tryPlaySong(raw: string): Promise<{ spoken: string } | null> {
   const req = detectPlaySongRequest(raw);
   if (!req) return null;
-  const match = await searchSong(req.query);
+  let match: Awaited<ReturnType<typeof searchSong>>;
+  try {
+    match = await searchSong(req.query);
+  } catch (e) {
+    if (!(e instanceof SongSearchUnavailable)) throw e;
+    console.log('[playSong] search unavailable:', e.reason);
+    // Could not reach our endpoint (offline): not this flow's to explain — the brain turn's failure
+    // owner says what is actually wrong. Reached it but YouTube did not answer: say that, not "no song".
+    if (!e.reachedServer) return null;
+    return { spoken: "The music player isn't answering right now — give it another try in a minute." };
+  }
   if (!match) {
     return { spoken: `I couldn't find "${req.query}" — try it again with the artist's name too.` };
   }

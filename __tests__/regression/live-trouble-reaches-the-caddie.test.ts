@@ -107,7 +107,11 @@ describe('it reaches the brain through the ONE shared block', () => {
     ]) {
       const src = read(f);
       const composesItself = /getCaddieContext\(/.test(src);
-      const usesTheBuilder = /buildCaddieRequestBody\(|askCaddie\(/.test(src);
+      // 2026-10-28 (Brain review r3) — listeningSession reaches the brain only through
+      // conversationalBrainTurn and the diagnostic handler now (both in this list); its own
+      // in_round_diagnostic askCaddie twin was deleted.
+      const usesTheBuilder = /buildCaddieRequestBody\(|askCaddie\(/.test(src)
+        || (f === 'services/listeningSession.ts' && /conversationalBrainTurn\(/.test(src));
       expect(composesItself || usesTheBuilder).toBe(true);
     }
   });

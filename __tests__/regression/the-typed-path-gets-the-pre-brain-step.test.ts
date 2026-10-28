@@ -200,12 +200,14 @@ describe('B10 — the pre-brain step on the typed and earbud routes', () => {
     expect(mockState.brainMessages[0].startsWith(buildPlainSpeakPrefix())).toBe(true);
   });
 
-  it('typed: "how do I use SmartFinder" gets the curated help, not a brain turn', async () => {
+  // 2026-10-28 (Brain review r3) — was "how do I use SmartFinder", which has no help entry and only
+  // passed because an unnamed object fell back to the SwingLab tour. It goes to Kevin now.
+  it('typed: "how do I use the scorecard" gets the curated help, not a brain turn', async () => {
     const { detectHelpRequest, getScreenHelp } = require('../../services/screenHelp') as typeof import('../../services/screenHelp');
-    const help = getScreenHelp(detectHelpRequest('how do I use SmartFinder')?.key);
+    const help = getScreenHelp(detectHelpRequest('how do I use the scorecard')?.key);
     expect(help).not.toBeNull();
     mockState.precheck = () => null;
-    await typed('how do I use SmartFinder');
+    await typed('how do I use the scorecard');
     expect(mockState.brainMessages).toEqual([]);
     expect(mockState.spoken).toContain(help!.spoken);
   });

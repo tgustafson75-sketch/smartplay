@@ -6,7 +6,7 @@
  *
  * Pure, no imports → unit-testable and usable from both a component and the voice
  * handler. detectHelpRequest is narrow (a real "how do I use X" / "how does X work"
- * ask), and maps the spoken feature name to a help key.
+ * ask about the APP), and maps the spoken feature name to a help key.
  */
 
 export interface ScreenHelp {
@@ -77,36 +77,91 @@ export const SCREEN_HELP: Record<string, ScreenHelp> = {
   },
 };
 
-const ALIASES: Record<string, string> = {
-  play: 'play', round: 'play', 'play tab': 'play',
-  drill: 'drills', drills: 'drills',
-  'smart motion': 'smartmotion', smartmotion: 'smartmotion', motion: 'smartmotion',
-  scorecard: 'scorecard', score: 'scorecard', scoring: 'scorecard',
-  'swing lab': 'swinglab', swinglab: 'swinglab', practice: 'swinglab',
+/**
+ * 2026-10-28 (Brain review r3) — feature names, split by how safely they name the APP.
+ *
+ * The old table was matched with a substring test against the whole sentence, behind a how-to test
+ * that accepted any "how do/does … use/work". Round 1 (B10) put this step in front of every brain
+ * turn, so "How should I use the wind on this hole?", "How does lag putting work?" and "How do I use
+ * my hybrid out of the rough?" got the SwingLab tour (the fallback), "How do I use my wedges to score
+ * better?" got the scorecard ('score'), and "How would you use the slope around the green?" got the
+ * Play tab ('round' inside 'around'). Kevin never heard any of them.
+ *
+ * So a feature is help only when it IS the object of use/work. A product name stands alone; a golf
+ * word ("round", "score", "practice") names the app only with a screen noun after it ("the play tab",
+ * "the practice screen").
+ */
+const FEATURE_NAMES: Record<string, string> = {
+  'play tab': 'play',
+  drills: 'drills',
+  'smart motion': 'smartmotion', smartmotion: 'smartmotion',
+  scorecard: 'scorecard', 'score card': 'scorecard',
+  'swing lab': 'swinglab', swinglab: 'swinglab',
 };
+const GOLF_WORD_FEATURES: Record<string, string> = {
+  play: 'play', round: 'play',
+  drill: 'drills', drills: 'drills',
+  motion: 'smartmotion',
+  score: 'scorecard', scoring: 'scorecard',
+  practice: 'swinglab',
+};
+const SCREEN_NOUN = '(?:tab|screen|page|section)';
+/** "this", "this screen", "the app" — the thing he is looking at. */
+const DEICTIC = new RegExp(`^(?:this|(?:this|the)\\s+(?:app|screen|page|tab|thing|feature))$`);
+/** What may follow the object without making it a golf question: a place, a name, a please. */
+const TAIL = String.raw`(?:\s+(?:here|in\s+(?:the|this)\s+app|on\s+this\s+(?:app|screen|page)|kevin|please))*`;
 
 export function getScreenHelp(key: string | null | undefined): ScreenHelp | null {
   if (!key) return null;
   return SCREEN_HELP[key] ?? null;
 }
 
+/** The SCREEN_HELP key for a live route (routeBreadcrumb's pathname), or null off the help surfaces. */
+export function helpKeyForRoute(route: string | null | undefined): string | null {
+  const r = (route ?? '').split('?')[0].replace(/\/+$/, '');
+  if (r === '/play') return 'play';
+  if (r === '/scorecard') return 'scorecard';
+  if (r === '/swinglab/smartmotion') return 'smartmotion';
+  if (r === '/swinglab') return 'swinglab';
+  if (r === '/drills' || r.startsWith('/drills/')) return 'drills';
+  return null;
+}
+
+/** Resolve the object of "use"/"work" to a help key: a feature name, or "this" → the current screen. */
+function resolveObject(obj: string, currentKey: string | null | undefined): string | null {
+  const o = obj.replace(/^(?:the|my|your|this|that)\s+/, '').trim();
+  if (DEICTIC.test(obj.trim())) return currentKey && SCREEN_HELP[currentKey] ? currentKey : null;
+  if (FEATURE_NAMES[o]) return FEATURE_NAMES[o];
+  const screen = o.match(new RegExp(`^([a-z ]+?)\\s+${SCREEN_NOUN}$`));
+  if (screen) {
+    const name = screen[1].trim();
+    if (name === 'this') return currentKey && SCREEN_HELP[currentKey] ? currentKey : null;
+    return FEATURE_NAMES[name] ?? GOLF_WORD_FEATURES[name] ?? null;
+  }
+  return null;
+}
+
 /**
- * Detect a "how do I use X / how does X work / how do you use X" request and resolve
- * the feature. Returns null when it isn't a how-to ask. `currentKey` (the screen the
- * user is on) is the fallback when they say "this" / don't name a feature.
+ * Detect a "how do I use X / how does X work / what do I do here" request about the APP and resolve
+ * the feature. Returns null for anything else — including every golf "how" question — so it reaches
+ * Kevin. `currentKey` (the screen the player is on) answers "this"; with no help screen behind
+ * "this", it is null too, because a tour of a screen he is not looking at is not an answer.
  */
 export function detectHelpRequest(raw: string, currentKey?: string | null): { key: string } | null {
-  const t = (raw ?? '').trim().toLowerCase();
+  const t = (raw ?? '').trim().toLowerCase()
+    .replace(/[?.!]+$/, '')
+    .replace(/^(?:(?:hey|ok|okay)\s+)?(?:kevin|serena|caddie)\s*,?\s+/, '')
+    .trim();
   if (!t) return null;
-  const isHowTo =
-    /\bhow\s+(?:do|does|can|could|would|should)\b[^.?!]*\b(?:use|works?)\b/.test(t) ||
-    /\bhow\s+do\s+i\s+(?:use|do)\s+this\b/.test(t) ||
-    /\bwhat\s+do\s+i\s+do\s+here\b/.test(t);
-  if (!isHowTo) return null;
-  // Named feature wins; else "this" → the current screen.
-  for (const [alias, key] of Object.entries(ALIASES)) {
-    if (t.includes(alias)) return { key };
+  const use = t.match(new RegExp(`^how\\s+(?:do|can|could|should|would)\\s+(?:i|you|we|one)\\s+use\\s+([a-z' ]+?)${TAIL}$`));
+  const works = t.match(new RegExp(`^how\\s+(?:does|do)\\s+([a-z' ]+?)\\s+work${TAIL}$`));
+  const obj = use?.[1] ?? works?.[1];
+  if (obj) {
+    const key = resolveObject(obj, currentKey);
+    return key ? { key } : null;
   }
-  if (currentKey && SCREEN_HELP[currentKey]) return { key: currentKey };
-  return { key: 'swinglab' }; // sensible default overview when unspecified
+  if (new RegExp(`^(?:how\\s+do\\s+i\\s+do\\s+this|what\\s+do\\s+i\\s+do\\s+(?:here|on\\s+this\\s+${SCREEN_NOUN}))$`).test(t)) {
+    return currentKey && SCREEN_HELP[currentKey] ? { key: currentKey } : null;
+  }
+  return null;
 }

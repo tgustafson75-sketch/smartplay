@@ -2917,10 +2917,20 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${onCourseContextBlock}$
       }
     }
     // NOTE the source: `text` has been reassigned to the caddie's REPLY by this point, so the mood
-    // must be read from `userMessage` — the player's own words. Reading `text` here would classify
-    // the caddie's empathy as the player's feelings, which is a real trap in this function.
+    // must be read from the player's own words. Reading `text` here would classify the caddie's
+    // empathy as the player's feelings, which is a real trap in this function.
+    //
+    // 2026-10-28 (Brain review r3) — and the player's own words are `baseMessage`, NOT `userMessage`.
+    // userMessage is the assembled turn: the coaching KB, Kevin's recent replies, [RECENT PATTERN],
+    // [HOW TIM SAYS HE FEELS], the round facts, THEN the question. Both extractors' question guards
+    // are anchored to the start of the string (a '[' never trips them) and their keyword tests ran
+    // over every block: "I'm 150 out over water" logged "frustrated" from KB wording, one logged mood
+    // was echoed into every later message and re-logged itself each turn, and "I chunked my wedge"
+    // was stored as a 9 iron to the green lifted from RECENT PATTERN. leadCoachFor reads baseMessage
+    // for the same reason. A proactive turn's message is our prompt, not anything he said.
+    const playerWords = is_proactive ? '' : String(baseMessage ?? '');
     if (!capture.actions.some(a => (a as { type?: string })?.type === 'log_emotional_state')) {
-      const mood = detectEmotionalState(userMessage);
+      const mood = detectEmotionalState(playerWords);
       if (mood) {
         const action = { type: 'log_emotional_state', ...mood } as typeof capture.action & object;
         capture.actions.push(action);
@@ -2929,7 +2939,7 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${onCourseContextBlock}$
     }
     // Same source rule as the mood above: the PLAYER's words, never the reply in `text`.
     if (!capture.actions.some(a => (a as { type?: string })?.type === 'log_shot')) {
-      const shot = extractShotReport(userMessage);
+      const shot = extractShotReport(playerWords);
       if (shot) {
         const action = { type: 'log_shot', ...shot } as typeof capture.action & object;
         capture.actions.push(action);

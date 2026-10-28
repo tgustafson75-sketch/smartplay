@@ -29,6 +29,8 @@ export interface AppContext {
   active_player_handicap?: number | null;
   active_group_size?: number;
   language?: 'en' | 'es' | 'zh';
+  /** The turn's abort: a handler that calls the brain passes it on, so a shush cancels the read. */
+  signal?: AbortSignal;
 }
 
 export interface IntentResult {

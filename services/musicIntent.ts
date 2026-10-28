@@ -15,8 +15,16 @@ const MUSIC_CUE = /\b(?:song|songs|music|tune|tunes|playlist|album|youtube|spoti
  * about the player ("I'd play") never matches.
  */
 const REQUEST_LEAD = /^(?:(?:hey|ok|okay|yo)\s+)?(?:(?!(?:i|we|you|they|he|she|it|i'll|i'd|we'll|we'd)\b)[a-z']+,?\s+)?(?:(?:please\s+)?(?:can|could|will|would)\s+you\s+(?:please\s+)?|please\s+|go\s+ahead\s+and\s+|just\s+)?(?:play|put\s+on)\b/i;
-/** What follows "play" in a shot decision: a club, a number, a direction, a shape, a piece of the hole. */
-const GOLF_TARGET = /^(?:(?:a|an|the|my|your|this|that|it|one|another)\s+)?(?:\d|driver|wood|woods|hybrid|hybrids|iron|irons|wedge|wedges|putter|pw|gw|sw|lw|club|front|back|left|right|short|long|high|low|aggressive|conservative|draw|fade|cut|hook|slice|punch|bump|chip|lay|layup|hole|shot|tee|green|fairway|pin|flag|wind|break|line|off|for|to|from|into|over|under|around|at)\b/i;
+/**
+ * What follows "play" in a shot decision or a rules call: a club, a number, a direction, a shape, a
+ * piece of the hole, the ball, a lie, a provisional, a local rule ("play it as it lies", "play it
+ * down", "play two clubs more", "play winter rules", "play preferred lies").
+ */
+const GOLF_TARGET = /^(?:(?:a|an|the|my|your|this|that|it|one|another)\s+)?(?:\d|one|two|three|four|five|half|driver|wood|woods|hybrid|hybrids|iron|irons|wedge|wedges|putter|pw|gw|sw|lw|club|clubs|ball|balls|lie|lies|provisional|preferred|winter|lift|percentages|position|stance|front|back|left|right|short|long|high|low|up|down|as|where|aggressive|conservative|draw|fade|cut|hook|slice|punch|bump|chip|lay|layup|hole|shot|tee|green|fairway|pin|flag|wind|break|line|off|for|to|from|into|over|under|around|at)\b/i;
+/** Asked politely ("can you play …?") — the one request form that legitimately ends in '?'. */
+const POLITE_ASK = /\b(?:can|could|will|would)\s+you\s+(?:please\s+)?(?:play|put\s+on)\b/i;
+/** A song-shaped object: a quoted title, or "<title> by <artist>". */
+const SONG_SHAPE = /["“][^"”]{2,}["”]|\S\s+by\s+[a-z]/i;
 
 export function detectPlaySongRequest(raw: string): { query: string } | null {
   const t = (raw ?? '').trim();
@@ -43,6 +51,13 @@ export function detectPlaySongRequest(raw: string): { query: string } | null {
    */
   if (!MUSIC_CUE.test(t)) {
     if (!REQUEST_LEAD.test(t)) return null;
+    /**
+     * 2026-10-28 (Brain review r3) — the lead alone let "Play the ball back in my stance?", "Play it as
+     * it lies?", "Play a provisional?" and "Play two clubs more?" through: they open with "play", and
+     * the golf list did not know the ball, a lie, a rule or a number word. A command that ends in a
+     * question mark is a question; only the polite "can you play …?" is still a request.
+     */
+    if (/\?\s*$/.test(t) && !POLITE_ASK.test(t)) return null;
   }
   const m = t.match(/\b(?:can\s+you\s+|could\s+you\s+|please\s+)?(?:play|put\s+on)(?:\s+me|\s+us|\s+the\s+song|\s+a\s+song)?\s+(.+)$/i);
   if (!m) return null;
@@ -51,6 +66,7 @@ export function detectPlaySongRequest(raw: string): { query: string } | null {
     .replace(/[?.!]+$/, '')
     .trim();
   if (query.length < 2) return null;
-  if (!MUSIC_CUE.test(t) && GOLF_TARGET.test(query)) return null;
+  // A named song ("Down Under by Men at Work", a quoted title) is a song even when its first word is golf.
+  if (!MUSIC_CUE.test(t) && GOLF_TARGET.test(query) && !SONG_SHAPE.test(query)) return null;
   return { query };
 }

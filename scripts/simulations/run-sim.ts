@@ -2939,7 +2939,10 @@ check('Quick how-to: first-time tutorials + on-demand "how do I use this?" share
       .every((k) => SCREEN_HELP[k]?.lines?.length >= 1 && SCREEN_HELP[k].spoken.length > 0 && SCREEN_HELP[k].lines.length <= 4);
     const help = detectScreenHelp('how does the scorecard work')?.key === 'scorecard'
       && detectScreenHelp('how do you use drills')?.key === 'drills'
-      && detectScreenHelp('how do I use this')?.key === 'swinglab'   // "this" → default overview
+      && detectScreenHelp('how do I use this', 'play')?.key === 'play'   // "this" → the screen he is on
+      // 2026-10-28 (Brain review r3) — no screen behind "this", no tour; a golf "how" is Kevin's.
+      && detectScreenHelp('how do I use this') === null
+      && detectScreenHelp('how does lag putting work') === null
       && detectScreenHelp('what club for 150') === null;             // no false positive
     // wired: tutorials on Play/Drills/Scorecard pull from SCREEN_HELP; help in the voice path
     const play = read('app/(tabs)/play.tsx');
@@ -2950,7 +2953,7 @@ check('Quick how-to: first-time tutorials + on-demand "how do I use this?" share
       /slug="drills_intro"[\s\S]*?SCREEN_HELP\.drills/.test(drills) &&
       /slug="scorecard_scoring"[\s\S]*?SCREEN_HELP\.scorecard/.test(score) &&
       // 2026-10-28 (Brain review B10) — the help answer is the shared pre-brain step's, on every surface.
-      /detectHelpRequest\(transcript\)/.test(read('services/voice/preBrainTurn.ts')) &&
+      /detectHelpRequest\(transcript, helpKeyForRoute\(getRoute\(\)\)\)/.test(read('services/voice/preBrainTurn.ts')) &&
       /getScreenHelp\(help\.key\)/.test(read('services/voice/preBrainTurn.ts')) &&
       /preBrainReply\(/.test(voice);
     return hasKeys && help && wired;
@@ -16519,8 +16522,8 @@ check(
    */
   check(
     'VOICE: screen help answers the FIRST question, and still outranks the song handler',
-    mainPath && /const help = detectHelpRequest\(transcript\);/.test(pre) &&
-      pre.indexOf('detectHelpRequest(transcript)') < pre.indexOf('tryPlaySong(transcript)'),
+    mainPath && /const help = detectHelpRequest\(transcript, /.test(pre) &&
+      pre.indexOf('detectHelpRequest(transcript') < pre.indexOf('tryPlaySong(transcript)'),
     '"how do I play this" is a help question, not a request for a song called "this" — sendToBrain documents that order and the main path has to keep it',
   );
   check(

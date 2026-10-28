@@ -19,9 +19,8 @@
  * Returns the brain's reply as voice_response so the caller speaks
  * it through the normal TTS pipeline.
  *
- * Side note: wants_card param (visual display) is captured but not
- * acted on yet — would require a card-rendering route. Logged as a
- * side_effect tag for owner debug.
+ * wants_card (visual display) opens app/diagnostic-card with the read —
+ * on every route since 2026-10-28 (it was the earbud twin's alone).
  */
 
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
@@ -162,6 +161,8 @@ export const inRoundDiagnosticHandler: IntentHandler = {
          */
         timeoutMs: isEndpointWarmed('/api/kevin') ? BRAIN_FETCH_TIMEOUT_MS : COLD_BRAIN_FETCH_TIMEOUT_MS,
         onNoAnswer: (reason) => { noAnswer = reason; },
+        // Review G2 — a shush aborts the Sonnet read instead of letting it finish (and bill) unheard.
+        signal: ctx.signal,
         // The caller speaks this reply through the voice layer, so the server need not render audio.
         skipTts: true,
         overrides: {
@@ -210,10 +211,22 @@ export const inRoundDiagnosticHandler: IntentHandler = {
           follow_up_needed: true,
         };
       }
+      // The card renders the reasoning and re-plays it without re-querying Sonnet, so it is pushed
+      // whether or not the line is spoken aloud — a muted player still gets the read.
+      let cardShown = false;
+      if (wantsCard) {
+        try {
+          (require('expo-router') as typeof import('expo-router')).router.push({
+            pathname: '/diagnostic-card',
+            params: { pattern: patternText, reasoning: reply },
+          });
+          cardShown = true;
+        } catch (e) { console.log('[inRoundDiagnostic] diagnostic-card nav failed', e); }
+      }
       return {
         success: true,
         voice_response: reply,
-        side_effects: ['in_round_diagnostic:answered', ...(wantsCard ? ['in_round_diagnostic:wants_card_unsupported'] : [])],
+        side_effects: ['in_round_diagnostic:answered', ...(cardShown ? ['in_round_diagnostic:card'] : [])],
         follow_up_needed: false,
       };
     } catch (e) {

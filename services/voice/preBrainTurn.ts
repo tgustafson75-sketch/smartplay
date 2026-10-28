@@ -12,7 +12,8 @@
  * ORDER IS PART OF THE CONTRACT: help first ("how do I play this" is a help question, not a request
  * for a song called "this"), then the song portal on the player's OWN words, then the two reshapes.
  */
-import { detectHelpRequest, getScreenHelp } from '../screenHelp';
+import { detectHelpRequest, getScreenHelp, helpKeyForRoute } from '../screenHelp';
+import { getRoute } from '../routeBreadcrumb';
 import { tryPlaySong } from '../playSongFlow';
 import { detectSingRequest, buildSingMessage } from '../singAttempt';
 import { detectPlainSpeakRequest, buildPlainSpeakPrefix } from '../plainSpeak';
@@ -20,7 +21,8 @@ import { detectPlainSpeakRequest, buildPlainSpeakPrefix } from '../plainSpeak';
 /** A deterministic reply that replaces the brain turn, or null to go to the brain. */
 export async function preBrainReply(transcript: string): Promise<string | null> {
   try {
-    const help = detectHelpRequest(transcript);
+    // "How do I use this?" means the screen he is on; off the help screens, "this" is Kevin's to answer.
+    const help = detectHelpRequest(transcript, helpKeyForRoute(getRoute()));
     const h = help ? getScreenHelp(help.key) : null;
     if (h) return h.spoken;
   } catch (e) { console.log('[preBrain] screen help error (non-fatal):', e); }

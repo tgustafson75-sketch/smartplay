@@ -26,7 +26,7 @@ const mockState = {
   askCaddie: [] as Array<(opts: { signal?: AbortSignal }) => Promise<unknown>>,
   askCaddieSignals: [] as Array<AbortSignal | undefined>,
   precheck: null as null | ((u: string) => unknown),
-  handler: null as null | { execute: () => Promise<unknown> },
+  handler: null as null | { execute: (...args: unknown[]) => Promise<unknown> },
   roundActive: false,
   speakingUserInitiated: false,
   speaking: false,
@@ -35,6 +35,10 @@ const mockState = {
 };
 
 const noCapture: Capture = { text: null, bail: 'cancelled', heardSpeech: false, durationMs: 0 };
+/** Enough evidence (a flight and a lie) that the handler's offline gate hands the read to the brain. */
+const SLICE = 'why am I slicing it right off the tee';
+const diagnosticHandler = () =>
+  jest.requireActual('../../services/intents/inRoundDiagnosticHandler').inRoundDiagnosticHandler as { execute: (...args: unknown[]) => Promise<unknown> };
 
 jest.mock('../../services/voiceService', () => ({
   speak: jest.fn(async (text: string) => {
@@ -111,9 +115,11 @@ jest.mock('../../services/intents', () => ({
   voiceCommandRouter: {
     getHandler: jest.fn(() => mockState.handler),
     // Returns the handler's own promise, unwrapped, so the turn's timing is the handler's.
-    dispatch: jest.fn(() => mockState.handler!.execute()),
+    dispatch: jest.fn((intent: unknown, ctx: unknown) => mockState.handler!.execute(intent, ctx)),
   },
 }));
+// The real diagnostic handler reads the live vision block first; the device edge answers at once.
+jest.mock('../../services/unifiedVisionContext', () => ({ getUnifiedVisionContext: jest.fn(async () => ({ promptBlock: null })) }));
 jest.mock('../../services/earbudControl', () => ({ subscribeEarbudTap: jest.fn(() => () => undefined) }));
 jest.mock('../../services/smartMotionRecordBus', () => ({ isSmartMotionRecording: jest.fn(() => false), emitSmartMotionCommand: jest.fn() }));
 jest.mock('../../services/responseRouter', () => ({ routeQuery: jest.fn(() => ({ filler: null })) }));
@@ -197,12 +203,17 @@ describe('finding 1 — a brain QUESTION reopens the mic for the answer', () => 
     expect(mockState.captureCalls).toBe(2);
   });
 
+  // 2026-10-28 (Brain review r3) — the session has no diagnostic branch of its own any more: the turn
+  // is inRoundDiagnosticHandler's, through dispatch, as on every other route.
   it('in_round_diagnostic: the coach asks back → a second listen', async () => {
     mockState.roundActive = true;
-    mockState.precheck = () => ({ intent_type: 'in_round_diagnostic', confidence: 'high', raw_text: 'why am I slicing', parameters: {} });
-    mockState.captures.push(said('why am I slicing'));
+    mockState.handler = diagnosticHandler();
+    mockState.precheck = () => ({ intent_type: 'in_round_diagnostic', confidence: 'high', raw_text: SLICE, parameters: { pattern_text: 'slicing' } });
+    mockState.captures.push(said(SLICE));
     mockState.askCaddie.push(async () => ({ text: 'Is it starting left and curving, or starting right?', audioBase64: null, toolActions: [] }));
     await tap();
+    // A handler turn runs behind the "still working" earcon pulse (1.8s apart), as every handler does.
+    await new Promise((r) => setTimeout(r, 2_000));
     await flush();
     expect(mockState.captureCalls).toBe(2);
   });
@@ -251,9 +262,10 @@ describe('finding 2 — a stale turn never touches the newer session', () => {
 
   it('closing the session aborts the in-flight brain request', async () => {
     mockState.roundActive = true;
-    mockState.precheck = () => ({ intent_type: 'in_round_diagnostic', confidence: 'high', raw_text: 'why', parameters: {} });
+    mockState.handler = diagnosticHandler();
+    mockState.precheck = () => ({ intent_type: 'in_round_diagnostic', confidence: 'high', raw_text: SLICE, parameters: { pattern_text: 'slicing' } });
     const pending = deferred<unknown>();
-    mockState.captures.push(said('why am I slicing'));
+    mockState.captures.push(said(SLICE));
     mockState.askCaddie.push(() => pending.promise);
     await tap();
     await flush();
@@ -264,7 +276,10 @@ describe('finding 2 — a stale turn never touches the newer session', () => {
     await tap(); // shush
     expect(signal!.aborted).toBe(true);
     pending.resolve(null);
+    // Past the handler's earcon pulse: the aborted read declines, and that must not become a brain turn.
+    await new Promise((r) => setTimeout(r, 2_000));
     await flush();
+    expect(mockState.brainCalls).toBe(0);
     // A turn the player closed owes them nothing — no failure line, no reopen.
     expect(mockState.spoken.slice(spokenBeforeShush)).toEqual([]);
     expect(mockState.captions).toEqual([]);

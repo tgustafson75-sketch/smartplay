@@ -195,8 +195,12 @@ describe('both paths actually USE the one builder', () => {
     for (const f of senders) {
       // Either it builds the union itself, or it delegates to caddieBrain.askCaddie(), which does.
       // Both are "through the one builder"; what is forbidden is hand-assembling a second payload.
+      // 2026-10-28 (Brain review r3) — or to conversationalBrainTurn, which is itself held to this
+      // rule here: listeningSession's last askCaddie was its in_round_diagnostic twin, deleted for
+      // the handler, and its one remaining /api/kevin is the warm-endpoint key for its timeout.
       const src = read(f);
-      const throughTheBuilder = /buildCaddieRequestBody\(/.test(src) || /askCaddie\(/.test(src);
+      const throughTheBuilder = /buildCaddieRequestBody\(/.test(src) || /askCaddie\(/.test(src)
+        || (/conversationalBrainTurn\(/.test(src) && /askCaddie\(/.test(read('services/conversationalBrain.ts')));
       expect([f, throughTheBuilder]).toEqual([f, true]);
     }
   });

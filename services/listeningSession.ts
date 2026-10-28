@@ -8,7 +8,6 @@ import { noteTurnState, noteTurnIntent, noteTurnClosing, noteTurnActed } from '.
 import { adviceIsStillWorthSaying, captureShotEpoch, currentTurnEpoch } from './adviceFreshness';
 import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
-import { askCaddie } from './caddieBrain';
 import { abortVoiceWarmup } from './voiceWarmup';
 import { noteUserTurn, getUserTurnEpoch } from './userTurnClock';
 import { noteCaddieTurn } from './funnelEvents';
@@ -1344,6 +1343,9 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
       current_hole: round.isRoundActive ? round.currentHole : null,
       recent_shots: round.shots.slice(-5),
       trust_spectrum_level: getTrustLevel(),
+      // A handler that asks the brain answers in his language, and a shush cancels it (Review G2).
+      language: settings.language,
+      signal: brainSignal,
     };
 
     // 2026-06-15 (Tim — tap-to-talk record must be deterministic, not a cloud
@@ -1568,85 +1570,15 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
         .catch(() => {});
     }
 
-    // Phase BH — in-round diagnostic Coach. When the user describes a
-    // multi-shot pattern and asks "why", route to /api/kevin Sonnet with
-    // register='coach' override + inRoundDiagnostic flag. The Coach
-    // prompt sub-branch returns ~30-45s of pattern reasoning.
-    if (intent.intent_type === 'in_round_diagnostic' && round.isRoundActive) {
-      // 2026-08-27 — the "abort the speculative call" note that stood here (07-20) went with the
-      // speculative call itself; the diagnostic request below now goes through askCaddie like every
-      // other brain turn in this file.
-      const patternText = (intent.parameters?.pattern_text as string | undefined) ?? utterance;
-      const wantsCard = intent.parameters?.wants_card === true;
-      try {
-        const settingsStore = require('../store/settingsStore').useSettingsStore.getState();
-        /**
-         * 2026-08-23 (Tim, sprint finish) — was twenty-three hand-listed fields, the largest of the
-         * ten hand-built payloads in the app and still short of the union: no course intelligence,
-         * no hazards, no bag, no round stats, no learned-memory block, no handedness. It also sent
-         * `experienceContext`, which the brain read under no name at all — sent and ignored (now
-         * wired, see api/kevin.ts).
-         *
-         * 2026-08-27 — and now it builds no payload of its own at all: askCaddie owns that, so the
-         * union cannot be reassembled here and drift again. This is the "why am I slicing this"
-         * turn — the one question where the player wants the caddie to actually KNOW him.
-         */
-        await fillerP;
-        /**
-         * 2026-08-27 — THE SIXTH BRAIN SITE, and the last raw one in this file.
-         *
-         * It was a hand-rolled fetch: its own timeout, its own response parsing, its own
-         * error handling, and — like the five before it — a reply spoken only while the session was
-         * still 'responding', with an explicit `setSessionStateMirror('idle'); return;` that threw
-         * away a finished answer when it wasn't. On the ONE turn where the player has asked the
-         * caddie to explain his own swing to him, after a 30-45s Sonnet read.
-         *
-         * It never needed to be raw: askCaddie has taken `overrides` since 08-23, which is the only
-         * thing this call has that a normal turn does not (register: 'coach', inRoundDiagnostic).
-         * Going through it also files the exchange in the shared history, so the follow-up question
-         * every player asks next — "so what do I do about it?" — reaches a caddie that remembers
-         * what it just said.
-         */
-        const turn = await askCaddie({
-          message: patternText,
-          language: settingsStore.language ?? 'en',
-          timeoutMs: kevinTimeout(),
-          overrides: { register: 'coach', inRoundDiagnostic: true },
-          // Review G2 — a shush aborts the Sonnet read instead of letting it finish (and bill) unheard.
-          signal: brainSignal,
-        });
-        // The card renders the reasoning and re-plays it without re-querying Sonnet, so it is
-        // pushed whether or not the line was spoken aloud — a muted player still gets the read.
-        if (wantsCard && turn?.text) {
-          try {
-            const router = require('expo-router').router;
-            router.push({
-              pathname: '/diagnostic-card',
-              params: { pattern: patternText, reasoning: turn.text },
-            });
-          } catch (e) { console.log('[listeningSession] diagnostic-card nav failed', e); }
-        }
-        await deliverBrainReply({
-          reply: { text: turn?.text ?? null, audioBase64: turn?.audioBase64 ?? null },
-          utterance: patternText,
-          language: settingsStore.language ?? settings.language,
-          voiceGender: settings.voiceGender,
-          apiUrl,
-          ttsAllowed,
-          site: 'listeningSession.in_round_diagnostic',
-          requireResponding: true,
-          isCurrent: live,
-        });
-      } catch (e) {
-        console.log('[listeningSession] in_round_diagnostic failed', e);
-        if (ttsAllowed && mine('responding')) {
-          await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
-        }
-      }
-      // Review G2 (finding 1) — through the shared tail: the coach asking back reopens the mic.
-      endTurn(mySerial);
-      return;
-    }
+    /**
+     * 2026-10-28 (Brain review r3) — the in-round diagnostic ("why am I slicing it") is
+     * inRoundDiagnosticHandler's, through dispatch below, like every other route. This file had its
+     * own branch here (Phase BH), which asked the brain the classifier's SUMMARY ("swing today") with
+     * no evidence-order doctrine, no live vision block and no offline evidence gate — and, because
+     * `heard` defaulted to that summary, filed "swing today" in the shared history and the style
+     * learner as the player's words. b16a169f fixed exactly that in the handler; this twin kept it.
+     * The card push it alone had now lives in the handler, so every route gets the card.
+     */
 
     // Phase BS audit (2026-05-14) — small-talk fallback. The voice-intent
     // classifier returns intent_type === 'unknown' for greetings and
@@ -1842,6 +1774,12 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
       // 2026-10-27 (Brain review B5) — and a handler that DECLINED (success:false, nothing to say,
       // nothing to do) is handing the turn over too. This path used to speak the "having trouble"
       // line over a non-owner's "read my reminders" — a failure that never happened.
+      if (toBrain && !live()) {
+        // 2026-10-28 (Brain review r3) — a turn the player shushed owes him nothing. The diagnostic now
+        // comes through here, and its aborted read declines; that must not go on to a brain turn.
+        endTurn(mySerial);
+        return;
+      }
       if (toBrain) {
         try {
           const r = await brainTurnWithPreStep(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
@@ -2254,8 +2192,8 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       recent_shots: round.shots.slice(-5),
       // 2026-07-04 (clean-audit L5) — read the REAL trust level (was hardcoded 3).
       trust_spectrum_level: (() => { try { return getTrustLevel() as 1 | 2 | 3; } catch { return 2 as const; } })(),
+      language: intent.language ?? settings.language,
     };
-    void settings;
     // 2026-10-27 (Brain review B6) — through dispatch: the kill switch, low confidence → the caddie,
     // the TightLie round gate and the remembered open offer, none of which execute() applies.
     const result = await voiceCommandRouter.dispatch(intent, ctx);
