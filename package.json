@@ -35,7 +35,8 @@
     "test:logic": "jest --selectProjects logic",
     "test:watch": "jest --watch",
     "user-sim": "tsx scripts/simulations/user-sim.ts",
-    "probe-tools": "tsx scripts/probe-brain-tools.ts"
+    "probe-tools": "tsx scripts/probe-brain-tools.ts",
+    "gate": "smartplay-gate --mode report"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
@@ -119,6 +120,7 @@
     "jest-expo": "~54.0.18",
     "patch-package": "^8.0.1",
     "react-test-renderer": "^19.1.0",
+    "smartplay-gate": "github:tgustafson75-sketch/smartplay-gate",
     "ts-jest": "^29.4.11",
     "tsx": "^4.22.3",
     "typescript": "~5.9.2"

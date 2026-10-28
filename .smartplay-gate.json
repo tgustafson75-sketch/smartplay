@@ -1,0 +1,79 @@
+{
+  "$schema": "./node_modules/smartplay-gate/schema/smartplay-gate.schema.json",
+  "clientDirs": [
+    "app",
+    "components",
+    "constants",
+    "contexts",
+    "data",
+    "glasses-modules",
+    "hooks",
+    "i18n",
+    "lib",
+    "services",
+    "store",
+    "styles",
+    "theme",
+    "types",
+    "utils"
+  ],
+  "serverDirs": [
+    "api"
+  ],
+  "authHelper": "verifyCaller",
+  "allow": [
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/flags.ts",
+      "reason": "Feature flags read from Edge Config; no provider call, no user data (SECURITY-AUDIT-2026-10 s4: Low/OK)."
+    },
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/glasses-return.ts",
+      "reason": "Static HTML fallback for the glasses app-link (https://api.smartplaycaddie.com/glasses); must be public, no provider call."
+    },
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/well-known-aasa.ts",
+      "reason": "Serves the static Apple app-site-association file; must be public for universal links."
+    },
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/well-known-assetlinks.ts",
+      "reason": "Serves the static Android assetlinks.json; must be public for app links."
+    },
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/owner-usage.ts",
+      "reason": "Gated by the x-owner-key server secret (api/owner-usage.ts:72), not by verifyCaller."
+    },
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/backup.ts",
+      "reason": "Rows are keyed by sha256(email::passphrase) with a per-IP read throttle; a wrong passphrase reads nothing (SECURITY-AUDIT-2026-10 s4: Low/OK)."
+    },
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/weather.ts",
+      "reason": "Weather lookup behind allowInference (60/min); low-cost provider, no user data (SECURITY-AUDIT-2026-10 s4: Low/OK)."
+    },
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/elevation.ts",
+      "reason": "Elevation lookup on the free opentopodata API behind allowInference (60/min); no user data."
+    },
+    {
+      "rule": "unauth-endpoints",
+      "file": "api/usage.ts",
+      "reason": "Writes anonymous usage events behind allowInference (120/min); no provider call (SECURITY-AUDIT-2026-10 s4: Low/OK)."
+    }
+  ],
+  "mode": {
+    "client-secrets": "warn",
+    "client-vendor-calls": "warn",
+    "client-prompts": "warn",
+    "client-entitlement": "warn",
+    "unauth-endpoints": "warn",
+    "owner-bundle-env": "warn"
+  }
+}
