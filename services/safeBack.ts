@@ -57,6 +57,20 @@ export function goToTab(tab: 'caddie' | 'dashboard' | 'play' | 'scorecard' | 'sw
   router.dismissTo(`/(tabs)/${tab}` as never);
 }
 
+/**
+ * 2026-10-27 (Brain review B7) — the same jump for a PATH ('/(tabs)/scorecard'), which is how voice
+ * tools name a tab (openToolHandler's navigate actions, the brain's navigate tool from the app catalog).
+ * Every dispatcher that receives a navigate/navigate_replace runs this first. True when the path was a
+ * tab and has been handled; false means the caller navigates as before.
+ */
+const TAB_PATH_RX = /^\/\(tabs\)\/(caddie|dashboard|play|scorecard|swinglab)\/?$/;
+export function goToTabPath(path: string): boolean {
+  const m = TAB_PATH_RX.exec(path);
+  if (!m) return false;
+  goToTab(m[1] as 'caddie' | 'dashboard' | 'play' | 'scorecard' | 'swinglab');
+  return true;
+}
+
 type Nav = { index?: number; routes?: { name?: string; state?: Nav }[] };
 
 /** Reads expo-router's container state. Swappable in tests, which must not jest.mock a real module

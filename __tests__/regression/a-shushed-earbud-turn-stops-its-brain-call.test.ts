@@ -20,8 +20,12 @@ describe('the earbud brain call is cancellable', () => {
 
   it('every earbud brain call passes the turn signal', () => {
     const ls = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
-    const calls = ls.match(/conversationalBrainTurn\(utterance, \{[^}]*\}\)/g) ?? [];
+    // 2026-10-28 (Brain review B10) — the earbud's brain calls go through brainTurnWithPreStep (the
+    // shared help / song / sing / plain-speak step), which must hand its opts — the signal — on.
+    const calls = ls.match(/(?:conversationalBrainTurn|brainTurnWithPreStep)\(utterance, \{[^}]*\}\)/g) ?? [];
     expect(calls.length).toBeGreaterThanOrEqual(3);
     for (const c of calls) expect(c).toMatch(/signal: brainSignal/);
+    const wrapper = ls.slice(ls.indexOf('async function brainTurnWithPreStep('));
+    expect(wrapper.slice(0, wrapper.indexOf('\n}\n'))).toMatch(/conversationalBrainTurn\(shapeForBrain\(utterance\), opts\)/);
   });
 });

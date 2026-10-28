@@ -18,7 +18,7 @@
  *
  * Fixed at the seam, the way the mental-state derivation was, so a surface added later inherits it.
  */
-import { useRoundStore, MAX_ROUND_HOLES } from '../../store/roundStore';
+import { useRoundStore, MAX_ROUND_HOLES, shotHoleFor } from '../../store/roundStore';
 
 const card = Array.from({ length: 18 }, (_, i) => ({ hole: i + 1, par: 4, distance: 380 }));
 
@@ -115,7 +115,9 @@ describe('the brain tool path guards itself as well', () => {
   it('bounds every one of them by the shared constant, not a hand-written 18', () => {
     expect(src).toMatch(/import \{ MAX_ROUND_HOLES as MAX_HOLES \}/);
     expect(src).toMatch(/askedHole > MAX_HOLES\)\) break;/);
-    expect(src).toMatch(/askedShotHole <= MAX_HOLES/);
+    // 2026-10-28 (Brain review B11) — log_shot's bound is the shared shotHoleFor (the Caddie tab uses
+    // the same one), so the two copies of the check cannot drift apart again.
+    expect(src).toMatch(/const shotHole = roundMod\.shotHoleFor\(a\.hole, round\.currentHole\);/);
     // and no bare 18 left to drift
     expect(src).not.toMatch(/a\.hole <= 18/);
     expect(src).not.toMatch(/h <= 18\)/);
@@ -131,7 +133,12 @@ describe('the brain tool path guards itself as well', () => {
   it('a shot on an impossible hole falls back to the hole he is on, rather than being dropped', () => {
     // A shot always happened somewhere; refusing it would lose real data. A score is different —
     // there is no honest default for which hole a score belongs to.
-    expect(src).toMatch(/: round\.currentHole;/);
+    expect(shotHoleFor(22, 5)).toBe(5);
+    expect(shotHoleFor(0, 3)).toBe(3);
+    expect(shotHoleFor('7', 3)).toBe(3);
+    expect(shotHoleFor(MAX_ROUND_HOLES, 1)).toBe(MAX_ROUND_HOLES);
+    expect(shotHoleFor(MAX_ROUND_HOLES + 1, 1)).toBe(1);
+    expect(shotHoleFor(6.6, 1)).toBe(7);
   });
 
   it('refuses a score below one on that path too', () => {

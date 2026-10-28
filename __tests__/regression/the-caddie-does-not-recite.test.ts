@@ -53,8 +53,10 @@ describe('the interview opener composes itself', () => {
 
   // 2026-09-29 — the ask-then-fallback moved into ONE owner, conversationalBrain.proactiveLineOrFallback
   // (behaviour tested in the-first-ask-after-launch). These now pin the wiring to it.
+  // 2026-10-27 (Brain review F2) — and says it is OFF the round: generateProactiveLine no longer forces
+  // isRoundActive:false for every caller, so this home-screen opener is the one that must ask for it.
   it('it asks the brain first, and seeds the history it will be answered against', () => {
-    expect(caddie).toMatch(/proactiveLineOrFallback\([\s\S]{0,600}?OPENER_FALLBACK,\s*\{ timeoutMs: 9_000, seedHistory: true \}/);
+    expect(caddie).toMatch(/proactiveLineOrFallback\([\s\S]{0,800}?OPENER_FALLBACK,[\s\S]{0,200}?\{ timeoutMs: 9_000, seedHistory: true, offRound: true \}/);
   });
 
   it('but it never goes silent — the mic opens straight after', () => {

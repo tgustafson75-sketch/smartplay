@@ -2876,8 +2876,11 @@ check('Caddie sings: a "sing X" request becomes a playful attempt prompt (Cecily
     const golf = detectSingRequest('what club for 150');
     const praises = detectSingRequest('she was singing my praises');
     const msg = hit ? buildSingMessage(hit.song) : '';
-    const wired = /detectSingRequest\(message\)/.test(read('hooks/useVoiceCaddie.ts')) &&
-      /message = sa\.buildSingMessage\(sing\.song\)/.test(read('hooks/useVoiceCaddie.ts'));
+    // 2026-10-28 (Brain review B10) — the reshape lives in the shared pre-brain step every surface runs.
+    const pre = read('services/voice/preBrainTurn.ts');
+    const wired = /detectSingRequest\(message\)/.test(pre) &&
+      /message = buildSingMessage\(sing\.song\)/.test(pre) &&
+      /shapeForBrain\(/.test(read('hooks/useVoiceCaddie.ts')) && /shapeForBrain\(/.test(read('services/listeningSession.ts'));
     return (
       hit?.song === 'let it go' &&
       named?.song === 'Baby Shark' &&            // "please" stripped
@@ -2919,8 +2922,10 @@ check('Music portal: "play [song]" → kid-safe search → clean in-app player (
       // which both UIManagers answer.
       /hasNativeWebView\(WebView\)/.test(screen) &&
       /WebBrowser\.openBrowserAsync/.test(screen) &&
-      // wired into the voice path (short-circuits the brain with a spoken confirm)
-      /tryPlaySong\(message\)/.test(voice)
+      // wired into the voice path (short-circuits the brain with a spoken confirm) — 2026-10-28 (B10)
+      // through the shared pre-brain step, which the avatar mic and the earbud/typed session both run
+      /await tryPlaySong\(transcript\)/.test(read('services/voice/preBrainTurn.ts')) &&
+      /preBrainReply\(/.test(voice) && /preBrainReply\(/.test(read('services/listeningSession.ts'))
     );
   })(),
   'play-song searches the kid-safe server endpoint and opens the clean embedded player behind a guard that asks the question BOTH architectures answer; golf "play" phrases excluded');
@@ -2944,7 +2949,10 @@ check('Quick how-to: first-time tutorials + on-demand "how do I use this?" share
     const wired = /slug="play_intro"[\s\S]*?SCREEN_HELP\.play\.spoken/.test(play) &&
       /slug="drills_intro"[\s\S]*?SCREEN_HELP\.drills/.test(drills) &&
       /slug="scorecard_scoring"[\s\S]*?SCREEN_HELP\.scorecard/.test(score) &&
-      /detectHelpRequest\(message\)/.test(voice) && /getScreenHelp\(help\.key\)/.test(voice);
+      // 2026-10-28 (Brain review B10) — the help answer is the shared pre-brain step's, on every surface.
+      /detectHelpRequest\(transcript\)/.test(read('services/voice/preBrainTurn.ts')) &&
+      /getScreenHelp\(help\.key\)/.test(read('services/voice/preBrainTurn.ts')) &&
+      /preBrainReply\(/.test(voice);
     return hasKeys && help && wired;
   })(),
   'one SCREEN_HELP source powers the first-time QuickTutorials (Play/Drills/Scorecard, ≤4 lines + narration) AND the on-demand "how do I use X" voice answer');
@@ -2962,7 +2970,10 @@ check('Voice polish: in-app "play" stays in-app · plain-speak mode · tutorials
     const plain = detectPlainSpeakRequest('explain that simply') && detectPlainSpeakRequest('how do I learn golf') &&
       !detectPlainSpeakRequest('what club for 150');
     const voice = read('hooks/useVoiceCaddie.ts');
-    const wired = /detectPlainSpeakRequest\(message\)/.test(voice) && /buildPlainSpeakPrefix\(\) \+ message/.test(voice);
+    // 2026-10-28 (Brain review B10) — the plain-speak reshape is the shared pre-brain step's.
+    const pre = read('services/voice/preBrainTurn.ts');
+    const wired = /detectPlainSpeakRequest\(message\)/.test(pre) && /buildPlainSpeakPrefix\(\) \+ message/.test(pre) &&
+      /shapeForBrain\(/.test(voice);
     // (c) 2026-07-04 (drift reconcile) — the testing-era FORCE_SHOW flag graduated to
     // real gating: show until seen, throttled to SHOW_LIMIT opens (Tim's throttle ask).
     const tut = read('components/QuickTutorial.tsx');
@@ -6604,7 +6615,9 @@ check('Brain failure falls back to a real local answer (not a snag prompt)',
   (() => {
     const ls = readCode('services/listeningSession.ts');
     // Every conversational brain call is followed by the shared deliverer — no site hand-rolls it.
-    const brainCalls = [...ls.matchAll(/conversationalBrainTurn\(/g)].map((m) => m.index ?? 0);
+    // 2026-10-28 (Brain review B10) — every brain call goes through brainTurnWithPreStep (the shared
+    // help / song / sing / plain-speak step, then conversationalBrainTurn); its call sites are the calls.
+    const brainCalls = [...ls.matchAll(/(?<!function )brainTurnWithPreStep\(/g)].map((m) => m.index ?? 0);
     const everyCallDelivers = brainCalls.length >= 2 && brainCalls.every(
       (idx) => /deliverBrainReply\(/.test(ls.slice(idx, idx + 1400)),
     );
@@ -8819,8 +8832,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /MENTION vs COMMAND/.test(read('api/voice-intent.ts')) &&
       /is NOT an open_tool and must NOT navigate to SwingLab/.test(read('api/voice-intent.ts')) &&
       /query_topic: "swing_observation"/.test(read('api/voice-intent.ts')) &&
-      // the client gate that turns a non-high-confidence open into an offer must still exist
-      /DISRUPTIVE_OPEN_INTENTS\.has\(intent\.intent_type\) && intent\.confidence !== 'high'/.test(read('services/listeningSession.ts')),
+      // the client gate that turns a non-high-confidence open into an offer must still exist.
+      // 2026-10-28 (Brain review B6) — it is voiceCommandRouter.dispatch's alone now; the earbud path
+      // reaches it because it runs its handler through dispatch, never execute().
+      /DISRUPTIVE_INTENTS\.has\(intent\.intent_type\) && intent\.confidence !== 'high'/.test(read('services/voiceCommandRouter.ts')) &&
+      /const handlerP = voiceCommandRouter\.dispatch\(intent, ctx\)/.test(read('services/listeningSession.ts')) &&
+      !/handler\.execute\(/.test(read('services/listeningSession.ts')),
     'a swing complaint ("we have an issue with my swing") is coaching talk, not a navigate — the classifier keeps it out of open_tool and the disruptive-open gate offers "want me to open that?" instead of auto-jumping to SwingLab');
 
   check('Swing-replay crash: clubhead extraction never runs concurrent with video playback',
@@ -10168,7 +10185,11 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
     /if \(!text && toolActions\.length\) text = 'Done\.'/.test(read('services/caddieBrain.ts')),
     'voice#2: a turn that produced actions but no words acknowledges instead of going silent, on every mic');
   check('watch/typed path gates disruptive-open on HIGH confidence (voice #3)',
-    (listenSrc.match(/DISRUPTIVE_OPEN_INTENTS/g) ?? []).length >= 2,
+    // 2026-10-28 (Brain review B6) — the gate is dispatch's; the watch/typed path must run its handler
+    // through dispatch (so the gate applies) and never call execute() past it.
+    /const result = await voiceCommandRouter\.dispatch\(intent, ctx\)/.test(listenSrc) &&
+      !/handler\.execute\(/.test(listenSrc) &&
+      /DISRUPTIVE_INTENTS\.has\(intent\.intent_type\) && intent\.confidence !== 'high'/.test(read('services/voiceCommandRouter.ts')),
     'voice#3: handleTranscribedUtterance offers instead of yanking a tool open on a medium-confidence watch-STT misread (mirrors the mic + earbud gates)');
 }
 
@@ -10355,7 +10376,11 @@ check('Club rec stamped on the DEFAULT (pipecat) shot-strategy path, not only th
     const q = read('services/intents/queryStatusHandler.ts');
     // the stamp must sit INSIDE the pipecat early-return branch (before route_to_brain), using the
     // learned-bag inferClub against a real distance-to-green.
-    const branch = q.slice(q.indexOf("case 'shot_strategy'"), q.indexOf('route_to_brain: true'));
+    // 2026-10-27 — the end is the first route_to_brain AFTER the case. Searched from the top of the
+    // file, any earlier route_to_brain (the Cage reads now have one) made this slice empty.
+    const caseAt = q.indexOf("case 'shot_strategy'");
+    if (caseAt < 0) return false;
+    const branch = q.slice(caseAt, q.indexOf('route_to_brain: true', caseAt));
     return (
       /inferClub\(yds\)/.test(branch) &&
       /setPendingKevinRec\(\{ club: recClub/.test(branch) &&
@@ -12776,32 +12801,58 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
     let i = open + 'const systemPrompt = `'.length;
     let depth = 0;
     const names = new Set<string>();
+    /**
+     * 2026-10-27 (Brain review F4) — the parser saw only `${identifier`. A cast `${(topObservations as
+     * …)` and an IIFE `${(() => { const pi = patternInsights … })()}` were invisible to it, which is how
+     * the private observations (rotated every send) and the round's shot count sat in the cached block
+     * with this guard green. So: a leading `(` is looked through for the name, and the whole text of
+     * every top-level interpolation is kept, so the DENY list is checked against IIFE bodies too.
+     */
+    const exprs: string[] = [];
+    let exprStart = -1;
     while (i < k.length) {
       const c = k[i];
       if (c === '\\') { i += 2; continue; }
       if (depth === 0 && c === '`') break;
       if (c === '$' && k[i + 1] === '{') {
-        const m = /^\$\{\s*([A-Za-z_][A-Za-z0-9_]*)/.exec(k.slice(i, i + 64));
+        const m = /^\$\{\s*\(*\s*([A-Za-z_][A-Za-z0-9_]*)/.exec(k.slice(i, i + 64));
         if (m) names.add(m[1]!);
+        if (depth === 0) exprStart = i;
         depth++; i += 2; continue;
       }
-      if (depth > 0) { if (c === '{') depth++; else if (c === '}') depth--; }
+      if (depth > 0) {
+        if (c === '{') depth++;
+        else if (c === '}') { depth--; if (depth === 0 && exprStart >= 0) { exprs.push(k.slice(exprStart, i + 1)); exprStart = -1; } }
+      }
       i++;
     }
-    if (names.size === 0) return false;                    // parse failed — never pass vacuously
+    if (names.size === 0 || exprs.length === 0) return false; // parse failed — never pass vacuously
 
     // Proven to change within a round. These moved to the message; they must not return.
     const DENY = ['currentYardage', 'currentStroke', 'currentHole', 'currentPar', 'currentHoleNote',
       'currentLocationType', 'currentTeeBox', '_club', 'totalScore', 'scoreVsPar', 'holesPlayed',
       'consecutiveBadHoles', 'riskMode', 'roundStats', 'yardageInsight', 'pendingLieAnalysis',
       'activeCourse', 'transportMode', 'isCompetition', 'nineHoleMode', 'isSpiralRisk', 'mentalState',
-      '_conversationTurns', 'voicedDistress', 'liveFactsBlock', 'bagBlock', '_personaKBBlock', 'kbAddendum'];
-    if (DENY.some((d) => names.has(d))) return false;
+      '_conversationTurns', 'voicedDistress', 'liveFactsBlock', 'bagBlock', '_personaKBBlock', 'kbAddendum',
+      /**
+       * 2026-10-27 (Brain review F4) — moved to the message (turnContextBlock), each with the reason
+       * it moves inside a round: the unified memory slice carries the GPS-fed trouble line; the hole
+       * block is per hole; the lock is per lock; the penalty, screen, ghost and recent-analyses
+       * blocks are per caller/screen/hole/turn; the coaching refinements are picked per question;
+       * is_proactive flips per trigger; the observations rotate by novelty every send; and
+       * PLAYER PATTERNS counts this round's shots.
+       */
+      '_unifiedContextBlock', '_holeContextBlock', '_smartFinderContext', '_penaltyContext', '_screenContext',
+      '_ghostContext', '_recentAnalyses', '_coachKnowledgeContext', 'is_proactive', 'topObservations',
+      'patternInsights',
+      // Found by the widened parse: this round's shots, a phrase learned per parsed shot, a hero saved mid-round.
+      'club_tendencies', 'playerVocabulary', 'recentHeroMoments'];
+    if (DENY.some((d) => names.has(d) || exprs.some((e) => new RegExp(`\\b${d}\\b`).test(e)))) return false;
 
     // Frozen 2026-08-25 at 57; 59 since 2026-09-12; 60 with _mentalPattern; 61 with _trainingImpact. Shrinking is always
     // fine; growing needs a deliberate line here.
-    const ALLOWED = new Set(['Array', 'TRANSLATION_OVERRIDE', '_cecilyMode', '_coachKnowledgeContext',
-      '_courseContext', '_courseIntelligence', '_dominantMiss', '_ghinNumber', '_ghostContext', '_goal',
+    const ALLOWED = new Set(['Array', 'TRANSLATION_OVERRIDE', '_cecilyMode',
+      '_courseContext', '_courseIntelligence', '_dominantMiss', '_ghinNumber', '_goal',
       /**
        * 2026-09-17 — ADDED DELIBERATELY, per the note above, and both are round-stable by nature.
        *
@@ -12816,10 +12867,10 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * Capped at three names of 120 chars, so it cannot grow the cached block meaningfully.
        */
       '_handicap', '_homeCourses',
-      '_golferModel', '_holeContextBlock', '_kevinContext', '_knownCoursesBlock', '_penaltyContext',
+      '_golferModel', '_kevinContext', '_knownCoursesBlock',
       '_persistentPatterns', '_personalBest', '_physicalLimitation', '_playerHistory',
-      '_practiceContext', '_practicePlan', '_recentAnalyses', '_recentCageInsights', '_recentRoundInsights',
-      '_routineImpact', '_screenContext', '_smartFinderContext', '_unifiedContextBlock', 'c', 'caddieName',
+      '_practiceContext', '_practicePlan', '_recentCageInsights', '_recentRoundInsights',
+      '_routineImpact', 'c', 'caddieName',
       'caddieRosterBlock', 'characterSpec', 'clubAdviceBlock',
       /**
        * 2026-09-11 — derived from `responseMode` (a Settings value) and `isRoundActive`, which is
@@ -12901,9 +12952,16 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * state.
        */
       '_trainingImpact',
+      /**
+       * 2026-10-27 (Brain review F4) — invisible to the old `${identifier` parse (both open with a
+       * cast) and now reviewed. recentBreakthroughs is a personal best, written when a ROUND ENDS;
+       * recentCageSessions is completed practice sessions, which finish off the course. Neither can
+       * move between two shots.
+       */
+      'recentBreakthroughs', 'recentCageSessions',
       'experienceDepthRule', 'firstName',
-      'handednessRule', 'insightLines', 'isRoundActive', 'is_proactive', 'langRule', 'mentalGameBlock',
-      'modeLabel', 'personaIntensity', 'perspectiveBlock', 'pi', 'playerAddressRule', 'r', 'registerBlock',
+      'handednessRule', 'isRoundActive', 'langRule', 'mentalGameBlock',
+      'personaIntensity', 'perspectiveBlock', 'playerAddressRule', 'r', 'registerBlock',
       'responseMode', 'roundsTogether', 'selfReferenceBlock', 'sessionsTogether', 'shotAnswerShapeBlock',
       'sim_round', 'todBlock', 'wd']);
     return [...names].every((n) => ALLOWED.has(n));
@@ -16447,7 +16505,10 @@ check(
  */
 {
   const vc = readCode('hooks/useVoiceCaddie.ts');
-  const mainPath = /const song = await ps\.tryPlaySong\(transcript\);[\s\S]{0,700}?await speakResponse\(song\.spoken\);/.test(vc);
+  // 2026-10-28 (Brain review B10) — help and the song portal are ONE shared step (services/voice/
+  // preBrainTurn), run on the main path, in sendToBrain, and on the earbud / typed session.
+  const pre = readCode('services/voice/preBrainTurn.ts');
+  const mainPath = /const spoken = await preBrainReply\(transcript\);[\s\S]{0,700}?await speakResponse\(spoken\);/.test(vc);
   /**
    * THE SIBLINGS. Sweeping for other handlers reachable ONLY from sendToBrain found three more,
    * every one of them user-facing and every one of them working as a follow-up but never as an
@@ -16457,15 +16518,15 @@ check(
    */
   check(
     'VOICE: screen help answers the FIRST question, and still outranks the song handler',
-    /const help = sh\.detectHelpRequest\(transcript\);/.test(vc) &&
-      vc.indexOf('sh.detectHelpRequest(transcript)') < vc.indexOf('ps.tryPlaySong(transcript)'),
+    mainPath && /const help = detectHelpRequest\(transcript\);/.test(pre) &&
+      pre.indexOf('detectHelpRequest(transcript)') < pre.indexOf('tryPlaySong(transcript)'),
     '"how do I play this" is a help question, not a request for a song called "this" — sendToBrain documents that order and the main path has to keep it',
   );
   check(
     'VOICE: the sing and plain-speak reshapes reach the brain on a first utterance',
-    /let brainTranscript = transcript;/.test(vc) &&
-      /brainTranscript = sa\.buildSingMessage\(sing\.song\)/.test(vc) &&
-      /brainTranscript = pl\.buildPlainSpeakPrefix\(\) \+ brainTranscript/.test(vc) &&
+    /const brainTranscript = shapeForBrain\(brainBase\);/.test(vc) &&
+      /message = buildSingMessage\(sing\.song\)/.test(pre) &&
+      /message = buildPlainSpeakPrefix\(\) \+ message/.test(pre) &&
       /await processTranscriptOverride\(brainTranscript\)/.test(vc),
     'these rewrite what the brain is ASKED rather than short-circuiting, so applying them only in sendToBrain meant an unshaped first turn — a refusal instead of the playful attempt, and plain-speak silently ignored',
   );
@@ -16476,12 +16537,13 @@ check(
   );
   check(
     'SONG: "play [song]" is handled on the FIRST utterance, not only as a follow-up',
-    mainPath && (vc.match(/tryPlaySong\(/g) ?? []).length >= 2,
+    mainPath && (vc.match(/preBrainReply\(/g) ?? []).length >= 2,
     'reachable only from sendToBrain means reachable only from the follow-up loop — the opening request goes to the brain and comes back as a link to tap',
   );
   check(
     'SONG: it runs AFTER the intent router, so golf commands keep priority',
-    vc.indexOf('voiceCommandRouter.route(transcript') < vc.indexOf('ps.tryPlaySong(transcript)'),
+    vc.indexOf('voiceCommandRouter.route(transcript') > 0 &&
+      vc.indexOf('voiceCommandRouter.route(transcript') < vc.indexOf('preBrainReply(transcript)'),
     'a song request must never outrank a deterministic on-course command',
   );
 
@@ -16991,7 +17053,9 @@ check(
     // SCOPED to the no-handler branch. `conversationalBrainTurn(text, ...)` appears TWICE in this
     // file, so an unscoped match survived deleting the one that matters — the guard proved nothing
     // until it was break-tested. [[three-ways-a-guard-is-worthless]]
-    /if \(!handler\) \{[\s\S]{0,900}?conversationalBrainTurn\(text, \{ timeoutMs: kevinTimeout\(\) \}\)/.test(listen) &&
+    // 2026-10-28 (Brain review B10) — through brainTurnWithPreStep, which ends in conversationalBrainTurn.
+    /if \(!handler\) \{[\s\S]{0,900}?brainTurnWithPreStep\(text, \{ timeoutMs: kevinTimeout\(\) \}\)/.test(listen) &&
+      /return conversationalBrainTurn\(shapeForBrain\(utterance\), opts\);/.test(listen) &&
       /const handler = voiceCommandRouter\.getHandler\(intent\.intent_type\);/.test(listen),
     'no tool handler is a reason to ASK THE BRAIN, not a reason to say nothing',
   );

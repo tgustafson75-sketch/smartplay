@@ -32,7 +32,7 @@ import { ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
  * "a hole that cannot exist" means. [[two-owners-is-the-root-cause]]
  */
 import { MAX_ROUND_HOLES as MAX_HOLES } from '../../store/roundStore';
-import { goToTab } from '../safeBack';
+import { goToTab, goToTabPath } from '../safeBack';
 
 /*
  * 2026-08-30 (full audit) — THE FIFTH LIST. Four surfaces were unified onto ACTIVE_PERSONAS earlier
@@ -191,6 +191,9 @@ function dispatchOne(a: AnyAction): void {
     }
     case 'navigate':
       if (typeof a.path === 'string' && a.path.length > 0) {
+        // 2026-10-27 (Brain review B7) — a tab is jumped to, never pushed: from a pushed screen
+        // (SmartFinder mid-round) router.push('/(tabs)/scorecard') mounted a SECOND tab navigator.
+        if (goToTabPath(a.path)) break;
         // 2026-09-28 — a navigate to a paid tool is gated by PATHNAME, query strings included.
         const gated = (require('../featureAccess') as typeof import('../featureAccess')).gatedFeatureForPath(a.path);
         if (gated) gatedOpen(gated, a.path);
@@ -199,6 +202,7 @@ function dispatchOne(a: AnyAction): void {
       break;
     case 'navigate_replace':
       if (typeof a.path === 'string' && a.path.length > 0) {
+        if (goToTabPath(a.path)) break; // B7 — same as navigate
         // 2026-09-29 (review) — same pathname gate as 'navigate'; a replace must not be the way round it.
         const gated = (require('../featureAccess') as typeof import('../featureAccess')).gatedFeatureForPath(a.path);
         if (gated) gatedOpen(gated, a.path);
@@ -532,10 +536,7 @@ function dispatchOne(a: AnyAction): void {
        * or correct it. Out of range falls back to the hole he is on, which is the honest default and
        * already what an absent hole does.
        */
-      const askedShotHole = typeof a.hole === 'number' && Number.isFinite(a.hole) ? Math.round(a.hole) : null;
-      const shotHole = askedShotHole != null && askedShotHole >= 1 && askedShotHole <= MAX_HOLES
-        ? askedShotHole
-        : round.currentHole;
+      const shotHole = roundMod.shotHoleFor(a.hole, round.currentHole);
       const dist = typeof a.distance_yards === 'number' && a.distance_yards > 0 && a.distance_yards <= 500
         ? Math.round(a.distance_yards) : null;
       round.logShot({

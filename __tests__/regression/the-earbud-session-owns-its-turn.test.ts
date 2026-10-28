@@ -107,7 +107,12 @@ jest.mock('../../store/settingsStore', () => ({
   }) },
 }));
 jest.mock('../../services/intents', () => ({
-  voiceCommandRouter: { getHandler: jest.fn(() => mockState.handler) },
+  // 2026-10-27 (Brain review B6) — the session runs a handler through dispatch, never execute().
+  voiceCommandRouter: {
+    getHandler: jest.fn(() => mockState.handler),
+    // Returns the handler's own promise, unwrapped, so the turn's timing is the handler's.
+    dispatch: jest.fn(() => mockState.handler!.execute()),
+  },
 }));
 jest.mock('../../services/earbudControl', () => ({ subscribeEarbudTap: jest.fn(() => () => undefined) }));
 jest.mock('../../services/smartMotionRecordBus', () => ({ isSmartMotionRecording: jest.fn(() => false), emitSmartMotionCommand: jest.fn() }));

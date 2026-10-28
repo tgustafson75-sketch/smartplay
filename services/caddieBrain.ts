@@ -46,7 +46,15 @@ export interface AskCaddieOptions extends CaddieRequestExtras {
   skipTts?: boolean;
   /** Caller-owned abort (a mic turn cancelled by the player, not by a timer). */
   signal?: AbortSignal;
+  /**
+   * 2026-10-27 (Brain review F7) — WHY there was no answer, for a caller that must decide whether to
+   * try again. 'timeout' means OUR timer fired: the server is still working on (and billing) the
+   * first request, so a retry pays for a second full turn and makes the player wait another window.
+   */
+  onNoAnswer?: (reason: NoAnswerReason) => void;
 }
+
+export type NoAnswerReason = 'timeout' | 'aborted' | 'failed';
 
 /**
  * A single turn with the caddie.
@@ -62,12 +70,17 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
   // 2026-10-16 (voice seam review) — an 'abort' listener never fires for a signal that is ALREADY
   // aborted, so a shushed earbud turn's retry ran a full, billed brain call. Already cancelled: no call
   // — checked before the plan gate, so a shushed turn cannot raise or record a paywall block either.
-  if (opts.signal?.aborted) return null;
-  if (!mayTalkToCaddie({ userInitiated: !opts.overrides?.is_proactive })) return null;
-  const { timeoutMs, skipTts, signal, ...extras } = opts;
+  if (opts.signal?.aborted) { opts.onNoAnswer?.('aborted'); return null; }
+  if (!mayTalkToCaddie({ userInitiated: !opts.overrides?.is_proactive })) { opts.onNoAnswer?.('failed'); return null; }
+  const { timeoutMs, skipTts, signal, onNoAnswer, ...extras } = opts;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  const noAnswer = (): null => {
+    onNoAnswer?.(timedOut ? 'timeout' : signal?.aborted ? 'aborted' : 'failed');
+    return null;
+  };
   const onOuterAbort = () => controller.abort();
   signal?.addEventListener('abort', onOuterAbort);
 
@@ -81,7 +94,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
       signal: controller.signal,
       body: JSON.stringify(body),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return noAnswer();
     // 2026-10-16 (voice seam review) — any answer from our server (even the 200-with-error below) proves
     // the phone is online: retire a cached "no internet" verdict so the failure line cannot say it.
     try { (require('../store/connectivityStore') as typeof import('../store/connectivityStore')).reportOnline(); } catch { /* advisory */ }
@@ -114,7 +127,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
      */
     if (raw.error || raw.errorType) {
       console.log('[caddieBrain] /api/kevin answered a failure as 200 —', raw.errorType ?? 'error', '— treated as no answer');
-      return null;
+      return noAnswer();
     }
 
     /**
@@ -130,7 +143,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
     // A tool-only turn is a real turn: the caddie DID something. Acknowledging it is the difference
     // between a caddie who acts and a mic that went dead.
     if (!text && toolActions.length) text = 'Done.';
-    if (!text) return null;
+    if (!text) return noAnswer();
 
     // ONE conversation, whichever surface asked. Written here so no caller can forget it — the
     // reason the caddie used to lose the thread when the player switched from earbud to typing.
@@ -173,7 +186,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
     } catch { /* never let this affect the turn */ }
     return { text, audioBase64: raw.audioBase64 ?? null, toolActions };
   } catch {
-    return null;
+    return noAnswer();
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', onOuterAbort);

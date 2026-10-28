@@ -22,6 +22,7 @@
  * guard the local precheck uses (services/utteranceIsCommand).
  */
 import { isNotACommand } from './utteranceIsCommand';
+import { ACTIVE_PERSONAS } from '../lib/persona';
 
 /**
  * Whole-utterance matches only (see YARDAGE in tabBypassKind). Each of these means exactly "how far am
@@ -133,17 +134,35 @@ export const isExactly = (raw: string, phrases: string[]): boolean => {
   return !!t && phrases.some((p) => normalizeUtterance(p) === t);
 };
 
+/**
+ * 2026-10-27 (Brain review B8) — a hero moment is the WHOLE utterance ("save that", "Kevin, save that
+ * one", "that's a keeper"), not a phrase inside one. matchesCommand found "save that" inside "save that
+ * routine" and "Kevin, save that warm-up", so the avatar mic filed a clip-less hero moment and the
+ * routine — which the precheck's routine_save owns on every other route — was never saved. The
+ * caddie's name or an interjection ("oh", "nice") before it, and the name, "please" or "for me"
+ * after it, are allowed; any other word is not.
+ */
+const PERSONA_NAMES = ACTIVE_PERSONAS.filter((p) => p !== 'custom').join('|');
+const isHeroMoment = (raw: string): boolean => {
+  const t = normalizeUtterance(raw)
+    .replace(new RegExp(`^(?:(?:hey|ok|okay|so|yo|oh|ooh|wow|nice|${PERSONA_NAMES}) )+`), '')
+    .replace(new RegExp(` (?:${PERSONA_NAMES}|please|for me)$`), '');
+  return !!t && HERO_PHRASES.some((p) => normalizeUtterance(p) === t);
+};
+
 export type TabBypassKind = 'penalty' | 'hero' | 'yardage' | 'vision' | 'hero_view' | 'mute';
 
 /** Which bypass (if any) the on-screen mic should act on. Order is the hook's historical order. */
 export function tabBypassKind(transcript: string, ctx: { isRoundActive: boolean; language: string }): TabBypassKind | null {
   if (ctx.isRoundActive && matchesCommand(transcript, PENALTY_PHRASES) && !isNotACommand(transcript)) return 'penalty';
-  if (matchesCommand(transcript, HERO_PHRASES)) return 'hero';
+  if (isHeroMoment(transcript)) return 'hero';
   // Non-English yardage queries skip the bypass so Kevin answers in the player's language via the
   // full voice-intent pipeline. Only English gets the hardcoded shortcut — and only for a BARE ask.
   if (ctx.language === 'en' && isExactly(transcript, YARDAGE_PHRASES)) return 'yardage';
   if (matchesCommand(transcript, VISION_PHRASES) && !isNotACommand(transcript)) return 'vision';
-  if (matchesCommand(transcript, HERO_VIEW_PHRASES)) return 'hero_view';
-  if (matchesCommand(transcript, MUTE_PHRASES)) return 'mute';
+  // 2026-10-27 (Brain review B8) — the same question guard the penalty and vision bypasses got on
+  // 10-15: "what were my best shots today" opened the reel, and "is mute on" silently ended the turn.
+  if (matchesCommand(transcript, HERO_VIEW_PHRASES) && !isNotACommand(transcript)) return 'hero_view';
+  if (matchesCommand(transcript, MUTE_PHRASES) && !isNotACommand(transcript)) return 'mute';
   return null;
 }

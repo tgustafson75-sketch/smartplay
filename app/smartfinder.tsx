@@ -1416,7 +1416,9 @@ function TargetCameraOverlay({
     if (!locked) { store.clearLock(); return; }
     const fix = getLastFix();
     const dist = targetYards ?? yards.middle;
-    if (!fix || fix.location.lat == null || fix.location.lng == null || dist == null) return;
+    // 2026-10-27 (Brain review F3) — a lock we cannot rebuild for what is on screen now is not left
+    // standing: after a hole change with no fix or no yardage, the previous hole's number would remain.
+    if (!fix || fix.location.lat == null || fix.location.lng == null || dist == null) { store.clearLock(); return; }
     const heading = headingRef.current ?? 0;
     // Destination point from (user, bearing=heading, distance) — standard great-circle projection.
     const R = 6371000, d = dist * 0.9144, br = (heading * Math.PI) / 180;
@@ -1425,16 +1427,29 @@ function TargetCameraOverlay({
     const lng2 = lng1 + Math.atan2(Math.sin(br) * Math.sin(d / R) * Math.cos(lat1), Math.cos(d / R) - Math.sin(lat1) * Math.sin(lat2));
     store.setLock({
       id: `lock_${fix.timestamp}`,
-      locked_at: fix.timestamp,
+      // When the lock was TAKEN — the payload builder's freshness gate reads this. The fix's own
+      // timestamp can be minutes old (the last cached GPS fix), which would age a lock taken just now.
+      locked_at: Date.now(),
       user_position: { lat: fix.location.lat, lng: fix.location.lng, accuracy: fix.accuracy_m ?? 0 },
       target_position: { lat: (lat2 * 180) / Math.PI, lng: (lng2 * 180) / Math.PI, estimated: true },
       distance_yards: Math.round(dist),
       distance_meters: Math.round(dist * 0.9144),
       compass_heading: Math.round(heading),
       tap_y_normalized: 0.52,
+      hole: currentHole,
     });
      
-  }, [locked, targetYards, yards.middle]);
+  }, [locked, targetYards, yards.middle, currentHole]);
+  /**
+   * 2026-10-27 (Brain review F3) — A LOCK LIVES AS LONG AS THE SCREEN THAT TOOK IT. The only clear
+   * was the `!locked` branch above, so leaving SmartFinder locked kept the number in the store until
+   * the app restarted, and the caddie said "you've got 152" on every hole after. Leaving the screen
+   * releases it; a hole change re-takes it for the new hole (currentHole is in the deps above), and
+   * the payload builder drops one taken on another hole or too long ago.
+   */
+  useEffect(() => () => {
+    (require('../store/smartFinderStore') as typeof import('../store/smartFinderStore')).useSmartFinderStore.getState().clearLock();
+  }, []);
   // 2026-06-23 — Hole switch: clear any manual tilt placement + re-seed the
   // target from the new hole's GPS so hole N's aim doesn't bleed into hole N+1.
   // Keyed on currentHole; the re-sync effect above then re-syncs from the new

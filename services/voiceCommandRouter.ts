@@ -5,6 +5,7 @@ import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
 import { useAgentBrainStats } from '../store/agentBrainStats';
 import { isFlagEnabled } from '../store/flagStore';
+import { beginTurnForOffer, takeUpRepeatedOffer, OPEN_OFFER_LINE } from './voice/pendingOpenOffer';
 
 export interface RoutingLog {
   timestamp: number;
@@ -94,7 +95,9 @@ export class VoiceCommandRouter {
     // → fall through to cloud parse as today. Zero regression risk:
     // if precheck is wrong, the handler still produces a correct
     // local answer (Phase 3 localStatusResponder proved the patterns).
-    const localIntent = precheckLocalIntent(text);
+    // 2026-10-27 (Brain review B4) — a "yes" to "Want me to open that?" IS the open, confirmed.
+    const offered = beginTurnForOffer(text);
+    const localIntent = offered ?? precheckLocalIntent(text);
     // Self-growing-agent telemetry: precheck match = answered locally (0 tokens);
     // a miss escalates to the cloud classifier. The local hit-rate should climb
     // as the brain grows. (self-growing-agent-architecture)
@@ -109,6 +112,21 @@ export class VoiceCommandRouter {
   }
 
   async dispatch(intent: VoiceIntent, context: AppContext): Promise<IntentResult> {
+    /**
+     * 2026-10-27 (Brain review B6) — the kill switch belongs to DISPATCH, not only to route(). The
+     * earbud, bottom-bar, typed and watch paths classify for themselves and call dispatch directly, so
+     * with the check only in route() flipping `kevin_tool_routing` mid-incident changed nothing on
+     * them. route() still checks first, to skip the classifier; this is the rule every caller gets.
+     */
+    if (!isFlagEnabled('kevin_tool_routing')) {
+      return {
+        success: true,
+        voice_response: null,
+        route_to_brain: true,
+        side_effects: ['route_to_brain:kill_switch'],
+        follow_up_needed: false,
+      };
+    }
     // 2026-06-04 — `conversational` falls through to the brain (free-form
     // questions need the LLM). Does not log to voice-miss (intentional).
     // 2026-07-31 — `social_greeting` ROUTES TO THE BRAIN again: socialGreetingHandler is unregistered
@@ -236,14 +254,23 @@ export class VoiceCommandRouter {
     // medium-confidence misread of "next hole" / "go home" / "watch my swing" yanked the hole/nav/camera
     // with no gate. Gate on intent_type + confidence here (mirrors listeningSession's pre-execute gate) so
     // any route()/dispatch() caller is protected; at less-than-high confidence, OFFER instead of acting.
+    //
+    // 2026-10-27 (Brain review B4) — and the offer is REMEMBERED (services/voice/pendingOpenOffer): a
+    // yes, or asking for the same thing again, opens it. It used to promise "Just say it again and I
+    // will" and keep no state, so saying it again got the same line forever. This is now the one gate
+    // for every route — listeningSession's two copies of it are gone.
     const DISRUPTIVE_INTENTS = new Set(['navigate', 'media_capture', 'open_tool', ...OPEN_TOOL_ALIAS_INTENTS]);
     if (DISRUPTIVE_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
-      return {
-        success: true,
-        voice_response: 'Want me to open that? Just say it again and I will.',
-        side_effects: ['disruptive_gate:' + intent.intent_type],
-        follow_up_needed: true,
-      };
+      const confirmed = takeUpRepeatedOffer(intent);
+      if (!confirmed) {
+        return {
+          success: true,
+          voice_response: OPEN_OFFER_LINE,
+          side_effects: ['disruptive_gate:' + intent.intent_type],
+          follow_up_needed: true,
+        };
+      }
+      intent = confirmed;
     }
 
     try {
@@ -282,6 +309,19 @@ export class VoiceCommandRouter {
       this.history = this.history.slice(-this.MAX_HISTORY);
     }
   }
+}
+
+/**
+ * 2026-10-27 (Brain review B5) — DOES THIS RESULT BELONG TO THE BRAIN? One answer for every route.
+ *
+ * A handler that DECLINES — success:false with nothing to say and nothing to do — is handing the turn
+ * to the caddie ("let the brain answer": a non-owner's "read my reminders", "my best score here"
+ * off-round). The avatar mic already read it that way (isCommandHit needs success). The earbud spoke
+ * a false "having trouble" line over it and the typed / watch path said nothing at all.
+ */
+export function resultWantsBrain(result: IntentResult): boolean {
+  if (result.route_to_brain) return true;
+  return result.success === false && !result.voice_response && !result.tool_action;
 }
 
 /**

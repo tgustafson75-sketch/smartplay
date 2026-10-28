@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import { useSmartVisionSignalStore } from '../store/smartVisionSignalStore';
 
 export interface SmartVisionState {
   isOpen: boolean;
@@ -33,6 +34,13 @@ export function SmartVisionProvider({ children }: { children: React.ReactNode })
   const setSmartVisionState = useCallback((patch: Partial<SmartVisionState>) => {
     setState(prev => ({ ...prev, ...patch }));
   }, []);
+
+  // 2026-10-27 (Brain review F5) — mirrored for the payload builder, which every mic and the typed box
+  // go through and none of which can read this context.
+  useEffect(() => {
+    useSmartVisionSignalStore.getState().setLiveView(state.isOpen ? state : null);
+  }, [state]);
+  useEffect(() => () => useSmartVisionSignalStore.getState().setLiveView(null), []);
 
   // Audit 101 / W6 — memoize the context value so consumers re-render
   // only when state or the (stable) setter actually change. Prior code

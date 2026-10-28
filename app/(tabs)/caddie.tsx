@@ -21,7 +21,8 @@ import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
 import { PermissionBanner } from '../../components/PermissionBanner';
-import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
+import { useRoundStore, roundLastHole, roundFirstHole, shotHoleFor } from '../../store/roundStore';
+import { goToTab, goToTabPath } from '../../services/safeBack';
 import { computeLivePace, paceLine, formatClock } from '../../services/paceOfPlay';
 import type { ShotLocation, ShotResult, CourseHole } from '../../store/roundStore';
 import { useRestReadoutStore } from '../../store/restReadoutStore';
@@ -1163,7 +1164,8 @@ export default function CaddieTab() {
           "warm, natural, in your own words, no preamble. Ask ONE question to start — how they got into golf " +
           "and how much time they realistically have to play and practise. Two sentences at most.",
           OPENER_FALLBACK,
-          { timeoutMs: 9_000, seedHistory: true },
+          // Off the course by construction — the get-to-know card is a home-screen moment.
+          { timeoutMs: 9_000, seedHistory: true, offRound: true },
         );
         if (!opener) return;
         const s0 = voiceStateRef.current;
@@ -2135,7 +2137,9 @@ export default function CaddieTab() {
         openSmartVision();
         break;
       case 'open_swinglab':
-        router.push('/(tabs)/swinglab' as never);
+        // 2026-10-27 (Brain review B7) — a jump, not a push: the SmartMotion screen's mic reaches this
+        // handler from ABOVE the tabs, where a push mounts a second tab navigator (services/safeBack).
+        goToTab('swinglab');
         break;
       case 'log_score': {
         // 2026-10-15 (review G3a) — no round, no score: the service dispatcher has had this guard
@@ -2229,7 +2233,9 @@ export default function CaddieTab() {
         // 2026-07-04 (Tim — compound statements) — honor a hole/distance the player
         // named ("...on hole 3 with 210 yards") instead of dropping them: log the shot
         // against the stated hole, and stamp the stated yardage when nothing measured it.
-        const shotHole = typeof a.hole === 'number' && a.hole > 0 ? Math.round(a.hole) : currentHole;
+        // 2026-10-27 (Brain review B11) — bounded like the service dispatcher's twin (09-11): a hole
+        // outside 1..MAX_ROUND_HOLES is a misheard number, not a hole any per-hole surface can show.
+        const shotHole = shotHoleFor(a.hole, currentHole);
         const shotDistance = typeof a.distance_yards === 'number' && a.distance_yards > 0 && a.distance_yards <= 500
           ? Math.round(a.distance_yards) : null;
         const shot: ShotResult = {
@@ -2479,6 +2485,9 @@ export default function CaddieTab() {
             break;
           }
         }
+        // 2026-10-27 (Brain review B7) — the SmartMotion screen's mic reaches this switch from ABOVE
+        // the tabs; a pushed '/(tabs)/…' path there stacks a second tab navigator. Jump instead.
+        if (goToTabPath(action.path)) break;
         router.push(action.path as never);
         break;
       case 'navigate_replace':
@@ -2492,6 +2501,7 @@ export default function CaddieTab() {
             break;
           }
         }
+        if (goToTabPath(action.path)) break; // B7 — same as navigate
         router.replace(action.path as never);
         break;
       case 'open_url': {
@@ -2726,7 +2736,7 @@ export default function CaddieTab() {
     onVisionTrigger: openSmartVision,
     onHeroReelView: () => {
       setCaddieResponse('Here are your best moments.');
-      router.push('/(tabs)/dashboard' as never);
+      goToTab('dashboard');
     },
     onToolAction: handleToolAction,
     // 2026-06-27 (A2) — voice couldn't reach the backend; open the typed

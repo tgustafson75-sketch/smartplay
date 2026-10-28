@@ -586,9 +586,56 @@ const ACTING_INTENTS = new Set([
   'correct_last_shot', 'set_club_distance', 'media_capture',
 ]);
 
+/**
+ * 2026-10-27 (Brain review B1) — THE STATUS LOOKUPS. Each of these answers with a bare readout from
+ * queryStatusHandler ("152 to the middle.", "Through 7, you're 38, +3.", "Your Index is 12.4"), and
+ * off-round several of them answer "You're not in a round yet". That is the right reply to a bare
+ * status ask and the wrong reply to anything else.
+ */
+const STATUS_LOOKUP_TOPICS = new Set([
+  'green_front', 'green_back', 'green_middle', 'distance_to_green', 'score', 'hole', 'holes_left', 'par',
+  'course', 'longest_putt', 'putt_stats', 'gir', 'nine_split', 'longest_drive', 'last_round_here',
+]);
+
+/**
+ * A decision, a reason, or a subject that is not the round's status. Any one of these turns a status
+ * phrase into a question only the caddie can answer: "what should I hit TO THE PIN", "what CLUB gets me
+ * to the back", "I'm worried about MY SCORE, should I lay up", "what's my handicap doing lately and WHY",
+ * "my buddy SAYS my yardage is WRONG", "how am I doing on my TEMPO". "Left to play" is a count, not a
+ * decision, so it is taken out before the test.
+ */
+const DECISION_OR_REASON_RX =
+  /\b(?:should|shall|why|clubs?|or|play|playing|change|expect|lay\s*up|go\s+(?:at|for)|(?:do|should|would|can|could|will)\s+i\s+hit|land|fly|aim|carry|attack|wrong|says|said|think|worried|worry|nervous|strategy|plan|lately|improve|better|fix|swing|tempo|feel|feels|mental|confidence)\b/i;
+
+function isStatusLookup(hit: VoiceIntent): boolean {
+  if (hit.intent_type === 'handicap_query') return true;
+  return hit.intent_type === 'query_status' && STATUS_LOOKUP_TOPICS.has(String(hit.parameters?.query_topic ?? ''));
+}
+
 export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   const hit = classifyLocalIntent(transcript);
-  if (!hit || !ACTING_INTENTS.has(hit.intent_type)) return hit;
+  if (!hit) return hit;
+  /**
+   * 2026-10-27 (Brain review B1) — A STATUS PHRASE INSIDE A QUESTION IS NOT A STATUS ASK.
+   *
+   * The question guard below covered only the ACTING intents, so every lookup pattern was unguarded:
+   * "what should I hit to the pin" → "152 to the middle.", "what's the par-saving play here" → "This
+   * hole plays a par 4.", "how many putts should I expect from 30 feet" → a putt count — each at
+   * confidence 'high', on every route, and the caddie never heard the question. That is the bare-number
+   * answer the 08-23 local-first removal was meant to kill, back through the front door.
+   *
+   * 'conversational', not null, for the same reason as the guard below: the cloud classifier would
+   * re-steal it ("what should I hit to the pin" → distance_to_green).
+   */
+  if (isStatusLookup(hit)) {
+    const raw = transcript.trim();
+    const withoutCounts = raw.replace(/\b(?:left|remaining|still)\s+to\s+play\b/gi, ' ');
+    if (DECISION_OR_REASON_RX.test(withoutCounts)) {
+      return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: String(hit.parameters?.query_topic ?? hit.intent_type) });
+    }
+    return hit;
+  }
+  if (!ACTING_INTENTS.has(hit.intent_type)) return hit;
   /**
    * 2026-10-15 (review) — A QUESTION OR A STORY IS NEVER AN ORDER.
    *

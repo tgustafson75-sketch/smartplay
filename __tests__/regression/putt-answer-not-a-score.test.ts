@@ -107,8 +107,10 @@ describe('EVERY voice surface consults it — one path covered is how this bug s
   it('the earbud / global-mic path checks before ITS classification', () => {
     const src = read('services/listeningSession.ts');
     const intercept = src.indexOf('tryAnswerOpenQuestion(utterance)');
-    const precheck = src.indexOf('let intent: VoiceIntent | null = precheckLocalIntent(utterance);');
+    // 2026-10-28 (Brain review B3) — the precheck now sits behind the follow-up / open-offer choice.
+    const precheck = src.indexOf('precheckLocalIntent(utterance)');
     expect(intercept).toBeGreaterThan(-1);
+    expect(precheck).toBeGreaterThan(-1);
     expect(intercept).toBeLessThan(precheck);
   });
 

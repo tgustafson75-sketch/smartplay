@@ -56,6 +56,38 @@ const TTS_STRINGS = {
   },
 } as const;
 
+/**
+ * 2026-10-27 (Brain review B2) — THE CAGE TEMPLATES BELONG TO THE CAGE.
+ *
+ * swing_observation and tell_me_more read the LAST Cage session and nothing else, but the classifier
+ * sends them "what's wrong with my swing", "what'd you see" and "tell me more" from anywhere. After a
+ * hole strategy, "tell me more" spoke a feel cue from a session weeks old; with no session at all it
+ * said "That's the main thing — nothing more to add." The template is only an answer while that
+ * session is the one in front of him: the practice overlay is up and the session is from today.
+ * Everywhere else the caddie answers, with the conversation in hand.
+ */
+function isToday(ms: number | null | undefined): boolean {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return false;
+  return new Date(ms).toDateString() === new Date().toDateString();
+}
+
+async function liveCageRead(): Promise<{ name: string; mechanical_breakdown: string; feel_cue: string; drillReason: string } | null> {
+  try {
+    const { getActiveSurface } = await import('../activeSurfaceRegistry');
+    if (getActiveSurface() !== 'cage') return null;
+    const { useSwingSessionStore } = await import('../../store/swingSessionStore');
+    const last = useSwingSessionStore.getState().sessionHistory.slice(-1)[0];
+    if (!last?.primary_issue || !isToday(last.date)) return null;
+    return { ...last.primary_issue, drillReason: last.drill_recommendation?.reason ?? '' };
+  } catch {
+    return null;
+  }
+}
+
+function cageToBrain(topic: string): IntentResult {
+  return { success: false, voice_response: null, side_effects: [`query:${topic}:route_to_brain`], follow_up_needed: false, route_to_brain: true };
+}
+
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 function compassDirFromDeg(deg: number): string {
   const idx = Math.round(((deg % 360) + 360) % 360 / 45) % 8;
@@ -223,7 +255,8 @@ export const queryStatusHandler: IntentHandler = {
      * [[no-canned-voice-blocking-the-ai]]
      */
     if (!round.isRoundActive && topic === 'last_round_here') {
-      return { success: false, voice_response: null, side_effects: ['query:last_round_here:off_round_route_to_brain'], follow_up_needed: false };
+      // 2026-10-27 (Brain review B5) — the flag its side effect names, so every route reads it the same way.
+      return { success: false, voice_response: null, side_effects: ['query:last_round_here:off_round_route_to_brain'], follow_up_needed: false, route_to_brain: true };
     }
 
     // Pre-beta — distance/wind/carry queries are shot-intent signals; bump
@@ -1105,55 +1138,30 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'swing_observation': {
-        // Phase K — replay primary issue observation from the most recent
-        // session.
-        try {
-          const { useSwingSessionStore } = await import('../../store/swingSessionStore');
-          const last = useSwingSessionStore.getState().sessionHistory.slice(-1)[0];
-          if (last?.primary_issue) {
-            return {
-              success: true,
-              voice_response: `${last.primary_issue.name}. ${last.primary_issue.mechanical_breakdown}`,
-              side_effects: ['cage:swing_observation'],
-              follow_up_needed: false,
-            };
-          }
-          return {
-            success: true,
-            voice_response: "I didn't see a clear primary issue from that session.",
-            side_effects: ['cage:swing_observation:none'],
-            follow_up_needed: false,
-          };
-        } catch {
-          return { success: true, voice_response: "Couldn't pull that up.", side_effects: ['cage:swing_observation:error'], follow_up_needed: false };
-        }
+        // Phase K — replay primary issue observation from the most recent session — but only while
+        // that session is the one in front of him (see liveCageRead).
+        const live = await liveCageRead();
+        if (!live) return cageToBrain('swing_observation');
+        return {
+          success: true,
+          voice_response: `${live.name}. ${live.mechanical_breakdown}`,
+          side_effects: ['cage:swing_observation'],
+          follow_up_needed: false,
+        };
       }
 
       case 'tell_me_more': {
-        // Phase K — expanded analysis. Plays the feel cue + drill recommendation
-        // reason if both are populated.
-        try {
-          const { useSwingSessionStore } = await import('../../store/swingSessionStore');
-          const last = useSwingSessionStore.getState().sessionHistory.slice(-1)[0];
-          if (last?.primary_issue) {
-            const feel = last.primary_issue.feel_cue;
-            const drill = last.drill_recommendation?.reason ?? '';
-            return {
-              success: true,
-              voice_response: `${feel} ${drill}`.trim(),
-              side_effects: ['cage:tell_me_more'],
-              follow_up_needed: false,
-            };
-          }
-          return {
-            success: true,
-            voice_response: "That's the main thing — nothing more to add.",
-            side_effects: ['cage:tell_me_more:none'],
-            follow_up_needed: false,
-          };
-        } catch {
-          return { success: true, voice_response: "Couldn't pull that up.", side_effects: ['cage:tell_me_more:error'], follow_up_needed: false };
-        }
+        // Phase K — expanded analysis: the feel cue + drill reason of the session in front of him.
+        // Anywhere else "tell me more" is a follow-up to whatever the caddie just said.
+        const live = await liveCageRead();
+        const feel = live ? `${live.feel_cue} ${live.drillReason}`.trim() : '';
+        if (!feel) return cageToBrain('tell_me_more');
+        return {
+          success: true,
+          voice_response: feel,
+          side_effects: ['cage:tell_me_more'],
+          follow_up_needed: false,
+        };
       }
 
       case 'next_focus': {
@@ -1163,8 +1171,11 @@ export const queryStatusHandler: IntentHandler = {
          * "Analysis is coming soon" — a canned deflection, and blind to the plan the player set up.
          * With a plan, or with no measured issue, the caddie answers: he sees the SmartPlan, the
          * practice history and the swing reads together, which this handler cannot weigh.
+         *
+         * 2026-10-27 (Brain review B2) — and with a measured issue that is not from TODAY: a weeks-old
+         * session's issue read back as "what should I work on" is the same deflection with a date on it.
          */
-        const toBrain: IntentResult = { success: false, voice_response: null, side_effects: ['query:next_focus:route_to_brain'], follow_up_needed: false, route_to_brain: true };
+        const toBrain = cageToBrain('next_focus');
         try {
           const planMod = await import('../../store/practicePlanStore');
           if (planMod.planIsConfigured()) return toBrain;
@@ -1173,7 +1184,7 @@ export const queryStatusHandler: IntentHandler = {
           const { useSwingSessionStore } = await import('../../store/swingSessionStore');
           const cage = useSwingSessionStore.getState();
           const last = cage.sessionHistory[cage.sessionHistory.length - 1];
-          if (last?.primary_issue) {
+          if (last?.primary_issue && isToday(last.date)) {
             const issue = last.primary_issue;
             return {
               success: true,

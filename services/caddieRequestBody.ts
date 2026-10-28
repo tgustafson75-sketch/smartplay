@@ -40,7 +40,7 @@ export interface CaddieRequestExtras {
   language: string;
   /** The live context block the caller composed (GPS + hole + geometry + recent shots). */
   liveBlock?: string | null;
-  /** SmartVision lives in a React context, not a store, so only a component can hand it over. */
+  /** SmartVision's view. Read from smartVisionSignalStore when a caller does not hand one over. */
   smartVisionContext?: unknown;
   /** Vision frame — the text box can attach a photo; the mic cannot. */
   image_base64?: string | null;
@@ -56,6 +56,24 @@ export interface CaddieRequestExtras {
   contextSuffix?: string | null;
   /** Overrides for anything a caller has already computed and does not want recomputed. */
   overrides?: Record<string, unknown>;
+}
+
+/**
+ * The penalty history the caddie aims away from, from the pattern read's raw stats. Null when there
+ * is none — an absent block is better than an empty heading.
+ */
+export function penaltyContextFrom(rs: { penalty_event_count_by_outcome?: Record<string, number | undefined>; recurring_trouble_holes?: number[] } | null): string | null {
+  if (!rs) return null;
+  const lines: string[] = [];
+  const counts = rs.penalty_event_count_by_outcome ?? {};
+  const total = Object.values(counts).reduce<number>((a, b) => a + (b ?? 0), 0);
+  if (total > 0) {
+    lines.push(`Recent penalties: ${Object.entries(counts).map(([o, c]) => `${c} ${o}`).join(', ')}.`);
+  }
+  if ((rs.recurring_trouble_holes ?? []).length > 0) {
+    lines.push(`Recurring trouble holes: ${(rs.recurring_trouble_holes ?? []).join(', ')}.`);
+  }
+  return lines.length > 0 ? lines.join(' ') : null;
 }
 
 /** The subset of a logged shot the brain prompt reads. Local so this file stays store-agnostic. */
@@ -84,6 +102,9 @@ const roundStore = () => require('../store/roundStore').useRoundStore.getState()
 const profileStore = () => require('../store/playerProfileStore').usePlayerProfileStore.getState();
 const relationshipStore = () => require('../store/relationshipStore').useRelationshipStore.getState();
 const settingsStore = () => require('../store/settingsStore').useSettingsStore.getState();
+
+/** A SmartFinder lock is a number for the shot in front of him; ten minutes covers walking up to hit it. */
+export const SMARTFINDER_LOCK_FRESH_MS = 10 * 60_000;
 
 export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<string, unknown> {
   const r = safe(() => roundStore(), {} as ReturnType<typeof roundStore>);
@@ -251,7 +272,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
 
     // ─── who the player is ──────────────────────────────────────────────────
     playerName: safe(() => p.name ?? null, null),
-    firstName: safe(() => (p.name ?? '').trim().split(/\s+/)[0] || null, null),
+    // 2026-10-28 (Brain review F5) — a pre-set salutation ("Uncle Mike") wins over the sign-in name.
+    // The avatar-mic hook resolved it into a selector nothing read; this is where every route asks.
+    firstName: safe(() => {
+      const fallback = (p.name ?? '').trim().split(/\s+/)[0] || '';
+      const { resolveCaddieSalutation } = require('../data/inviteePreferences') as typeof import('../data/inviteePreferences');
+      return resolveCaddieSalutation(p.email, fallback) || null;
+    }, null),
     handicap: safe(() => p.handicap ?? null, null),
     ghinNumber: safe(() => p.ghin_number ?? null, null),
     /** 2026-09-17 — up to three, names only. Picked on the Play tab and shown in Profile since
@@ -504,6 +531,16 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     /** A 9-hole round is a different shape of round; "you're halfway" is wrong at hole 5 of 9. */
     nineHoleMode: safe(() => !!r.nineHoleMode, false),
     scores: safe(() => r.scores ?? {}, {}),
+    /**
+     * 2026-10-27 (Brain review F1) — THE ROUND'S SCORE TO PAR, from the WHOLE card.
+     *
+     * courseHoles below is trimmed to the current hole ±1, and api/kevin worked vs-par out by looking
+     * each scored hole's par up in that trimmed list — so on the 10th tee after 47 on a par-36 front
+     * nine only hole 9 matched, and the prompt read "Score: 47 | Vs par: +1". The 08-24 "calls 47
+     * even par" defect by another door. The round store owns this number (the same getter the card,
+     * the recap and the handicap differential read); null when no scored hole has a known par.
+     */
+    roundVsPar: safe(() => (isRoundActive ? r.getScoreVsPar() : null), null),
     // Current hole +/- 1 only: the full 18 added 5-15KB to every call.
     courseHoles: safe(() => {
       const all = r.courseHoles ?? [];
@@ -512,9 +549,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     }, []),
 
     // ─── what we know about this course, right now ──────────────────────────
-    // `activeCourse` is the course NAME, not a record, so there is nothing to summarise here — the
-    // caller that holds the loaded course passes this in. Key always present.
-    courseContext: null,
+    /**
+     * 2026-10-27 (Brain review F5) — the loaded course's card, on every route. It was null here and
+     * filled only by useVoiceCaddie's follow-up loop, so no primary turn ever carried COURSE LOADED.
+     * services/courseContextCache owns it; a miss starts the one fetch it needs for next turn.
+     */
+    courseContext: safe(() => {
+      if (!isRoundActive || !activeCourseId) return null;
+      const cc = require('./courseContextCache') as typeof import('./courseContextCache');
+      const card = cc.getCourseContextSync(activeCourseId);
+      if (!card) void cc.warmCourseContext(activeCourseId);
+      return card;
+    }, null),
     courseIntelligence: safe(() => {
       if (!isRoundActive || !activeCourseId) return null;
       const intel = require('./courseIntelligenceService') as typeof import('./courseIntelligenceService');
@@ -531,10 +577,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       const { buildYardageInsight } = require('./yardageResolver') as typeof import('./yardageResolver');
       return buildYardageInsight();
     }, null),
+    /**
+     * 2026-10-27 (Brain review F3) — only a lock taken for THIS shot. It was sent whenever one existed,
+     * with no age or hole check, and the prompt tells the model to use it as the working number — so
+     * a lock left behind on hole 4 overrode the real yardage on every hole after. Fresh (taken within
+     * SMARTFINDER_LOCK_FRESH_MS) and on the hole the player is standing on, or not at all.
+     */
     smartFinderContext: safe(() => {
       const sf = require('../store/smartFinderStore').useSmartFinderStore.getState();
       const lock = sf.currentLock;
       if (!lock) return null;
+      if (!(typeof lock.locked_at === 'number' && Date.now() - lock.locked_at <= SMARTFINDER_LOCK_FRESH_MS)) return null;
+      if (typeof lock.hole === 'number' && lock.hole !== currentHole) return null;
       return `SMARTFINDER ACTIVE: User has locked distance of ${lock.distance_yards} yards at compass heading ${Math.round(lock.compass_heading)}°. Treat the locked distance as the working number.`;
     }, null),
 
@@ -772,7 +826,12 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
 
     // ─── how they've been playing ───────────────────────────────────────────
     patternInsights,
-    penaltyContext: safe(() => extras.overrides?.penaltyContext ?? null, null),
+    /**
+     * 2026-10-27 (Brain review F5) — derived HERE from the pattern read this builder already makes. It
+     * was composed only inside useVoiceCaddie's follow-up loop, so PENALTY HISTORY never rendered on a
+     * primary turn, on any route.
+     */
+    penaltyContext: safe(() => penaltyContextFrom(patternInsights?.raw_stats ?? null), null),
     ghostContext: safe(() => {
       return require('../store/ghostStore').useGhostStore.getState().getSummaryText();
     }, null),
@@ -1835,7 +1894,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     inRoundDiagnostic: false,
 
     // ─── caller-only ────────────────────────────────────────────────────────
-    smartVisionContext: extras.smartVisionContext ?? null,
+    /**
+     * 2026-10-27 (Brain review F5) — SmartVision's live view is mirrored into a store by its provider,
+     * so a question asked from the global mic, the earbud or the caddie bar while SmartVision is open
+     * carries the tapped target too. Only the follow-up loop handed it over before, and "what do I hit
+     * to that?" was answered to the middle of the green.
+     */
+    smartVisionContext: extras.smartVisionContext ?? safe(() => {
+      const v = (require('../store/smartVisionSignalStore') as typeof import('../store/smartVisionSignalStore'))
+        .useSmartVisionSignalStore.getState().liveView;
+      if (!v?.isOpen) return null;
+      return { holeNumber: v.holeNumber, par: v.par, centerYards: v.centerYards, measureYards: v.measureYards, analysisText: v.analysisText };
+    }, null),
     /**
      * 2026-08-23 — sourced from the round store when the caller does not hand one over, so the MIC
      * path gets it too. It was previously supplied only by the text box, and read by nobody.

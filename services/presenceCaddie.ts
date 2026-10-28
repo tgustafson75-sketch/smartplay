@@ -2,6 +2,7 @@ import { getApiBaseUrl } from './apiBase';
 import type { Persona } from '../lib/persona';
 import { mayTalkToCaddie } from './featureAccess';
 import { buildCaddieRequestBody } from './caddieRequestBody';
+import { useSettingsStore } from '../store/settingsStore';
 /**
  * 2026-05-28 — Fix FE: "Keep the presence alive."
  *
@@ -161,23 +162,41 @@ async function fetchPresenceFromBrain(
      *
      * Both fixed here: the union payload, and the field the server actually returns.
      */
+    /**
+     * 2026-10-27 (Brain review B9 / F9) — three more holes in the same call, all now closed.
+     *
+     * 1. A FAILURE ARRIVING AS A 200 WAS SPOKEN AS THE ANSWER. api/kevin's outer catch answers 200
+     *    with "I'm having trouble connecting — try that again." plus error/errorType. This read only
+     *    res.ok and data.text, so during a brain outage with no GPS fix "how far to the green" got
+     *    the trouble line as its answer — cached 60s — and localPresenceFallback, built for exactly
+     *    this moment, never ran. askCaddie has refused that shape since 10-15; this raw fetch (kept
+     *    raw because a presence beat must not enter the conversation history or the style notes
+     *    askCaddie writes) now refuses it too.
+     * 2. IT PAID FOR A VOICE IT THREW AWAY. The caller speaks the TEXT; the server rendered TTS for
+     *    every beat because skip_tts was never sent.
+     * 3. IT WAS ENGLISH ONLY. language was hard-coded 'en' while the handler that speaks it localizes
+     *    its own lines, so a Spanish or Chinese player got an English presence beat.
+     */
+    const body = buildCaddieRequestBody({
+      message,
+      language: useSettingsStore.getState().language ?? 'en',
+      overrides: {
+        register: 'presence',
+        // The caddie is speaking first — the player did not ask.
+        is_proactive: true,
+        ...(context.persona ? { persona: context.persona } : {}),
+      },
+    });
+    body.skip_tts = true;
     const res = await fetch(`${getApiBaseUrl().replace(/\/+$/, '')}/api/kevin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildCaddieRequestBody({
-        message,
-        language: 'en',
-        overrides: {
-          register: 'presence',
-          // The caddie is speaking first — the player did not ask.
-          is_proactive: true,
-          ...(context.persona ? { persona: context.persona } : {}),
-        },
-      })),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { text?: string };
+    const data = (await res.json()) as { text?: string; error?: string; errorType?: string };
+    if (data.error || data.errorType) return null;
     const text = (data.text ?? '').trim();
     return text.length > 0 ? text : null;
   } catch (e) {

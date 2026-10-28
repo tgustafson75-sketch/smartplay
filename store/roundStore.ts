@@ -1114,6 +1114,17 @@ export function strokesPlayedOnHole(
  */
 export const MAX_ROUND_HOLES = 18;
 
+/**
+ * 2026-10-27 (Brain review B11) — the hole a voice-logged shot lands on. ONE implementation for both
+ * log_shot dispatchers (services/voice/conversationalToolDispatch and the Caddie tab's switch), which
+ * had drifted: the tab twin accepted hole 22. A hole outside 1..MAX_ROUND_HOLES is a misheard number,
+ * so it falls back to the hole the player is on — what an absent hole already does.
+ */
+export function shotHoleFor(asked: unknown, currentHole: number): number {
+  const h = typeof asked === 'number' && Number.isFinite(asked) ? Math.round(asked) : null;
+  return h != null && h >= 1 && h <= MAX_ROUND_HOLES ? h : currentHole;
+}
+
 export function roundFirstHole(s: { nineHoleMode: boolean; roundStartHole: number }): number {
   return s.nineHoleMode ? Math.max(1, s.roundStartHole || 1) : 1;
 }

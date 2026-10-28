@@ -100,7 +100,13 @@ export async function readScene(input: {
       console.warn('[sceneRead] api non-ok', res.status);
       return null;
     }
-    const raw = (await res.json()) as { text?: string };
+    const raw = (await res.json()) as { text?: string; error?: string; errorType?: string };
+    // 2026-10-27 (Brain review B9) — api/kevin answers a failed turn with HTTP 200, a "having trouble
+    // connecting" line, and error/errorType. That line is not a read of the scene.
+    if (raw.error || raw.errorType) {
+      console.warn('[sceneRead] api answered a failure as 200 —', raw.errorType ?? 'error');
+      return null;
+    }
     const text = typeof raw.text === 'string' ? raw.text.trim() : '';
     if (!text) return null;
     return { text, hadWind: ctx.hasWind };

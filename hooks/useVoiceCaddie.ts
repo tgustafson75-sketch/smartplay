@@ -46,7 +46,6 @@ import { openToolHandler } from '../services/intents/openToolHandler';
 import { quickRoundHandler } from '../services/intents/quickRoundHandler';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import type { ToolAction } from '../types/toolAction';
-import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { useRoundStore } from '../store/roundStore';
 import { tryAnswerOpenQuestion } from '../services/pendingPuttAsk';
@@ -56,11 +55,13 @@ import { usePlayerProfileStore, primaryHomeCourseName } from '../store/playerPro
 import { useFamilyStore } from '../store/familyStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
+import { warmCourseContext } from '../services/courseContextCache';
+import { preBrainReply, shapeForBrain } from '../services/voice/preBrainTurn';
+import { hasPendingOpenOffer } from '../services/voice/pendingOpenOffer';
+import { answerToClarification } from '../services/voice/clarifiedTurn';
 import { resolvePendingCourseUtterance } from '../services/pendingDisambiguation';
 import { useConversationLog } from '../store/conversationLogStore';
 import { VoiceState } from '../components/CaddieAvatar';
-import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
-import { generatePatternInsights } from '../services/patternDetection';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail, logVoiceDiag, noteVoiceTurnStarted } from '../services/voiceErrorLog';
 import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { probeReachability, isProvenOffline } from '../services/reachability';
@@ -550,7 +551,6 @@ export const useVoiceCaddie = ({
     activeCourse,
     activeCourseId,
     club,
-    scores,
     mode: roundMode,
     shots,
     courseHoles,
@@ -562,7 +562,6 @@ export const useVoiceCaddie = ({
       activeCourse: s.activeCourse,
       activeCourseId: s.activeCourseId,
       club: s.club,
-      scores: s.scores,
       mode: s.mode,
       shots: s.shots,
       courseHoles: s.courseHoles,
@@ -575,8 +574,6 @@ export const useVoiceCaddie = ({
     [familyMembers, activeFamilyMemberId],
   );
   const getCurrentPar = useRoundStore((s) => s.getCurrentPar);
-  const courseContextRef = useRef<string | null>(null);
-  const courseContextCourseIdRef = useRef<string | null>(null);
 
   const {
     voiceGender,
@@ -592,41 +589,10 @@ export const useVoiceCaddie = ({
     }))
   );
 
+  // 2026-10-27 (Brain review F5) — the course card is services/courseContextCache's, read by the
+  // payload builder on every route. Warming it at round start means the first turn already has it.
   useEffect(() => {
-    let cancelled = false;
-    if (!isRoundActive || !activeCourseId) {
-      courseContextRef.current = null;
-      courseContextCourseIdRef.current = null;
-      return;
-    }
-    if (courseContextCourseIdRef.current === activeCourseId && courseContextRef.current) {
-      return;
-    }
-    courseContextCourseIdRef.current = activeCourseId;
-    courseContextRef.current = null;
-    // Fix B4 — local:* courses return null from getApiCourse (no API record).
-    // Build courseContext directly from bundled courseHoles so Kevin has
-    // per-hole par/yardage data for local courses without an API call.
-    if (activeCourseId.startsWith('local:')) {
-      const holes = useRoundStore.getState().courseHoles;
-      if (holes.length > 0) {
-        courseContextRef.current = holes
-          .sort((a, b) => a.hole - b.hole)
-          .map(h => `Hole ${h.hole}: Par ${h.par}, ${h.distance} yds`)
-          .join('. ') + '.';
-      }
-      return () => {};
-    }
-    void (async () => {
-      try {
-        const course = await getApiCourse(activeCourseId);
-        if (cancelled || !course) return;
-        courseContextRef.current = courseSummaryForContext(course);
-      } catch (e) {
-        console.warn('[voiceCaddie] course context preload failed:', e);
-      }
-    })();
-    return () => { cancelled = true; };
+    if (isRoundActive && activeCourseId) void warmCourseContext(activeCourseId);
   }, [activeCourseId, isRoundActive]);
 
   // Load the filler library index into memory on first mount — fast, reads AsyncStorage only.
@@ -704,31 +670,8 @@ export const useVoiceCaddie = ({
      
   }, []);
 
-  const {
-    handicap,
-    dominantMiss,
-  } = usePlayerProfileStore(
-    useShallow((s) => ({
-      // 2026-05-25 — firstName gets layered through inviteePreferences
-      // map so Tim's pre-set salutations ("Uncle Mike" for m.hayes@snet.net)
-      // override the default sign-in firstName. Applied here so EVERY
-      // brain call receives the right name without changing the store
-      // shape. Falls back to s.firstName when no override exists.
-      firstName: (() => {
-        try {
-          const { resolveCaddieSalutation } = require('../data/inviteePreferences') as typeof import('../data/inviteePreferences');
-          return resolveCaddieSalutation(s.email, s.firstName);
-        } catch {
-          return s.firstName;
-        }
-      })(),
-      handicap: s.handicap,
-      dominantMiss: s.dominantMiss,
-    }))
-  );
-
-  // dominantMiss from profile has compatible type — just cast for patternDetection
-  const profileDominantMiss = dominantMiss as 'left' | 'right' | 'straight' | null;
+  // 2026-10-27 (Brain review F5) — the profile subscription here fed only the pattern read, which the
+  // payload builder owns now.
 
   /**
    * 2026-08-26 — the whole relationship-store subscription came out with the hand-built payload.
@@ -746,7 +689,6 @@ export const useVoiceCaddie = ({
 
   const apiUrl = getApiBaseUrl();
   const currentPar = getCurrentPar();
-  const smartVision = useSmartVision();
 
   // ── CLEAR AUTO STOP ───────────────────────
 
@@ -879,32 +821,13 @@ export const useVoiceCaddie = ({
     // 2026-06-13 (Tim) — "how do I use this / how does X work" → speak the quick how-to
     // for that feature (shared SCREEN_HELP copy, same as the first-time tutorials).
     // Checked first so "how do I play this" is help, not a song request.
-    try {
-      const sh = require('../services/screenHelp') as typeof import('../services/screenHelp');
-      const help = sh.detectHelpRequest(message);
-      if (help) {
-        const h = sh.getScreenHelp(help.key);
-        if (h) return { text: h.spoken, audioBase64: null, toolAction: null, fallback: false };
-      }
-    } catch { /* non-fatal */ }
-    try {
-      const sa = require('../services/singAttempt') as typeof import('../services/singAttempt');
-      const sing = sa.detectSingRequest(message);
-      if (sing) message = sa.buildSingMessage(sing.song);
-    } catch { /* non-fatal — fall back to the literal message */ }
-    // 2026-06-13 (Tim/Cecily) — "play [song]" → search the kid-safe portal and open the
-    // clean in-app player, short-circuiting the brain with a spoken confirmation.
-    try {
-      const ps = require('../services/playSongFlow') as typeof import('../services/playSongFlow');
-      const handled = await ps.tryPlaySong(message);
-      if (handled) return { text: handled.spoken, audioBase64: null, toolAction: null, fallback: false };
-    } catch { /* non-fatal — fall through to the brain */ }
-    // 2026-06-13 (Tim) — plain-speak: if the user asked for it simple (or signals they're
-    // new), reshape so the brain answers short, jargon-free, and conversational.
-    try {
-      const pl = require('../services/plainSpeak') as typeof import('../services/plainSpeak');
-      if (pl.detectPlainSpeakRequest(message)) message = pl.buildPlainSpeakPrefix() + message;
-    } catch { /* non-fatal */ }
+    // 2026-10-27 (Brain review B10) — help, the song portal and the two reshapes are ONE shared step
+    // (services/voice/preBrainTurn) that every surface runs, in one order.
+    {
+      const spoken = await preBrainReply(message);
+      if (spoken) return { text: spoken, audioBase64: null, toolAction: null, fallback: false };
+      message = shapeForBrain(message);
+    }
 
     /**
      * Declared out here, not inside the try, so the RETRY below can send the same context the first
@@ -919,35 +842,9 @@ export const useVoiceCaddie = ({
       // happens exactly once per brain send (not per re-render).
       if (topObs.length > 0) markObservationsUsed(topObs.map(o => o.id));
 
-      // Defensive: a single malformed session in history (e.g. a shape the
-      // SmartMotion redesign produced) must never throw here and take the whole
-      // brain call down. Guard every field access.
-
-      // Build player pattern insights (on-device, sync — cheap enough per-request)
-      const patternInsights = generatePatternInsights(shots, {
-        currentRoundMode: roundMode,
-        scores,
-        courseHoles,
-        handicap,
-        dominantMiss: profileDominantMiss,
-      });
-
-      // Build penalty context from already-computed patternInsights raw_stats
-      const rs = patternInsights.raw_stats;
-      const penaltyLines: string[] = [];
-      const totalPenalties = Object.values(rs.penalty_event_count_by_outcome ?? {}).reduce((a, b) => a + (b ?? 0), 0);
-      if (totalPenalties > 0) {
-        const parts = Object.entries(rs.penalty_event_count_by_outcome ?? {})
-          .map(([o, c]) => `${c} ${o}`)
-          .join(', ');
-        penaltyLines.push(`Recent penalties: ${parts}.`);
-      }
-      if ((rs.recurring_trouble_holes ?? []).length > 0) {
-        penaltyLines.push(`Recurring trouble holes: ${rs.recurring_trouble_holes.join(', ')}.`);
-      }
-      const penaltyContext = penaltyLines.length > 0 ? penaltyLines.join(' ') : null;
-
-      const courseContext = isRoundActive ? courseContextRef.current : null;
+      // 2026-10-27 (Brain review F5) — the pattern read, the penalty history and the course card that
+      // used to be composed here are the payload builder's now, so every route sends them, not only
+      // this follow-up loop.
       // 2026-06-06 — Phase 2.5: web-search-grounded course intelligence
       // brief. Cached client-side by services/courseIntelligenceService
       // via the round-prefetch path; null when no fetch has landed yet
@@ -1016,23 +913,10 @@ export const useVoiceCaddie = ({
             language,
             liveBlock,
             responseMode,
-            // SmartVision lives in a React context — only a component can hand it over.
-            smartVisionContext: smartVision.isOpen ? {
-              holeNumber: smartVision.holeNumber,
-              par: smartVision.par,
-              centerYards: smartVision.centerYards,
-              measureYards: smartVision.measureYards,
-              analysisText: smartVision.analysisText,
-            } : null,
+            // SmartVision, the course card and the penalty history are read by the builder itself.
             overrides: {
-              // Composed from courseContextRef, which this hook fills from the bundled holes at
-              // round start. The builder emits `courseContext: null` and documents that the caller
-              // holding the loaded course is the one that can supply it.
-              ...(courseContext != null ? { courseContext } : {}),
               // The sync cache MISS path here also kicks off a fetch; the builder only reads cache.
               ...(courseIntelligence != null ? { courseIntelligence } : {}),
-              // Assembled from this turn's penalty lines, which exist only in this scope.
-              ...(penaltyContext != null ? { penaltyContext } : {}),
             },
           }),
         }),
@@ -2065,6 +1949,12 @@ export const useVoiceCaddie = ({
       // opt-in setting in a follow-up rather than default-on behavior.
       void source;
 
+      /**
+       * 2026-10-27 (Brain review B3) — read BEFORE this turn is recorded. isAwaitingFollowUp asks
+       * whether the LAST buffered turn is the caddie's question, and the very next line makes the
+       * last turn this one — so the follow-up bypass further down could never fire on this path.
+       */
+      const answeringCaddie = isAwaitingFollowUp();
       // Phase AR — record user turn into the conversation buffer so any
       // follow-up reply that flows out of this query has the prior turn
       // available in its context.
@@ -2255,10 +2145,12 @@ export const useVoiceCaddie = ({
        * yardage-shaped number goes through the router — which is the existing owner of intent
        * classification, not a second detector — and everything else bypasses exactly as before.
        */
-      const skipIntentRouter = isAwaitingFollowUp() && !carriesYardageCorrection(transcript);
+      // 2026-10-27 (Brain review B4) — except while "Want me to open that?" is waiting: the router
+      // owns that answer, and a "yes" sent to the brain would leave the offer unkept.
+      const skipIntentRouter = answeringCaddie && !carriesYardageCorrection(transcript) && !hasPendingOpenOffer(transcript);
       if (skipIntentRouter) {
         devLog('[voice] follow-up bypass: Kevin asked a question, routing reply straight to brain');
-      } else if (isAwaitingFollowUp()) {
+      } else if (answeringCaddie) {
         devLog('[voice] follow-up carries a yardage — routing it so the correction can land');
       }
 
@@ -2299,6 +2191,14 @@ export const useVoiceCaddie = ({
       // skip the full brain call. Tactical / conversational queries fall through.
       // Run intent routing only when we're NOT awaiting a follow-up.
       // The follow-up case routes straight to the brain below.
+      /**
+       * 2026-10-27 (Brain review B12) — what the brain is asked. When the router asks a clarifying
+       * question and the answer is not a command, the brain must hear BOTH halves: the original words
+       * and the narrowing. It used to get only the original, so Kevin answered the question the player
+       * had already corrected ("watch my swing" → "Want me to open that?" → "no, I mean how did my
+       * last one look").
+       */
+      let brainBase = transcript;
       if (!skipIntentRouter) try {
         let { intent, result } = await voiceCommandRouter.route(transcript, appContext, apiUrl);
 
@@ -2311,12 +2211,15 @@ export const useVoiceCaddie = ({
           (intent.intent_type === 'unknown' || intent.confidence !== 'high')
         ) {
           onResponseReceived(result.voice_response);
+          recordKevinTurn(result.voice_response);
           wrappedOnVoiceStateChange('speaking');
           await speakResponse(result.voice_response);
           wrappedOnVoiceStateChange('listening');
           const clarification = await captureUtterance(8000, apiUrl, language);
-          if (clarification && clarification.trim()) {
-            const second = await voiceCommandRouter.route(clarification, appContext, apiUrl);
+          const clarified = answerToClarification(transcript, clarification);
+          if (clarified && clarification) {
+            brainBase = clarified;
+            const second = await voiceCommandRouter.route(clarification.trim(), appContext, apiUrl);
             intent = second.intent;
             result = second.result;
           } else {
@@ -2435,55 +2338,20 @@ export const useVoiceCaddie = ({
        * Checked BEFORE the song handler, deliberately, preserving the order sendToBrain documents:
        * "how do I play this" is a help question, not a request for a song called "this".
        */
-      try {
-        const sh = require('../services/screenHelp') as typeof import('../services/screenHelp');
-        const help = sh.detectHelpRequest(transcript);
-        const h = help ? sh.getScreenHelp(help.key) : null;
-        if (h) {
-          onResponseReceived(h.spoken);
-          recordKevinTurn(h.spoken);
-          wrappedOnVoiceStateChange('speaking');
-          await speakResponse(h.spoken);
-          wrappedOnVoiceStateChange('idle');
-          isProcessingRef.current = false;
-          return;
-        }
-      } catch (e) { console.log('[voice] screen help error (non-fatal):', e); }
-
-      /**
-       * 2026-09-03 (Tim) — "play [song]" HAS TO WORK ON THE FIRST THING YOU SAY.
-       *
-       * Tim's actual pre-round: open the app, "Kevin, play Sail by Awolnation on YouTube", and let
-       * it play while he gets his tempo right. What he got instead was the caddie reading him a
-       * link he had to tap — which is the opposite of the product.
-       *
-       * The cause was placement, not detection. tryPlaySong lived inside sendToBrain, and
-       * sendToBrain "survives only for the follow-up listen loop" (see the comment below): a FIRST
-       * utterance goes to processTranscriptOverride and straight to the brain, which answers
-       * conversationally with a URL. So the song portal worked only as a follow-up — which is why
-       * it looked intermittent rather than broken, and why it never got pinned down.
-       *
-       * Placed here, after the intent router, so every deterministic golf command still gets first
-       * refusal and only a genuine song request short-circuits. detectPlaySongRequest is already
-       * narrow about golf "play" phrases (play a round / play it safe / play through / play my last
-       * swing), so nothing on-course is hijacked. It stays in sendToBrain too — the follow-up loop
-       * is a real path and must keep working. [[hands-free-zero-setup-is-the-product]]
-       */
-      try {
-        const ps = require('../services/playSongFlow') as typeof import('../services/playSongFlow');
-        const song = await ps.tryPlaySong(transcript);
-        if (song) {
+      {
+        const spoken = await preBrainReply(transcript);
+        if (spoken) {
           // Same shape the intent-router branch above uses for a deterministic reply: surface the
           // line, record the turn so the caddie remembers it said this, speak it, then idle.
-          onResponseReceived(song.spoken);
-          recordKevinTurn(song.spoken);
+          onResponseReceived(spoken);
+          recordKevinTurn(spoken);
           wrappedOnVoiceStateChange('speaking');
-          await speakResponse(song.spoken);
+          await speakResponse(spoken);
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
         }
-      } catch (e) { console.log('[voice] song portal error (non-fatal):', e); }
+      }
 
       // ── Conversational turn → the pipecat BRAIN ───────────────────────────
       // Only a CONVERSATIONAL / unknown turn reaches here (the router above already
@@ -2507,16 +2375,7 @@ export const useVoiceCaddie = ({
        * Applied to the transcript handed to the brain, not to the transcript we matched on, so the
        * detectors above still see what the player actually said.
        */
-      let brainTranscript = transcript;
-      try {
-        const sa = require('../services/singAttempt') as typeof import('../services/singAttempt');
-        const sing = sa.detectSingRequest(brainTranscript);
-        if (sing) brainTranscript = sa.buildSingMessage(sing.song);
-      } catch { /* non-fatal — the literal transcript is a fine fallback */ }
-      try {
-        const pl = require('../services/plainSpeak') as typeof import('../services/plainSpeak');
-        if (pl.detectPlainSpeakRequest(brainTranscript)) brainTranscript = pl.buildPlainSpeakPrefix() + brainTranscript;
-      } catch { /* non-fatal */ }
+      const brainTranscript = shapeForBrain(brainBase);
 
       if (processTranscriptOverride) {
         wrappedOnVoiceStateChange('thinking');

@@ -46,6 +46,11 @@ export interface BrainReply {
   /** A proactive line whose moment passed: the player started a turn while it was generating. */
   stale?: boolean;
   /**
+   * 2026-10-27 (Brain review F7) — no answer because THIS phone's timer fired. The server is still
+   * running (and billing) that turn, so the caller must not retry it.
+   */
+  timedOut?: boolean;
+  /**
    * 2026-09-29 (review) — proactive lines only: remember the line in the shared history. Call it
    * right before the line is SHOWN or SPOKEN, never before the caller's own busy check. A no-op for
    * an aside that does not seed, and safe to call twice.
@@ -96,6 +101,7 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
     }
   } catch { /* suggestion is best-effort — never blocks the turn */ }
 
+  let timedOut = false;
   const turn = await askCaddie({
     message: utterance,
     language: useSettingsStore.getState().language ?? 'en',
@@ -103,8 +109,9 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
     // 2026-10-16 — the earbud session's turn signal: a shushed or superseded turn stops its brain call
     // (it used to run to completion and bill, its answer dropped or captioned).
     signal: opts?.signal,
+    onNoAnswer: (reason) => { timedOut = reason === 'timeout'; },
   });
-  if (!turn) return NO_ANSWER;
+  if (!turn) return timedOut ? { ...NO_ANSWER, timedOut: true } : NO_ANSWER;
   return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
 }
 
@@ -142,14 +149,27 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
  */
 export async function generateProactiveLine(
   directive: string,
-  opts?: { timeoutMs?: number; seedHistory?: boolean },
+  opts?: { timeoutMs?: number; seedHistory?: boolean; offRound?: boolean },
 ): Promise<BrainReply> {
   const epoch = getUserTurnEpoch();
   const turn = await askCaddie({
     message: directive,
     language: useSettingsStore.getState().language ?? 'en',
     timeoutMs: opts?.timeoutMs ?? 12_000,
-    overrides: { is_proactive: true, isRoundActive: false },
+    /**
+     * 2026-10-27 (Brain review F2) — the ROUND is the builder's to report. This always said
+     * isRoundActive:false, which is right for a line spoken off the course (the get-to-know opener)
+     * and wrong for the hole-change, streak and front-nine lines proactiveKevin fires DURING a round:
+     * the brain was handed no hole and no score and told "DIALOGUE MODE: OFF-COURSE … don't reference
+     * a current score", then asked to sum up the front nine. Only an `offRound` caller says so now.
+     */
+    overrides: opts?.offRound ? { is_proactive: true, isRoundActive: false } : { is_proactive: true },
+    /**
+     * 2026-10-27 (Brain review F8) — no server voice. Every caller of this reads only the TEXT and
+     * speaks it itself (proactiveLineOrFallback returns a line, the persona composer a string), so
+     * the TTS kevin rendered for every proactive beat was paid for and thrown away.
+     */
+    skipTts: true,
   });
   if (!turn?.text) return NO_ANSWER;
   return settleProactiveTurn(directive, turn, epoch, !!opts?.seedHistory);
@@ -171,7 +191,7 @@ export async function generateProactiveLine(
 export async function proactiveLineOrFallback(
   directive: string,
   fallback: string,
-  opts?: { timeoutMs?: number; seedHistory?: boolean },
+  opts?: { timeoutMs?: number; seedHistory?: boolean; offRound?: boolean },
 ): Promise<ProactiveLine | null> {
   const epoch = getUserTurnEpoch();
   let line = fallback;

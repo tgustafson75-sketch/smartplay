@@ -11,24 +11,46 @@
  * busts it. cacheRead is the number; cacheWrite near zero after turn 1 is the goal.
  *
  *   npx tsx scripts/probe-cache-in-round.ts
+ *
+ * 2026-10-27 (Brain review F4) — AND IT WAS STILL THE WRONG BODY. These turns carried none of the
+ * fields a real round sends and that move inside one: the memory slice with its GPS-fed "TROUBLE ON
+ * THIS SHOT" line, the rotating private observations, the round's pattern read (its shot count), a
+ * SmartFinder lock, the per-question coaching refinements, a proactive flag, an active course id. So
+ * it could not see those values busting the cache — the 08-24 false positive, repeated. The turns
+ * below now carry them, moving the way a round moves them. The authoritative check that the cached
+ * block holds none of them is __tests__/regression/the-cached-prompt-survives-a-round.test.ts, which
+ * runs the real handler on real builder bodies and needs no network.
+ *
+ * NEVER loop this from Tim's home connection: production rate-limits per IP, and his phone on the
+ * same Wi-Fi goes dark with it.
  */
 const BASE = process.env.API_BASE ?? 'https://api.smartplaycaddie.com';
 
 const ON_COURSE = {
   firstName: 'Tim', handicap: 14, persona: 'kevin',
   isRoundActive: true, currentHole: 9, currentPar: 4, currentYardage: 150,
-  activeCourse: 'Greenhill', skip_tts: true,
+  activeCourse: 'Greenhill', activeCourseId: 'local:greenhill', skip_tts: true,
 };
+
+/** What moves between two turns of a real round, in the shapes caddieRequestBody sends. */
+const moving = (n: number, yards: number) => ({
+  unified_context_block: `TROUBLE ON THIS SHOT: bunker front-right, ${yards - 12}y to reach, ${yards - 2}y to carry.\nRecent: ${n} shots logged this hole.`,
+  topObservations: [{ content: `observation ${n % 3}: favours the left side when tired` }, { content: `observation ${(n + 1) % 3}: tempo quickens after a bogey` }],
+  patternInsights: { shot_count_analyzed: 30 + n, insights: ['Misses right under pressure'], raw_stats: {} },
+  smartFinderContext: n % 2 ? `SMARTFINDER ACTIVE: User has locked distance of ${yards} yards at compass heading 212°.` : null,
+  coachKnowledgeContext: n % 2 ? null : 'COACH REFINEMENT: on short-sided chips, land it on the fringe.',
+  is_proactive: n === 4,
+});
 
 type Turn = { label: string; body: Record<string, unknown> };
 
 const turns: Turn[] = [
   // FRESH questions, never sent before — a repeat matches its own earlier entry inside the 1h TTL
   // and reads as a hit that proves nothing.
-  { label: 'turn 1 — fresh question (a WRITE is expected)', body: { ...ON_COURSE, message: 'is this one playing longer than it looks' } },
-  { label: 'turn 2 — DIFFERENT fresh question', body: { ...ON_COURSE, message: 'where do I not want to be here' } },
-  { label: 'turn 3 — different fresh question AND the shot moved', body: { ...ON_COURSE, currentYardage: 118, currentStroke: 2, message: 'am I better short or long' } },
-  { label: 'turn 4 — different fresh question, later in the hole', body: { ...ON_COURSE, currentYardage: 42, currentStroke: 3, message: 'talk me through this little one' } },
+  { label: 'turn 1 — fresh question (a WRITE is expected)', body: { ...ON_COURSE, ...moving(1, 150), message: 'is this one playing longer than it looks' } },
+  { label: 'turn 2 — DIFFERENT fresh question, the player has moved', body: { ...ON_COURSE, ...moving(2, 147), message: 'where do I not want to be here' } },
+  { label: 'turn 3 — different fresh question AND the shot moved', body: { ...ON_COURSE, ...moving(3, 118), currentYardage: 118, currentStroke: 2, message: 'am I better short or long' } },
+  { label: 'turn 4 — a proactive beat, later in the hole', body: { ...ON_COURSE, ...moving(4, 42), currentYardage: 42, currentStroke: 3, message: 'talk me through this little one' } },
 ];
 
 (async () => {

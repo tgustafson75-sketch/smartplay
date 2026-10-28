@@ -35,12 +35,12 @@ export const ownerChecklistHandler: IntentHandler = {
   async execute(_intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
     if (!isOwnerBuild()) {
       // Not "you don't have one" — nothing at all, so the brain answers whatever they actually meant.
-      return { success: false, voice_response: null, side_effects: ['owner_checklist:not_owner'], follow_up_needed: false };
+      return { success: false, voice_response: null, side_effects: ['owner_checklist:not_owner'], follow_up_needed: false, route_to_brain: true };
     }
 
     let remaining: ReturnType<typeof useOwnerChecklistStore.getState>['items'] = [];
     try { remaining = useOwnerChecklistStore.getState().items.filter((i) => !i.done); }
-    catch { return { success: false, voice_response: null, side_effects: ['owner_checklist:unavailable'], follow_up_needed: false }; }
+    catch { return { success: false, voice_response: null, side_effects: ['owner_checklist:unavailable'], follow_up_needed: false, route_to_brain: true }; }
 
     if (remaining.length === 0) {
       return {

@@ -348,6 +348,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       mentalState = 'neutral',
       // 2026-08-31 — the player's pre-round focus, written on the Play tab. See the prompt block.
       roundNotes = null,
+      // 2026-10-27 (Brain review F1) — the whole card's score to par, owned by the round store.
+      roundVsPar = undefined,
       consecutiveBadHoles = 0,
       isSpiralRisk = false,
       topObservations = [],
@@ -867,7 +869,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      *
      * Null when no hole we scored had a known par. Stated only when it is real.
      */
-    const scoreVsPar = (() => {
+    /**
+     * 2026-10-27 (Brain review F1) — and it is the CLIENT'S number when the client sent one. The
+     * derivation below reads courseHoles, which the builder trims to the current hole ±1, so it
+     * counted one or two holes against a total that counts all of them. It stays only for a body
+     * that predates roundVsPar.
+     */
+    const scoreVsPar = typeof roundVsPar === 'number' && Number.isFinite(roundVsPar) ? Math.round(roundVsPar)
+      : roundVsPar === null ? null
+      : (() => {
       let par = 0; let score = 0; let matched = 0;
       Object.entries(scores as Record<string, number>).forEach(([hole, s]) => {
         const h = (courseHoles as Array<{ hole: number; par: number }>).find(ch => ch.hole === Number(hole));
@@ -1865,10 +1875,6 @@ Pattern insights: when the player has a known miss tendency, factor it in silent
 TOOLS:
 Use tools ONLY when the player EXPLICITLY asks to do the thing — "show me the hole", "find my ball", "log my score", "record my swing", "open the tempo drill". Never use a tool unprompted, and NEVER on narrative. If they are just talking — about their head, their sleep, how their game feels, that they are "off", or that they "needs to work on" something — that is CONVERSATION: reply naturally, let it be heard, and do NOT open a screen, record, or start a drill. Only if they then NAME a specific thing, make ONE short offer ("want me to open that?") and wait for an explicit yes before firing. When you do use a tool, speak a brief acknowledgment.
 
-${(topObservations as Array<{ content: string }>).length > 0
-  ? `WHAT YOU KNOW PRIVATELY (never reference directly — let it inform your advice):
-${(topObservations as Array<{ content: string }>).map(o => '- ' + o.content).join('\n')}`
-  : ''}
 
 ${roundsTogether === 0
   ? `This is your first time with ${firstName || 'this player'}. Introduce yourself in one short, warm line and invite them to tell you about their game whenever they're ready — then stop and let THEM lead. Do not fire off an interview.`
@@ -1880,10 +1886,6 @@ ${roundsTogether === 0
 ${_goal ? `GOAL: ${_goal} — reference when relevant, never constantly.` : ''}
 ${_handicap != null ? `HANDICAP: ${_handicap}. This is the single biggest thing separating one player's smart play from another's — a 2 and a 28 facing the same 200 yards over water are being asked different questions. Never recite it at them; let it decide how much risk you offer.` : ''}
 ${_homeCourses.length > 0 ? `HOME COURSE${_homeCourses.length > 1 ? 'S' : ''}: ${_homeCourses.join(', ')} — where they play most. "My home course" means these, even if no round here has been logged yet.` : ''}
-
-${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }>).length > 0
-  ? `HERO MOMENTS: ${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }>).map(m => 'Hole ' + m.hole + ' — ' + m.club).join(', ')}. Use one for confidence if the moment calls for it.`
-  : ''}
 
 ${(recentBreakthroughs as Array<{ description: string; at: number | null }>).length > 0
   ? `THEIR MILESTONES (most recent first): ${(recentBreakthroughs as Array<{ description: string; at: number | null }>).map(b => b.description).join(' · ')}. These are things THEY did. Reference one only when this moment genuinely echoes it — a milestone recited for its own sake is worse than silence.`
@@ -1927,7 +1929,7 @@ session, not a live round.
 
 Stay in this mode for the entire conversation until a real round starts.`}
 
-${_holeContextBlock ? `${_holeContextBlock}\n` : ''}${_knownCoursesBlock ? `${_knownCoursesBlock}\n` : ''}
+${_knownCoursesBlock ? `${_knownCoursesBlock}\n` : ''}
 ${wd ? `WATCH SENSOR DATA (silent context):
 Tempo: ${wd.averageTempo}:1 | Fault: ${wd.dominantFault || 'none'} | Early transition: ${wd.earlyTransitionRate}% | Club speed: ${wd.averageClubSpeed} mph | Swings: ${wd.swingCount}` : ''}
 
@@ -1954,7 +1956,6 @@ When Cecily Mode is on, you become a warm, playful, age-appropriate companion. B
 
 This mode is gated by an explicit user toggle in Settings. When OFF, normal golf-only behavior resumes.` : ''}
 ${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}
-${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}
 ${_playerHistory ? `\n${_playerHistory}` : ''}
 ${_practicePlan ? `\n${_practicePlan}` : ''}
 ${_routineImpact ? `\n${_routineImpact}` : ''}
@@ -1963,15 +1964,11 @@ ${_puttingRecord ? `\n${_puttingRecord}` : ''}
 ${_measuredSwing ? `\n${_measuredSwing}` : ''}
 ${_mentalPattern ? `\n${_mentalPattern}` : ''}
 ${_trainingImpact ? `\n${_trainingImpact}` : ''}
-${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}
-
-${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}
 
 ${_persistentPatterns ? `EMERGING PATTERNS (private; reference naturally if they fit, never list them):\n${_persistentPatterns}` : ''}
 
 ${_practiceContext ? `${_practiceContext}\n\nUse the practice context to shape advice on relevant clubs / situations. Reinforce the player's current learning when shots match. Do not introduce a competing swing thought during a shot that already calls for a practiced technique.` : ''}
 
-${_screenContext ? _screenContext : ''}
 
 ${_recentRoundInsights.length > 0 ? `RECENT ROUND MEMORY (private; reference if same course or matching pattern):\n${_recentRoundInsights.map(r => `- ${r.course ? r.course + ': ' : ''}${r.insight}`).join('\n')}` : ''}
 
@@ -2004,43 +2001,9 @@ ${_courseContext ? `COURSE LOADED (use this — do not call lookup_hole for curr
 
 ${_courseIntelligence ? `COURSE INTELLIGENCE (pulled from live web search at round start — these are SPECIFICS about THIS course, prefer over generic theory when the player asks about layout / strategy / signature holes):\n${_courseIntelligence}` : ''}
 
-${(() => {
-  type PatternInsights = {
-    shot_count_analyzed?: number;
-    insights?: string[];
-    raw_stats?: {
-      miss_tendency_overall?: string;
-      miss_tendency_under_pressure?: string;
-      streak?: { type?: string; length?: number };
-    };
-  };
-  const pi = patternInsights as PatternInsights | null;
-  const modeLabel: Record<string, string> = {
-    break_100: 'Break 100 (avoid doubles, bogey is fine)',
-    break_90:  'Break 90 (smart misses, lay up when in doubt)',
-    break_80:  'Break 80 (hunt birdies, aggressive but disciplined)',
-    free_play: 'Free Play (casual)',
-  };
-  const insightLines = pi && Array.isArray(pi.insights) && pi.insights.length > 0
-    ? pi.insights.map((s: string) => '- ' + s).join('\n')
-    : '- Insufficient shot history — note their tendencies as you observe them (do not interrogate them about them).';
-  return `PLAYER PATTERNS:
-- Mode: ${modeLabel[_roundMode] ?? _roundMode}
-${insightLines}
-(shots analyzed: ${pi?.shot_count_analyzed ?? 0})`;
-})()}
 
-${_ghostContext ? `GHOST MATCH — PLAYING AGAINST PAST SELF:
-${_ghostContext}
-When the player asks "how am I doing against past me?", "am I beating my last round?", "ghost status", or any variation — give a brief, vivid 1-2 sentence answer using this data. Name the margin and direction (ahead or behind). If they've just gained or lost a stroke this hole, acknowledge it. Keep it warm and honest.` : ''}
 
-${_smartFinderContext ? `SMARTFINDER LOCK:
-${_smartFinderContext}
-The player just used SmartFinder to lock in their distance. When recommending a club or discussing the shot, use this exact yardage as your working number. Say "you've got [X] yards" not "around [X]". Don't mention the tool by name — just treat it as established fact.` : ''}
 
-${_penaltyContext ? `PENALTY HISTORY (use silently — never lecture):
-${_penaltyContext}
-When giving directional advice on a hole with relevant hazards, reference this history once: "you've put two in the water right here before — aim left center." Never bring it up unprompted. One mention per hole at most.` : ''}
 
 DIRECTIONAL ADVICE — HAZARD-AWARE TARGETING:
 
@@ -2149,7 +2112,7 @@ KEEP IT SHORT. On the course you are terse — whichever of you is on the bag. 1
 SMARTVISION BEHAVIOR:
 When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, then STOP. Do NOT end with a question. Two sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
 
-${_coachKnowledgeContext ? `${_coachKnowledgeContext}\n\nThese are the owner's curated coaching refinements. Treat them as a strong signal to balance against your own default explanation, not an override — if the framing reinforces your take, lean into it; if it conflicts, say so in your own words. Your character voice stays YOUR character voice. The owner reviews refinements offline and curates which become canonical.\n\n` : ''}DATA IMPORT QUESTIONS (2026-05-25 — Fix AD):
+DATA IMPORT QUESTIONS (2026-05-25 — Fix AD):
 If the player asks about importing their rounds, stats, or history from another app (18Birdies, Arccos, Sportsbox, Shot Scope, GHIN, TheGrint, Garmin, Whoop, etc.), give them an HONEST status:
 - "Round import is on the near-term roadmap — we're targeting screenshot-based import so you can share a scorecard from any app into SmartPlay and we'll pull the round data. Not live yet, but it's coming soon. Want me to log a note that you want this?"
 - If they ask about a SPECIFIC app, name it back ("yeah, importing your 18Birdies rounds is what we're building for"). Don't promise direct-API integration with 18Birdies / Arccos — those need partner agreements; screenshot OCR is the v1 path that works with every app.
@@ -2182,7 +2145,7 @@ The body may include a yardageInsight blob: { yardage, source, confidence, reaso
 - source 'none' → no yardage available. OWN it — you're getting the GPS back; do NOT put the question on the player. Say something like "GPS is reacquiring — one sec and I'll have your number." If they VOLUNTEERS a rangefinder number, take it, but never ask them to do your job. (2026-07-08, the player: the caddie asking HIM the distance is the single worst failure — it's the reason this app exists.)
 Use the \`reason\` field as a guide for the natural language of the hedge — it's already written caddie-style. NEVER assert a static-card number as truth — the player needs to know it's a tee number, not their current position.
 
-${is_proactive ? `PROACTIVE CONTEXT: You are speaking up on your own — the player did not ask a question. This is an observation, a nudge, or a check-in you chose to offer. Keep it to one sentence. Natural. Not a reminder, not a tip. Something a real caddie would say as they walk between holes.` : ''}
+
 
 INTENSITY DIAL (PGA HOPE follow-up): The player has set your intensity to ${personaIntensity}/100. ${
   personaIntensity >= 85 ? 'Default cadence — the character spec applies normally.' :
@@ -2200,8 +2163,7 @@ PACE CHECK (sim-202 follow-up):
 - Match the user's energy. If they're terse, you're terse. If they ask a long question, you can give a longer read — but never longer than the response-length cap.
 - The pace bar is "what would feel like too much chatter from a real caddie walking next to you?" — when in doubt, say less.
 
-${Array.isArray(club_tendencies) && club_tendencies.length > 0 ? `How their clubs actually behave (learned from their own shots — factor this into the club call; don't recite it): ${(club_tendencies as string[]).join('; ')}.
-` : ''}${sim_round ? `SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on the course). Their narrated shot DISTANCES move their simulated position down the hole — so when they describe a shot WITHOUT a distance, include "about how far did it go?" in your reply so the sim can move them. Log shots/scores normally.
+${sim_round ? `SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on the course). Their narrated shot DISTANCES move their simulated position down the hole — so when they describe a shot WITHOUT a distance, include "about how far did it go?" in your reply so the sim can move them. Log shots/scores normally.
 ` : ''}RESPONSE LENGTH: ${effectiveLength}
 
 RESPONSE STRUCTURE (Phase V.6):
@@ -2288,6 +2250,75 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
      * retrieved coaching entries. So all of it rides the message. The model reads the same text.
      */
     const systemPromptWithKB = systemPrompt + stableCatalogBlock;
+    /**
+     * 2026-10-27 (Brain review F4) — THE REST OF THE PER-TURN CONTEXT LEAVES THE CACHED BLOCK.
+     *
+     * The 08-24 and 08-25 moves took the shot's live facts out of the system prompt; these stayed in,
+     * and each one changes inside a round: the memory slice's "TROUBLE ON THIS SHOT … Ny to carry"
+     * line comes off the latest GPS fix, PLAYER PATTERNS counts this round's shots, the private
+     * observations rotate by novelty every send, the hole block changes per hole, the SmartFinder
+     * lock per lock, the coaching refinements are picked per question, and a proactive turn flips a
+     * line of its own. Widening the sim's RATCHET to see casts found three more: club_tendencies
+     * folds in this round's shots, the phrase list learns from every parsed shot, and a hero moment
+     * saved mid-round re-renders its line. The system prompt is ONE cache breakpoint, so any one of them moving made
+     * nearly every in-round turn a full 1h write (~19.5K tokens at 2x) instead of a read.
+     *
+     * Same text, same words to the model — it rides the message now, ahead of the round facts. The
+     * doctrine that tells the model how to use each block stays in the system prompt.
+     */
+    const turnContextBlock = [
+`${_holeContextBlock ? `${_holeContextBlock}\n` : ''}`,
+`${_screenContext ? _screenContext : ''}`,
+`${(() => {
+  type PatternInsights = {
+    shot_count_analyzed?: number;
+    insights?: string[];
+    raw_stats?: {
+      miss_tendency_overall?: string;
+      miss_tendency_under_pressure?: string;
+      streak?: { type?: string; length?: number };
+    };
+  };
+  const pi = patternInsights as PatternInsights | null;
+  const modeLabel: Record<string, string> = {
+    break_100: 'Break 100 (avoid doubles, bogey is fine)',
+    break_90:  'Break 90 (smart misses, lay up when in doubt)',
+    break_80:  'Break 80 (hunt birdies, aggressive but disciplined)',
+    free_play: 'Free Play (casual)',
+  };
+  const insightLines = pi && Array.isArray(pi.insights) && pi.insights.length > 0
+    ? pi.insights.map((s: string) => '- ' + s).join('\n')
+    : '- Insufficient shot history — note their tendencies as you observe them (do not interrogate them about them).';
+  return `PLAYER PATTERNS:
+- Mode: ${modeLabel[_roundMode] ?? _roundMode}
+${insightLines}
+(shots analyzed: ${pi?.shot_count_analyzed ?? 0})`;
+})()}`,
+`${(topObservations as Array<{ content: string }>).length > 0
+  ? `WHAT YOU KNOW PRIVATELY (never reference directly — let it inform your advice):
+${(topObservations as Array<{ content: string }>).map(o => '- ' + o.content).join('\n')}`
+  : ''}`,
+`${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}`,
+`${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}`,
+`${_ghostContext ? `GHOST MATCH — PLAYING AGAINST PAST SELF:
+${_ghostContext}
+When the player asks "how am I doing against past me?", "am I beating my last round?", "ghost status", or any variation — give a brief, vivid 1-2 sentence answer using this data. Name the margin and direction (ahead or behind). If they've just gained or lost a stroke this hole, acknowledge it. Keep it warm and honest.` : ''}`,
+`${_smartFinderContext ? `SMARTFINDER LOCK:
+${_smartFinderContext}
+The player just used SmartFinder to lock in their distance. When recommending a club or discussing the shot, use this exact yardage as your working number. Say "you've got [X] yards" not "around [X]". Don't mention the tool by name — just treat it as established fact.` : ''}`,
+`${_penaltyContext ? `PENALTY HISTORY (use silently — never lecture):
+${_penaltyContext}
+When giving directional advice on a hole with relevant hazards, reference this history once: "you've put two in the water right here before — aim left center." Never bring it up unprompted. One mention per hole at most.` : ''}`,
+`${_coachKnowledgeContext ? `${_coachKnowledgeContext}\n\nThese are the owner's curated coaching refinements. Treat them as a strong signal to balance against your own default explanation, not an override — if the framing reinforces your take, lean into it; if it conflicts, say so in your own words. Your character voice stays YOUR character voice. The owner reviews refinements offline and curates which become canonical.\n\n` : ''}`,
+`${is_proactive ? `PROACTIVE CONTEXT: You are speaking up on your own — the player did not ask a question. This is an observation, a nudge, or a check-in you chose to offer. Keep it to one sentence. Natural. Not a reminder, not a tip. Something a real caddie would say as they walk between holes.` : ''}`,
+`${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }>).length > 0
+  ? `HERO MOMENTS: ${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }>).map(m => 'Hole ' + m.hole + ' — ' + m.club).join(', ')}. Use one for confidence if the moment calls for it.`
+  : ''}`,
+`${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}`,
+`${Array.isArray(club_tendencies) && club_tendencies.length > 0 ? `How their clubs actually behave (learned from their own shots — factor this into the club call; don't recite it): ${(club_tendencies as string[]).join('; ')}.
+` : ''}`
+    ].map((s) => s.trim()).filter(Boolean).join('\n\n');
+    const turnContextPrefix = turnContextBlock ? `${turnContextBlock}\n\n` : '';
     // 2026-08-25 — the PERSONA KB is chosen by the question too (buildPersonaKBPromptBlock takes the
     // message), so it was busting the cache for exactly the same reason as the coaching KB. Located
     // by the per-chunk fingerprints: chunks 0-10 matched between two questions and everything from
@@ -2495,8 +2526,8 @@ ${sv.measureYards != null ? sv.measureYards + ' yards to tapped target' : ''}
 ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 [/SMARTVISION OPEN]
 
-${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`
-      : `${kbPrefix ? `${kbPrefix}\n\n` : ''}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`;
+${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`
+      : `${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`;
 
     // 2026-05-22 — Vision frame normalization. When the client passed
     // an image, validate the shape and prefer it as the primary user-

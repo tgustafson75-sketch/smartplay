@@ -32,6 +32,12 @@ import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { getApiBaseUrl, isEndpointWarmed, markEndpointWarmed } from './apiBase';
 import { tryAnswerOpenQuestion } from './pendingPuttAsk';
 import { isFlagEnabled } from '../store/flagStore';
+import { isAwaitingFollowUp, recordUserTurn, recordKevinTurn } from './conversationState';
+import { carriesYardageCorrection } from './intents/stateYardageHandler';
+import { beginTurnForOffer, isAnsweringOffer } from './voice/pendingOpenOffer';
+import { preBrainReply, shapeForBrain } from './voice/preBrainTurn';
+import { resultWantsBrain } from './voiceCommandRouter';
+import type { BrainReply } from './conversationalBrain';
 // 2026-08-06 (Tim — "no more pre-canned speech; use a subtle earcon, no words" during the think gap). The
 // "thinking" earcon: a soft NON-VERBAL tone played ONCE when a turn will take a beat, replacing the old
 // spoken filler words ("Let me see...", "Looking at those swings...") — the loudest canned-speech surface.
@@ -697,6 +703,27 @@ function failureFallbackFor(lang: string | null | undefined): string {
  * contract, and it still needs the caddie's name to style a clarifying question.
  */
 
+/** The player is answering the caddie's own question: a conversational turn, straight to the brain. */
+function answerToCaddie(utterance: string): VoiceIntent {
+  return {
+    intent_type: 'conversational',
+    parameters: { raw_utterance: utterance, answers_caddie: true },
+    confidence: 'high',
+    follow_up_question: null,
+    raw_text: utterance,
+  };
+}
+
+/**
+ * 2026-10-27 (Brain review B10) — the shared pre-brain step (help, song, sing, plain-speak), then one
+ * brain turn. The avatar mic ran these; every brain turn on this file's routes skipped them.
+ */
+async function brainTurnWithPreStep(utterance: string, opts: { timeoutMs: number; signal?: AbortSignal }): Promise<BrainReply> {
+  const spoken = await preBrainReply(utterance);
+  if (spoken) return { text: spoken, audioBase64: null, toolActions: [], source: 'kevin' };
+  return conversationalBrainTurn(shapeForBrain(utterance), opts);
+}
+
 function customCaddieFields(): { customCaddieBasePersona: string; customCaddieName: string | null } {
   try {
     const p = require('../store/playerProfileStore').usePlayerProfileStore.getState();
@@ -842,6 +869,9 @@ async function deliverBrainReply(opts: {
       });
       return;
     }
+    // 2026-10-27 (Brain review B3) — the caddie's line is the last turn, so a question he ends on is
+    // one the next utterance answers — on this path, as on the avatar mic (useCaddieTabMic records it).
+    try { recordKevinTurn(text); } catch { /* non-fatal */ }
     if (maySpeak()) {
       await stopSpeaking('screen:services-listeningsession').catch(() => {});
       if (maySpeak()) {
@@ -1343,7 +1373,23 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
       }
     }
 
-    let intent: VoiceIntent | null = precheckLocalIntent(utterance);
+    /**
+     * 2026-10-27 (Brain review B3 / B4) — THE CADDIE'S QUESTION OWNS THE ANSWER, ON THIS PATH TOO.
+     *
+     * Only the avatar mic checked whether Kevin had just asked something. Here, "Go for it or lay up
+     * short of the creek?" answered with "go for it" hit the precheck's risk-mode rule: aggressive for
+     * the rest of the round, "Aggressive it is", and no club. Same rule as useVoiceCaddie: an answer
+     * to the caddie's question goes to the caddie, unless it carries a yardage correction (the router
+     * owns those) — and a yes to "Want me to open that?" is that open, confirmed.
+     *
+     * Read BEFORE this turn is recorded: the record makes this turn the last one.
+     */
+    const offeredOpen = beginTurnForOffer(utterance);
+    const answeringCaddie = !offeredOpen && !isAnsweringOffer() && isAwaitingFollowUp() && !carriesYardageCorrection(utterance);
+    try { recordUserTurn(utterance); } catch { /* non-fatal */ }
+
+    let intent: VoiceIntent | null = offeredOpen
+      ?? (answeringCaddie ? answerToCaddie(utterance) : precheckLocalIntent(utterance));
     // Local-first health metric ([[self-growing-agent-architecture]]) — a precheck hit
     // answered without the cloud classifier. Pure observation; never gates the flow.
     if (intent) {
@@ -1494,33 +1540,9 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
 
     setSessionStateMirror('responding');
 
-    // 2026-07-06 (voice audit — H1 on the hands-free path) / 2026-07-07 (re-audit fix) —
-    // the DISRUPTIVE_OPEN gate that lives in useVoiceCaddie was MISSING here, so over the
-    // earbud / global mic a medium-confidence misread of NARRATIVE ("I want to work on my
-    // putting") could yank a tool open uninvited — on the owner's #1 surface. If a
-    // classifier tool-OPEN intent isn't HIGH confidence, don't fire it: make it an OFFER
-    // (confirm-before-open) and let the mic re-open. Data capture / queries (log_shot,
-    // state_yardage, etc.) are NOT gated — only tool-opens.
-    //
-    // This MUST run BEFORE handler.execute(): `navigate` (next/prev hole) and
-    // `media_capture` (open camera / autoRecord) act synchronously INSIDE execute(),
-    // so gating after the handler ran let the action fire anyway — and a repeated
-    // "next hole" then advanced TWICE. `open_tool` defers to result.tool_action, so it
-    // was the only one the old post-handler placement actually caught. Gate here and all
-    // three are truly held until the user re-confirms.
-    const DISRUPTIVE_OPEN_INTENTS = new Set(['open_tool', 'media_capture', 'navigate']);
-    if (DISRUPTIVE_OPEN_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
-      await stopSpeaking('screen:services-listeningsession').catch(() => {});
-      if (ttsAllowed && mine('responding')) {
-        await speak(
-          'Want me to open that? Just say it again and I will.',
-          settings.voiceGender, intent.language ?? settings.language, apiUrl,
-          { userInitiated: true },
-        ).catch(() => {});
-      }
-      endTurn(mySerial);
-      return;
-    }
+    // The disruptive-open gate (open / navigate / capture at less than high confidence → OFFER) is
+    // voiceCommandRouter.dispatch's, which the handler branch below goes through. It used to be copied
+    // here, before execute(); dispatch also runs it before execute, and it remembers the offer (B4).
 
     // Phase P — fire filler (if router prescribes one) in parallel with handler.
     // playLocalFile is non-blocking start; we await it later before speak() so
@@ -1644,6 +1666,7 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
             if (mine('responding')) {
               await speak(intent.follow_up_question, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true })
                 .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
+              try { recordKevinTurn(intent.follow_up_question); } catch { /* non-fatal */ }
             }
           }
         } else {
@@ -1655,6 +1678,7 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
           //   (2) chatRes.ok === true but reply text is empty / wrong shape
           //   (3) fetch itself throws (network error, AbortController)
           let chatSpoken = false;
+          let firstTimedOut = false;
           // 2026-07-01 (whole-app audit — MIC CONVERGENCE) — route the badge / earbud / hands-free
           // conversational turn to the SAME unified pipecat brain the caddie-tab mic uses.
           // conversationalBrainTurn falls back to legacy kevin internally on any pipecat failure, and
@@ -1664,7 +1688,8 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
           // setting with no UI setter that the v15 migration force-set, so the test could only ever
           // be true and the absent `else` was a legacy path nothing could reach. Unwrapped.
           try {
-            const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
+            const r = await brainTurnWithPreStep(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
+            firstTimedOut = !!r.timedOut;
             // 2026-07-01 (re-audit — voice H2) — dispatch service-safe tool actions
             // (switch_caddie / navigate) the conversational brain returned; this
             // branch previously spoke the reply but dropped them.
@@ -1714,8 +1739,14 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
            * answers on the retry. So the retry stays and the SECOND CADDIE goes: the same call,
            * the same payload, the same history, once more. [[no-half-fixes-enforce-every-surface]]
            */
-          if (!chatSpoken && live()) try { // a shushed turn does not retry (voice seam review)
-            const retry = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
+          /**
+           * 2026-10-27 (Brain review F7) — BUT NOT AFTER OUR OWN TIMEOUT. A timed-out first attempt is
+           * still running on the server and will be billed in full; a retry pays for a second turn and
+           * makes him wait another whole window. useVoiceCaddie learned this on 09-23 ("ourTimeout");
+           * this path never did, so the two routes had opposite rules.
+           */
+          if (!chatSpoken && live() && !firstTimedOut) try { // a shushed turn does not retry (voice seam review)
+            const retry = await brainTurnWithPreStep(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
             if (retry.toolActions?.length) {
               const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
               dispatchConversationalToolActions(retry.toolActions);
@@ -1774,7 +1805,10 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
       // user no longer hears dead silence between 'Let me see...' and the
       // response.
       let resultReady = false;
-      const handlerP = handler.execute(intent, ctx)
+      // 2026-10-27 (Brain review B6) — through dispatch, not handler.execute: dispatch is where the
+      // kill switch, the low-confidence rule, the TightLie round gate and the disruptive-open offer
+      // live, and calling execute directly skipped all four on this path.
+      const handlerP = voiceCommandRouter.dispatch(intent, ctx)
         .finally(() => { resultReady = true; });
 
       await fillerP;
@@ -1792,7 +1826,8 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
 
       const result = await handlerP;
       const t_response_start = Date.now();
-      if (result.success && (result.tool_action || !result.voice_response)) noteTurnActed();
+      const toBrain = resultWantsBrain(result);
+      if (!toBrain && result.success && (result.tool_action || !result.voice_response)) noteTurnActed();
 
       // Phase V.7+ — the response is user-initiated (mic-tap reply), so it
       // speaks at L1 too via { userInitiated: true }. Opener + filler stay
@@ -1803,9 +1838,13 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
       // read (shot_strategy) to the conversational caddie brain. Answer with Claude
       // (pipecat→kevin inside conversationalBrainTurn) + dispatch any tool actions; on a
       // total brain miss (signal drop) fall back to the offline caddie (local club-call).
-      if (result.route_to_brain) {
+      //
+      // 2026-10-27 (Brain review B5) — and a handler that DECLINED (success:false, nothing to say,
+      // nothing to do) is handing the turn over too. This path used to speak the "having trouble"
+      // line over a non-owner's "read my reminders" — a failure that never happened.
+      if (toBrain) {
         try {
-          const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
+          const r = await brainTurnWithPreStep(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
           if (r.toolActions?.length) {
             const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
             dispatchConversationalToolActions(r.toolActions);
@@ -1878,30 +1917,17 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
         // when the classifier didn't emit one (older Vercel route,
         // English transcript, or no triggers matched).
         await speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true });
+        try { recordKevinTurn(result.voice_response); } catch { /* non-fatal */ }
       } else if (result.voice_response && !responseAllowed) {
         // 2026-07-30 (voice/brain audit H1 — Tim: "voice off and still get ALL the text responses").
         // Earbud/hands-free with voice muted (or phone-speaker gated) → SHOW the handler's reply so the
         // turn isn't silently dead. tool_action (below) still dispatches regardless.
         try { flashCaption?.(result.voice_response, 7000); } catch { /* non-fatal */ }
-      } else if (!result.voice_response && responseAllowed) {
-        // 2026-05-21 — Fix I shape A: handler returned no voice_response
-        // (e.g. an internal failure path with no fallback string). Don't
-        // leave the pill idle in silence — speak an honest "having
-        // trouble" line. Some handlers legitimately have no spoken reply
-        // (e.g. navigation tool_actions that route the user); those set
-        // result.tool_action, which we still execute below. For the
-        // pure-no-output case the user gets the localized failure line.
-        // 2026-07-26 (deep audit S2) — but a SUCCESSFUL handler that chose
-        // silence (acknowledge: "thanks"/"okay"/"got it" → success:true,
-        // voice_response:null, side_effects:['acknowledge']) was falling in
-        // here and speaking "I'm having trouble connecting" on a totally
-        // normal ack. Only speak the failure line when the handler actually
-        // FAILED (success === false) — an intentional silent-success stays
-        // silent, matching the text/watch path which guards on voice_response.
-        if (!result.tool_action && result.success === false && mine('responding')) {
-          await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
-        }
+        try { recordKevinTurn(result.voice_response); } catch { /* non-fatal */ }
       }
+      // 2026-10-27 (Brain review B5) — the old "no voice_response and success:false → speak the
+      // having-trouble line" branch is gone: that exact result is a DECLINE, and resultWantsBrain sent
+      // it to the caddie above. A silent success (acknowledge) stays silent, as it always did.
       // Phase R/S — dispatch tool_action.open_url. Internal routes (e.g.
       // swing library jumps, SmartVision opens) go through router.push as
       // before. External URLs (http/https) are allowlisted to prevent
@@ -2074,15 +2100,35 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
    * buffer with pipecatHistory and drops exact role+text repeats, so a turn that lands in both
    * is told to the caddie once.
    */
+  // 2026-10-27 (Brain review B3 / B4) — the caddie's question owns the answer here too; see the
+  // earbud path. Read before this turn is recorded, because recording it makes it the last turn.
+  const offeredOpen = beginTurnForOffer(text);
+  const answeringCaddie = !offeredOpen && !isAnsweringOffer() && isAwaitingFollowUp() && !carriesYardageCorrection(text);
   try { require('../store/conversationLogStore').useConversationLog.getState().logUser(text, Date.now()); } catch { /* non-fatal */ }
-  try { (require('./conversationState') as typeof import('./conversationState')).recordUserTurn(text); } catch { /* non-fatal */ }
+  try { recordUserTurn(text); } catch { /* non-fatal */ }
   try {
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
     const apiUrl = getApiBaseUrl();
+    /**
+     * 2026-10-27 (Brain review B10) — THE OPEN PUTT QUESTION, here too. Every other surface answers
+     * "How many putts?" before classifying anything (pendingPuttAsk: missing it on one surface was ~50
+     * of the "2 putts became an eagle" reports). The watch dictates "two" straight into this function;
+     * offline the turn fell to a failed brain call and the putt count was lost.
+     */
+    const answered = tryAnswerOpenQuestion(text);
+    if (answered) {
+      if (settings.voiceEnabled ?? true) {
+        await speak(answered.line, settings.voiceGender, settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
+      } else {
+        try { flashCaption?.(answered.line, 6000); } catch { /* non-fatal */ }
+      }
+      try { recordKevinTurn(answered.line); } catch { /* non-fatal */ }
+      return;
+    }
     // 2026-07-04 (clean-audit H5) — the watch path went straight to the cloud and
     // silently died offline. Try the LOCAL precheck first, like both other paths.
-    let intent = precheckLocalIntent(text);
+    let intent = offeredOpen ?? (answeringCaddie ? answerToCaddie(text) : precheckLocalIntent(text));
     if (!intent) {
       // Review G2 (finding 5) — a THROW (timeout, no route) is the same "no tool intent" as a non-ok:
       // it used to fall to the outer catch below, a console.log, and the player got nothing at all.
@@ -2145,7 +2191,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       // orchestrator), so this answers in BOTH modes and can't regress below silence.
       console.log(`[handsFree-route] no tool handler for ${intent.intent_type} → conversational`);
       try {
-        const r = await conversationalBrainTurn(text, { timeoutMs: kevinTimeout() });
+        const r = await brainTurnWithPreStep(text, { timeoutMs: kevinTimeout() });
         // 2026-07-01 (re-audit — voice H2) — dispatch the service-safe tool actions
         // the brain returned (switch_caddie / navigate) so a hands-free "switch to
         // Tank" / "open SmartFinder" actually happens instead of only being spoken.
@@ -2192,20 +2238,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       }
       return;
     }
-    // 2026-07-30 (voice audit #3) — the watch/typed path had NO disruptive-open confidence gate (the mic
-    // + earbud paths both require confidence==='high' for open_tool/media_capture/navigate). A medium-
-    // confidence watch-STT misread of ordinary speech could yank a tool open or advance the hole. Mirror
-    // the gate: at less-than-high confidence, OFFER instead of acting (open_course already self-gates).
-    const DISRUPTIVE_OPEN_INTENTS = new Set(['open_tool', 'media_capture', 'navigate']);
-    if (DISRUPTIVE_OPEN_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
-      const offer = 'Want me to open that? Just say it again and I will.';
-      if (settings.voiceEnabled ?? true) {
-        await speak(offer, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
-      } else {
-        try { flashCaption?.(offer, 6000); } catch { /* non-fatal */ }
-      }
-      return;
-    }
+    // The disruptive-open gate is voiceCommandRouter.dispatch's (below), as on the earbud path.
     const ctx: AppContext = {
       active_screen: 'watch_voice',
       active_round: round.isRoundActive
@@ -2223,13 +2256,17 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       trust_spectrum_level: (() => { try { return getTrustLevel() as 1 | 2 | 3; } catch { return 2 as const; } })(),
     };
     void settings;
-    const result = await handler.execute(intent, ctx);
+    // 2026-10-27 (Brain review B6) — through dispatch: the kill switch, low confidence → the caddie,
+    // the TightLie round gate and the remembered open offer, none of which execute() applies.
+    const result = await voiceCommandRouter.dispatch(intent, ctx);
     // 2026-07-04 (clean-audit C2) — in pipecat mode the judgment reads (shot_strategy)
     // DEFER to the conversational brain; this path used to ignore the flag → total
     // silence on "what's the play" from the watch. Mirror the earbud branch.
-    if (result?.route_to_brain) {
+    // 2026-10-27 (Brain review B5) — a decline (success:false, nothing to say or do) is a brain turn
+    // too. This path used to say nothing at all to a non-owner's typed "read my reminders".
+    if (resultWantsBrain(result)) {
       try {
-        const r = await conversationalBrainTurn(text, { timeoutMs: kevinTimeout() });
+        const r = await brainTurnWithPreStep(text, { timeoutMs: kevinTimeout() });
         if (r.toolActions?.length) {
           const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
           dispatchConversationalToolActions(r.toolActions);
@@ -2269,9 +2306,9 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       return;
     }
     if (result?.voice_response) {
-      const { speak } = await import('./voiceService');
       void speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
         ?.catch?.(() => undefined);
+      try { recordKevinTurn(result.voice_response); } catch { /* non-fatal */ }
     }
     // 2026-07-04 (clean-audit C2) — dispatch the handler's tool_action. This path
     // spoke "Opening SmartFinder" and then... nothing. The full service dispatcher
