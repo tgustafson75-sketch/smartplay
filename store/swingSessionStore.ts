@@ -12,6 +12,23 @@ function withoutArc<T extends { club_arc?: unknown; club_arc_frame?: unknown; cl
   return rest as T;
 }
 
+/**
+ * 2026-10-27 (Phase SB7, recheck R9) — THE SESSION'S COPIES OF SWING 1 GO WITH SWING 1. The SmartMotion
+ * shot map is swing 1's by position (swingIndex 0), and the session-level body read, arc and fault frame
+ * are the first clip-bearing swing's (shotDetail.storedShotBiomech / hasFinalArc). Deleting that swing
+ * only filtered it out, so the swing that moved into first place showed its tempo, start line, carry, BODY
+ * tiles, skeleton and arc, and the caddie was told they were that swing's measured numbers.
+ */
+function withoutSwingOnesCopies(session: SwingSession, shotId: string): SwingSession {
+  const atFirst = session.shots[0]?.id === shotId;
+  const firstRead = session.shots.find(shot => shot.clipUri)?.id === shotId;
+  if (!atFirst && !firstRead) return session;
+  const mapGone = atFirst ? { smart_motion_shot_map: null } : {};
+  if (!firstRead) return { ...session, ...mapGone };
+  const { biomechanics: _b, analysis_version: _v, ...rest } = withoutArc(session);
+  return { ...(rest as SwingSession), ...mapGone, fault_frame_uri: null, fault_frame_index: null, fault_frame_fraction: null };
+}
+
 // ─── TYPES ────────────────────────────────
 
 export interface AcousticContact {
@@ -1655,7 +1672,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           // aggregation downstream over-counted by one per delete.
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : {
-              ...session,
+              ...withoutSwingOnesCopies(session, shotId),
               shots: session.shots.filter(shot => shot.id !== shotId),
               // 2026-10-27 — an upload's swing list the player edited is never re-split (practiceSwings.resplitEligible).
               ...(session.source === 'uploaded_video' && session.shots.some(shot => shot.id === shotId) ? { swings_edited_by_user: true } : {}),

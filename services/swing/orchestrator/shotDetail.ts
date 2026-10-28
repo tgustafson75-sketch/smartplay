@@ -108,6 +108,13 @@ function lookup(sessionId: string, shotId: string): { s: SwingSession; shot: Swi
 }
 
 /**
+ * 2026-10-27 (Phase SB7, recheck R9) — is the shot STILL the first swing when its run writes? The session's
+ * copies are the first swing's; a read of swing 1 that lands after the player deleted swing 1 must not put
+ * the deleted swing's skeleton and arc back on the swing that moved into first place.
+ */
+const stillFirst = (input: Pick<In, 'sessionId' | 'shotId'>): boolean => lookup(input.sessionId, input.shotId)?.first === true;
+
+/**
  * The biomechanics already stored for this shot (`undefined` = never computed, `null` = computed, none).
  * 2026-10-26 — computed BY TODAY'S CODE: a read an older build stored (older or no analysis_version) is
  * unread, so the swing is read again when it is next shown and no verdict is minted from its skeleton.
@@ -323,7 +330,7 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
     // Computed, none — so a screen showing this shot does not locate the same minute again.
     const noRead = liveSessionStore(signal);
     noRead.setShotBiomechanics(input.sessionId, input.shotId, null);
-    if (first) noRead.setSessionBiomechanics(input.sessionId, null);
+    if (stillFirst(input)) noRead.setSessionBiomechanics(input.sessionId, null);
     return null;
   }
   const { swingerForSession } = require('../sessionSwinger') as typeof import('../sessionSwinger');
@@ -348,13 +355,13 @@ async function poseStage(input: In, signal: AbortSignal): Promise<SwingBiomechan
    * belongs to the old one — it goes back to unread too, never left standing as this window's skeleton.
    */
   if (!biomech && outcome.unanswered) {
-    if (input.force) liveSessionStore(signal).clearShotBiomechanics(input.sessionId, input.shotId, first);
+    if (input.force) liveSessionStore(signal).clearShotBiomechanics(input.sessionId, input.shotId, stillFirst(input));
     traceStep('body read: no pose detector could look — not stored, read again next time', { shot: traceShotLabel(s, input.shotId), forced: input.force }, { sessionId: input.sessionId });
     return null;
   }
   const store = liveSessionStore(signal);
   store.setShotBiomechanics(input.sessionId, input.shotId, biomech);
-  if (first) store.setSessionBiomechanics(input.sessionId, biomech);
+  if (stillFirst(input)) store.setSessionBiomechanics(input.sessionId, biomech);
   traceStep('body read', { shot: traceShotLabel(s, input.shotId), frames: biomech?.frames.length ?? 0, windowed: !!window, impact: impactMs != null }, { sessionId: input.sessionId });
   return biomech;
 }
@@ -476,7 +483,7 @@ async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomec
     // No answer at all (no copy / no network) — asked again next time. 2026-10-26 — on a FORCED run (a new
     // analysis, maybe a new window and a new body read) the old arc goes too: it must never be drawn against
     // the new skeleton as if it were this window's.
-    if (input.force) store.clearShotClubArc(input.sessionId, input.shotId, first);
+    if (input.force) store.clearShotClubArc(input.sessionId, input.shotId, stillFirst(input));
     return null;
   }
   answered.add(answerKey(s, shot));
@@ -490,9 +497,9 @@ async function arcStage(input: In, signal: AbortSignal, thisRunPose: SwingBiomec
   const frame = pts.length ? { w: arc.frameW ?? null, h: arc.frameH ?? null } : null;
   // A forced run's answer replaces the old one outright, even an empty one (the setters keep a good arc
   // over an empty re-run otherwise).
-  if (input.force) store.clearShotClubArc(input.sessionId, input.shotId, first);
+  if (input.force) store.clearShotClubArc(input.sessionId, input.shotId, stillFirst(input));
   store.setShotClubArc(input.sessionId, input.shotId, pts, frame, arc.source);
-  if (first) store.setSessionClubArc(input.sessionId, pts, frame, arc.source);
+  if (stillFirst(input)) store.setSessionClubArc(input.sessionId, pts, frame, arc.source);
   return { points: pts.length };
 }
 
@@ -614,20 +621,35 @@ export function requestShotDetail(
   } = {},
 ): () => void {
   const runOpts = { arc: opts.arc };
+  const key = shotRunKey(sessionId, shotId);
+  const level = arcLevel(opts.arc === undefined ? true : opts.arc);
   // One `off` for the request and every step it defers: paging away silences all of them.
   let off = false;
   // A later retirement of this swing (a new capture) silences everything this request deferred.
   const gen = retirementOf(sessionId);
   const wanted = () => !off && retirementOf(sessionId) === gen;
+  /**
+   * 2026-10-27 (Phase SB7, recheck R9) — SETTLED ONLY BY A RUN THAT ANSWERS THIS REQUEST. A live run asked
+   * for less arc (Issue's body-only read, the silent tracker pass) is what runShotDetail hands back while
+   * it queues a follow-up; settling on it cleared the screen's pending flag before the arc was traced, so
+   * turning on Swing Trace after Issue said "The clubhead could not be seen" (with a Re-analyze) while the
+   * arc was still on its way. A weaker run, or one a new analysis cancelled, is asked about again: ask()
+   * then joins the follow-up the weaker run left behind.
+   */
+  const settleOn = (run: AnalysisRun<In>): void => {
+    const answers = (liveArcLevel.get(key) ?? 2) >= level;
+    void run.done.then((snap) => {
+      if (!wanted()) return;
+      if (!answers || Object.values(snap.stages).some((st) => st.status === 'cancelled')) ask();
+      else opts.onSettled?.();
+    });
+  };
   const ask = (): void => {
     const hit = lookup(sessionId, shotId);
     if (!hit) { opts.onSettled?.(); return; }
     const live = liveRun(swingRunKey(sessionId));
     if (hit.first && live) {
-      void live.done.then(() => {
-        if (!wanted()) return;
-        void runShotDetail(sessionId, shotId, runOpts).done.then(() => { if (wanted()) opts.onSettled?.(); });
-      });
+      void live.done.then(() => { if (wanted()) settleOn(runShotDetail(sessionId, shotId, runOpts)); });
       return;
     }
     /**
@@ -641,20 +663,15 @@ export function requestShotDetail(
       void live.done.then(() => { if (wanted()) ask(); });
       return;
     }
-    const other = liveRunKeys().find((k) => k.startsWith(`shot:${sessionId}:`) && k !== shotRunKey(sessionId, shotId));
+    const other = liveRunKeys().find((k) => k.startsWith(`shot:${sessionId}:`) && k !== key);
     const busy = other ? liveRun(other) : null;
     if (busy) {
       void busy.done.then(() => { if (wanted()) ask(); });
       return;
     }
-    const run = runShotDetail(sessionId, shotId, runOpts);
     // Cancelled by a NEW analysis of the swing (its window may have moved): the screen still shows this
     // shot, so ask again once that analysis lets it (ask waits for it).
-    void run.done.then((snap) => {
-      if (!wanted()) return;
-      if (Object.values(snap.stages).some((st) => st.status === 'cancelled')) ask();
-      else opts.onSettled?.();
-    });
+    settleOn(runShotDetail(sessionId, shotId, runOpts));
   };
   ask();
   return () => { off = true; };

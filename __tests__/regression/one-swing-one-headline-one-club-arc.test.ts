@@ -42,7 +42,7 @@ describe('one swing, one headline, one club arc', () => {
     expect((sm.match(/detectClubPath\(/g) ?? []).length).toBe(0);
     expect((detail.match(/detectClubPath\(/g) ?? []).length).toBe(0);
     expect((runner.match(/detectClubPath\(/g) ?? []).length).toBe(1);
-    expect(runner).toMatch(/store\.setShotClubArc\(input\.sessionId, input\.shotId, pts, frame, arc\.source\);\s*if \(first\) store\.setSessionClubArc\(input\.sessionId, pts, frame, arc\.source\);/);
+    expect(runner).toMatch(/store\.setShotClubArc\(input\.sessionId, input\.shotId, pts, frame, arc\.source\);\s*if \(stillFirst\(input\)\) store\.setSessionClubArc\(input\.sessionId, pts, frame, arc\.source\);/);
   });
 
   it('SmartMotion writes no verdict of its own — only the camera\'s ball-never-left evidence', () => {
