@@ -143,10 +143,14 @@ const RECORDING_STOP_TAP_COOLDOWN_MS = 1500;
 // 600ms covers the echo + jitter, nothing more. (Camera tap-stop keeps its full 1.5s — audio-session
 // release genuinely needs it.)
 const TAP_ECHO_SWALLOW_MS = 600;
-// 2026-08-09 (voice audit P2) — when a tap-to-submit already played the persona-voice "Got it" cue,
-// suppress the redundant device-TTS pick-ack so the nice cue isn't clipped by a robotic one. Timestamp
-// of the last got-it verbal cue; the capture-end ack checks it.
-let gotItCueFiredAt = 0;
+/**
+ * 2026-10-27 (Sentry P9: too_short, heardSpeech true, durationMs 0, iPhone) — an "I'm done" tap asks for
+ * the persona "Got it" cue, and the capture-end ack plays it once the recording has STOPPED. It used to
+ * play at the tap, over the still-live recorder: playback sets allowsRecordingIOS false, which makes
+ * expo-av pause the iOS recorder without banking its time (EXAV.m:275-278, 622-624), so the capture
+ * read 0 ms, was dropped as too_short, and the player's words were thrown away.
+ */
+let gotItOnCaptureEnd = false;
 
 /**
  * 2026-08-11 (Tim) — "she ends with something like 'what's on your mind today', but doesn't listen."
@@ -514,13 +518,9 @@ export async function toggle(): Promise<void> {
     // ...and dedupe THIS endpoint tap's own double-fire (echo window only).
     if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) return;
     sessionCloseTapAt = Date.now();
+    // The "Got it" cue plays at capture end, after the recorder stops (see gotItOnCaptureEnd).
+    gotItOnCaptureEnd = true;
     endCaptureEarly();
-    if (useSettingsStore.getState().voiceEnabled) {
-      // 2026-08-08 (Tim) — the caddie SAYS it heard you ("Got it." in the persona voice, cached);
-      // earcon only as first-run fallback. Not awaited — capture already ended, nothing to self-record.
-      gotItCueFiredAt = Date.now(); // P2: tells the capture-end flow to skip its device-TTS pick-ack
-      void playVerbalCue('gotit', GOTIT_EARCON, GOTIT_EARCON_MS).catch(() => {});
-    }
     return;
   }
   // 2026-06-04 — Ignore re-tap during in-flight processing window.
@@ -920,6 +920,7 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
   turnAbort = new AbortController();
   const brainSignal = turnAbort.signal;
   setMine('opening');
+  gotItOnCaptureEnd = false;   // every session, tapped or auto-reopened, starts without a pending cue
   /**
    * 2026-10-25 (Sentry NB–NH, a relaunch mid-round) — a press that lands while iOS is still bringing
    * the app forward (cold launch, unlock) waits briefly for 'active'. It never refuses: still not
@@ -1256,11 +1257,14 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
     const settingsAck = useSettingsStore.getState();
     // 2026-07-20 (bug-hunt fix) — same phone-speaker mute respect as the opener/replies:
     // don't speak the "got it" ack aloud on the phone speaker when the user muted it.
-    // 2026-08-09 (voice audit P2) — skip this device-TTS ack when a tap-to-submit just played the
-    // persona "Got it" cue (within 4s): firing it here stops the mp3 mid-word (one-voice invariant) and
-    // replaces a natural cue with a robotic stutter. Silence/VAD-ended captures (no tap cue) still ack.
-    const gotItRecent = Date.now() - gotItCueFiredAt < 4000;
-    if (settingsAck.voiceEnabled && !gotItRecent) {
+    // A tap-ended capture gets the persona "Got it" cue (2026-08-08, Tim: the caddie SAYS it heard
+    // you; earcon only as first-run fallback) — played HERE, now the recorder has stopped. A silence-
+    // ended capture gets the varied device-TTS ack. One or the other, never both (voice audit P2).
+    const tapEnded = gotItOnCaptureEnd;
+    gotItOnCaptureEnd = false;
+    if (settingsAck.voiceEnabled && tapEnded) {
+      void playVerbalCue('gotit', GOTIT_EARCON, GOTIT_EARCON_MS).catch(() => {});
+    } else if (settingsAck.voiceEnabled) {
       const lang = (['en', 'es', 'zh'] as const).includes(settingsAck.language as never) ? (settingsAck.language as 'en' | 'es' | 'zh') : 'en';
       const { speakDeviceNotice } = await import('./voiceService');
       void speakDeviceNotice(pickAck(lang), lang, settingsAck.voiceGender).catch(() => {});

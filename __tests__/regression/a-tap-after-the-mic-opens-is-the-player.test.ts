@@ -167,12 +167,14 @@ afterEach(() => { Date.now = realNow; ls.forceCloseSession(); });
 // Not awaited: toggle() awaits the whole turn, and a player taps whenever they like.
 
 
+let releaseWith: (c: Capture) => void = () => {};
 const mocks = () => require('../../services/voiceService') as { endCaptureEarly: jest.Mock };
 
 /** Open a session with a cue of `cueMs`, holding the capture open so the session stays 'listening'. */
 async function openWithCue(cueMs: number): Promise<{ tapAt: number; release: () => void }> {
   mockState.cueMs = cueMs;
   const hold = deferred<Capture>();
+  releaseWith = (c: Capture) => hold.resolve(c);
   mockState.captures.push(() => hold.promise);
   clock += 5_000;
   const tapAt = clock;
@@ -211,5 +213,43 @@ describe('a tap after the mic opens is the player, not an echo', () => {
     await tapAt(s.tapAt + 350);
     expect(mocks().endCaptureEarly).not.toHaveBeenCalled();
     s.release();
+  });
+});
+
+/**
+ * 2026-10-27 (Sentry SMARTPLAY-CADDIE-MOBILE-P9: listen_no_transcript, too_short, heardSpeech true,
+ * durationMs 0, iPhone). The "I'm done" tap played its "Got it" cue while the recorder was still live.
+ * Playback sets allowsRecordingIOS false, and expo-av then PAUSES the iOS recorder without banking its
+ * time (EXAV.m:275-278, 622-624): duration reads 0, the capture is dropped as too_short, and the
+ * player's words are thrown away. The cue now plays only after the capture has stopped.
+ */
+describe('the "Got it" cue never plays over a live recording', () => {
+  const voice = () => require('../../services/voiceService') as { playLocalFile: jest.Mock; speakDeviceNotice: jest.Mock };
+
+  it('the end tap plays nothing while the capture is still running; the cue follows the stop', async () => {
+    const s = await openWithCue(300);
+    voice().playLocalFile.mockClear();
+    voice().speakDeviceNotice.mockClear();
+    await tapAt(s.tapAt + 2_000);                      // a real "I'm done"
+    expect(mocks().endCaptureEarly).toHaveBeenCalled();
+    expect(voice().playLocalFile).not.toHaveBeenCalled(); // recorder still live: no audio mode switch
+    // the capture stops and returns what was said
+    const said1: Capture = { text: 'what club here', bail: null, heardSpeech: true, durationMs: 1800 };
+    releaseWith(said1);
+    await flush();
+    expect(voice().playLocalFile).toHaveBeenCalled();     // the got-it cue, after the stop
+    expect(voice().speakDeviceNotice).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything());
+  });
+
+  it('a capture that ended on silence (no tap) still gets the spoken ack, not the cue', async () => {
+    mockState.cueMs = 0;
+    mockState.captures.push({ text: 'what club here', bail: null, heardSpeech: true, durationMs: 1800 });
+    clock += 5_000;
+    voice().playLocalFile.mockClear();
+    void ls.toggle();
+    await flush();
+    voice().playLocalFile.mockClear();
+    await flush();
+    expect(voice().speakDeviceNotice).toHaveBeenCalled();
   });
 });
