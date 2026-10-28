@@ -40,7 +40,11 @@ jest.mock('../../services/poseDetection', () => ({
     return { kind: 'ok', analysis: { observation: `tentative of ${uri}`, follow_up_question: null } };
   },
   probeDurationMs: async () => 40_000,
-  locateSwings: async () => { mockLocateCalls++; return mockLocate; },
+  locateSwings: async (_u: string, _d: number, coverage?: { complete: boolean }) => {
+    mockLocateCalls++;
+    if (coverage) coverage.complete = true;   // both finder passes answered
+    return mockLocate;
+  },
 }));
 jest.mock('../../services/reachability', () => ({
   ...jest.requireActual('../../services/reachability'),
@@ -154,7 +158,7 @@ describe('a re-split never overrides what the player did', () => {
   it('a first split does not copy swing 1\'s per-swing tags onto a swing the player never tagged… unless the player tagged the whole clip', () => {
     seedFreshUpload();
     useSwingSessionStore.getState().updateShotTags('s1', 'up_shot', { feel: 'pure' });
-    useSwingSessionStore.getState().expandUploadIntoSwings('s1', [{ startSec: 1, endSec: 4 }, { startSec: 10, endSec: 13 }]);
+    useSwingSessionStore.getState().expandUploadIntoSwings('s1', [{ startSec: 1, endSec: 4 }, { startSec: 10, endSec: 13 }], true);
     // the single upload's tag was on the whole clip: it rides on every swing, as the clip's notes do
     expect(shots().map((x) => x.feel)).toEqual(['pure', 'pure']);
     // a RE-split carries no tag of an old swing onto the new ones

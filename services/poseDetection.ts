@@ -1162,6 +1162,14 @@ async function locateSwingWindowImpl(
 const LOCATE_SWINGS_TIMEOUT_MS = 30_000;
 
 /**
+ * 2026-10-27 (Phase SB5) — whether this look was WHOLE: both passes asked and both answered. A caller that
+ * REPLACES swings it already holds needs to know (videoUpload's re-split): each pass alone misses swings, so a
+ * look one pass answered is half a look. The list it returns is still the best the finder has; it is just
+ * not grounds for throwing a stored swing away. Filled in by locateSwings; `complete` is false unless proven.
+ */
+export type LocateSwingsCoverage = { complete: boolean };
+
+/**
  * RANGE MODE (acoustics off) — find ALL swings in a multi-swing clip. Plural
  * sibling of locateSwingWindow: sends DENSER coarse timestamped frames and asks
  * the model for every distinct swing-impact time. Returns an array (possibly
@@ -1176,9 +1184,11 @@ const LOCATE_SWINGS_TIMEOUT_MS = 30_000;
 export async function locateSwings(
   clipUri: string,
   durationMs: number,
+  coverage?: LocateSwingsCoverage,
 ): Promise<{ timeSec: number; confidence: 'high' | 'low' }[]> {
+  if (coverage) coverage.complete = false;
   try {
-    const out = await locateSwingsImpl(clipUri, durationMs);
+    const out = await locateSwingsImpl(clipUri, durationMs, coverage);
     try {
       const { noteLocate } = await import('./swing/analysisPipeline');
       noteLocate(clipUri, out.length > 0 ? 'ok' : 'empty', {
@@ -1200,6 +1210,7 @@ export async function locateSwings(
 async function locateSwingsImpl(
   clipUri: string,
   durationMs: number,
+  coverage?: LocateSwingsCoverage,
 ): Promise<{ timeSec: number; confidence: 'high' | 'low' }[]> {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) {
@@ -1301,7 +1312,10 @@ async function locateSwingsImpl(
     // clip can't merge distinct swings; the floor still scales up from 2.5s for genuinely sparse frames.
     const frameIntervalSec = durationMs / 1000 / Math.max(1, frames.length);
     const out = mergeSwingDetections(raw, Math.min(3.5, Math.max(2.5, frameIntervalSec)), answered.length);
-    logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length, passes: answered.length, half_frames: framesHalf.length });
+    // Whole only when the half-step pass was asked too (its frames can fail to extract) and both answered.
+    const complete = settled.length === 2 && answered.length === 2;
+    if (coverage) coverage.complete = complete;
+    logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length, passes: answered.length, half_frames: framesHalf.length, complete });
     return out;
   } catch (e) {
     // 2026-08-24 — name the cause, same as the single locate. `dead_host` with both probes false is

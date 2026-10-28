@@ -584,7 +584,8 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
         ? Math.round(ingestSec * 1000)
         : await pose.probeDurationMs(swings[0].clipUri).catch(() => 0);
       if (durMs >= MULTI_SWING_UPLOAD_MIN_MS) {
-        const found = await pose.locateSwings(swings[0].clipUri, durMs);
+        const coverage: import('./poseDetection').LocateSwingsCoverage = { complete: false };
+        const found = await pose.locateSwings(swings[0].clipUri, durMs, coverage);
         // 2026-08-19 — the practice-swing gate that stood here is REMOVED (see the long note on the
         // same removal in app/swinglab/smartmotion.tsx, re-analyze path). Short version: it read the
         // locator's 'low' as "practice swing", but the prompt EXCLUDES practice swings outright and has
@@ -600,6 +601,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
         uploadLog('upload-swings-located', {
           found: found.length,
           unconfirmed: segs.filter(sg => sg.confidence === 'low').length,
+          whole: coverage.complete,
         }, sessionId);
         // The finder's confidence rides on each swing (high / low; the video finder has no 'medium').
         const windows = segs.map(seg => ({
@@ -609,8 +611,14 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           confidence: (seg.confidence === 'low' ? 'low' : 'high') as 'high' | 'low',
         }));
         if (resplit) {
-          // Nothing found is a failed look, not evidence: the stored swings stand.
-          if (found.length >= 1) {
+          // Nothing found is a failed look, not evidence: the stored swings stand. 2026-10-27 (Phase SB5) — so
+          // is a HALF look: each finder pass alone misses swings (poseDetection, the 27.5s swing), and a
+          // replace is for good (it stamps the finder), so a pass that failed would delete a real swing, its
+          // read and its mark with nothing to bring it back. Unstamped, the next Re-analyze looks again.
+          if (found.length >= 1 && !coverage.complete) {
+            uploadLog('upload-resplit-skipped', { reason: 'half_look', swings_found: found.length, shots: swings.length }, sessionId);
+            V6('STAGE 0 — old upload kept its swings (one finder pass did not answer)', { found: found.length, shots: swings.length });
+          } else if (found.length >= 1) {
             store.replaceUploadSwings(sessionId, windows);
             (require('./swing/orchestrator/uploadRun') as typeof import('./swing/orchestrator/uploadRun')).adoptRunWindow(sessionId);
             // Anything this launch remembers about the old swings (answered arcs, live shot runs) is another swing's now.
@@ -624,17 +632,19 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
             V6('STAGE 0 — old upload split again', { found: found.length, shots: swings.length });
           }
         } else if (found.length > 1) {
-          store.expandUploadIntoSwings(sessionId, windows);
+          store.expandUploadIntoSwings(sessionId, windows, coverage.complete);
           (require('./swing/orchestrator/uploadRun') as typeof import('./swing/orchestrator/uploadRun')).adoptRunWindow(sessionId);
           const fresh = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
           uploadLog('upload-multi-swing-expand', { swings_found: found.length, shots: swings.length }, sessionId);
           V6('STAGE 0 — upload expanded into multi-swing', { found: found.length, shots: swings.length });
-        } else if (found.length === 1 && segs.length === 1) {
+        } else if (found.length === 1 && segs.length === 1 && coverage.complete) {
           // 2026-08-09 (verification wave speed #1) — the single-swing result used to be DISCARDED and the
           // clip re-located from scratch inside analyzeSwing (second coarse extraction + second model call
           // + re-probe: ~15-40s wasted on the most common upload). Persist the located window + impact on
           // the existing shot so the analyze + pose passes run bounded and strike-anchored immediately.
+          // 2026-10-27 (Phase SB5) — only on a WHOLE look: a bound window closes this upload's first split, so
+          // one swing found by half a look would hide the swing the other pass would have seen for good.
           store.setShotClipBoundaries(sessionId, swings[0].id, segs[0].startMs / 1000, segs[0].endMs / 1000, segs[0].strikeMs / 1000);
           const fresh = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }

@@ -159,7 +159,7 @@ describe('re-review 10-04', () => {
     useSwingSessionStore.setState({ expandUploadIntoSwings: spy } as never);
     const ctrl = new AbortController();
     ctrl.abort();
-    liveSessionStore(ctrl.signal).expandUploadIntoSwings('s' as never, [] as never);
+    liveSessionStore(ctrl.signal).expandUploadIntoSwings('s' as never, [] as never, true);
     expect(spy).not.toHaveBeenCalled();
     useSwingSessionStore.setState({ expandUploadIntoSwings: real } as never);
   });

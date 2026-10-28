@@ -40,7 +40,11 @@ jest.mock('../../services/poseDetection', () => ({
   },
   analyzeSwingTentative: async () => ({ kind: 'no_network' }),
   probeDurationMs: async () => 40_000,
-  locateSwings: async () => { mockLocateCalls++; return mockLocate; },
+  locateSwings: async (_u: string, _d: number, coverage?: { complete: boolean }) => {
+    mockLocateCalls++;
+    if (coverage) coverage.complete = true;   // both finder passes answered
+    return mockLocate;
+  },
 }));
 jest.mock('../../services/reachability', () => ({
   ...jest.requireActual('../../services/reachability'),

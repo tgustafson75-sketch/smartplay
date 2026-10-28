@@ -7781,7 +7781,7 @@ const uploadSrc2 = read('services/videoUpload.ts');
 check('Multi-swing UPLOAD expansion (long upload → one analysis per swing)',
   /expandUploadIntoSwings/.test(read('store/swingSessionStore.ts')) &&
     /MULTI_SWING_UPLOAD_MIN_MS/.test(uploadSrc2) &&
-    /pose\.locateSwings\(swings\[0\]\.clipUri, durMs\)/.test(uploadSrc2) &&
+    /pose\.locateSwings\(swings\[0\]\.clipUri, durMs, coverage\)/.test(uploadSrc2) &&
     /store\.expandUploadIntoSwings\(sessionId/.test(uploadSrc2) &&
     /upload-multi-swing-expand/.test(uploadSrc2),
   'a single uploaded clip long enough to hold multiple swings runs locateSwings; if >1 found, the session is expanded into one windowed shot per swing (each analyzed + carded) reusing the per-shot loop, instead of analyzing the whole clip as one swing');

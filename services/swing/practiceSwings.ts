@@ -85,7 +85,8 @@ export function classifyPracticeSwings(
  * (`swings_split_version`) by both splitters. A split carries nothing of the player's, so without the stamp
  * every Re-analyze split it again: the finder ran again, every practice mark was dropped and the demoted
  * swing's read was paid for again. Only a split an OLDER finder made (no stamp, or a lower one) is looked at
- * again. Bump this when services/poseDetection.locateSwings changes what it finds.
+ * again. Bump this when services/poseDetection.locateSwings changes what it finds. 2026-10-27 (Phase SB5) —
+ * stamped only when both finder passes answered (LocateSwingsCoverage): a half look's split stays open.
  */
 export const UPLOAD_FINDER_VERSION = 1;
 

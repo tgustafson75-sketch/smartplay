@@ -841,12 +841,16 @@ interface SwingSessionState {
   /** 2026-06-10 — Multi-swing UPLOAD expansion. A single uploaded clip can hold
    *  several swings; once the video locator finds them, replace the session's
    *  single shot with one windowed shot per swing so each gets its own analysis
-   *  + per-swing card (mirrors the live multi-swing path). No-op if <2 windows. */
-  expandUploadIntoSwings: (sessionId: string, windows: UploadSwingWindow[]) => void;
+   *  + per-swing card (mirrors the live multi-swing path). No-op if <2 windows.
+   *  2026-10-27 (Phase SB5) — `finderWhole`: both of the finder's passes answered. Only a whole look is
+   *  stamped with the finder's version; a half look stays open to the next Re-analyze, which can find the
+   *  swing the missing pass would have seen. */
+  expandUploadIntoSwings: (sessionId: string, windows: UploadSwingWindow[], finderWhole: boolean) => void;
   /**
    * 2026-10-26 — an OLD upload's finder-carved swings replaced by the finder's answer today (Re-analyze;
    * services/swing/practiceSwings.resplitEligible decides). One window is enough. Every per-swing result
-   * goes; the clip's commentary follows the swing it was spoken over.
+   * goes; the clip's commentary follows the swing it was spoken over. 2026-10-27 (Phase SB5) — the caller
+   * only replaces on a WHOLE look (both finder passes answered): this throws stored swings away for good.
    */
   replaceUploadSwings: (sessionId: string, windows: UploadSwingWindow[]) => void;
   /** 2026-10-26 — the practice classifier's answer per shot id (null = counts). */
@@ -2179,13 +2183,13 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           ),
         })),
 
-      expandUploadIntoSwings: (sessionId, windows) =>
+      expandUploadIntoSwings: (sessionId, windows, finderWhole) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session => {
             if (session.id !== sessionId) return session;
             const base = session.shots[0];
             if (!base || windows.length < 2) return session; // nothing to expand
-            return { ...session, shots: carveUploadSwings(sessionId, base, windows, []), swings_split_version: UPLOAD_FINDER_VERSION };
+            return { ...session, shots: carveUploadSwings(sessionId, base, windows, []), ...(finderWhole ? { swings_split_version: UPLOAD_FINDER_VERSION } : {}) };
           }),
         })),
 

@@ -182,7 +182,7 @@ describe('a swing runs window → read → body → arc, once', () => {
     useSwingSessionStore.getState().expandUploadIntoSwings('s1', [
       { startSec: 3, endSec: 6, impactSec: 5, confidence: 'high' },
       { startSec: 20, endSec: 23, impactSec: 22, confidence: 'high' },
-    ] as never);
+    ] as never, true);
     require('../../services/swing/orchestrator/uploadRun').adoptRunWindow('s1');
     const second = runUploadAnalysis('s1');
     release();
@@ -192,7 +192,7 @@ describe('a swing runs window → read → body → arc, once', () => {
 
   it('every split inside the read adopts the window (the wire the test above relies on)', () => {
     const up = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'services/videoUpload.ts'), 'utf8') as string;
-    for (const split of ['replaceUploadSwings(sessionId, windows);', 'expandUploadIntoSwings(sessionId, windows);']) {
+    for (const split of ['replaceUploadSwings(sessionId, windows);', 'expandUploadIntoSwings(sessionId, windows, coverage.complete);']) {
       const at = up.indexOf(split);
       expect(at).toBeGreaterThan(-1);
       expect(up.slice(at, at + 260)).toMatch(/adoptRunWindow\(sessionId\)/);

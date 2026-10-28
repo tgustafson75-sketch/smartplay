@@ -235,7 +235,7 @@ describe('carving an upload into swings hands none of swing 1\'s results to the 
       ...x.shots[0], clipWindowSource: 'user', review_labels: { contact: 'fat' }, review_transcript: 'chunked it',
       analysis_version: BODY_READ_VERSION, club_arc_version: CLUB_ARC_VERSION,
     }] })) }) as never);
-    useSwingSessionStore.getState().expandUploadIntoSwings('s1', [{ startSec: 1, endSec: 4, impactSec: 3 }, { startSec: 11, endSec: 14, impactSec: 13 }]);
+    useSwingSessionStore.getState().expandUploadIntoSwings('s1', [{ startSec: 1, endSec: 4, impactSec: 3 }, { startSec: 11, endSec: 14, impactSec: 13 }], true);
     expect(s1().shots).toHaveLength(2);
     for (const sh of s1().shots as unknown as Record<string, unknown>[]) {
       expect(sh.clipUri).toBe('file:///reel.mp4');
