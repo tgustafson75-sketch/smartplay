@@ -22,6 +22,7 @@
  */
 
 import { resolvePlayerName } from '../../store/swingSessionStore';
+import { bodyReadIsCurrent } from '../swing/analysisVersion';
 import type { TrendSwing } from './swingMetricTrend';
 
 /** The shape this reads off a swing-library session. Local so the module stays store-agnostic. */
@@ -42,7 +43,14 @@ export interface SwingLibrarySession {
   club?: string | null;
   tempo_result?: { ratio?: number | null; ratingLabel?: string | null } | null;
   biomechanics?: ReadableBiomech | null;
-  shots?: { club?: string | null; biomechanics?: ReadableBiomech | null }[];
+  /** Which code stored `biomechanics` (analysisVersion). */
+  analysis_version?: number | null;
+  shots?: {
+    club?: string | null;
+    biomechanics?: ReadableBiomech | null;
+    clipUri?: string | null;
+    practice?: import('../swing/practiceSwings').PracticeMark | null;
+  }[];
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -72,7 +80,8 @@ export function collectSelfTrendSwings(
     const tempoRatio = num(sess.tempo_result?.ratio);
 
     // 2026-10-26 — a demoted practice swing is not one of the player's swings.
-    const perShot = (require('../swing/practiceSwings') as typeof import('../swing/practiceSwings')).countedShots(sess.shots).filter((sh) => sh.biomechanics);
+    const { countedShots, isPracticeSwing } = require('../swing/practiceSwings') as typeof import('../swing/practiceSwings');
+    const perShot = countedShots(sess.shots).filter((sh) => sh.biomechanics);
     if (perShot.length > 0) {
       for (const sh of perShot) {
         swings.push({
@@ -84,11 +93,21 @@ export function collectSelfTrendSwings(
       continue;
     }
 
-    if (!sess.biomechanics && tempoRatio == null) continue;
+    /**
+     * 2026-10-27 (Phase SB6, recheck E-R7-1) — THE SESSION READ IS SWING 1'S BODY. The run reads the first
+     * swing with a clip (shotDetail's `first`), demoted or not, so with swing 1 a practice swing and no other
+     * swing read yet, this fallback put the practice swing's hips and sequencing into the trend the caddie
+     * quotes. It speaks only for a swing that counts, and only when today's code stored it — the rule every
+     * screen reading it keeps (shotDetail.sessionBodyRead). Tempo is the session's own read: it still counts.
+     */
+    const sessionBio = !isPracticeSwing(sess.shots?.find((sh) => sh.clipUri)) && bodyReadIsCurrent(sess.analysis_version)
+      ? sess.biomechanics ?? null
+      : null;
+    if (!sessionBio && tempoRatio == null) continue;
     swings.push({
       date: sess.date,
       club: sess.club ?? null,
-      metrics: metricsFrom(sess.biomechanics, tempoRatio),
+      metrics: metricsFrom(sessionBio, tempoRatio),
     });
   }
   return swings;
