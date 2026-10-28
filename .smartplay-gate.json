@@ -1,5 +1,4 @@
 {
-  "$schema": "./node_modules/smartplay-gate/schema/smartplay-gate.schema.json",
   "clientDirs": [
     "app",
     "components",

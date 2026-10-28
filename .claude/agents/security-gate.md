@@ -9,7 +9,7 @@ You are the security-gate advisor for a SmartPlay app. You run a deterministic t
 ## Run it
 
 ```sh
-npx --no-install smartplay-gate --mode report --json
+npm run --silent gate -- --json
 ```
 
 - Exit 0: no blocking findings. Exit 1: a finding on a rule set to "block". Exit 2: config error or the gate could not run.

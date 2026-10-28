@@ -1,28 +1,24 @@
 #!/bin/sh
-# smartplay-gate pre-push hook.
+# smartplay-gate pre-push hook (2026-10-27).
 #
-# Install in the app repo:
-#   mkdir -p .githooks && cp node_modules/smartplay-gate/templates/pre-push .githooks/pre-push
-#   chmod +x .githooks/pre-push && git config core.hooksPath .githooks
+# Runs the gate from the LOCAL checkout (~/smartplay-gate). It is deliberately NOT a package.json
+# dependency: the gate repo is private, so Vercel and EAS could not install it and every deploy/build
+# would fail at npm install. Never npx it either (the name could resolve to an unrelated npm package).
 #
-# Blocks the push only when a rule set to "block" in .smartplay-gate.json has a finding.
-# A gate that cannot run says so loudly instead of passing quietly.
+# Blocks the push only when a rule set to "block" in .smartplay-gate.json has a finding (exit 1),
+# or when the gate cannot read its config (exit 2). A machine without the gate says so and continues.
 
-if [ ! -x node_modules/.bin/smartplay-gate ]; then
-  echo "smartplay-gate: NOT RUN. It is not installed here (npm i -D github:tgustafson75-sketch/smartplay-gate)." >&2
-  echo "smartplay-gate: the push continues unchecked." >&2
+GATE="$HOME/smartplay-gate/dist/cli.js"
+if [ ! -f "$GATE" ]; then
+  echo "smartplay-gate: NOT RUN (not found at $GATE). The push continues unchecked." >&2
   exit 0
 fi
 
-node_modules/.bin/smartplay-gate --mode enforce
+node "$GATE" --mode enforce
 status=$?
-
 if [ "$status" -eq 1 ]; then
   echo "smartplay-gate: push blocked by a finding on a blocking rule (see above)." >&2
-  exit 1
-fi
-if [ "$status" -ne 0 ]; then
+elif [ "$status" -ne 0 ]; then
   echo "smartplay-gate: config error (exit $status). Fix .smartplay-gate.json; the push is blocked until the gate can run." >&2
-  exit "$status"
 fi
-exit 0
+exit "$status"
