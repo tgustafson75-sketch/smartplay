@@ -90,7 +90,7 @@ RULES — honesty is critical:
 Return ONLY the structured object.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!allowInference(req, res, 'course-ai-search')) return;
+  if (!(await allowInference(req, res, 'course-ai-search'))) return;
   const q = (req.method === 'POST' ? (req.body?.q ?? req.body?.query) : (req.query.q ?? req.query.query)) as string | undefined;
   const region = (req.method === 'POST' ? req.body?.region : req.query.region) as string | undefined;
 

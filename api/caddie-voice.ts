@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
    * key gate cannot work here, which is exactly why api/voice and api/kevin use this IP limiter
    * instead. Without it one script could spend the inference budget for the whole launch.
    */
-  if (!allowInference(req, res, 'caddie-voice', 20)) return;
+  if (!(await allowInference(req, res, 'caddie-voice', 20))) return;
   try {
     const { imageB64, mediaType = 'image/jpeg' } = (req.body ?? {}) as { imageB64?: string; mediaType?: string };
     if (!imageB64 || typeof imageB64 !== 'string' || imageB64.length < 100) {

@@ -175,6 +175,12 @@ export function initBilling(): boolean {
     }
     Purchases.configure({ apiKey: key });
     configured = true;
+    // 2026-10-27 (security audit Section 4) — our API learns who is calling (log-only for now).
+    try {
+      const ci = require('../callerIdentity') as typeof import('../callerIdentity');
+      ci.installCallerIdentityHeader();
+      void Promise.resolve(Purchases.getAppUserID?.()).then(ci.setCallerAppUserId).catch(() => {});
+    } catch { /* identity is a courtesy; billing must not depend on it */ }
     return true;
   } catch {
     return false;

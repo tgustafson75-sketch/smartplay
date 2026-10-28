@@ -153,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   // App-key gate (constant-time). Both callers (golferAvatar, custom-caddie) send x-app-key.
   if (!requireAppKey(req, res)) return;
-  if (!allowInference(req, res, 'image-edit', 10)) return;
+  if (!(await allowInference(req, res, 'image-edit', 10))) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No image provider configured (need GOOGLE_API_KEY or OPENAI_API_KEY)' });
   }

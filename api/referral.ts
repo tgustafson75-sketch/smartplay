@@ -74,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });
 
   if (!requireAppKey(req, res)) return;
-  if (!allowInference(req, res, 'referral', 30)) return;
+  if (!(await allowInference(req, res, 'referral', 30))) return;
 
   const db = getSmartPlaySupabase();
   // Referrals are additive: with no database the app must still work, so this reports "off" rather

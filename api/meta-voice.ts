@@ -433,7 +433,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!allowInference(req, res, 'meta-voice')) return;
+  if (!(await allowInference(req, res, 'meta-voice'))) return;
 
   let payload: RequestPayload;
   try {

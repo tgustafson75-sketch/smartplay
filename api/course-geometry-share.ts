@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
    * and reasoning as the brain route (the app key ships in the bundle, so a key gate protects
    * nothing and would 401 real users mid-rollout). [[overstrict-gate-lens]]
    */
-  if (!allowInference(req, res, 'geometry_share', 20)) return;
+  if (!(await allowInference(req, res, 'geometry_share', 20))) return;
 
   // App-key gate — constant-time compare so a wrong key can't be timed out.
   const provided = norm(req.headers['x-app-key']);

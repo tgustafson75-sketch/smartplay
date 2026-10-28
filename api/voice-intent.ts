@@ -758,7 +758,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   // 2026-07-27 (24h audit) — skip the gate for the splash warmup (must always land); gate the real path.
-  if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'voice-intent')) return;
+  if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !(await allowInference(req, res, 'voice-intent'))) return;
 
   // Warmup spends $0 (2026-10-27 security audit): the request landing is the Lambda warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {

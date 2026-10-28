@@ -133,7 +133,7 @@ const TOPTRACER_SCHEMA: StructuredSchema = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (!allowInference(req, res, 'toptracer-parse')) return;
+  if (!(await allowInference(req, res, 'toptracer-parse'))) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No AI provider configured' });
   }

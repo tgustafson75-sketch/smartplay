@@ -112,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
   }
-  if (!allowInference(req, res, 'club-path')) return;
+  if (!(await allowInference(req, res, 'club-path'))) return;
   if (!process.env.ANTHROPIC_API_KEY) {
     // Honest "not configured" — client collapses to null and keeps the honest
     // hand/tempo trace rather than drawing a fabricated club arc.

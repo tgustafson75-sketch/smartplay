@@ -17,7 +17,7 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!allowInference(req, res, 'preround')) return;
+  if (!(await allowInference(req, res, 'preround'))) return;
 
   try {
     const {

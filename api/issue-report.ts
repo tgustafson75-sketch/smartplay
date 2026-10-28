@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
    * and reasoning as the brain route (the app key ships in the bundle, so a key gate protects
    * nothing and would 401 real users mid-rollout). [[overstrict-gate-lens]]
    */
-  if (!allowInference(req, res, 'issue_report', 10)) return;
+  if (!(await allowInference(req, res, 'issue_report', 10))) return;
 
   const provided = norm(req.headers['x-app-key']);
   const ok = provided.length === APP_KEY.length &&

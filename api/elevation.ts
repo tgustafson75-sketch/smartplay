@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
    * Nothing bounded the request COUNT. Placed first so a flood is refused before it costs
    * us an upstream call. Same primitive as the brain route. [[overstrict-gate-lens]]
    */
-  if (!allowInference(req, res, 'elevation', 60)) return;
+  if (!(await allowInference(req, res, 'elevation', 60))) return;
   const lat = req.query.lat as string | undefined;
   const lng = req.query.lng as string | undefined;
   if (!lat || !lng) {

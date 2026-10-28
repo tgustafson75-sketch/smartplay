@@ -145,7 +145,7 @@ interface RecapRequest {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!allowInference(req, res, 'recap')) return;
+  if (!(await allowInference(req, res, 'recap'))) return;
 
   try {
     const raw = (req.body ?? {}) as Partial<RecapRequest>;

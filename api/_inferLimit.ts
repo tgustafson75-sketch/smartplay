@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { hitInMemory } from './_rateLimit';
+import { checkCaller, ENFORCE_CALLER_IDENTITY } from './_callerIdentity';
 
 /**
  * 2026-07-23 (QA — inference cost control, zero-regression path) — a generous per-IP throttle for
@@ -28,24 +29,37 @@ function clientKey(req: VercelRequest): string {
 }
 
 /**
- * Throttle a paid-inference route per client IP. Returns true when the request may proceed; when it
- * must be throttled it has already written a 429 and the caller must `return` immediately. Usage:
- *   if (!allowInference(req, res, 'bag-scan')) return;
+ * Throttle a paid-inference route per client IP, and identify the caller. Resolves true when the
+ * request may proceed; when it must not, it has already written the response (429, or 402 once caller
+ * identity is enforced) and the caller must `return` immediately. Usage:
+ *   if (!(await allowInference(req, res, 'bag-scan'))) return;
+ *
+ * Caller identity (api/_callerIdentity, 2026-10-27): LOG ONLY while ENFORCE_CALLER_IDENTITY is false —
+ * the check is started and NOT awaited, so it adds no latency and never refuses a request.
  *
  * @param name    route label — buckets are namespaced per route so limits don't bleed across routes.
  * @param limit   max requests per window per IP (default 60 — generous for human-initiated capture).
  * @param windowMs sliding window (default 60s).
  */
-export function allowInference(
+export async function allowInference(
   req: VercelRequest,
   res: VercelResponse,
   name: string,
   limit = 60,
   windowMs = 60_000,
-): boolean {
+): Promise<boolean> {
   const throttled = hitInMemory(`infer:${name}:${clientKey(req)}`, limit, windowMs);
   if (throttled) {
     res.status(429).json({ error: 'rate_limited', retry_after_ms: windowMs });
+    return false;
+  }
+  if (!ENFORCE_CALLER_IDENTITY) {
+    void checkCaller(req, name).catch(() => {});   // log only: never awaited, never refuses
+    return true;
+  }
+  const verdict = await checkCaller(req, name);
+  if (verdict !== 'pro') {
+    res.status(402).json({ error: 'entitlement_required', caller_identity: verdict });
     return false;
   }
   return true;

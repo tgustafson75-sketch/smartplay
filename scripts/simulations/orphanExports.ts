@@ -291,7 +291,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
 
   // ── SURFACE — deliberate read/lifecycle/debug APIs ────────────────────────────
   'services/apiBase.ts :: API_BASE_URL': 'SURFACE — spine constant, kept as the documented name of the value.',
-  'services/apiBase.ts :: PROD_API_BASE_URL': 'SURFACE — see API_BASE_URL.',
   'services/voiceCircuitBreaker.ts :: getCircuitBreakerSnapshot': 'SURFACE — diagnostic read for owner tools.',
   'services/voiceCircuitBreaker.ts :: degradedReason': 'SURFACE — diagnostic read.',
   'services/voiceCircuitBreaker.ts :: resetCircuitBreaker': 'SURFACE — recovery hatch.',

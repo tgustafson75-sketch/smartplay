@@ -12,7 +12,7 @@ const MODE_DESCRIPTIONS: Record<string, string> = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!allowInference(req, res, 'briefing')) return;
+  if (!(await allowInference(req, res, 'briefing'))) return;
 
   // Warmup spends $0 (2026-10-27 security audit): the request landing is the Lambda warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {

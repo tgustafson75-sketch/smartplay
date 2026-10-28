@@ -1034,7 +1034,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2026-08-08 (course-engine audit gap #4) — this endpoint proxies the PAID golfcourseapi key and
   // hammers Overpass with NO throttle: a curl loop could burn the quota / get the UA banned. IP-based
   // rate limit (generous — a real round pulls one course); same pattern as every AI route.
-  if (!allowInference(req, res, 'course-geometry', 30)) return;
+  if (!(await allowInference(req, res, 'course-geometry', 30))) return;
   // Start the Overpass wall-clock for THIS request. Without this stamp the budget check is inert and
   // the mirror walk is unbounded again — which is the whole defect.
   overpassDeadlineMs = Date.now() + OVERPASS_TOTAL_BUDGET_MS;

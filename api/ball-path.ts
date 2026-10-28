@@ -81,7 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
   }
-  if (!allowInference(req, res, 'ball-path')) return;
+  if (!(await allowInference(req, res, 'ball-path'))) return;
   if (!process.env.ANTHROPIC_API_KEY) {
     // Mirror ball-departure: honest "not configured" so the client collapses to
     // null and simply hides the trace rather than fabricating one.

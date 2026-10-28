@@ -294,7 +294,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // actually protect this AND would 401 the caddie (the client doesn't send the header). 90/min is
   // far above any human voice cadence (~6-12 turns/min) but stops an abuse loop cold. Placed AFTER
   // the warmup return so pre-warm is never throttled.
-  if (!allowInference(req, res, 'kevin', 90)) return;
+  if (!(await allowInference(req, res, 'kevin', 90))) return;
 
   try {
     const body = req.body ?? {};

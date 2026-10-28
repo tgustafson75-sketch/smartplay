@@ -64,7 +64,7 @@ export function aggregateUsage(rows: EventRow[], now: number): OwnerUsageReport[
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  if (!allowInference(req, res, 'owner-usage', 20)) return;
+  if (!(await allowInference(req, res, 'owner-usage', 20))) return;
   res.setHeader('Cache-Control', 'no-store');
 
   const secret = (process.env.OWNER_USAGE_KEY ?? '').trim();

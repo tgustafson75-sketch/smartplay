@@ -108,7 +108,7 @@ type FrameIn = { b64?: unknown; media_type?: unknown };
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!allowInference(req, res, 'arccos-import')) return;
+  if (!(await allowInference(req, res, 'arccos-import'))) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No AI provider configured' });
   }

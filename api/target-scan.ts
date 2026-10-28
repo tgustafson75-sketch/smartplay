@@ -86,7 +86,7 @@ Do NOT report a golf ball, a club, a logo, a light fixture, or a hole in the net
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!allowInference(req, res, 'target-scan')) return;
+  if (!(await allowInference(req, res, 'target-scan'))) return;
 
   const body = (req.body ?? {}) as { image_b64?: string; image_media_type?: string };
   const image_b64 = String(body.image_b64 ?? '').trim();

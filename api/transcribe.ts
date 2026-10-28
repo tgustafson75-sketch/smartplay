@@ -57,7 +57,7 @@ interface DgResponse {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!allowInference(req, res, 'transcribe')) return;
+  if (!(await allowInference(req, res, 'transcribe'))) return;
 
   // Warmup — Deepgram is always available, no Lambda warming needed
   if (req.query?.mode === 'warmup') {

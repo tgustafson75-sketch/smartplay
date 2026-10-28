@@ -209,7 +209,7 @@ export interface SpaceAssessment {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!allowInference(req, res, 'space-scan')) return;
+  if (!(await allowInference(req, res, 'space-scan'))) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No AI provider configured' });
   }

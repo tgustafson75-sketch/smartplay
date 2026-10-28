@@ -124,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   // Spends up to one vision read per hole: a tight per-IP budget. A course is normally checked once.
-  if (!allowInference(req, res, 'course-verify', 6)) return;
+  if (!(await allowInference(req, res, 'course-verify', 6))) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
     return res.status(200).json({ configured: false, holes: [] });
   }

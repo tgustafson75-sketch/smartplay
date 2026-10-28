@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
    * key gate cannot work here, which is exactly why api/voice and api/kevin use this IP limiter
    * instead. Without it one script could spend the inference budget for the whole launch.
    */
-  if (!allowInference(req, res, 'course-places', 60)) return;
+  if (!(await allowInference(req, res, 'course-places', 60))) return;
   if (googleKeys().length === 0) return res.status(200).json({ website: null, phone: null, error: 'not_configured' });
 
   try {

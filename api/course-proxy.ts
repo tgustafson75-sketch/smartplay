@@ -48,7 +48,7 @@ function upstreamError(status: number, body: unknown): { error: string; raw: unk
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2026-08-08 (course-engine audit gap #4) — proxies the PAID golfcourseapi key; add the same IP
   // throttle as course-geometry so the quota can't be burned by a loop.
-  if (!allowInference(req, res, 'course-proxy', 60)) return;
+  if (!(await allowInference(req, res, 'course-proxy', 60))) return;
   const apiKey = process.env.GOLFCOURSE_API_KEY;
   if (!apiKey) {
     console.error('[golfcourseapi] GOLFCOURSE_API_KEY not set in environment');

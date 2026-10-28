@@ -21,46 +21,46 @@ function fakeRes() {
 beforeEach(() => __resetInMemory());
 
 describe('allowInference — per-IP inference throttle', () => {
-  it('lets requests through up to the limit, then 429s', () => {
+  it('lets requests through up to the limit, then 429s', async () => {
     const ip = '1.2.3.4';
     // limit 3 → first three pass, fourth throttles
     for (let i = 0; i < 3; i++) {
       const { res, state } = fakeRes();
-      expect(allowInference(reqFrom(ip), res, 'bag-scan', 3)).toBe(true);
+      expect(await allowInference(reqFrom(ip), res, 'bag-scan', 3)).toBe(true);
       expect(state.code).toBeNull(); // nothing written on the happy path
     }
     const { res, state } = fakeRes();
-    expect(allowInference(reqFrom(ip), res, 'bag-scan', 3)).toBe(false);
+    expect(await allowInference(reqFrom(ip), res, 'bag-scan', 3)).toBe(false);
     expect(state.code).toBe(429);
     expect(state.body).toMatchObject({ error: 'rate_limited' });
   });
 
-  it('namespaces buckets per client IP (one abuser does not throttle another user)', () => {
+  it('namespaces buckets per client IP (one abuser does not throttle another user)', async () => {
     const { res: r1 } = fakeRes();
     const { res: r2 } = fakeRes();
-    expect(allowInference(reqFrom('9.9.9.9'), r1, 'hole-scan', 1)).toBe(true);
+    expect(await allowInference(reqFrom('9.9.9.9'), r1, 'hole-scan', 1)).toBe(true);
     // second hit from the SAME ip trips
     const { res: r1b, state: s1b } = fakeRes();
-    expect(allowInference(reqFrom('9.9.9.9'), r1b, 'hole-scan', 1)).toBe(false);
+    expect(await allowInference(reqFrom('9.9.9.9'), r1b, 'hole-scan', 1)).toBe(false);
     expect(s1b.code).toBe(429);
     // a DIFFERENT ip is unaffected
-    expect(allowInference(reqFrom('8.8.8.8'), r2, 'hole-scan', 1)).toBe(true);
+    expect(await allowInference(reqFrom('8.8.8.8'), r2, 'hole-scan', 1)).toBe(true);
   });
 
-  it('namespaces buckets per route (throttling one endpoint frees another)', () => {
+  it('namespaces buckets per route (throttling one endpoint frees another)', async () => {
     const ip = '5.5.5.5';
     const a = fakeRes();
-    expect(allowInference(reqFrom(ip), a.res, 'swing-analysis', 1)).toBe(true);
+    expect(await allowInference(reqFrom(ip), a.res, 'swing-analysis', 1)).toBe(true);
     const aOver = fakeRes();
-    expect(allowInference(reqFrom(ip), aOver.res, 'swing-analysis', 1)).toBe(false);
+    expect(await allowInference(reqFrom(ip), aOver.res, 'swing-analysis', 1)).toBe(false);
     // same IP, different route → its own fresh bucket
     const b = fakeRes();
-    expect(allowInference(reqFrom(ip), b.res, 'putting-analysis', 1)).toBe(true);
+    expect(await allowInference(reqFrom(ip), b.res, 'putting-analysis', 1)).toBe(true);
   });
 
-  it('reads x-real-ip when x-forwarded-for is absent', () => {
+  it('reads x-real-ip when x-forwarded-for is absent', async () => {
     const req = { headers: { 'x-real-ip': '7.7.7.7' }, socket: {} } as never;
     const { res } = fakeRes();
-    expect(allowInference(req, res, 'lie-analysis', 1)).toBe(true);
+    expect(await allowInference(req, res, 'lie-analysis', 1)).toBe(true);
   });
 });

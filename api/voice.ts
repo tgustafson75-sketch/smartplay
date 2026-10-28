@@ -48,7 +48,7 @@ export default async function handler(
   // 2026-07-27 (full-app audit) — 150/min (not the default 60): a persona switch legitimately renders the
   // 58-clip filler library + ~15 offline ack clips in one window; 60 guaranteed-429'd them → the caddie
   // fell back to the robot voice. 150 fits the warm burst + live TTS while still capping a curl loop.
-  if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'voice', 150)) return;
+  if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !(await allowInference(req, res, 'voice', 150))) return;
 
   // Warmup spends $0 (2026-10-27 security audit): the request landing is the Lambda warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {

@@ -65,7 +65,7 @@ const TOOL: Anthropic.Tool = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (!allowInference(req, res, 'narrative-extract')) return;
+  if (!(await allowInference(req, res, 'narrative-extract'))) return;
   if (!process.env.ANTHROPIC_API_KEY) return res.status(200).json({ configured: false });
 
   try {

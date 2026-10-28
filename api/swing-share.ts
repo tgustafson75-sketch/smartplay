@@ -164,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Creating a share spends a database write and stores a megabyte; gate and throttle it.
   if (!requireAppKey(req, res)) return;
-  if (!allowInference(req, res, 'swing-share', 20)) return;
+  if (!(await allowInference(req, res, 'swing-share', 20))) return;
 
   const db = getSmartPlaySupabase();
   if (!db) return res.status(200).json({ ok: false, error: 'not_configured' });
