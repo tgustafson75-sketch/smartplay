@@ -24,7 +24,7 @@ describe('a real tap is never silently lost', () => {
   });
 
   it('honours it the moment the mic is live', () => {
-    const armed = ls.indexOf('listeningStartedAt = Date.now()');
+    const armed = ls.indexOf("setSessionStateMirror('listening');");
     const applied = ls.indexOf('if (pendingEndpointTap)');
     expect(armed).toBeGreaterThan(-1);
     expect(applied).toBeGreaterThan(armed);

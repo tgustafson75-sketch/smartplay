@@ -143,17 +143,10 @@ const RECORDING_STOP_TAP_COOLDOWN_MS = 1500;
 // 600ms covers the echo + jitter, nothing more. (Camera tap-stop keeps its full 1.5s — audio-session
 // release genuinely needs it.)
 const TAP_ECHO_SWALLOW_MS = 600;
-// 2026-08-07 (regression audit) — timestamp of when the mic actually opened (state → 'listening').
-// The endpoint tap (tap-again-to-submit) must be handled BEFORE the sessionInFlight guard, so we need
-// a way to swallow the OPEN tap's OWN ~350ms second fire (legacy sub + pattern sub) which would
-// otherwise land in 'listening' and end the capture before the user says a word. Any tap within
-// LISTEN_ENDPOINT_MIN_MS of the mic opening is that echo, not a real "I'm done".
-let listeningStartedAt = 0;
 // 2026-08-09 (voice audit P2) — when a tap-to-submit already played the persona-voice "Got it" cue,
 // suppress the redundant device-TTS pick-ack so the nice cue isn't clipped by a robotic one. Timestamp
 // of the last got-it verbal cue; the capture-end ack checks it.
 let gotItCueFiredAt = 0;
-const LISTEN_ENDPOINT_MIN_MS = 800;
 
 /**
  * 2026-08-11 (Tim) — "she ends with something like 'what's on your mind today', but doesn't listen."
@@ -504,14 +497,18 @@ export async function toggle(): Promise<void> {
   // could run). Handle the endpoint HERE, before that guard. A tap while the mic is OPEN means "I'm done,
   // submit" — end the capture early (transcribe what we have) + play the distinct got-it earcon.
   if (state === 'listening') {
-    // Swallow the OPEN tap's own ~350ms echo (it lands in 'listening' but isn't a real "done" tap)...
-    // 2026-09-01 (Tim, on Meta glasses: temple tap starts listening but "does not react as well to a
-    // stop listening tap") — SAY HOW LATE THE TAP WAS. Which guard ate it is already logged; what was
-    // missing is the number that decides whether the window is wrong or the glasses double-fired.
-    // Glasses arrive over Bluetooth AVRCP with more jitter than earbuds, so this is the one figure
-    // that separates "tune the constant" from "de-duplicate the event".
-    if (Date.now() - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS) {
-      swallowedTap('open_tap_echo', { msSinceOpen: Date.now() - listeningStartedAt, windowMs: LISTEN_ENDPOINT_MIN_MS });
+    /**
+     * Swallow the OPEN tap's own echo — the same press arriving a second time (earbudControl's
+     * pattern detector fires 'single' ~350 ms after the tap). It can land in 'listening' only when it
+     * cut the open cue short, so it arrives just after the mic opens.
+     *
+     * 2026-10-27 (Sentry PA/PB: msSinceOpen 397 and 495, real presses eaten) — MEASURED FROM THE TAP.
+     * This used to be 800 ms from the moment the mic opened. That was right on 08-07, when 'listening'
+     * began at the tap; since 08-11 it begins only after the spoken open cue, so the window reached
+     * a second or more past the press and ate real "I'm done" taps. An echo belongs to the tap.
+     */
+    if (Date.now() - sessionOpenTapAt < TAP_ECHO_SWALLOW_MS) {
+      swallowedTap('open_tap_echo', { msSinceOpenTap: Date.now() - sessionOpenTapAt, windowMs: TAP_ECHO_SWALLOW_MS });
       return;
     }
     // ...and dedupe THIS endpoint tap's own double-fire (echo window only).
@@ -1059,7 +1056,6 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
   // The cue has finished and capture begins on the next line — this is the first honest moment to
   // claim we are listening, so the strip, the halo and the tap-again endpoint all arm here.
   setSessionStateMirror('listening');
-  listeningStartedAt = Date.now(); // 2026-08-07 — arms the tap-again endpoint (see toggle())
   console.log('[audit:voice] listening engaged');
   /**
    * A real tap arrived while we were still opening. Honour it now rather than losing it: the person

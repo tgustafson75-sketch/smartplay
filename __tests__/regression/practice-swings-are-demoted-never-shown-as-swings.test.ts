@@ -62,14 +62,14 @@ import { getLibrary } from '../../services/swingLibrary';
 const s1 = () => useSwingSessionStore.getState().sessionHistory[0];
 const shots = () => s1().shots as unknown as Record<string, unknown>[];
 
-/** An upload split by an older build: three `${sid}_shot_i` windows on one clip, 'manual', no source, no confidence. */
+/** An upload split by an older build: three `${sid}_shot_i` finder-shaped windows on one clip, 'manual', no source, no confidence. */
 function seedOldUpload(patch: (i: number) => Record<string, unknown> = () => ({})) {
   useSwingSessionStore.setState({
     activeSession: null,
     sessionHistory: [{
       id: 's1', source: 'uploaded_video', analysis_status: 'ok', club: '7i', date: 1, upload: { duration_sec: 40, uploaded_at: 1 },
       shots: [2, 14, 28].map((start, i) => ({
-        id: `s1_shot_${i}`, club: '7i', clipUri: 'file:///range.mp4', clipStartSeconds: start, clipEndSeconds: start + 4,
+        id: `s1_shot_${i}`, club: '7i', clipUri: 'file:///range.mp4', clipStartSeconds: start, clipEndSeconds: start + 4, locatedImpactSec: start + 2.5,
         detectionMethod: 'manual', timestamp: 1, feel: null, shape: null, contact: null, direction: null, acousticContact: null, aiAnalysis: null,
         ...patch(i),
       })),

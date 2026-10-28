@@ -611,6 +611,11 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           confidence: (seg.confidence === 'low' ? 'low' : 'high') as 'high' | 'low',
         }));
         if (resplit) {
+          // 2026-10-27 (Phase SB6, recheck E-R6-1) — the look takes seconds and the swing list stays live
+          // through it: a good-rep mark, a tag, a note or a delete made meanwhile makes the list his. Judge
+          // the split again on the session as it is NOW, and read what he left, not what was there before.
+          const now = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
+          if (now) { session = now; swings = session.shots.filter(s => s.clipUri); }
           // Nothing found is a failed look, not evidence: the stored swings stand. 2026-10-27 (Phase SB5) — so
           // is a HALF look: each finder pass alone misses swings (poseDetection, the 27.5s swing), and a
           // replace is for good (it stamps the finder), so a pass that failed would delete a real swing, its
@@ -618,6 +623,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           if (found.length >= 1 && !coverage.complete) {
             uploadLog('upload-resplit-skipped', { reason: 'half_look', swings_found: found.length, shots: swings.length }, sessionId);
             V6('STAGE 0 — old upload kept its swings (one finder pass did not answer)', { found: found.length, shots: swings.length });
+          } else if (found.length >= 1 && (!now || !resplitEligible(now))) {
+            uploadLog('upload-resplit-skipped', { reason: 'edited_during_look', swings_found: found.length, shots: swings.length }, sessionId);
+            V6('STAGE 0 — old upload kept its swings (the player changed them during the look)', { found: found.length, shots: swings.length });
           } else if (found.length >= 1 && resplitWouldRestoreRemoved(session, windows)) {
             // 2026-10-27 (Phase SB6, recheck E2) — a swing he deleted before deletes were flagged would come back.
             uploadLog('upload-resplit-skipped', { reason: 'would_restore_deleted', swings_found: found.length, shots: swings.length }, sessionId);

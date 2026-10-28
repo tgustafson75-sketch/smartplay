@@ -79,7 +79,7 @@ function seedOldUpload(patch: (i: number) => Record<string, unknown> = () => ({}
     sessionHistory: [{
       id: 's1', source: 'uploaded_video', analysis_status: 'ok', club: '7i', date: 1, upload: { duration_sec: 40, uploaded_at: 1 },
       shots: [2, 14, 28].map((start, i) => ({
-        id: `s1_shot_${i}`, club: '7i', clipUri: 'file:///range.mp4', clipStartSeconds: start, clipEndSeconds: start + 4,
+        id: `s1_shot_${i}`, club: '7i', clipUri: 'file:///range.mp4', clipStartSeconds: start, clipEndSeconds: start + 4, locatedImpactSec: start + 2.5,
         detectionMethod: 'manual', timestamp: 1, feel: null, shape: null, contact: null, direction: null, acousticContact: null, aiAnalysis: null,
         ...patch(i),
       })),
@@ -161,9 +161,9 @@ describe('a re-split never overrides what the player did', () => {
     useSwingSessionStore.getState().expandUploadIntoSwings('s1', [{ startSec: 1, endSec: 4 }, { startSec: 10, endSec: 13 }], true);
     // the single upload's tag was on the whole clip: it rides on every swing, as the clip's notes do
     expect(shots().map((x) => x.feel)).toEqual(['pure', 'pure']);
-    // a RE-split carries no tag of an old swing onto the new ones
+    // a RE-split never moves a tag onto another swing: the store refuses to replace a list carrying his tags (SB6)
     useSwingSessionStore.getState().replaceUploadSwings('s1', [{ startSec: 1, endSec: 4 }, { startSec: 10, endSec: 13 }, { startSec: 20, endSec: 23 }]);
-    expect(shots().map((x) => x.feel ?? null)).toEqual([null, null, null]);
+    expect(shots().map((x) => x.feel ?? null)).toEqual(['pure', 'pure']);
   });
 
   it('THE REPORT: deleting the last swing of an upload — the next Re-analyze does not bring it back', async () => {

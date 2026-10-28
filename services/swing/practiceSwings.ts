@@ -19,6 +19,8 @@
  * Not a demotion signal (a product call): the camera's ball-departure check. A ball that never left is a
  * duff — a real swing, scored as fat — not a practice swing, and it is not persisted per swing anyway.
  */
+import { POST_STRIKE_MS, PRE_STRIKE_MS } from './swingSegmentation';
+
 export type PracticeReason = 'no_ball_seen';
 export interface PracticeMark { reason: PracticeReason; restoredByUser?: boolean }
 export type BallStruck = 'yes' | 'no' | 'unknown';
@@ -103,6 +105,8 @@ type SessionLike = {
   shots: readonly (ShotLike & {
     clipUri?: string | null;
     clipStartSeconds?: number;
+    clipEndSeconds?: number;
+    locatedImpactSec?: number;
     clipWindowSource?: 'auto' | 'user';
     isGoodRep?: boolean | null;
     userNotes?: string | null;
@@ -129,10 +133,29 @@ export function shotHasUserContent(sh: SessionLike['shots'][number]): boolean {
 }
 
 /**
+ * 2026-10-27 (Phase SB6, recheck E-R6-2) — DID THE FINDER CARVE THIS PRE-10-26 WINDOW? Before 10-04 a trim and
+ * Analyze-at-this-moment wrote no window source either, so the pre-10-26 shape alone cannot tell the finder's
+ * window from his. The finder's has always been its impact less 2.5s to at most 1.5s after it
+ * (swingSegmentation PRE/POST_STRIKE_MS, unchanged since 06-07; a neighbour or the clip's end only narrows
+ * it). A trim cleared the impact; Analyze-at-this-moment ran 3s past its moment. Anything else is his.
+ */
+const WINDOW_SLOP_SEC = 0.05;
+function finderShapedWindow(sh: SessionLike['shots'][number]): boolean {
+  const at = sh.locatedImpactSec;
+  const start = sh.clipStartSeconds;
+  const end = sh.clipEndSeconds;
+  if (typeof at !== 'number' || typeof start !== 'number' || typeof end !== 'number') return false;
+  return start <= at && at <= end
+    && at - start <= PRE_STRIKE_MS / 1000 + WINDOW_SLOP_SEC
+    && end - at <= POST_STRIKE_MS / 1000 + WINDOW_SLOP_SEC;
+}
+
+/**
  * May a Re-analyze look for this session's swings again? Only an upload (a live capture's split fused what
  * the microphone heard), only when the finder carved EVERY window — today's 'auto', or the pre-10-26 shape
  * of the same thing (`${id}_shot_i`, one clip, 'manual', no window source) — only when an OLDER finder made
  * the split (UPLOAD_FINDER_VERSION), and only when the player has put nothing on any swing and removed none.
+ * A pre-10-26 window must also be the finder's shape: a trim made before 10-04 left that same shape.
  */
 export function resplitEligible(session: SessionLike): boolean {
   if (session.source !== 'uploaded_video' || session.shots.length === 0) return false;
@@ -148,7 +171,7 @@ export function resplitEligible(session: SessionLike): boolean {
     sh.id === `${session.id}_shot_${i}`
     && sh.clipUri === clip
     && typeof sh.clipStartSeconds === 'number'
-    && (sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && sh.detectionMethod === 'manual'))
+    && (sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && sh.detectionMethod === 'manual' && finderShapedWindow(sh)))
     && !shotHasUserContent(sh));
 }
 

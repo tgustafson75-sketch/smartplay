@@ -91,7 +91,7 @@ function seedOldUploadLastDeleted(headlineShots?: string[]) {
       id: 's1', source: 'uploaded_video', analysis_status: 'ok', club: '7i', date: 1, upload: { duration_sec: 60, uploaded_at: 1 },
       ...(headlineShots ? { primary_issue: { issue_id: 'over_the_top', detected_in_shots: headlineShots } } : {}),
       shots: SIX.slice(0, 5).map((t, i) => ({
-        id: `s1_shot_${i}`, club: '7i', clipUri: 'file:///range60.mp4', clipStartSeconds: t - 2, clipEndSeconds: t + 2,
+        id: `s1_shot_${i}`, club: '7i', clipUri: 'file:///range60.mp4', clipStartSeconds: t - 2.5, clipEndSeconds: t + 1.5,
         locatedImpactSec: t, detectionMethod: 'manual', timestamp: 1,
         feel: null, shape: null, contact: null, direction: null, acousticContact: null, aiAnalysis: null,
       })),

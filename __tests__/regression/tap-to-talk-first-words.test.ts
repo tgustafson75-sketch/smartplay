@@ -77,13 +77,13 @@ describe('the app never claims to be listening before the mic is live', () => {
       expect(capture).toBeGreaterThan(listening);
     });
 
-    it('arms the tap-again endpoint at the same moment, not at the tap', () => {
-      // listeningStartedAt gates "tap again = I'm done". Arming it a second early would let the
-      // open-tap's own echo end a capture that had not begun.
-      const listening = body.indexOf("setSessionStateMirror('listening')");
-      const armed = body.indexOf('listeningStartedAt = Date.now()');
-      expect(armed).toBeGreaterThan(listening);
-      expect(armed - listening).toBeLessThan(200);
+    it('the tap-again endpoint is armed by the listening state itself, and its echo guard keys off the TAP', () => {
+      // 2026-10-27 (Sentry PA/PB) — the endpoint arms when state becomes 'listening' (toggle checks the
+      // state). The open tap's echo is measured from the tap, not from the mic opening: an 800 ms window
+      // from mic-open ate real "I'm done" presses once 'listening' moved behind the spoken cue.
+      const src = read('services/listeningSession.ts');
+      expect(src).not.toMatch(/listeningStartedAt|LISTEN_ENDPOINT_MIN_MS/);
+      expect(src).toMatch(/if \(Date\.now\(\) - sessionOpenTapAt < TAP_ECHO_SWALLOW_MS\) \{\s*swallowedTap\('open_tap_echo'/);
     });
 
     it('the cancel-during-cue guard checks the state actually held during the cue', () => {

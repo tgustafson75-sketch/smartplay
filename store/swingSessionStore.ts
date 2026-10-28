@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import { practiceLog } from '../services/practiceTelemetry';
 import { BODY_READ_VERSION, CLUB_ARC_VERSION, bodyReadIsCurrent, clubArcIsCurrent } from '../services/swing/analysisVersion';
-import { isPracticeSwing, UPLOAD_FINDER_VERSION } from '../services/swing/practiceSwings';
+import { isPracticeSwing, resplitEligible, UPLOAD_FINDER_VERSION } from '../services/swing/practiceSwings';
 import type { SetCreditSnapshot } from '../services/practice/smartMotionPracticeCredit';
 
 /** A shot or session without its club arc (the arc, its frame, its source and its version). */
@@ -851,6 +851,7 @@ interface SwingSessionState {
    * services/swing/practiceSwings.resplitEligible decides). One window is enough. Every per-swing result
    * goes; the clip's commentary follows the swing it was spoken over. 2026-10-27 (Phase SB5) — the caller
    * only replaces on a WHOLE look (both finder passes answered): this throws stored swings away for good.
+   * 2026-10-27 (Phase SB6) — a no-op on a list resplitEligible refuses (one the player edited meanwhile).
    */
   replaceUploadSwings: (sessionId: string, windows: UploadSwingWindow[]) => void;
   /** 2026-10-26 — the practice classifier's answer per shot id (null = counts). */
@@ -2198,7 +2199,8 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           sessionHistory: s.sessionHistory.map(session => {
             if (session.id !== sessionId) return session;
             const base = session.shots[0];
-            if (!base || windows.length < 1) return session;
+            // 2026-10-27 (Phase SB6, recheck E-R6-1) — the store refuses too: a list he edited is never replaced.
+            if (!base || windows.length < 1 || !resplitEligible(session)) return session;
             return { ...session, shots: carveUploadSwings(sessionId, base, windows, session.shots), swings_split_at: Date.now(), swings_split_version: UPLOAD_FINDER_VERSION };
           }),
         })),
