@@ -854,6 +854,13 @@ interface SwingSessionState {
    * 2026-10-27 (Phase SB6) — a no-op on a list resplitEligible refuses (one the player edited meanwhile).
    */
   replaceUploadSwings: (sessionId: string, windows: UploadSwingWindow[]) => void;
+  /**
+   * 2026-10-27 (Phase SB6, recheck round 8) — today's finder looked at this old split and its stored swings
+   * stand (the look would bring back a swing he deleted): stamp the finder without touching a swing, so the
+   * next Re-analyze does not pay for the same look to reach the same answer. A no-op where replaceUploadSwings
+   * would be one.
+   */
+  keepUploadSwings: (sessionId: string) => void;
   /** 2026-10-26 — the practice classifier's answer per shot id (null = counts). */
   setShotPracticeMarks: (sessionId: string, marks: Record<string, import('../services/swing/practiceSwings').PracticeMark | null>) => void;
   /** 2026-10-26 — the player counts a demoted swing again (true) or agrees it was practice (false). */
@@ -2203,6 +2210,12 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             if (!base || windows.length < 1 || !resplitEligible(session)) return session;
             return { ...session, shots: carveUploadSwings(sessionId, base, windows, session.shots), swings_split_at: Date.now(), swings_split_version: UPLOAD_FINDER_VERSION };
           }),
+        })),
+
+      keepUploadSwings: (sessionId) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId || !resplitEligible(session) ? session : { ...session, swings_split_version: UPLOAD_FINDER_VERSION }),
         })),
 
       setShotPracticeMarks: (sessionId, marks) =>

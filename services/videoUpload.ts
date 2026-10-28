@@ -628,6 +628,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
             V6('STAGE 0 — old upload kept its swings (the player changed them during the look)', { found: found.length, shots: swings.length });
           } else if (found.length >= 1 && resplitWouldRestoreRemoved(session, windows)) {
             // 2026-10-27 (Phase SB6, recheck E2) — a swing he deleted before deletes were flagged would come back.
+            // Recheck round 8 — and today's finder will say the same next time: stamp it, or every Re-analyze
+            // pays for this look again (and a look that happens to find fewer would re-split after all).
+            store.keepUploadSwings(sessionId);
             uploadLog('upload-resplit-skipped', { reason: 'would_restore_deleted', swings_found: found.length, shots: swings.length }, sessionId);
             V6('STAGE 0 — old upload kept its swings (the look would bring back a deleted swing)', { found: found.length, shots: swings.length });
           } else if (found.length >= 1) {

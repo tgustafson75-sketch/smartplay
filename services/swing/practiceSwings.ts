@@ -138,13 +138,20 @@ export function shotHasUserContent(sh: SessionLike['shots'][number]): boolean {
  * window from his. The finder's has always been its impact less 2.5s to at most 1.5s after it
  * (swingSegmentation PRE/POST_STRIKE_MS, unchanged since 06-07; a neighbour or the clip's end only narrows
  * it). A trim cleared the impact; Analyze-at-this-moment ran 3s past its moment. Anything else is his.
+ * Recheck round 8 (E-R6-2) — a split made before 08-09 stored no impact on any swing (72b83436 added it), so
+ * when NO swing of the session carries one, the window's length is the test: the finder's was never longer
+ * than PRE + POST, and Analyze-at-this-moment's ran 5.5s. One impact-less window among impact-carrying ones
+ * is a trim, never the finder's.
  */
 const WINDOW_SLOP_SEC = 0.05;
-function finderShapedWindow(sh: SessionLike['shots'][number]): boolean {
+function finderShapedWindow(sh: SessionLike['shots'][number], splitBeforeImpacts: boolean): boolean {
   const at = sh.locatedImpactSec;
   const start = sh.clipStartSeconds;
   const end = sh.clipEndSeconds;
-  if (typeof at !== 'number' || typeof start !== 'number' || typeof end !== 'number') return false;
+  if (typeof start !== 'number' || typeof end !== 'number') return false;
+  if (typeof at !== 'number') {
+    return splitBeforeImpacts && start < end && end - start <= (PRE_STRIKE_MS + POST_STRIKE_MS) / 1000 + WINDOW_SLOP_SEC;
+  }
   return start <= at && at <= end
     && at - start <= PRE_STRIKE_MS / 1000 + WINDOW_SLOP_SEC
     && end - at <= POST_STRIKE_MS / 1000 + WINDOW_SLOP_SEC;
@@ -167,11 +174,12 @@ export function resplitEligible(session: SessionLike): boolean {
   if ((session.primary_issue?.detected_in_shots ?? []).some((id) => id.startsWith(`${session.id}_shot_`) && !held.has(id))) return false;
   const clip = session.shots[0].clipUri;
   if (!clip) return false;
+  const splitBeforeImpacts = session.shots.every((sh) => typeof sh.locatedImpactSec !== 'number');
   return session.shots.every((sh, i) =>
     sh.id === `${session.id}_shot_${i}`
     && sh.clipUri === clip
     && typeof sh.clipStartSeconds === 'number'
-    && (sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && sh.detectionMethod === 'manual' && finderShapedWindow(sh)))
+    && (sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && sh.detectionMethod === 'manual' && finderShapedWindow(sh, splitBeforeImpacts)))
     && !shotHasUserContent(sh));
 }
 
