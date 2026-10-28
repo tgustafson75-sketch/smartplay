@@ -69,10 +69,10 @@
   ],
   "mode": {
     "client-secrets": "warn",
-    "client-vendor-calls": "warn",
+    "client-vendor-calls": "block",
     "client-prompts": "warn",
-    "client-entitlement": "warn",
+    "client-entitlement": "block",
     "unauth-endpoints": "warn",
-    "owner-bundle-env": "warn"
+    "owner-bundle-env": "block"
   }
 }
