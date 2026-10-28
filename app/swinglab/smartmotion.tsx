@@ -49,7 +49,7 @@ import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
 import { drawableClubArc, overlayLayers, swingTraceNote, type OverlayArcPoint } from '../../services/swing/overlayVisibility';
-import { bodyReadNote, reviewShotDetailAsk, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, spotlightShows, type IssueHold } from '../../services/swing/faultSpotlight';
+import { bodyReadNote, reviewShotDetailAsk, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, reviewFaultOnScreen, spotlightShows, type IssueHold } from '../../services/swing/faultSpotlight';
 import { anchorsFromPoseFrames, swingStageTimesMs, type SwingStageKey } from '../../services/swing/poseMotion';
 import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
@@ -1591,6 +1591,10 @@ export default function SmartMotion() {
   const cageSession = useSwingSessionStore(s =>
     sessionId ? s.sessionHistory.find(x => x.id === sessionId) ?? null : null,
   );
+  // The swing on screen. Its practice mark lands at the end of the set's read, after its own read
+  // (`analysis`); a demoted swing shows no fault (reviewFaultOnScreen).
+  const reviewShot = cageSession?.shots[selectedSwing];
+  const reviewIsPractice = isPracticeSwing(reviewShot);
   useEffect(() => { setShowTrace(false); }, [sessionId]);
   const setSessionBallArea = useSwingSessionStore(s => s.setSessionBallArea);
   const setSessionTarget = useSwingSessionStore(s => s.setSessionTarget);
@@ -2447,6 +2451,9 @@ export default function SmartMotion() {
       }
       return { text: 'SOLID SWING', tone: 'good' as SmTone };
     }
+    // 2026-10-27 (SB7 R11) — a swing the set's read demoted to practice keeps its read but names no fault:
+    // the banner under the reel says "Practice swing — no ball seen".
+    if (analysis && reviewIsPractice) return { text: 'PRACTICE SWING', tone: 'neutral' as SmTone };
     // 2026-06-11 — "NO READ — RECORD AGAIN" is a TERMINAL state, only in review.
     // The cage's first read often runs a bounded acoustic window, THEN falls back
     // to a whole-clip video re-scan + analysis; in that gap analysis is briefly
@@ -2455,18 +2462,18 @@ export default function SmartMotion() {
     // so the read no longer flashes a fail state before it lands (cage findings).
     // 2026-10-17 — and while THIS swing's body read is still coming (a swing 2+ the player paged to).
     return deriveVerdict(analysis, phase === 'analyzing' || (phase === 'review' && !analysis && selectedBodyReadPending), swingContact, measuredEvidence);
-  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact, poseRead, measuredEvidence, selectedBodyReadPending]);
+  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact, poseRead, measuredEvidence, selectedBodyReadPending, reviewIsPractice]);
   const coverageLine = useMemo(
     () => coverageNote(analysis?.sample_coverage ?? null, analysis?.phases_visible ?? null),
     [analysis],
   );
   const faultHeadline = useMemo(() => {
-    if (!analysis) return null;
+    if (!analysis || reviewIsPractice) return null;
     const f = analysis.primary_fault;
     if (f && f !== 'no_dominant_fault' && f !== 'inconclusive') return f.replace(/_/g, ' ');
     if (analysis.detected_issue && analysis.detected_issue !== 'none') return analysis.detected_issue.replace(/_/g, ' ');
     return null;
-  }, [analysis]);
+  }, [analysis, reviewIsPractice]);
 
   // Cleanup on unmount — stop an in-flight recording + metering + ALL speech.
   useEffect(() => {
@@ -3190,8 +3197,9 @@ export default function SmartMotion() {
 
   const openDrills = useCallback(() => {
     // 2026-10-27 (audit R4) — the drill for the fault TOP FOCUS headlines (primary_fault first), not detected_issue.
-    router.push(drillRouteFor(analysis) as never);
-  }, [analysis, router]);
+    // A practice swing names no fault (reviewFaultOnScreen), so it opens the drill list.
+    router.push(drillRouteFor(reviewIsPractice ? null : analysis) as never);
+  }, [analysis, reviewIsPractice, router]);
 
   /**
    * 2026-08-10 (Tim — "I went to put a coach's note… but that didn't ingest anywhere").
@@ -4924,8 +4932,9 @@ export default function SmartMotion() {
    * same stop the swing library makes (services/swing/faultSpotlight): THIS swing's fault (`analysis` is the
    * selected swing's read), timed by the frame its read was made from, else its phase on the pose positions.
    * Hooks, so above the permission gate (see the 08-09 note above).
+   * 2026-10-27 (SB7 R11) — none for a swing demoted to practice after its read (reviewFaultOnScreen).
    */
-  const reviewFaultId = analysis?.primary_fault ?? analysis?.detected_issue ?? null;
+  const reviewFaultId = reviewFaultOnScreen(analysis, reviewShot);
   const reviewAnchors = useMemo(() => anchorsFromPoseFrames(poseFrames), [poseFrames]);
   const reviewHeardStrike = shotImpactHeard(cageSession?.shots[selectedSwing]);   // the body read's own answer
   /** Where each stage chip / scrubber tick seeks — the one rule both review screens use (poseMotion). */
@@ -4935,7 +4944,7 @@ export default function SmartMotion() {
   );
   const reviewFaultMoment = useMemo(() => {
     const seg = segments[selectedSwing];
-    const sh = cageSession?.shots[selectedSwing];
+    const sh = reviewShot;
     // 2026-10-16 — the anchors MEASURED from this read's motion (poseMotion), as the library uses: a label
     // the sampler placed, at a window fraction or a fixed offset from impact, is not a measurement.
     const anchors = reviewAnchors;
@@ -4949,7 +4958,7 @@ export default function SmartMotion() {
       windowStartSec: seg && seg.endMs > seg.startMs ? seg.startMs / 1000 : 0,
       windowEndSec: seg && seg.endMs > seg.startMs ? seg.endMs / 1000 : Number.MAX_SAFE_INTEGER,
     });
-  }, [segments, selectedSwing, cageSession?.shots, reviewAnchors, reviewFaultId]);
+  }, [segments, selectedSwing, reviewShot, reviewAnchors, reviewFaultId]);
   const reviewFaultSecRef = useRef<number | null>(null);
   const reviewIssuePausedRef = useRef(false);
   const reviewLastPosRef = useRef(-1);
@@ -5599,8 +5608,8 @@ export default function SmartMotion() {
               // 2026-07-06 (range audit RANK 3) — light the diagnosed fault's body
               // region orange/red in the LIVE review too (was only on the saved-swing
               // screen), so a significant over-the-top actually reads red as you watch.
-              faultJoints={faultJointsFor(analysis?.primary_fault ?? analysis?.detected_issue)}
-              faultSevere={analysis?.severity === 'significant'}
+              faultJoints={reviewFaultJoints}
+              faultSevere={!!reviewFaultId && analysis?.severity === 'significant'}
               clubArc={reviewLayers.clubArc}
               videoW={reviewVideoNatural?.w ?? null}
               videoH={reviewVideoNatural?.h ?? null}
@@ -6677,6 +6686,17 @@ export default function SmartMotion() {
         })()
       ) : (
         <>
+          {/*
+            2026-10-27 (SB7 R11) — a swing the set's read demoted to practice keeps its read for "count it",
+            but none of it is shown: what it observed, why, the fix and the drill all describe a fault the
+            screen says this swing does not have.
+          */}
+          {reviewIsPractice ? (
+            <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.practice_swing')}</Text>
+              <Text style={[styles.insightText, { color: colors.text_secondary }]}>{t('swinglab_smartmotion.smart_motion.practice_swing_read_hidden')}</Text>
+            </View>
+          ) : null}
           {faultHeadline ? (
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
               <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.top_focus')}</Text>
@@ -6707,38 +6727,38 @@ export default function SmartMotion() {
             </Text>
           ) : null}
 
-          {analysis.observation ? (
+          {analysis.observation && !reviewIsPractice ? (
             <Text style={[styles.insightBody, { color: colors.text_secondary, backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>{analysis.observation}</Text>
           ) : null}
 
-          {analysis.cause ? (
+          {analysis.cause && !reviewIsPractice ? (
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
               <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.why_it_happens')}</Text>
               <Text style={[styles.insightText, { color: colors.text_secondary }]}>{analysis.cause}</Text>
             </View>
           ) : null}
 
-          {analysis.fix ? (
+          {analysis.fix && !reviewIsPractice ? (
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.accent }]}>
               <Text style={[styles.insightLabel, { color: colors.accent }]}>{t('swinglab_smartmotion.smart_motion.the_fix')}</Text>
               <Text style={[styles.insightText, { color: colors.text_primary }]}>{analysis.fix}</Text>
             </View>
           ) : null}
 
-          {analysis.drill ? (
+          {analysis.drill && !reviewIsPractice ? (
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
               <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.recommended_drill')}</Text>
               <Text style={[styles.insightText, { color: colors.text_secondary }]}>{analysis.drill}</Text>
             </View>
           ) : null}
 
-          {analysis.layman_explanation ? (
+          {analysis.layman_explanation && !reviewIsPractice ? (
             <Pressable onPress={() => setShowLayman((v) => !v)} style={[styles.laymanToggle, { borderColor: colors.border }]}>
               <Ionicons name={showLayman ? 'chevron-up' : 'help-circle-outline'} size={15} color={colors.accent} />
               <Text style={[styles.laymanToggleText, { color: colors.accent }]}>{showLayman ? 'Hide' : 'What does this mean?'}</Text>
             </Pressable>
           ) : null}
-          {showLayman && analysis.layman_explanation ? (
+          {showLayman && analysis.layman_explanation && !reviewIsPractice ? (
             <Text style={[styles.insightText, { color: colors.text_secondary }]}>{analysis.layman_explanation}</Text>
           ) : null}
 

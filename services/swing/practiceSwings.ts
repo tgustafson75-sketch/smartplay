@@ -192,10 +192,23 @@ export function resplitEligible(session: SessionLike): boolean {
  * cannot tell a swing the old finder missed from one he removed — the stored swings stand. Undoing his delete
  * is the worse error; a missed swing can still be analyzed at its moment. Today's 'auto' splits are not
  * held back: a half look's split stays open so the next whole look finds the swing it missed (SB5).
+ *
+ * 2026-10-27 (Phase SB7, recheck E-R10-1) — positions, not counts. The finder is meant to drop the old split's
+ * practice swings, so a look at 5 old windows (one a practice swing, the last real swing deleted: 4 held) finds
+ * the same 4 swings it holds, the deleted one among them, and 4 > 4 let the re-split carve it back. A trailing
+ * delete is the one the id-gap and headline checks cannot see, and its swing is found past the end of the last
+ * stored window, where no stored swing lies: such a window holds the stored swings back too.
  */
-export function resplitWouldRestoreRemoved(session: Pick<SessionLike, 'shots'>, windows: readonly unknown[]): boolean {
+export function resplitWouldRestoreRemoved(
+  session: Pick<SessionLike, 'shots'>,
+  windows: readonly { startSec: number; impactSec?: number }[],
+): boolean {
   const legacy = session.shots.length > 0 && session.shots.every((sh) => sh.clipWindowSource == null);
-  return legacy && windows.length > session.shots.length;
+  if (!legacy) return false;
+  if (windows.length > session.shots.length) return true;
+  const lastEnd = Math.max(...session.shots.map((sh) => sh.clipEndSeconds ?? sh.clipStartSeconds ?? Number.NaN).filter(Number.isFinite));
+  if (!Number.isFinite(lastEnd)) return false;
+  return windows.some((w) => (w.impactSec ?? w.startSec) > lastEnd);
 }
 
 /**

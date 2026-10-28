@@ -154,9 +154,11 @@ describe('the swing screen stops, rings and names it — the skeleton stays opt-
 describe('SmartMotion\'s review makes the same stop — the swing you just hit', () => {
   const sm = code('app/swinglab/smartmotion.tsx');
   it('times THIS swing\'s fault from its stored read frame, through the one module', () => {
-    expect(sm).toMatch(/const reviewFaultId = analysis\?\.primary_fault \?\? analysis\?\.detected_issue \?\? null;/);
+    // 2026-10-27 (SB7 R11) — through reviewFaultOnScreen: a swing demoted to practice after its read shows none.
+    expect(sm).toMatch(/const reviewFaultId = reviewFaultOnScreen\(analysis, reviewShot\);/);
+    expect(sm).toMatch(/const reviewShot = cageSession\?\.shots\[selectedSwing\];/);
     expect(sm).toMatch(/faultMomentFor\(\{\s*faultId: reviewFaultId,/);
-    expect(sm).toMatch(/const sh = cageSession\?\.shots\[selectedSwing\];/);
+    expect(sm).toMatch(/const sh = reviewShot;/);
   });
   it('the status handler stops on it (declarative pause too) only with the setting on', () => {
     expect(sm).toMatch(/enabled: pauseOnIssueRef\.current, latched: reviewIssuePausedRef\.current/);

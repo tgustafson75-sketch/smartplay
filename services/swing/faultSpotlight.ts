@@ -281,6 +281,32 @@ export function swingFaultOnScreen(idx: number, sessionHeadline: FaultRead, shot
 }
 
 /**
+ * 2026-10-27 (Phase SB7, recheck R11) — SmartMotion's side of swingFaultOnScreen: the fault its review shows
+ * for the swing on screen (the Issue chip and Jump-to-issue tick, the pause stop, the caption, the ring, the
+ * verdict and the TOP FOCUS card). `read` is that swing's own read (the screen's `analysis`). The set's read
+ * demotes a practice swing AFTER its read has landed, and keeps the read, so the screen still held the fault
+ * under a banner saying "Practice swing — no ball seen". A demoted swing shows none; "count it" brings it back.
+ */
+export function reviewFaultOnScreen(read: FaultRead, shot: ShotOnScreen): string | null {
+  if (isPracticeSwing(shot)) return null;
+  return read?.primary_fault ?? read?.detected_issue ?? null;
+}
+
+/**
+ * 2026-10-27 (Phase SB7, recheck R11) — the fault evidence a library reel row shows for its swing: the read's
+ * observation and the "See the moment" fault-frame thumbnail (and the fault its modal names). A demoted practice
+ * swing shows none — its row is titled "Practice swing — no ball seen" while the observation described the
+ * fault and the thumbnail opened it. The read is kept, so "count it" brings them back.
+ */
+export function reelRowFaultEvidence(
+  read: { observation?: string | null; visual_reference_path?: string | null; detected_issue?: string | null } | null | undefined,
+  shot: ShotOnScreen,
+): { observation: string; faultUri: string | null; detectedIssue: string | null } {
+  if (isPracticeSwing(shot)) return { observation: '', faultUri: null, detectedIssue: null };
+  return { observation: read?.observation ?? '', faultUri: read?.visual_reference_path ?? null, detectedIssue: read?.detected_issue ?? null };
+}
+
+/**
  * 2026-10-27 (seam review of SB3a/b/d) — may the session headline stand in for swing 1's own read? Only for a
  * legacy swing 1: not a demoted practice swing (SB3b skips its read, so it has none — the headline is the
  * COUNTED swings'), and not when the headline names other swings only (SB3a clears every per-swing read at a

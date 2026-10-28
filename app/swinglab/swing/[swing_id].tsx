@@ -70,7 +70,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
-import { bodyReadNote, olderBodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
+import { bodyReadNote, olderBodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, reelRowFaultEvidence, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { drawableClubArc, overlayLayers, swingTraceNote, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
@@ -3120,8 +3120,8 @@ export default function SwingDetail() {
                 // as a small thumbnail beside the row + a "See the
                 // moment" tap target that opens the full-size modal
                 // with the observation. Tolerates absence gracefully.
-                const faultUri = a?.visual_reference_path ?? null;
-                const observation = a?.observation ?? '';
+                // 2026-10-27 (SB7 R11) — none for a demoted practice swing (reelRowFaultEvidence).
+                const { faultUri, observation, detectedIssue } = reelRowFaultEvidence(a, s);
                 // 2026-10-26 — the practice classifier's call, shown (never hidden) and the player's to overturn.
                 const practice = isPracticeSwing(s);
                 const restored = s.practice?.restoredByUser === true;
@@ -3173,11 +3173,11 @@ export default function SwingDetail() {
                             </Text>
                           </TouchableOpacity>
                         )}
-                        {observation && (
+                        {observation ? (
                           <Text style={[styles.shotObservation, { color: colors.text_muted }]} numberOfLines={2}>
                             {observation}
                           </Text>
-                        )}
+                        ) : null}
                       </View>
                     </TouchableOpacity>
                     {faultUri && (
@@ -3185,7 +3185,7 @@ export default function SwingDetail() {
                         onPress={() => setFaultFrameModal({
                           uri: faultUri,
                           observation,
-                          detected_issue: a?.detected_issue ?? null,
+                          detected_issue: detectedIssue,
                         })}
                         style={styles.faultThumbWrap}
                         accessibilityRole="button"

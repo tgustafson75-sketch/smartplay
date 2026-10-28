@@ -118,7 +118,9 @@ describe('an old upload is split again on Re-analyze', () => {
     useSwingSessionStore.getState().setShotClipBoundaries('s1', 's1_shot_1', 13, 17, 15, 'user');
     expect(swingLayoutKey(s1() as never)).toBe(before);              // a trim keeps the selection
     seedOldUpload();
-    mockLocate = [{ timeSec: 16, confidence: 'high' }, { timeSec: 30, confidence: 'high' }, { timeSec: 36, confidence: 'high' }];
+    // 2026-10-27 (SB7, E-R10-1) — every swing found inside the stored span: one past the last stored window
+    // is a possible pre-SB4x trailing delete, and holds the split back (a-trailing-delete-stays-deleted-…).
+    mockLocate = [{ timeSec: 16, confidence: 'high' }, { timeSec: 22, confidence: 'high' }, { timeSec: 30, confidence: 'high' }];
     await _runPhaseKRead('s1');
     expect(shots().map((x) => x.id)).toEqual(['s1_shot_0', 's1_shot_1', 's1_shot_2']);   // same ids…
     expect(swingLayoutKey(s1() as never)).not.toBe(before);          // …different swings: per-swing state is dropped

@@ -413,6 +413,8 @@
       "frames_found_swing": "Encontré tu swing entre {{start}} y {{end}} s · {{frames}} fotogramas",
       "frames_whole_clip": "El clip cubre {{start}}–{{end}} s · {{frames}} fotogramas — no pude ubicar el swing",
       "frames_missed_top_impact": "La parte alta y el impacto no aparecen en estos fotogramas, así que la lectura es de baja confianza.",
+      "practice_swing": "SWING DE PRÁCTICA",
+      "practice_swing_read_hidden": "No se vio bola, así que la lectura de este swing queda aparte. Toca COUNT IT bajo el video para recuperarla.",
       "get_set": "PREPÁRATE"
     }
   },

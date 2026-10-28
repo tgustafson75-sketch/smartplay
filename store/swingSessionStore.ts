@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import { practiceLog } from '../services/practiceTelemetry';
-import { BODY_READ_VERSION, CLUB_ARC_VERSION, bodyReadIsCurrent, clubArcIsCurrent } from '../services/swing/analysisVersion';
+import { BODY_READ_VERSION, CLUB_ARC_VERSION, arcIsCurrent, bodyReadIsCurrent, clubArcIsCurrent } from '../services/swing/analysisVersion';
 import { isPracticeSwing, resplitEligible, UPLOAD_FINDER_VERSION } from '../services/swing/practiceSwings';
 import type { SetCreditSnapshot } from '../services/practice/smartMotionPracticeCredit';
 
@@ -18,6 +18,11 @@ function withoutArc<T extends { club_arc?: unknown; club_arc_frame?: unknown; cl
  * are the first clip-bearing swing's (shotDetail.storedShotBiomech / hasFinalArc). Deleting that swing
  * only filtered it out, so the swing that moved into first place showed its tempo, start line, carry, BODY
  * tiles, skeleton and arc, and the caddie was told they were that swing's measured numbers.
+ *
+ * 2026-10-27 (Phase SB7, recheck E-R10-2) — and the new first swing's own copies come up. The session read is
+ * what Compare and every other swing's reference list read (shotDetail.sessionBodyRead), and only the shot
+ * run writes it back — never for a swing that already holds today's read of its own. So a swing 2 the player
+ * had opened kept its full body read on screen while the session dropped out of Compare until a Re-analyze.
  */
 function withoutSwingOnesCopies(session: SwingSession, shotId: string): SwingSession {
   const atFirst = session.shots[0]?.id === shotId;
@@ -26,7 +31,12 @@ function withoutSwingOnesCopies(session: SwingSession, shotId: string): SwingSes
   const mapGone = atFirst ? { smart_motion_shot_map: null } : {};
   if (!firstRead) return { ...session, ...mapGone };
   const { biomechanics: _b, analysis_version: _v, ...rest } = withoutArc(session);
-  return { ...(rest as SwingSession), ...mapGone, fault_frame_uri: null, fault_frame_index: null, fault_frame_fraction: null };
+  const next = session.shots.find(shot => shot.id !== shotId && shot.clipUri);
+  const bodyUp = next && next.biomechanics !== undefined && bodyReadIsCurrent(next.analysis_version)
+    ? { biomechanics: next.biomechanics, analysis_version: next.analysis_version } : {};
+  const arcUp = next && (next.club_arc !== undefined || next.club_arc_source !== undefined) && arcIsCurrent(next.club_arc_version, next.club_arc_source)
+    ? { club_arc: next.club_arc, club_arc_frame: next.club_arc_frame ?? null, club_arc_source: next.club_arc_source, club_arc_version: next.club_arc_version } : {};
+  return { ...(rest as SwingSession), ...mapGone, ...bodyUp, ...arcUp, fault_frame_uri: null, fault_frame_index: null, fault_frame_fraction: null };
 }
 
 // ─── TYPES ────────────────────────────────
