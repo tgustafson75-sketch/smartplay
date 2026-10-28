@@ -197,3 +197,47 @@ Whether these migrations are applied to the live project is UNVERIFIED from code
 - Rotate the Meta Wearables client token and the Google Maps key that are in git history. Both rotations are UNVERIFIED.
 - Restrict the Mapbox `pk.` token to the app bundle IDs.
 - Change docs/OTA-RUNBOOK.md:33 to `npm run ota:production` so the owner guard always runs.
+
+---
+
+## Fix status (2026-10-27)
+
+Server-only changes shipped first (Critical #3, then #2), then the client (#1), then caller identity. Every commit staged explicit paths only; another session's uncommitted work was never included.
+
+| Critical | What changed | File:line | Commit |
+|---|---|---|---|
+| **#1: typed owner email granted lifetime Pro and Owner Tools** | **Removed.** `OWNER_EMAILS` and `isOwnerEmail` are deleted, and so are the support@ and tim@ entries. `isOwnerBuild()` is true only when the build carries `EXPO_PUBLIC_OWNER_EMAIL`, which only the eas.json development and preview profiles set; `scripts/ota-owner-guard.mjs` (unchanged) still refuses a production OTA while it is set. All ~30 call sites use it, and none reads the email. The lifetime grant is deleted: the `grantLifetime` action, planner rung 2, and the env→profile email mirror in `_layout`. The existing planner rule clears any leftover `lifetime` to `free` on the next launch, which also revokes anyone who already used the trick. An owner build gets Pro only at the one access check. The Profile form no longer confirms a typed owner address. | store/playerProfileStore.ts:23; services/featureAccess.ts:178,181; services/billing/trialLifecycle.ts:124 | 56b3acc5 |
+| **#2: warmup made paid calls, some before the rate limiter** | **Removed.** All six warmup branches return 200 before any provider call: kevin (was LLM + TTS), voice (TTS), voice-intent (LLM json), kevin-read and briefing (LLM ping), swing-analysis (Gemini ping). The dead `WARMUP_SYSTEM`/`WARMUP_USER` constants are gone. **Code path:** `mode === 'warmup'` → `return res.status(200)…` with nothing in between. **Tradeoff:** the first real call on a cold Lambda pays provider TLS/SDK setup again (~0.5–2 s). | api/kevin.ts:279; api/voice.ts:54; api/voice-intent.ts:764; api/kevin-read.ts:149; api/briefing.ts:18; api/swing-analysis.ts:884 | ce68fc3e |
+| **#3: /api/owner-triage unauthenticated, calling Anthropic** | **Deleted.** Its only caller was the app's own Triage button, so a header secret would have had to ship in the bundle. The route file, its vercel.json build and route entries, and the client button are all gone. Live check after deploy: `POST https://api.smartplaycaddie.com/api/owner-triage` returns **HTTP 404**. | api/owner-triage.ts (deleted); vercel.json; app/owner-logs.tsx | 90ff42f8 (server), 56b3acc5 (client button) |
+
+**Proof the gates are real** (each was run against the broken behavior and failed):
+- `__tests__/regression/a-warmup-spends-nothing.test.ts` calls every warmup handler with the provider SDKs mocked: 6/6 failed before the fix, 6/6 pass after.
+- `watch-owner-gate` "an owner email TYPED into a player build gets nothing" fails when a typed email is honoured.
+- `a-paid-screen-checks-its-own-door` "a TYPED owner email on a player build is gated like anyone else".
+- The sim LOCK "owner is the build — no email allow-list, no lifetime grant".
+
+**Net diff, Critical #1–#3 (90ff42f8, ce68fc3e, 56b3acc5):** +254 / −998 lines.
+
+### Section 4: caller identity on paid endpoints (log-only), commit 1c8dca2c
+
+- **Client:** `services/callerIdentity.ts` installs one fetch wrapper when billing configures (services/billing/purchases.ts:181). Every request to our API carries `x-rc-app-user-id` = the RevenueCat appUserID. No other host sees it.
+- **Server:** `api/_callerIdentity.ts` verifies `smartplay_caddie_pro` via the RevenueCat REST API, caches answers for 5 min, and logs each verdict (pro / no_entitlement / missing_id / invalid_id / unverified) as a Vercel log line plus a Sentry event with tags and a breadcrumb.
+- **Wiring:** `api/_inferLimit.ts:57`. `allowInference`, which all 55 paid call sites use, starts the check without awaiting it, so every request is served and no latency is added.
+- **The one-line flip to enforce:** `api/_callerIdentity.ts:18`
+
+  ```diff
+  - export const ENFORCE_CALLER_IDENTITY = false;
+  + export const ENFORCE_CALLER_IDENTITY = true;
+  ```
+
+  `allowInference` then awaits the verdict and answers 402 to anything that is not `pro`.
+- **Before flipping:**
+  1. `REVENUECAT_SECRET_KEY` is **not set on Vercel** (verified with `vercel env ls production`), so every verdict is `unverified` today.
+  2. Old app builds send no header (`missing_id`) until the app update carrying 1c8dca2c reaches them.
+  3. With `feature_edition` all `lite`, enforcing would 402 every free player. Enforce only once the Pro routes are meant to be paid.
+
+### Found while fixing
+
+- **Messages IDOR is live.** `MESSAGING_ALLOWED_EMAILS` is not set on Vercel (`vercel env ls production`), so with the bundled messaging key, `GET /api/messages?user=<email>` returns anyone's thread (api/messages.ts:24-32,71-77). Severity: **Critical**. Fastest fix: set that env var to the two participants.
+- **Tim's own production install is no longer an owner.** Owner Tools and owner Pro now need a development or preview build.
+- **App Review.** `tim@smartplaycaddie.com` was the Google Play review sign-in that reached paid features. Every feature is `lite` today, so review is not blocked. When Pro gates come back, reviewers need a sandbox purchase or a promo, not an email.
