@@ -391,6 +391,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
     practiceLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'session_not_in_store' });
     return { primary_issue: null, drill_recommendation: null, analyses };
   }
+  // 2026-10-27 (Phase SB5, recheck R3) — this read has not reached its end until it stamps so below (a credit
+  // held for the set waits for that stamp across a kill: practice/smartMotionPracticeCredit.applyHeldSetCredits).
+  store.setSessionReadEnded(sessionId, null);
 
   // 2026-05-22 — Putting sessions (glasses POV or putt/chip tag) do NOT
   // fit Phase K's full-body swing pose model. Route through the dedicated
@@ -458,6 +461,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           // the cage-review Putting tab can render it without re-running
           // analysis. addPuttingAnalysis also flips analysis_status='ok'.
           liveSessionStore(signal).addPuttingAnalysis(sessionId, result);
+          liveSessionStore(signal).setSessionReadEnded(sessionId, Date.now());
           uploadLog('putting-analysis-attached', { session_id: sessionId, score: result.overallScore }, sessionId);
           // 2026-05-23 (Fix #5) — Synthesize an overall-fault PrimaryIssue
           // from the putting result and persist it alongside the granular
@@ -1105,6 +1109,8 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
         for (const r of results) reads[r.swing_id] = r.analysis;
         const marks = classifyPracticeSwings(cur.shots, reads);
         liveSessionStore(signal).setShotPracticeMarks(sessionId, marks);
+        // The read has reached its end: what it demotes is marked (SwingSession.readEndedAt).
+        liveSessionStore(signal).setSessionReadEnded(sessionId, Date.now());
         const demoted = new Set(Object.keys(marks).filter(id => isPracticeSwing({ practice: marks[id] })));
         if (demoted.size > 0) {
           const kept = results.filter(r => !demoted.has(r.swing_id));

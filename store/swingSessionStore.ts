@@ -447,6 +447,10 @@ export interface SwingSession {
    *  does not lose it (services/practice/smartMotionPracticeCredit.applyHeldSetCredits at launch). Cleared
    *  when the set is credited. */
   practiceCreditPending?: SetCreditSnapshot | null;
+  /** 2026-10-27 (Phase SB5, recheck R3) — when this set's read last REACHED ITS END: the practice classifier
+   *  ran (or the putt read landed). Cleared when a read starts. The launch's held-credit sweep reads a set
+   *  without it first; analysis_status is no such signal (the no-launch verdict writes 'ok' mid-read). */
+  readEndedAt?: number | null;
 }
 
 export type AnalysisStatus =
@@ -869,6 +873,8 @@ interface SwingSessionState {
   setSessionCreditedPractice: (sessionId: string, credited: boolean) => void;
   /** Hold (or drop, null) a set's practice credit until its read settles (SB5). */
   setSessionPracticeCreditPending: (sessionId: string, snap: SetCreditSnapshot | null) => void;
+  /** Stamp (or clear, null) the end of a set's read (SB5 recheck R3; SwingSession.readEndedAt). */
+  setSessionReadEnded: (sessionId: string, at: number | null) => void;
 }
 
 // ─── Helpers ──────────────────────────────
@@ -2283,6 +2289,16 @@ export const useSwingSessionStore = create<SwingSessionState>()(
         set(s => {
           const apply = (session: SwingSession): SwingSession =>
             session.id !== sessionId ? session : { ...session, practiceCreditPending: snap };
+          return {
+            activeSession:
+              s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
+      setSessionReadEnded: (sessionId, at) =>
+        set(s => {
+          const apply = (session: SwingSession): SwingSession =>
+            session.id !== sessionId ? session : { ...session, readEndedAt: at };
           return {
             activeSession:
               s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,

@@ -2623,7 +2623,8 @@
       "shot_map_older_save": "This set was saved by an older version that didn't record which swing its tempo and shot map came from, so they aren't shown.",
       "reanalyze_to_see": "Re-analyze",
       "older_body_read": "This swing's body read is from an older version, so it isn't shown.",
-      "read_again": "Read it again"
+      "read_again": "Read it again",
+      "read_again_failed": "Couldn't read this swing again just now."
     },
     "accessibility_label": {
       "export_swing_report_pdf": "Export swing report PDF",

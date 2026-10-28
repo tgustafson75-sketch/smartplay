@@ -216,10 +216,15 @@ const hydrated = (store: Persisted): Promise<void> => new Promise((resolve) => {
  * hold-until-settled rule as the screen's ledger. The practice classifier runs at the END of the set's read,
  * and a read the kill cut short is never resumed (nothing re-reads it but readWhenOnline, and only a swing
  * that waited for a connection). So waiting for a live run waited for nothing at boot: every swing was
- * credited, a practice swing included, for good. Now a set whose read never reached its end (its status is
- * not 'ok', the status the read writes only after the classifier) is READ first, through the one run, and
- * credited when that read settles — offline it settles at once, failed, and is credited as the screen
- * credits an offline set. One read at a time.
+ * credited, a practice swing included, for good. Now a set whose read never reached its end (no end stamp,
+ * below) is READ first, through the one run, and credited when that read settles — offline it settles at
+ * once, failed, and is credited as the screen credits an offline set. One read at a time.
+ *
+ * 2026-10-27 (Phase SB5, recheck R3 "the no-launch verdict writes 'ok' mid-read") — 'ok' was not the end of
+ * the read: SmartMotion's ball-departure check writes its no-launch verdict (setSessionAnalysis → 'ok') while
+ * swings 2+ are still being read, so a set killed after that was credited unread, its practice swing for
+ * good, and the rest of it never read. The read now stamps its end itself (SwingSession.readEndedAt, right
+ * after the classifier) and the sweep reads any held set without that stamp.
  */
 export async function applyHeldSetCredits(): Promise<string[]> {
   const { useSwingSessionStore } = require('../../store/swingSessionStore') as typeof import('../../store/swingSessionStore');
@@ -236,7 +241,7 @@ export async function applyHeldSetCredits(): Promise<string[]> {
     if (find(id)?.creditedPractice === true) { useSwingSessionStore.getState().setSessionPracticeCreditPending(id, null); continue; }
     const live = liveRun(swingRunKey(id));
     if (live) await live.done;
-    else if (find(id)?.analysis_status !== 'ok') {
+    else if (find(id)?.readEndedAt == null) {
       const { runSwingAnalysis } = require('../swing/orchestrator/uploadRun') as typeof import('../swing/orchestrator/uploadRun');
       // The first read of these swings to reach its end, not a second look: what was read before the kill stays.
       await runSwingAnalysis(id, { deferredRead: true }).catch(() => undefined);

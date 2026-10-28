@@ -210,11 +210,16 @@ export function shotDetailRequestFor(w: { idx: number; showSkeleton: boolean; tr
  * nothing is drawn from it; swing 1 with everything off asks for nothing (the library is manual), so without
  * this line the Biomechanics card, the body tiles and the Swing Breakdown simply vanished on every swing read
  * before 10-26. 'older_read' offers "Read it again" (shotDetailRequestFor bodyAsked); 'reading' while it is out.
+ *
+ * 2026-10-27 (Phase SB5, recheck R3) — 'read_failed': he asked, the read settled, and the older read is still
+ * the only one (a read that is not forced stores nothing when it does not land). It went back to 'older_read',
+ * so the button flashed "Reading…" and the screen looked exactly as before the tap. It says so, and offers
+ * "Read it again" again (every tap a new ask, hooks/useBodyAsk).
  */
-export function olderBodyReadNote(n: { shown: boolean; olderRead: boolean; pending: boolean; asked?: boolean }): 'older_read' | 'reading' | 'no_read' | null {
+export function olderBodyReadNote(n: { shown: boolean; olderRead: boolean; pending: boolean; asked?: boolean }): 'older_read' | 'read_failed' | 'reading' | 'no_read' | null {
   if (n.shown) return null;
   if (n.pending && (n.olderRead || n.asked)) return 'reading';
-  if (n.olderRead) return 'older_read';
+  if (n.olderRead) return n.asked ? 'read_failed' : 'older_read';
   // Read again on his tap and today's code found no body: say so, never just drop the line.
   return n.asked ? 'no_read' : null;
 }

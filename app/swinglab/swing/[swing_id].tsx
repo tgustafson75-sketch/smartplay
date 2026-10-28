@@ -3592,6 +3592,7 @@ export default function SwingDetail() {
                   <Text style={{ color: colors.text_muted, fontSize: 12, flex: 1 }}>
                     {olderReadNote === 'reading' ? t('swinglab_swing.swing_detail.reading_body')
                       : olderReadNote === 'no_read' ? t('swinglab_swing.swing_detail.no_body_read')
+                      : olderReadNote === 'read_failed' ? t('swinglab_swing.swing_detail.read_again_failed')
                       : t('swinglab_swing.swing_detail.older_body_read')}
                   </Text>
                   {olderReadNote === 'no_read' ? (
@@ -3599,7 +3600,7 @@ export default function SwingDetail() {
                       <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
                     </TouchableOpacity>
                   ) : null}
-                  {olderReadNote === 'older_read' && (
+                  {(olderReadNote === 'older_read' || olderReadNote === 'read_failed') && (
                     <TouchableOpacity onPress={askBody} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.read_again')}>
                       <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.read_again')}</Text>
                     </TouchableOpacity>

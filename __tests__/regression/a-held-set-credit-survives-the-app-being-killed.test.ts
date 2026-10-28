@@ -15,6 +15,11 @@
  * the kill cut that read short, and nothing resumes it. At launch the sweep "waited for the live read" — none
  * exists at boot — and credited all three swings for good. Now the kill comes first, and the launch READS
  * the set (the one run, here stubbed: it runs the classifier as the real read does) before crediting it.
+ *
+ * 2026-10-27 (recheck R3 "the no-launch verdict writes 'ok' mid-read") — the sweep took status 'ok' as "the
+ * read reached its end". SmartMotion's no-launch check (a practice swing beside a ball on the spot: the ball
+ * never left) writes setSessionAnalysis → 'ok' while swings 2+ are still being read; killed after Save, the
+ * set was credited at launch unread, its practice swing for good. The read now stamps its end (readEndedAt).
  */
 const mockReads: { id: string; extras: unknown }[] = [];
 let mockReadOutcome: 'classified' | 'offline' = 'classified';
@@ -24,7 +29,7 @@ jest.mock('../../services/swing/orchestrator/uploadRun', () => ({
     await new Promise((r) => setTimeout(r, 5));        // the read takes time: the credit must wait for it
     const { useSwingSessionStore: st } = jest.requireActual('../../store/swingSessionStore');
     if (mockReadOutcome === 'offline') { st.getState().setSessionAnalysisStatus(id, 'failed', 'no signal'); return { readFailed: 'no signal' }; }
-    mockDemoteB();                                      // the set's classifier, at the end of its read
+    mockClassifierRan();                                // the set's classifier, at the end of its read
     st.getState().setSessionAnalysisStatus(id, 'ok');
     return { primary_issue: null, drill_recommendation: null, analyses: {} };
   },
@@ -33,6 +38,7 @@ import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { classifyPracticeSwings } from '../../services/swing/practiceSwings';
+import { noLaunchIssue } from '../../services/swing/contactVerdict';
 import * as credit from '../../services/practice/smartMotionPracticeCredit';
 import type { SetCreditBooks, SetCreditSnapshot } from '../../services/practice/smartMotionPracticeCredit';
 
@@ -51,6 +57,11 @@ const mockDemoteB = () => {
   useSwingSessionStore.getState().setShotPracticeMarks('s', classifyPracticeSwings(shots as never, {
     a: { ball_struck: 'yes' }, b: { ball_struck: 'no' }, c: { ball_struck: 'yes' },
   }));
+};
+/** The end of the set's read as the real read writes it: the classifier's marks, then its end stamp. */
+const mockClassifierRan = () => {
+  mockDemoteB();
+  useSwingSessionStore.getState().setSessionReadEnded('s', Date.now());
 };
 const credited = () => usePracticeSessionStore.getState().history.map((h) => h.swingCount);
 const sess = () => useSwingSessionStore.getState().sessionHistory[0];
@@ -92,11 +103,32 @@ describe('a set\'s held practice credit survives the app being killed', () => {
     expect(mockReads).toHaveLength(1);
   });
 
-  it('killed after the read reached its end (status ok, classifier ran) but before the credit: credited at once, no read', async () => {
+  it('THE R3 REPORT: the no-launch verdict wrote \'ok\' mid-read, then the kill — the launch still reads the set before crediting', async () => {
+    const l = credit.createSetCreditLedger((sid, s) => credit.creditSmartMotionSet(sid, s, books));
+    l.readStarted('s');
+    // Swing 1's read landed, the review opened; the ball never left the spot on the practice swing.
+    useSwingSessionStore.getState().setSessionAnalysis('s', noLaunchIssue(), null);
+    expect(sess().analysis_status).toBe('ok');           // 'ok' while swings 2+ are still being read
+    expect(l.request('s', snap).pending).toBe(true);     // Save
+    // -- killed mid-read: the classifier never ran --
+    expect(await launch()).toEqual(['s']);
+    expect(mockReads).toEqual([{ id: 's', extras: { deferredRead: true } }]);
+    expect(credited()).toEqual([2]);                     // b, the practice swing, is not credited
+    expect(await launch()).toEqual([]);
+    expect(credited()).toEqual([2]);
+  });
+
+  it('the end stamp is persisted (the launch reads it from disk)', () => {
+    mockClassifierRan();
+    const disk = useSwingSessionStore.persist.getOptions().partialize!(useSwingSessionStore.getState()) as { sessionHistory: { readEndedAt?: unknown }[] };
+    expect(typeof disk.sessionHistory[0].readEndedAt).toBe('number');
+  });
+
+  it('killed after the read reached its end (classifier ran) but before the credit: credited at once, no read', async () => {
     const l = credit.createSetCreditLedger((sid, s) => credit.creditSmartMotionSet(sid, s, books));
     l.readStarted('s');
     l.request('s', snap);
-    mockDemoteB();
+    mockClassifierRan();
     useSwingSessionStore.getState().setSessionAnalysisStatus('s', 'ok');
     // -- killed before readEnded / flush --
     expect(await launch()).toEqual(['s']);

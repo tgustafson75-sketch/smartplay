@@ -9,6 +9,9 @@
  *
  * Now every tap is a new ask (hooks/useBodyAsk). Driven through the screen's real hooks on the real store,
  * with only the shot run mocked (its ask is recorded and settled by hand).
+ *
+ * Recheck R3 — and the read that did not land SAYS so ('read_failed'). It went back to 'older_read', the
+ * same note and button as before the tap: "Reading…" flashed and the screen looked as if nothing was tried.
  */
 const mockAsks: { shotId: string; arc: unknown; settle: () => void }[] = [];
 jest.mock('../../services/swing/orchestrator/shotDetail', () => ({
@@ -94,7 +97,8 @@ describe('"Read it again" asks again after a read that did not land', () => {
     expect(result.current.note()).toBe('reading');
 
     act(() => { mockAsks[0].settle(); });                  // the read did not land: nothing was stored
-    expect(result.current.note()).toBe('older_read');      // "Read it again" is offered again…
+    expect(result.current.note()).not.toBe('older_read');  // not the note from before the tap…
+    expect(result.current.note()).toBe('read_failed');     // …it says the read failed, and offers it again…
 
     act(() => { result.current.askBody(); });
     expect(mockAsks).toHaveLength(2);                      // …and it does what it says
@@ -107,9 +111,10 @@ describe('"Read it again" asks again after a read that did not land', () => {
     // Swing 2 is read on paging (the free pass); that read did not land either.
     const before = mockAsks.length;
     act(() => { mockAsks.forEach((a) => a.settle()); });
-    expect(result.current.note()).toBe('older_read');
+    expect(result.current.note()).toBe('older_read');        // he never asked: no failure to report
     act(() => { result.current.askBody(); });
     act(() => { mockAsks[mockAsks.length - 1].settle(); });
+    expect(result.current.note()).toBe('read_failed');
     act(() => { result.current.askBody(); });
     expect(mockAsks.length - before).toBe(2);
     expect(mockAsks.slice(before).every((a) => a.shotId === 's1_shot_1')).toBe(true);

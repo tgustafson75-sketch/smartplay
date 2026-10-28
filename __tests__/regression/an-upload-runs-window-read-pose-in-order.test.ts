@@ -321,8 +321,9 @@ describe('a new read clears the old swing rows, and checks the connection before
     expect(up).toMatch(/if \(!unreachable && firstSwingWithClip\?\.clipUri\) \{/);
     // a replaced / over-budget read stops: no more batches, no paid tentative, no memory side effects
     expect(up).toMatch(/await Promise\.allSettled\(batch\.map\(runOne\)\);\s*if \(signal\?\.aborted\) break;/);
-    // (2026-10-26 — the practice classifier now sits between them; it too runs only on a read that was not abandoned.)
-    expect(up).toMatch(/if \(signal\?\.aborted\) return \{ primary_issue: null, drill_recommendation: null, analyses, readFailed: 'cancelled' \};\s*\/\*\*[\s\S]{0,600}THE PRACTICE CLASSIFIER[\s\S]{0,2000}?if \(faultCandidates\.length > 0\)/);
+    // (2026-10-26 — the practice classifier now sits between them; it too runs only on a read that was not abandoned.
+    // 2026-10-27 SB5 R3 — and it stamps the read's end there, SwingSession.readEndedAt: the window grew to 2400.)
+    expect(up).toMatch(/if \(signal\?\.aborted\) return \{ primary_issue: null, drill_recommendation: null, analyses, readFailed: 'cancelled' \};\s*\/\*\*[\s\S]{0,600}THE PRACTICE CLASSIFIER[\s\S]{0,2400}?if \(faultCandidates\.length > 0\)/);
     // a shot's body read is asked only once the swing's read has settled (its budget is not spent waiting),
     // and a cancelled one stops DECODING
     const sd = fs.readFileSync(path.join(__dirname, '..', '..', 'services/swing/orchestrator/shotDetail.ts'), 'utf8');
