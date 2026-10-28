@@ -142,6 +142,21 @@ export function shownSwingHoldsOlderRead(s: SwingSession | null | undefined, sel
   return rawShotBiomech(s, shot, first) != null;
 }
 
+/**
+ * 2026-10-27 (Phase SB6, recheck R4-1) — THE FRAMES THE FAULT MOMENT IS TIMED BY on the swing shown (clamped):
+ * today's read, else an older build's read — TIMING ONLY (the anchors the replay stops on; nothing is drawn
+ * or named from it), until today's read lands. SB4x made an old read unread, so on an old swing 1 with
+ * everything off (nothing asked: the library is manual) the moment had no anchors, and where the stored
+ * fault time was missing or legacy the Issue chip, the seek-bar marks and the fault pause all vanished.
+ */
+export function shownSwingTimingFrames(s: SwingSession | null | undefined, selectedShotIdx: number): readonly PoseFrame[] {
+  const shot = s?.shots[selectedShotIdx] ?? s?.shots[0];
+  if (!s || !shot) return [];
+  const first = s.shots.find((x) => x.clipUri)?.id === shot.id;
+  const stored = storedShotBiomech(s, shot, first);
+  return (stored !== undefined ? stored : rawShotBiomech(s, shot, first))?.frames ?? [];
+}
+
 /** What is stored for the shot by ANY build (the shot's own, or for swing 1 the session's). */
 function rawShotBiomech(s: SwingSession, shot: SwingShot, first: boolean): SwingBiomechanics | null | undefined {
   return shot.biomechanics !== undefined ? shot.biomechanics : (first ? s.biomechanics : undefined);

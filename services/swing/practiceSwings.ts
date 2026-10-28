@@ -13,7 +13,8 @@
  *  - isPracticeSwing / countedShots: what the detail strip, the library count, the SmartMotion reel, the
  *    practice credit and the caddie use instead of `shots.length`.
  *  - resplitEligible: whether a Re-analyze may look for an old upload's swings again — only when the finder
- *    carved every window and the player has put nothing on any swing.
+ *    carved every window and the player has put nothing on any swing; resplitWouldRestoreRemoved: whether
+ *    what it found would bring back a swing he deleted before deletes were flagged.
  *
  * Not a demotion signal (a product call): the camera's ball-departure check. A ball that never left is a
  * duff — a real swing, scored as fat — not a practice swing, and it is not persisted per swing anyway.
@@ -97,6 +98,8 @@ type SessionLike = {
   swings_split_version?: number;
   /** The player removed a swing from this upload: its swing list is theirs now, never re-split. */
   swings_edited_by_user?: boolean;
+  /** The headline names the swings it was read from — a named swing missing from the list was removed. */
+  primary_issue?: { detected_in_shots?: readonly string[] | null } | null;
   shots: readonly (ShotLike & {
     clipUri?: string | null;
     clipStartSeconds?: number;
@@ -135,6 +138,10 @@ export function resplitEligible(session: SessionLike): boolean {
   if (session.source !== 'uploaded_video' || session.shots.length === 0) return false;
   if (typeof session.swings_split_version === 'number' && session.swings_split_version >= UPLOAD_FINDER_VERSION) return false;
   if (session.swings_edited_by_user === true) return false;
+  // 2026-10-27 (Phase SB6, recheck E2) — a delete made before swings_edited_by_user existed: the headline
+  // still names a carved swing (`${id}_shot_k`) that is no longer in the list.
+  const held = new Set(session.shots.map((sh) => sh.id));
+  if ((session.primary_issue?.detected_in_shots ?? []).some((id) => id.startsWith(`${session.id}_shot_`) && !held.has(id))) return false;
   const clip = session.shots[0].clipUri;
   if (!clip) return false;
   return session.shots.every((sh, i) =>
@@ -143,6 +150,21 @@ export function resplitEligible(session: SessionLike): boolean {
     && typeof sh.clipStartSeconds === 'number'
     && (sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && sh.detectionMethod === 'manual'))
     && !shotHasUserContent(sh));
+}
+
+/**
+ * 2026-10-27 (Phase SB6, recheck E2) — WOULD THIS RE-SPLIT BRING BACK A SWING THE PLAYER DELETED? Before SB4x
+ * a delete set no flag (swings_edited_by_user), and dropping the LAST swing of an old finder split leaves the
+ * ids in an unbroken run, so the split still looked untouched: Re-analyze ran the finder again and
+ * replaceUploadSwings carved the deleted swing back, with a new paid read. On a split in the pre-10-26 shape
+ * (no window source: made before deletes were flagged), a look that finds MORE swings than the session holds
+ * cannot tell a swing the old finder missed from one he removed — the stored swings stand. Undoing his delete
+ * is the worse error; a missed swing can still be analyzed at its moment. Today's 'auto' splits are not
+ * held back: a half look's split stays open so the next whole look finds the swing it missed (SB5).
+ */
+export function resplitWouldRestoreRemoved(session: Pick<SessionLike, 'shots'>, windows: readonly unknown[]): boolean {
+  const legacy = session.shots.length > 0 && session.shots.every((sh) => sh.clipWindowSource == null);
+  return legacy && windows.length > session.shots.length;
 }
 
 /**

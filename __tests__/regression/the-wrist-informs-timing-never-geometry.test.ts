@@ -68,7 +68,10 @@ describe('the wrist may inform timing', () => {
     expect(fs.readFileSync(path.join(root, 'services/swing/clubPathWindow.ts'), 'utf8')).toMatch(/poseImpactMs: poseImpactFromFrames\(input\.frames\)/);
     // 2026-10-16 — the wrists → anchors step moved into poseMotion.anchorsFromPoseFrames, shared with
     // SmartMotion's review; the screen's chips read those anchors through swingStageTimesMs.
-    expect(screen).toMatch(/const motionAnchors = useMemo\(\(\) => anchorsFromPoseFrames\(poseFrames\), \[poseFrames\]\);/);
+    // 2026-10-27 (SB6, R4-1) — read off the drawn read's frames (an older build's only while none is drawn,
+    // for the fault moment: the chips show only over a drawn read).
+    expect(screen).toMatch(/activeBiomech \? poseFrames : shownSwingTimingFrames\(session, selectedShotIdx\)/);
+    expect(screen).toMatch(/const motionAnchors = useMemo\(\(\) => anchorsFromPoseFrames\(timingFrames\), \[timingFrames\]\);/);
     expect(screen).toMatch(/swingStageTimesMs\(poseFrames, \{ heardStrike, anchors: motionAnchors \}\)/);
     const pm = fs.readFileSync(path.join(root, 'services/swing/poseMotion.ts'), 'utf8');
     const fn = pm.slice(pm.indexOf('export function anchorsFromPoseFrames'), pm.indexOf('export function anchorsFromPoseFrames') + 600);

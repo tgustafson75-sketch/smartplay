@@ -15,6 +15,7 @@ import { cancelRunsWithPrefix, getOrStartRun, liveRun, liveRunKeys, whenStageSet
 import { useSwingSessionStore } from '../../../store/swingSessionStore';
 import { clearAnswered, noteSwingRunStarted, retireSessionShotRuns, retiredBy, retirementOf, runShotDetail, shotImpactMs, shotRunKey, swingRunKey } from './shotDetail';
 import type { ReadExtras } from '../../videoUpload';
+import { isPracticeSwing } from '../practiceSwings';
 
 /**
  * 2026-10-05 (Tim: "We should have one clean, fast, and correct analysis path that the orchestrator
@@ -242,33 +243,53 @@ function stages(): StageDef<In>[] {
           ]).finally(() => clearTimeout(cap));
           if (signal.aborted) return null;
         }
+        /** A forced body read of one swing — THIS run's read only, never frames stored by an earlier analysis. */
+        const bodyRead = async (shotId: string, arc: false | 'tracker') => {
+          const shotRun = runShotDetail(input.sessionId, shotId, { force: true, arc });
+          signal.addEventListener('abort', () => shotRun.cancel(), { once: true });
+          await whenStageSettled(shotRunKey(input.sessionId, shotId), 'pose', signal);
+          const ps = shotRun.snapshot();
+          return ps.stages.pose?.status === 'ok' ? ps.outputs.pose as import('../../poseAnalysisApi').SwingBiomechanics : null;
+        };
+        /**
+         * 2026-10-27 (Phase SB6, recheck E1) — THE SWING A FALLBACK VERDICT IS NAMED FROM: the first one that
+         * counts (live practice marks), never a demoted practice swing — videoUpload's fallbacks keep the same
+         * rule (firstCountedSwing). With swing 1 demoted and the read failing (weak or no Wi-Fi), the library
+         * and detail headline was minted from the swing the app itself marks as practice. Read FIRST: the
+         * verdict is what this failure needs; swing 1's skeleton is for show. Every swing demoted: no verdict
+         * here — the settle stage reports the read's failure.
+         */
+        const pre = session(input.sessionId);
+        // (A ball the camera saw never leave is the answer already: no verdict read for it, below.)
+        const verdictShot = pre && pre.analysis_status !== 'ok' && pre.primary_issue?.issue_id !== 'no_launch'
+          ? pre.shots.find((x) => !!x.clipUri && !isPracticeSwing(x)) ?? null
+          : null;
+        let bio = verdictShot && verdictShot.id !== shot0.id ? await bodyRead(verdictShot.id, false) : null;
+        if (signal.aborted) return null;
         // The arc comes from the silent pass: the free on-device tracker, never the paid vision model
         // (2026-10-10). The player's Swing Trace toggle is what asks for more.
-        const shotRun = runShotDetail(input.sessionId, shot0.id, { force: true, arc: 'tracker' });
-        signal.addEventListener('abort', () => shotRun.cancel(), { once: true });
-        await whenStageSettled(shotRunKey(input.sessionId, shot0.id), 'pose', signal);
+        const shot0Bio = await bodyRead(shot0.id, 'tracker');
         if (signal.aborted) return null;
+        if (verdictShot?.id === shot0.id) bio = shot0Bio;
         const s = session(input.sessionId);
-        const shot = s?.shots.find((x) => x.id === shot0.id);
-        // THIS run's body read only — never frames stored by an earlier analysis of another window.
-        const ps = shotRun.snapshot();
-        const bio = ps.stages.pose?.status === 'ok' ? ps.outputs.pose as import('../../poseAnalysisApi').SwingBiomechanics : null;
-        if (!s || !shot) return null;
+        const shot = verdictShot ? s?.shots.find((x) => x.id === verdictShot.id) : null;
+        if (!s) return null;
         // A ball the camera SAW never leave (no_launch) is the answer whatever the body did: it stands.
         if (s.analysis_status !== 'ok' && s.primary_issue?.issue_id === 'no_launch') {
           const { liveSessionStore } = require('./liveSessionStore') as typeof import('./liveSessionStore');
           liveSessionStore(signal).setSessionAnalysisStatus(input.sessionId, 'ok');
           return true;
         }
-        if (!bio?.frames?.length) return null;
-        if (s.analysis_status !== 'ok') {
+        if (s.analysis_status !== 'ok' && shot && bio?.frames?.length) {
           try {
             const poseMod = require('../../poseAnalysisApi') as typeof import('../../poseAnalysisApi');
             const { buildPoseSwingRead } = require('../poseSwingRead') as typeof import('../poseSwingRead');
             const { poseReadToPrimaryIssue } = require('../poseReadVerdict') as typeof import('../poseReadVerdict');
             // The impact the body read was given — the same one the swing's own row is named from (shotDetail).
             const impactMs = shotImpactMs(shot);
-            const pi = poseReadToPrimaryIssue(buildPoseSwingRead(bio, poseMod.tempoFromPoseFrames(bio.frames, impactMs, 'video')));
+            const read = poseReadToPrimaryIssue(buildPoseSwingRead(bio, poseMod.tempoFromPoseFrames(bio.frames, impactMs, 'video')));
+            // Named from that swing: the Issue tap goes to it, and swing 1 stands in for it only when it is swing 1.
+            const pi = read ? { ...read, detected_in_shots: [shot.id] } : null;
             if (pi) {
               const { liveSessionStore } = require('./liveSessionStore') as typeof import('./liveSessionStore');
               liveSessionStore(signal).setSessionAnalysis(input.sessionId, pi, null);
@@ -299,7 +320,7 @@ function stages(): StageDef<In>[] {
                 visual_reference_path: null,
                 mechanical_breakdown: 'The full read didn\'t come back, but I measured your body through the swing and nothing stood out.',
                 feel_cue: 'Re-analyze when you have a connection for the full read.',
-                detected_in_shots: [shot0.id],
+                detected_in_shots: [shot.id],
                 confidence: 'low',
               } as import('../../../store/swingSessionStore').PrimaryIssue, null);
               liveSessionStore(signal).setSessionAnalysisStatus(input.sessionId, 'ok');
@@ -308,7 +329,7 @@ function stages(): StageDef<In>[] {
             }
           } catch { /* the settle stage reports the read's failure */ }
         }
-        return true;
+        return shot0Bio?.frames?.length ? true : null;
       },
     },
     {

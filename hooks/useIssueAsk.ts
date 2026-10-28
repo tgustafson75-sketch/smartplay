@@ -14,6 +14,7 @@
  * so the fault-moment effect does not rewrite it, and the replay kept stopping at the old swing's second).
  */
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { issueJumpSec } from '../services/swing/faultSpotlight';
 
 export function useIssueAsk(reviewKey: string): {
   issueAsked: boolean;
@@ -25,6 +26,11 @@ export function useIssueAsk(reviewKey: string): {
   holdAskedFault: (sec: number) => void;
   /** The computed moment took over (the screen's fault-moment effect wrote faultSecRef). */
   clearAskedFault: () => void;
+  /**
+   * The second a jump to the issue goes to (the Issue chip: no `askedSec`; a Fault-moment pill: its time),
+   * holding a pill's time as the fault when no moment is computed. Null: nothing to jump to.
+   */
+  issueJumpTo: (askedSec?: number) => number | null;
 } {
   const keyRef = useRef(reviewKey);
   keyRef.current = reviewKey;
@@ -40,6 +46,16 @@ export function useIssueAsk(reviewKey: string): {
     setAskedFault({ key: keyRef.current, sec });
   }, []);
   const clearAskedFault = useCallback(() => { pillHeldRef.current = false; setAskedFault(null); }, []);
+  // 2026-10-27 (Phase SB6, recheck R4-2) — a pill's held time is not THE moment: the next pill tapped wins.
+  // It was handed to issueJumpSec as the computed moment, so after pill 1 every later pill seeked back to
+  // pill 1's second (and held it), and pill 2 could not be reached until he left the swing.
+  const issueJumpTo = useCallback((askedSec?: number): number | null => {
+    const asked = typeof askedSec === 'number' && Number.isFinite(askedSec);
+    const moment = pillHeldRef.current && asked ? null : faultSecRef.current;
+    const f = issueJumpSec(moment, askedSec);
+    if (f != null && (moment == null || pillHeldRef.current)) holdAskedFault(f);
+    return f;
+  }, [holdAskedFault]);
   useEffect(() => {
     if (pillHeldRef.current) { faultSecRef.current = null; pillHeldRef.current = false; }
     setAskedKey(null);
@@ -52,5 +68,6 @@ export function useIssueAsk(reviewKey: string): {
     askedFaultSec: askedFault && askedFault.key === reviewKey ? askedFault.sec : null,
     holdAskedFault,
     clearAskedFault,
+    issueJumpTo,
   };
 }

@@ -38,7 +38,7 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { sessionBodyRead, sessionsToCompare, shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, shownSwingNeverRead, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { sessionBodyRead, sessionsToCompare, shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, shownSwingNeverRead, shownSwingTimingFrames, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
 import { useShotDetailRequest } from '../../../hooks/useShotDetailRequest';
 import { useIssueAsk } from '../../../hooks/useIssueAsk';
 import { useBodyAsk } from '../../../hooks/useBodyAsk';
@@ -70,7 +70,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
-import { bodyReadNote, olderBodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, issueJumpSec, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
+import { bodyReadNote, olderBodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { drawableClubArc, overlayLayers, swingTraceNote, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
@@ -575,7 +575,7 @@ export default function SwingDetail() {
   // The second a Fault-moment pill held as the fault when no moment could be computed (issueJumpSec), and the
   // fault time the replay stops on — both per swing on screen (hooks/useIssueAsk).
   const reviewKey = `${swing_id ?? ''}|${layoutKey}|${shot?.id ?? ''}`;
-  const { issueAsked, markIssueAsked, faultSecRef, askedFaultSec, holdAskedFault, clearAskedFault } = useIssueAsk(reviewKey);
+  const { issueAsked, markIssueAsked, faultSecRef, askedFaultSec, clearAskedFault, issueJumpTo } = useIssueAsk(reviewKey);
   // 2026-10-27 (SB4x seam) — "Read it again" on a swing holding an older build's body read: keyed to the swing
   // on screen, every tap a new ask (hooks/useBodyAsk, faultSpotlight.olderBodyReadNote).
   const { bodyAsked, bodyAskTaps, askBody } = useBodyAsk(reviewKey);
@@ -718,7 +718,15 @@ export default function SwingDetail() {
    * Shared by the impact anchor below and the jump-to-stage chips, so both name the same instant.
    * Still TIMING ONLY — these seek the video to a millisecond and never produce a drawn point.
    */
-  const motionAnchors = useMemo(() => anchorsFromPoseFrames(poseFrames), [poseFrames]);
+  // 2026-10-27 (SB6, recheck R4-1) — timed by this read, else (an older build's read: unread, nothing drawn
+  // from it) by that read's frames until today's lands (shotDetail.shownSwingTimingFrames). Without it an old
+  // swing 1 had no fault moment: no Issue chip, no marks, no fault pause. The stage chips still show only over
+  // a drawn read (hasPose).
+  const timingFrames = useMemo(
+    () => (activeBiomech ? poseFrames : shownSwingTimingFrames(session, selectedShotIdx)),
+    [activeBiomech, poseFrames, session, selectedShotIdx],
+  );
+  const motionAnchors = useMemo(() => anchorsFromPoseFrames(timingFrames), [timingFrames]);
 
   // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — jump-to-stage chips, reusing scrubTo.
   // 2026-10-16 — WHERE they seek is services/swing/poseMotion.swingStageTimesMs, shared with SmartMotion:
@@ -1278,11 +1286,10 @@ export default function SwingDetail() {
     });
   }, [shot?.detected_issue_timestamps_sec, shot?.perShotAnalysis, displayFault, motionAnchors, winStartSec, winEndSec]);
   /** Seek to the fault and hold it, exactly as if the replay had stopped there — the player asked to see it.
-   *  `askedSec` is the Fault-moment pill's time, held as the fault when no moment is computed (issueJumpSec). */
+   *  `askedSec` is the Fault-moment pill's time, held as the fault when no moment is computed (useIssueAsk.issueJumpTo). */
   const jumpToIssue = useCallback((askedSec?: number) => {
-    const f = issueJumpSec(faultSecRef.current, askedSec);
+    const f = issueJumpTo(askedSec);
     if (f == null) return;
-    if (faultSecRef.current == null) holdAskedFault(f);
     markIssueAsked();
     issuePausedRef.current = true;
     selfSeekUntilRef.current = Date.now() + 800;
@@ -1291,7 +1298,7 @@ export default function SwingDetail() {
     playbackEmitRef.current.lastPosAt = Date.now();
     setPosition(f);
     void scrubTo(f);
-  }, [setIssueHold, holdAskedFault, markIssueAsked, faultSecRef]);
+  }, [setIssueHold, issueJumpTo, markIssueAsked]);
   // A new swing on screen is a new review: nothing held. Keyed on the layout too — a re-split reuses
   // `_shot_0` for a different swing, so the id alone would carry the old swing's hold across. (The ask and a
   // pill-held fault time are keyed to the swing on screen by useIssueAsk.)

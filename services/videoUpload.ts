@@ -567,7 +567,7 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
    * all) were re-read on every Re-analyze for good. Now a Re-analyze looks again — only when the finder
    * carved every window and the player has put nothing on any swing (services/swing/practiceSwings).
    */
-  const { resplitEligible, classifyPracticeSwings, isPracticeSwing } = require('./swing/practiceSwings') as typeof import('./swing/practiceSwings');
+  const { resplitEligible, resplitWouldRestoreRemoved, classifyPracticeSwings, isPracticeSwing } = require('./swing/practiceSwings') as typeof import('./swing/practiceSwings');
   const resplit = !firstSplit && resplitEligible(session);
   if ((firstSplit || resplit) && swings[0]?.clipUri) {
     try {
@@ -618,6 +618,10 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           if (found.length >= 1 && !coverage.complete) {
             uploadLog('upload-resplit-skipped', { reason: 'half_look', swings_found: found.length, shots: swings.length }, sessionId);
             V6('STAGE 0 — old upload kept its swings (one finder pass did not answer)', { found: found.length, shots: swings.length });
+          } else if (found.length >= 1 && resplitWouldRestoreRemoved(session, windows)) {
+            // 2026-10-27 (Phase SB6, recheck E2) — a swing he deleted before deletes were flagged would come back.
+            uploadLog('upload-resplit-skipped', { reason: 'would_restore_deleted', swings_found: found.length, shots: swings.length }, sessionId);
+            V6('STAGE 0 — old upload kept its swings (the look would bring back a deleted swing)', { found: found.length, shots: swings.length });
           } else if (found.length >= 1) {
             store.replaceUploadSwings(sessionId, windows);
             (require('./swing/orchestrator/uploadRun') as typeof import('./swing/orchestrator/uploadRun')).adoptRunWindow(sessionId);
