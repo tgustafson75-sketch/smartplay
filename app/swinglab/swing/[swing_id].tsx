@@ -1970,7 +1970,8 @@ export default function SwingDetail() {
   // moment. >2 entries = legacy fabricated array → show nothing rather than fake detections.
   // 2026-10-16 (review) — and only times inside the swing on screen: the pill seeks there, and a stored
   // read time outside the located window would jump the player into the walk-up or the dead air.
-  const issueTimestamps = ((shot.detected_issue_timestamps_sec ?? []).slice(0, 2).length === (shot.detected_issue_timestamps_sec ?? []).length
+  // 2026-10-27 (SB7) — none on a demoted practice swing: its read keeps the time, but it has no fault to show.
+  const issueTimestamps = isPracticeSwing(shot) ? [] : ((shot.detected_issue_timestamps_sec ?? []).slice(0, 2).length === (shot.detected_issue_timestamps_sec ?? []).length
     ? (shot.detected_issue_timestamps_sec ?? [])
     : []).filter((t) => Number.isFinite(t) && t >= winStartSec - 0.05 && t <= winEndSec);
 
@@ -1998,14 +1999,18 @@ export default function SwingDetail() {
    * chicken_wing, reverse_pivot…), so it resolves directly. detected_issue is the last resort, and
    * recommendDrill still returns null for 'none' or an unmapped id — a genuinely unanalyzed swing
    * keeps the honest placeholder rather than getting a fabricated drill.
+   *
+   * 2026-10-27 (SB7) — never from a demoted practice swing's read: it has no fault on screen either
+   * (faultSpotlight.swingFaultOnScreen).
    */
+  const shotReadForDrill = isPracticeSwing(shot) ? null : shot?.perShotAnalysis;
   const drillRecommendation =
     session.drill_recommendation ??
     (session.primary_issue ? recommendDrill(session.primary_issue.issue_id as never) : null) ??
     (session.primary_issue?.primary_fault ? recommendDrill(session.primary_issue.primary_fault as never) : null) ??
-    (shot?.perShotAnalysis?.primary_fault ? recommendDrill(shot.perShotAnalysis.primary_fault as never) : null) ??
-    (shot?.perShotAnalysis?.detected_issue && shot.perShotAnalysis.detected_issue !== 'none'
-      ? recommendDrill(shot.perShotAnalysis.detected_issue as never)
+    (shotReadForDrill?.primary_fault ? recommendDrill(shotReadForDrill.primary_fault as never) : null) ??
+    (shotReadForDrill?.detected_issue && shotReadForDrill.detected_issue !== 'none'
+      ? recommendDrill(shotReadForDrill.detected_issue as never)
       : null);
 
   // 2026-06-13 (Phase 2) — capture-kind identity. Every library entry now wears a

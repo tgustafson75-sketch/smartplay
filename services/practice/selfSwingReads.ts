@@ -22,7 +22,6 @@
  */
 
 import { resolvePlayerName } from '../../store/swingSessionStore';
-import { bodyReadIsCurrent } from '../swing/analysisVersion';
 import type { TrendSwing } from './swingMetricTrend';
 
 /** The shape this reads off a swing-library session. Local so the module stays store-agnostic. */
@@ -43,8 +42,6 @@ export interface SwingLibrarySession {
   club?: string | null;
   tempo_result?: { ratio?: number | null; ratingLabel?: string | null } | null;
   biomechanics?: ReadableBiomech | null;
-  /** Which code stored `biomechanics` (analysisVersion). */
-  analysis_version?: number | null;
   shots?: {
     club?: string | null;
     biomechanics?: ReadableBiomech | null;
@@ -97,12 +94,14 @@ export function collectSelfTrendSwings(
      * 2026-10-27 (Phase SB6, recheck E-R7-1) — THE SESSION READ IS SWING 1'S BODY. The run reads the first
      * swing with a clip (shotDetail's `first`), demoted or not, so with swing 1 a practice swing and no other
      * swing read yet, this fallback put the practice swing's hips and sequencing into the trend the caddie
-     * quotes. It speaks only for a swing that counts, and only when today's code stored it — the rule every
-     * screen reading it keeps (shotDetail.sessionBodyRead). Tempo is the session's own read: it still counts.
+     * quotes. It speaks only for a swing that counts. Tempo is the session's own read: it still counts.
+     *
+     * 2026-10-27 (Phase SB7, recheck E-R9-1) — WHATEVER BUILD STORED IT, like the per-shot reads above. It also
+     * asked for today's BODY_READ_VERSION stamp, which no read before 10-26 carries, and before shotDetail
+     * (10-05) a single-swing capture kept swing 1's body ONLY here — so those weeks fell to tempo alone and a
+     * body metric could drop under the trend's 4-week floor. The practice check alone keeps a practice swing out.
      */
-    const sessionBio = !isPracticeSwing(sess.shots?.find((sh) => sh.clipUri)) && bodyReadIsCurrent(sess.analysis_version)
-      ? sess.biomechanics ?? null
-      : null;
+    const sessionBio = !isPracticeSwing(sess.shots?.find((sh) => sh.clipUri)) ? sess.biomechanics ?? null : null;
     if (!sessionBio && tempoRatio == null) continue;
     swings.push({
       date: sess.date,

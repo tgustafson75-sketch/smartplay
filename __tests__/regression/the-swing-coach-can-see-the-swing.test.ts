@@ -1,7 +1,6 @@
 import { buildCaddieRequestBody } from '../../services/caddieRequestBody';
 import { useSwingSessionStore, OTHER_PLAYER_ID } from '../../store/swingSessionStore';
 import { collectSelfTrendSwings } from '../../services/practice/selfSwingReads';
-import { BODY_READ_VERSION } from '../../services/swing/analysisVersion';
 
 /**
  * 2026-09-12 (Tim — the day-one concept) — "if you wanna talk to your swing coach… I open the app
@@ -143,8 +142,7 @@ describe('one owner of which measured swings are his', () => {
   it('falls back to the session read when no shot could be graded', () => {
     const now = Date.now();
     const swings = collectSelfTrendSwings([{
-      date: now, club: 'driver', biomechanics: { hipTurnDeg: 50 }, analysis_version: BODY_READ_VERSION,
-      shots: [{ club: 'driver', biomechanics: null }],
+      date: now, club: 'driver', biomechanics: { hipTurnDeg: 50 }, shots: [{ club: 'driver', biomechanics: null }],
     }]);
     expect(swings).toHaveLength(1);
     expect(swings[0].metrics.hipTurnDeg).toBe(50);

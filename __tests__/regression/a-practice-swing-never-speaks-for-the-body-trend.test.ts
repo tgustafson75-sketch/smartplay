@@ -6,16 +6,16 @@
  * SESSION read. Only the shown swing is read on an upload, so swings 2+ usually have no read of their own,
  * and collectSelfTrendSwings fell back to that session read: the practice swing's hip slide and sequencing
  * entered the trend the dashboard draws and the caddie quotes, under swing lists that say it is not his.
- * That fallback also took a read an older build stored, which every screen already refuses to show.
+ *
+ * 2026-10-27 (SB7, E-R9-1): the fallback no longer asks for today's version stamp — see
+ * an-old-single-swing-capture-keeps-its-body-trend.test.ts.
  */
 import { collectSelfTrendSwings } from '../../services/practice/selfSwingReads';
-import { BODY_READ_VERSION } from '../../services/swing/analysisVersion';
 
 const practiceRead = { hipTurnDeg: 31, hipSlideRatio: 0.9, sequencingScore: 12 };
 const upload = (over: Record<string, unknown> = {}) => ({
   date: Date.now(),
   club: '7 iron',
-  analysis_version: BODY_READ_VERSION,
   biomechanics: practiceRead,                            // swing 1's skeleton, written by the run's body read
   shots: [
     { club: '7 iron', clipUri: 'file://a.mp4', practice: { reason: 'no_ball_seen' as const }, biomechanics: practiceRead },
@@ -43,12 +43,5 @@ describe('a practice swing never speaks for the body-metric trend', () => {
     restored.shots[0] = { ...restored.shots[0], practice: { reason: 'no_ball_seen', restoredByUser: true } as never };
     const swings = collectSelfTrendSwings([restored]);
     expect(swings.map((s) => s.metrics.hipSlideRatio)).toEqual([0.9]);
-  });
-
-  it('never takes a session read an older build stored', () => {
-    const counted = { shots: [{ club: '7 iron', clipUri: 'file://a.mp4' }] };
-    expect(collectSelfTrendSwings([upload({ ...counted, analysis_version: undefined })])).toHaveLength(0);
-    expect(collectSelfTrendSwings([upload({ ...counted, analysis_version: BODY_READ_VERSION - 1 })])).toHaveLength(0);
-    expect(collectSelfTrendSwings([upload(counted)]).map((s) => s.metrics.hipTurnDeg)).toEqual([31]);
   });
 });

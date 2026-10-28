@@ -18,6 +18,7 @@
  */
 import type { PoseFrame } from '../poseAnalysisApi';
 import { ISSUE_DISPLAY_NAME } from '../swingIssueClassifier';
+import { isPracticeSwing, type PracticeMark } from './practiceSwings';
 
 // 2026-07-06 (Tim: "if the turn is wrong or the hips don't move, it needs to
 // go orange or red, kinda like GolfFix, so you see the AREA of error") —
@@ -256,14 +257,21 @@ export function issueJumpSec(faultMomentSec: number | null, askedSec?: number | 
 }
 
 type FaultRead = { primary_fault?: string | null; detected_issue?: string | null; issue_id?: string | null; severity?: string | null; detected_in_shots?: readonly string[] | null } | null | undefined;
-type ShotOnScreen = { id: string; practice?: { reason: string; restoredByUser?: boolean } | null } | null | undefined;
+type ShotOnScreen = { id: string; practice?: PracticeMark | null } | null | undefined;
 /**
  * The fault painted and timed on the swing ON SCREEN (library swing screen). Every swing — the first too —
  * uses its own per-swing read when it has one (audit R7: swing 1 showed the session headline, which can be
  * another swing's, so its own stored fault frame was discarded and SmartMotion named a different fault for
  * the same swing). The headline stands in only for a legacy first swing with no per-swing read.
+ *
+ * 2026-10-27 (Phase SB7, recheck round 10) — A DEMOTED PRACTICE SWING HAS NO FAULT, whatever its read holds.
+ * The run reads every swing first and demotes after (classifyPracticeSwings on those same reads), and the
+ * demotion keeps the read — so a practice swing 1, the swing the library opens on, wore its own fault: the
+ * Issue chip, the pause-on-issue stop with its caption and ring, under a reel row saying "Practice swing".
+ * The read is kept, so restoring the swing ("count it") brings its fault back.
  */
 export function swingFaultOnScreen(idx: number, sessionHeadline: FaultRead, shotRead: FaultRead, shot?: ShotOnScreen): { faultId: string | null; severe: boolean } {
+  if (isPracticeSwing(shot)) return { faultId: null, severe: false };
   if (shotRead) {
     const own = shotRead.primary_fault ?? (shotRead.detected_issue && shotRead.detected_issue !== 'none' ? shotRead.detected_issue : null);
     return { faultId: own ?? null, severe: shotRead.severity === 'significant' };
@@ -280,8 +288,7 @@ export function swingFaultOnScreen(idx: number, sessionHeadline: FaultRead, shot
  * unknown (an older build's headline): it still stands in.
  */
 function headlineStandsIn(idx: number, headline: FaultRead, shot: ShotOnScreen): boolean {
-  if (idx !== 0 || !headline) return false;
-  if (shot?.practice && shot.practice.restoredByUser !== true) return false;
+  if (idx !== 0 || !headline || isPracticeSwing(shot)) return false;
   const named = headline.detected_in_shots;
   return !shot || !Array.isArray(named) || named.length === 0 || named.includes(shot.id);
 }
@@ -339,7 +346,8 @@ export function spotlightRing(
 /**
  * 2026-10-27 — the fault the library's BODY tiles are toned from, for the swing on screen. Same rule as
  * swingFaultOnScreen: the swing's own read; the session headline only for a legacy swing 1 with none. It fell
- * back to the headline for EVERY swing, so swing 3's tiles were coloured by another swing's fault.
+ * back to the headline for EVERY swing, so swing 3's tiles were coloured by another swing's fault. A demoted
+ * practice swing has none (SB7).
  */
 export function swingBodyFaultRead(
   idx: number,
@@ -347,6 +355,7 @@ export function swingBodyFaultRead(
   shotRead: FaultRead,
   shot?: ShotOnScreen,
 ): { primary_fault: string | null; detected_issue: string } | null {
+  if (isPracticeSwing(shot)) return null;
   if (shotRead) return { primary_fault: shotRead.primary_fault ?? null, detected_issue: shotRead.detected_issue ?? 'none' };
   if (sessionHeadline && headlineStandsIn(idx, sessionHeadline, shot)) return { primary_fault: sessionHeadline.primary_fault ?? null, detected_issue: sessionHeadline.issue_id ?? 'none' };
   return null;
