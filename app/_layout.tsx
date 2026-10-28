@@ -92,6 +92,7 @@ import CaptureOverlay from '../components/CaptureOverlay';
 import { UpdateAvailableBanner } from '../components/UpdateAvailableBanner';
 import { OfflineBanner } from '../components/OfflineBanner';
 import NativeFallbackBanner from '../components/NativeFallbackBanner';
+import { WebAnalytics } from '../components/WebAnalytics';   // web build only; renders nothing on iOS/Android
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
@@ -1603,6 +1604,7 @@ function AppNavigator() {
           knows they're in cloud mode rather than confused by silent
           feature absence. Renders nothing on healthy builds. */}
       <NativeFallbackBanner />
+      <WebAnalytics />
       {/* Phase 106 — caddie team handoff suggestion overlay. */}
       <CaddieSuggestionCard />
       {/* Phase 107 — GPS quality debug overlay (gated by settings flag). */}

@@ -261,7 +261,7 @@ button.play{background:var(--green);border-color:var(--green);color:var(--ink)}
 .cta{display:block;text-align:center;background:var(--green);color:var(--ink);text-decoration:none;font-weight:800;border-radius:12px;padding:15px;margin-top:22px;min-height:48px}
 footer{text-align:center;color:var(--green);font-size:11px;letter-spacing:.24em;text-transform:uppercase;font-weight:700;margin-top:20px}
 .empty{color:var(--muted);text-align:center;padding:64px 16px}
-</style></head><body><div class="wrap">${body}</div></body></html>`;
+</style><script defer src="/_vercel/insights/script.js"></script></head><body><div class="wrap">${body}</div></body></html>`;
 
 function notFoundHtml(): string {
   return SHELL('Swing not found · SmartPlay Caddie',

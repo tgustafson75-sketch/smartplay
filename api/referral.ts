@@ -219,7 +219,7 @@ p{color:#9ca3af;margin:0 0 22px}
 a.btn{display:block;background:#00C896;color:#04140d;text-decoration:none;font-weight:800;
       padding:15px;border-radius:11px;margin-bottom:11px}
 a.alt{background:transparent;color:#9ca3af;border:1px solid #1f3242}
-</style></head><body><div class="card">
+</style><script defer src="/_vercel/insights/script.js"></script></head><body><div class="card">
 <h1>Your caddie's waiting</h1>
 <p>A friend thinks you'd get on with SmartPlay Caddie — a golf caddie that actually watches your swing.</p>
 ${code ? `<div class="code">${code}</div>
