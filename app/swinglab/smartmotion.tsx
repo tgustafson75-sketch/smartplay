@@ -48,8 +48,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
-import { drawableClubArc, overlayLayers, swingTraceNote, type OverlayArcPoint } from '../../services/swing/overlayVisibility';
-import { bodyReadNote, reviewShotDetailAsk, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, reviewFaultOnScreen, spotlightShows, type IssueHold } from '../../services/swing/faultSpotlight';
+import { drawableClubArc, overlayLayers, swingTraceNote, swingTraceNoteOffersReanalyze, type OverlayArcPoint } from '../../services/swing/overlayVisibility';
+import { bodyReadNote, reviewShotDetailAsk, reviewTraceOffered, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, reviewFaultOnScreen, spotlightShows, type IssueHold } from '../../services/swing/faultSpotlight';
 import { anchorsFromPoseFrames, swingStageTimesMs, type SwingStageKey } from '../../services/swing/poseMotion';
 import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
@@ -102,7 +102,7 @@ import { ReplayMarkupModal, freezeReplayForMarkup } from '../../components/smart
 import { usePagerKeepsPage } from '../../hooks/usePagerKeepsPage';
 import { isPracticeSwing } from '../../services/swing/practiceSwings';
 import { NO_SWING_FOUND } from '../../services/swing/orchestrator/uploadRun';
-import { shotImpactHeard, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
+import { shotImpactHeard, storedArcIsFinal, storedShotBiomech } from '../../services/swing/orchestrator/shotDetail';
 import { useShotDetailRequest } from '../../hooks/useShotDetailRequest';
 import { CONTACT_ISSUE_IDS, mishitFromFeel, noLaunchIssue } from '../../services/swing/contactVerdict';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
@@ -2403,15 +2403,11 @@ export default function SmartMotion() {
     [ballDeparture, feelText, analysis, cageSession?.feel_note],
   );
   // 2026-07-22 (Tim — "the hand/clubhead trace shows even on a practice swing; apply it once the
-  // shot arc + full shot points are identified") — the trace/club arc is a CONFIRMED-shot overlay.
-  // A shot is confirmed when the camera saw the ball actually leave (ballDeparture.departed) or the
-  // model's honest contact read is a known strike. Practice swings (ball never left / unknown) draw
-  // the clean skeleton only — no speculative trace.
-  const shotConfirmed = useMemo(() => {
-    if (ballDeparture?.departed === true) return true;
-    const cr = analysis?.contact_read;
-    return cr === 'clean' || cr === 'fat' || cr === 'thin' || cr === 'topped';
-  }, [ballDeparture, analysis]);
+  // shot arc + full shot points are identified") — the trace/club arc is never drawn on a practice swing.
+  // 2026-10-27 (Phase SB8) — a practice swing is the practice mark's call (faultSpotlight.reviewTraceOffered),
+  // as on the library. It was "the ball left, or the read named the strike", so a counted swing the read called
+  // 'unknown' (or no departure was accepted) had no Swing Trace chip here and one on the same swing there.
+  const traceOffered = reviewTraceOffered(reviewShot);
   /**
    * 2026-10-17 (Tim, swings 2 and 3: "We may have a pause on that when you click on it, then it should
    * analyze") — the shot whose body read was asked for (requestShotDetail, below) and has not finished.
@@ -2882,7 +2878,7 @@ export default function SmartMotion() {
     sessionId,
     shotId: cageSession?.shots[selectedSwing]?.id ?? null,
     // The Swing Trace chip is the player's ask (it may pay, as on the library); paging stays the free pass.
-    ask: reviewShotDetailAsk({ review: phase === 'review', traceAsked: showTrace }),
+    ask: reviewShotDetailAsk({ review: phase === 'review', traceAsked: showTrace, shot: reviewShot }),
     unread: selectedShotBio === undefined,
     retrigger: `${selectedSwing}|${showTrace}`,
     setPending: setBodyReadPendingShot,
@@ -5229,15 +5225,16 @@ export default function SmartMotion() {
   });
   const reviewLayers = overlayLayers({
     userSkeleton: showSkeleton, userTrace: showTrace, spotlight: reviewSpotlightOn, hasPose: poseReady,
-    arc: clubArcPoints, shotConfirmed,
+    arc: clubArcPoints, shotConfirmed: traceOffered,
   });
   // 2026-10-27 (SB4x) — a lit Swing Trace chip that draws nothing says why, as on the library swing
   // (overlayVisibility.swingTraceNote). Never a silent chip.
   const reviewShotId = cageSession?.shots[selectedSwing]?.id ?? null;
   const reviewTraceNote = swingTraceNote({
-    wanted: showTrace && shotConfirmed, drawn: reviewLayers.trace,
+    wanted: showTrace && traceOffered, drawn: reviewLayers.trace,
     hasArc: !!clubArcPoints && clubArcPoints.length >= 3, hasBody: poseReady,
     pending: reviewShotId != null && bodyReadPendingShot === reviewShotId,
+    settled: !!cageSession && !!reviewShot && storedArcIsFinal(cageSession, reviewShot, cageSession.shots.find((x) => x.clipUri)?.id === reviewShot.id),
   });
   const reviewCaption = reviewOnIssueFrame && reviewFaultId ? faultCaption(reviewFaultId) : null;
   const skeletonRow =
@@ -5252,7 +5249,7 @@ export default function SmartMotion() {
             {showSkeleton ? (poseReady ? 'Motion ✓' : 'Reading motion…') : 'Motion'}
           </Text>
         </TactilePressable>
-        {shotConfirmed ? (
+        {traceOffered ? (
           <TactilePressable
             onPress={() => setShowTrace((v) => !v)}
             style={[styles.skelToggle, { borderColor: showTrace ? colors.accent : 'rgba(255,255,255,0.3)', backgroundColor: showTrace ? colors.accent_muted : 'rgba(0,0,0,0.4)' }]}
@@ -5269,9 +5266,10 @@ export default function SmartMotion() {
             <Text style={[styles.skelToggleText, { color: '#fff', flex: 1, fontWeight: '600' }]}>
               {reviewTraceNote === 'tracing' ? t('swinglab_swing.swing_detail.tracing_clubhead')
                 : reviewTraceNote === 'no_body' ? t('swinglab_swing.swing_detail.no_body_read')
+                : reviewTraceNote === 'no_trace' ? t('swinglab_swing.swing_detail.trace_not_answered')
                 : t('swinglab_swing.swing_detail.no_clubhead_seen')}
             </Text>
-            {reviewTraceNote !== 'tracing' ? (
+            {swingTraceNoteOffersReanalyze(reviewTraceNote) ? (
               <TactilePressable onPress={() => reanalyze()} style={styles.scrubChip} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.reanalyze_to_see')}>
                 <Text style={styles.scrubChipText}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
               </TactilePressable>

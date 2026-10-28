@@ -27,8 +27,8 @@ function withoutArc<T extends { club_arc?: unknown; club_arc_frame?: unknown; cl
 function withoutSwingOnesCopies(session: SwingSession, shotId: string): SwingSession {
   const atFirst = session.shots[0]?.id === shotId;
   const firstRead = session.shots.find(shot => shot.clipUri)?.id === shotId;
-  if (!atFirst && !firstRead) return session;
-  const mapGone = atFirst ? { smart_motion_shot_map: null } : {};
+  if (!atFirst && !firstRead) return withUnknownMapStamped(session, shotId);
+  const mapGone = atFirst ? { smart_motion_shot_map: null } : { smart_motion_shot_map: withUnknownMapStamped(session, shotId).smart_motion_shot_map };
   if (!firstRead) return { ...session, ...mapGone };
   const { biomechanics: _b, analysis_version: _v, ...rest } = withoutArc(session);
   const next = session.shots.find(shot => shot.id !== shotId && shot.clipUri);
@@ -37,6 +37,20 @@ function withoutSwingOnesCopies(session: SwingSession, shotId: string): SwingSes
   const arcUp = next && (next.club_arc !== undefined || next.club_arc_source !== undefined) && arcIsCurrent(next.club_arc_version, next.club_arc_source)
     ? { club_arc: next.club_arc, club_arc_frame: next.club_arc_frame ?? null, club_arc_source: next.club_arc_source, club_arc_version: next.club_arc_version } : {};
   return { ...(rest as SwingSession), ...mapGone, ...bodyUp, ...arcUp, fault_frame_uri: null, fault_frame_index: null, fault_frame_fraction: null };
+}
+
+/**
+ * 2026-10-27 (Phase SB8, recheck E-R11-1) — AN OLDER BUILD'S SHOT MAP STAYS NOBODY'S. A map saved without a
+ * swingIndex on a set of more than one swing may be any swing's (isUnknownSwingMap). That was decided from the
+ * swing count at read time, so deleting swings 2 and 3 left one swing and the map read as swing 1's again: its
+ * tempo, start line, carry and BODY tiles (maybe the deleted swing's) on screen and told to the caddie as
+ * measured. A delete from a multi-swing set stamps what the count said onto the map itself.
+ */
+function withUnknownMapStamped(session: SwingSession, deletedId: string): SwingSession {
+  const map = session.smart_motion_shot_map;
+  if (!map || typeof map.swingIndex === 'number' || map.swingUnknown === true || session.shots.length < 2) return session;
+  if (!session.shots.some(shot => shot.id === deletedId)) return session;
+  return { ...session, smart_motion_shot_map: { ...map, swingUnknown: true } };
 }
 
 // ─── TYPES ────────────────────────────────
@@ -283,6 +297,9 @@ export interface SmartMotionShotMap {
   /** 2026-10-27 (SB4x) — the swing (0-based) the snapshot was read from. Missing = an older build's save,
    *  which may be any swing of the set (services/swing/smartMotionShotMap). */
   swingIndex?: number;
+  /** 2026-10-27 (SB8) — an older build's snapshot whose set held more than one swing when it was edited: which
+   *  swing it was read from stays unknown however many swings are left (isUnknownSwingMap). */
+  swingUnknown?: true;
 }
 
 export interface SwingSession {

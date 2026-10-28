@@ -80,14 +80,26 @@ export type OverlayLayers<A> = {
  *   drawn:   the arc is on screen (the screen's own mount rule);
  *   hasArc:  a drawable arc exists (drawableClubArc);
  *   hasBody: the swing has a body read (the arc is found FROM it, and the library draws over it);
- *   pending: the screen's ask for this swing is out (useShotDetailRequest).
+ *   pending: the screen's ask for this swing is out (useShotDetailRequest);
+ *   settled: the stored arc is today's final answer (shotDetail.storedArcIsFinal).
  * With no body read the honest reason is the body, not the clubhead.
+ *
+ * 2026-10-27 (Phase SB8, recheck TRACE-REANALYZE-NOOP) — 'no_clubhead' is today's final answer and offers
+ * nothing: Re-analyze re-read the whole set (paid) and re-ran the same tracker over the same frames, to the
+ * same empty arc. 'no_trace' (no answer stored: no copy, no network, or an older build's arc) keeps Re-analyze.
+ * Which notes offer it: swingTraceNoteOffersReanalyze.
  */
-export type SwingTraceNote = 'tracing' | 'no_clubhead' | 'no_body' | null;
-export function swingTraceNote(n: { wanted: boolean; drawn: boolean; hasArc: boolean; hasBody: boolean; pending: boolean }): SwingTraceNote {
+export type SwingTraceNote = 'tracing' | 'no_clubhead' | 'no_trace' | 'no_body' | null;
+export function swingTraceNote(n: { wanted: boolean; drawn: boolean; hasArc: boolean; hasBody: boolean; pending: boolean; settled: boolean }): SwingTraceNote {
   if (!n.wanted || n.drawn) return null;
   if (n.pending) return 'tracing';
-  return n.hasArc || !n.hasBody ? 'no_body' : 'no_clubhead';
+  if (n.hasArc || !n.hasBody) return 'no_body';
+  return n.settled ? 'no_clubhead' : 'no_trace';
+}
+
+/** Whether the trace note's line carries Re-analyze: only where a Re-analyze can change the answer. */
+export function swingTraceNoteOffersReanalyze(note: SwingTraceNote): boolean {
+  return note === 'no_body' || note === 'no_trace';
 }
 
 export function overlayLayers<A>(i: OverlayLayersIn<A>): OverlayLayers<A> {

@@ -226,14 +226,26 @@ export function olderBodyReadNote(n: { shown: boolean; olderRead: boolean; pendi
 }
 
 /**
+ * 2026-10-27 (Phase SB8, recheck SM-TRACE-GATE) — whether SmartMotion's review offers Swing Trace on the swing
+ * shown: every counted swing, as on the library swing page. One owner for "is this a swing": the practice
+ * mark (practiceSwings.isPracticeSwing). It asked for a confirmed strike (an accepted ball departure, or a
+ * named contact read), so a counted swing the read called 'unknown' had no chip there and one on the library.
+ */
+export function reviewTraceOffered(shot: ShotOnScreen): boolean {
+  return !isPracticeSwing(shot);
+}
+
+/**
  * What SmartMotion's review asks THE shot run for the swing shown: always its body read, and the silent free
  * tracker pass for the arc — unless the player turned Swing Trace on, which is his ask and may pay (as on the
  * library). 2026-10-27 (SB4x): it asked 'tracker' whatever the chip said, which on iOS (no tracker) is no
  * ask at all, so the chip lit and toggled to nothing.
+ * 2026-10-27 (SB8) — only where the chip is offered (reviewTraceOffered): the chip stays lit when he pages, so
+ * on a practice swing it paid the vision model for an arc the screen does not draw.
  */
-export function reviewShotDetailAsk(w: { review: boolean; traceAsked: boolean }): { arc: boolean | 'tracker' } | null {
+export function reviewShotDetailAsk(w: { review: boolean; traceAsked: boolean; shot: ShotOnScreen }): { arc: boolean | 'tracker' } | null {
   if (!w.review) return null;
-  return { arc: w.traceAsked ? true : 'tracker' };
+  return { arc: w.traceAsked && reviewTraceOffered(w.shot) ? true : 'tracker' };
 }
 
 /**

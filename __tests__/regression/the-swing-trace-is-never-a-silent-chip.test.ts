@@ -15,24 +15,26 @@ import { grabFrameStill } from '../../services/swing/grabFrameStill';
 
 describe('the Swing Trace chip always has an answer on screen', () => {
   it('THE REPORT: trace on, no arc yet, the run out — "tracing"', () => {
-    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: false, hasBody: true, pending: true })).toBe('tracing');
+    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: false, hasBody: true, pending: true, settled: false })).toBe('tracing');
   });
 
-  it('THE REPORT: trace on, the run settled with no arc — the clubhead could not be seen (with Re-analyze)', () => {
-    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: false, hasBody: true, pending: false })).toBe('no_clubhead');
+  it('THE REPORT: trace on, the run settled with no arc — the clubhead could not be seen', () => {
+    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: false, hasBody: true, pending: false, settled: true })).toBe('no_clubhead');
+    // No answer stored (no copy, no network): it says so, with Re-analyze (SB8: a-final-empty-arc-offers-no-re-analyze).
+    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: false, hasBody: true, pending: false, settled: false })).toBe('no_trace');
   });
 
   it('an arc that cannot be drawn for want of a body read says so', () => {
-    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: true, hasBody: false, pending: false })).toBe('no_body');
+    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: true, hasBody: false, pending: false, settled: false })).toBe('no_body');
   });
 
   it('no body read: the reason is the body (the arc is found from it), never "no clubhead"', () => {
-    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: false, hasBody: false, pending: false })).toBe('no_body');
+    expect(swingTraceNote({ wanted: true, drawn: false, hasArc: false, hasBody: false, pending: false, settled: false })).toBe('no_body');
   });
 
   it('drawn, or not asked for: no note', () => {
-    expect(swingTraceNote({ wanted: true, drawn: true, hasArc: true, hasBody: false, pending: true })).toBeNull();
-    expect(swingTraceNote({ wanted: false, drawn: false, hasArc: false, hasBody: true, pending: true })).toBeNull();
+    expect(swingTraceNote({ wanted: true, drawn: true, hasArc: true, hasBody: false, pending: true, settled: false })).toBeNull();
+    expect(swingTraceNote({ wanted: false, drawn: false, hasArc: false, hasBody: true, pending: true, settled: false })).toBeNull();
   });
 });
 
@@ -82,7 +84,7 @@ describe('both review screens render the trace note and Grab Frame\'s honest toa
     expect(lib).toMatch(/t\('swinglab_swing\.swing_detail\.tracing_clubhead'\)/);
     expect(lib).toMatch(/t\('swinglab_swing\.swing_detail\.no_clubhead_seen'\)/);
     const sm = read('app/swinglab/smartmotion.tsx');
-    expect(sm).toMatch(/swingTraceNote\(\{\s*wanted: showTrace && shotConfirmed, drawn: reviewLayers\.trace,/);
+    expect(sm).toMatch(/swingTraceNote\(\{\s*wanted: showTrace && traceOffered, drawn: reviewLayers\.trace,/);
     expect(sm).toMatch(/t\('swinglab_swing\.swing_detail\.tracing_clubhead'\)/);
     expect(sm).toMatch(/t\('swinglab_swing\.swing_detail\.no_clubhead_seen'\)/);
   });

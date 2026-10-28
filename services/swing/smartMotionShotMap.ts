@@ -63,9 +63,10 @@ export function shotMapToPersist(src: ShotMapSource, selectedSwing: number): Sma
   };
 }
 
-/** An older build's snapshot on a set of more than one swing: which swing it was read from is unknown. */
+/** An older build's snapshot on a set of more than one swing: which swing it was read from is unknown. Stamped
+ *  so (swingUnknown) when a delete shrinks that set, so it stays unknown on what is left (SB8). */
 export function isUnknownSwingMap(map: SmartMotionShotMap | null | undefined, shotCount: number): boolean {
-  return !!map && typeof map.swingIndex !== 'number' && shotCount > 1;
+  return !!map && typeof map.swingIndex !== 'number' && (map.swingUnknown === true || shotCount > 1);
 }
 
 /** The saved snapshot as the swing at `shotIdx` may show it: swing 1's own, nobody else's — and never an

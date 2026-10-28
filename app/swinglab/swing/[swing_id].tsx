@@ -38,7 +38,7 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
-import { sessionBodyRead, sessionsToCompare, shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, shownSwingNeverRead, shownSwingTimingFrames, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
+import { sessionBodyRead, sessionsToCompare, shotImpactHeard, shownShotBiomech, shownSwingHoldsOlderRead, shownSwingNeverRead, shownSwingTimingFrames, storedArcIsFinal, storedShotBiomech, swingRunKey } from '../../../services/swing/orchestrator/shotDetail';
 import { useShotDetailRequest } from '../../../hooks/useShotDetailRequest';
 import { useIssueAsk } from '../../../hooks/useIssueAsk';
 import { useBodyAsk } from '../../../hooks/useBodyAsk';
@@ -73,7 +73,7 @@ import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/S
 import { bodyReadNote, olderBodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, reelRowFaultEvidence, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
-import { drawableClubArc, overlayLayers, swingTraceNote, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
+import { drawableClubArc, overlayLayers, swingTraceNote, swingTraceNoteOffersReanalyze, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
 import { buildPoseSwingRead, signedWeightDisplay } from '../../../services/swing/poseSwingRead';
 import { BodyAnalysisRow, TempoBar, deriveBodyItems, type BodyItem, SwingBreakdownCard } from '../../../components/smartmotion/SmartMotionHud';
 import type { SwingAnalysis } from '../../../services/poseDetection';
@@ -1349,6 +1349,7 @@ export default function SwingDetail() {
   const traceNote = swingTraceNote({
     wanted: showTrace, drawn: hasPose && layers.trace, hasArc: !!clubArcPoints && clubArcPoints.length >= 3, hasBody: hasPose,
     pending: !!shot && bodyReadPendingShot === shot.id,
+    settled: !!session && !!shot && storedArcIsFinal(session, shot, session.shots.find((x) => x.clipUri)?.id === shot.id),
   });
 
   // 2026-07-10 (Tim — "missing play rewind and forward and slider controls in swing
@@ -2875,9 +2876,10 @@ export default function SwingDetail() {
                 <Text style={{ color: colors.text_muted, fontSize: 12, flex: 1 }}>
                   {traceNote === 'tracing' ? t('swinglab_swing.swing_detail.tracing_clubhead')
                     : traceNote === 'no_body' ? t('swinglab_swing.swing_detail.no_body_read')
+                    : traceNote === 'no_trace' ? t('swinglab_swing.swing_detail.trace_not_answered')
                     : t('swinglab_swing.swing_detail.no_clubhead_seen')}
                 </Text>
-                {traceNote !== 'tracing' && (
+                {swingTraceNoteOffersReanalyze(traceNote) && (
                   <TouchableOpacity onPress={() => onReanalyzeRef.current?.()} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.swing_detail.reanalyze_to_see')}>
                     <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.reanalyze_to_see')}</Text>
                   </TouchableOpacity>

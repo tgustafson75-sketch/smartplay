@@ -74,7 +74,7 @@ function useSmartMotion(p: { swing: number; showTrace?: boolean }) {
   const bio = cage && sh ? storedShotBiomech(cage, sh, cage.shots.find((x) => x.clipUri)?.id === sh.id) : undefined;
   const [, setPending] = useState<string | null>(null);
   useShotDetailRequest({
-    sessionId: 's1', shotId: sh?.id ?? null, ask: reviewShotDetailAsk({ review: true, traceAsked: !!p.showTrace }), unread: bio === undefined,
+    sessionId: 's1', shotId: sh?.id ?? null, ask: reviewShotDetailAsk({ review: true, traceAsked: !!p.showTrace, shot: sh }), unread: bio === undefined,
     retrigger: `${p.swing}|${!!p.showTrace}`, setPending,
   });
 }

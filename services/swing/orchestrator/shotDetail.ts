@@ -227,6 +227,16 @@ export function clearAnswered(sessionId: string): void {
 
 function hasFinalArc(s: SwingSession, shot: SwingShot, first: boolean): boolean {
   if (answered.has(answerKey(s, shot))) return true;
+  return storedArcIsFinal(s, shot, first);
+}
+
+/**
+ * The swing's STORED arc is today's final answer (an arc, or an honest "no arc"): asking again, or a whole
+ * Re-analyze, runs the same tracker (or the vision model where there is none) over the same frames.
+ * 2026-10-27 (Phase SB8, recheck TRACE-REANALYZE-NOOP) — exported so a screen does not offer Re-analyze to
+ * retry an empty arc that cannot change (overlayVisibility.swingTraceNote `settled`).
+ */
+export function storedArcIsFinal(s: SwingSession, shot: SwingShot, first: boolean): boolean {
   // 2026-10-26 — only an arc TODAY'S code stored is final: an older build's (older or no club_arc_version)
   // is tracked again. "Re-tracking gives the same answer" held only while the tracker never changed.
   const own = shot.club_arc_source !== undefined || shot.club_arc !== undefined;

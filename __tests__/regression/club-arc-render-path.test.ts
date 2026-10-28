@@ -96,10 +96,11 @@ describe('the arc renders without the skeleton — from its own chip', () => {
     expect(sm).toContain('clubArc={reviewLayers.clubArc}');
   });
 
-  it('still only traces a CONFIRMED strike, never a practice swing', () => {
-    // shotConfirmed = the camera saw the ball leave, or the contact read is a known strike.
-    const src = sm.slice(sm.indexOf('const shotConfirmed = useMemo'));
-    expect(src.slice(0, 400)).toContain('ballDeparture?.departed === true');
+  it('still never traces a practice swing', () => {
+    // 2026-10-27 (SB8) — the practice mark decides, as on the library (behaviour:
+    // smartmotion-offers-swing-trace-on-every-counted-swing).
+    expect(sm).toContain('const traceOffered = reviewTraceOffered(reviewShot);');
+    expect(sm).toContain('shotConfirmed: traceOffered,');
   });
 });
 

@@ -102,16 +102,16 @@ describe('SmartMotion\'s Swing Trace chip is the player\'s ask (iOS has no free 
   it('THE REPORT: on iOS, turning Swing Trace on asks for an arc; with it off nothing is tracked', async () => {
     setOS('ios');
     seed({});
-    const off = reviewShotDetailAsk({ review: true, traceAsked: false })!;
+    const off = reviewShotDetailAsk({ review: true, traceAsked: false, shot: { id: 'sh1' } })!;
     await settled('sh1', off.arc!);
     expect(mockArcCalls).toEqual([]);
-    const on = reviewShotDetailAsk({ review: true, traceAsked: true })!;
+    const on = reviewShotDetailAsk({ review: true, traceAsked: true, shot: { id: 'sh1' } })!;
     await settled('sh1', on.arc!);
     expect(mockArcCalls).toEqual([{ trackerOnly: false }]);
   });
 
   it('paging with the trace off stays the silent free pass; outside review nothing is asked', () => {
-    expect(reviewShotDetailAsk({ review: true, traceAsked: false })).toEqual({ arc: 'tracker' });
-    expect(reviewShotDetailAsk({ review: false, traceAsked: true })).toBeNull();
+    expect(reviewShotDetailAsk({ review: true, traceAsked: false, shot: { id: 'sh1' } })).toEqual({ arc: 'tracker' });
+    expect(reviewShotDetailAsk({ review: false, traceAsked: true, shot: { id: 'sh1' } })).toBeNull();
   });
 });

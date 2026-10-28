@@ -85,8 +85,9 @@ describe('Swing Trace turned on while Issue\'s body read is out', () => {
     await tick(10);
     mockReads[0](read);
     await tick(30);
-    const note = swingTraceNote({ wanted: true, drawn: false, pending, hasArc: !!shot().club_arc?.length, hasBody: !!shot().biomechanics });
+    const note = swingTraceNote({ wanted: true, drawn: false, pending, hasArc: !!shot().club_arc?.length, hasBody: !!shot().biomechanics, settled: false });
     expect(note).not.toBe('no_clubhead');
+    expect(note).not.toBe('no_trace');
     mockArcs[0](arc);
     await tick(30);
   });
