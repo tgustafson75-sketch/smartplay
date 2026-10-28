@@ -212,7 +212,7 @@ describe('the arc is the player\'s to turn on; only the player can pay for one',
   });
   it('a shot paged to asks the silent pass; only the player\'s trace asks for more', () => {
     // 2026-10-27 — the ask is faultSpotlight.shotDetailRequestFor (behaviour: the-issue-chip-shows-the-issue).
-    expect(sd).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked \}\),/);
+    expect(sd).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked, shot: selShot \}\),/);
     expect(code('app/swinglab/smartmotion.tsx')).toMatch(/useShotDetailRequest\(\{\s*sessionId,\s*shotId: cageSession\?\.shots\[selectedSwing\]\?\.id \?\? null,[\s\S]{0,160}?ask: reviewShotDetailAsk\(\{ review: phase === 'review', traceAsked: showTrace, shot: reviewShot \}\),/);
   });
 

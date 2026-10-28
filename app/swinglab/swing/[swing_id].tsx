@@ -70,7 +70,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
-import { bodyReadNote, olderBodyReadNote, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, reelRowFaultEvidence, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
+import { bodyReadNote, olderBodyReadNote, reviewTraceOffered, calloutAtBottom, faultCaption, faultMomentFor, faultPauseTick, heldOnFault, issueChipPress, reelRowFaultEvidence, shotDetailRequestFor, spotlightShows, swingFaultOnScreen, swingBodyFaultRead, type IssueHold } from '../../../services/swing/faultSpotlight';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { drawableClubArc, overlayLayers, swingTraceNote, swingTraceNoteOffersReanalyze, type OverlayArcPoint } from '../../../services/swing/overlayVisibility';
@@ -782,6 +782,10 @@ export default function SwingDetail() {
   }, [session, shot]);
   // Each swing opened starts with the trace off (paging within one reel keeps the player's choice).
   useEffect(() => { setShowTrace(false); }, [swing_id]);
+  // 2026-10-27 (Phase SB8, recheck SB8-LIB-TRACE-PRACTICE) — Swing Trace on a practice swing: no button, no
+  // ask, no drawn arc, as in SmartMotion's review (faultSpotlight.reviewTraceOffered). The lit trace stays his
+  // choice while he pages; it comes back on the next counted swing.
+  const traceOffered = reviewTraceOffered(shot);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -810,7 +814,7 @@ export default function SwingDetail() {
     showTrace: true,
     // 2026-07-27 (full-app audit) — pass the detected clubhead arc so the baked still keeps the real
     // clubhead trace + blue club (the trace is clubhead-or-nothing, so without this it went skeleton-only).
-    clubArc: clubArcPoints,
+    clubArc: traceOffered ? clubArcPoints : null,
   });
 
   // 2026-05-17 — dropped the Coach Audio / Kevin Analysis toggle.
@@ -942,7 +946,7 @@ export default function SwingDetail() {
   useShotDetailRequest({
     sessionId: swing_id,
     shotId: selShot?.clipUri ? selShot.id : null,
-    ask: shotDetailRequestFor({ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked }),
+    ask: shotDetailRequestFor({ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked, shot: selShot }),
     unread: !!session && !!selShot && storedShotBiomech(session, selShot, session.shots.find((x) => x.clipUri)?.id === selShot.id) === undefined,
     retrigger: `${selectedShotIdx}|${selShot?.clipUri ?? ''}|${showSkeleton}|${showTrace}|${issueAsked}|${bodyAskTaps}`,
     setPending: setBodyReadPendingShot,
@@ -1339,6 +1343,7 @@ export default function SwingDetail() {
   const skeletonBodyNote = bodyReadNote({ wanted: showSkeleton, hasPose, pending: bodyReadPending });
   const layers = overlayLayers({
     userSkeleton: showSkeleton, userTrace: showTrace, motionOnly, spotlight: spotlightOn, hasPose, arc: clubArcPoints,
+    shotConfirmed: traceOffered,
   });
   const olderReadNote = olderBodyReadNote({
     shown: activeBiomech != null, olderRead: shownSwingHoldsOlderRead(session, selectedShotIdx),
@@ -1347,7 +1352,7 @@ export default function SwingDetail() {
   // 2026-10-27 (SB4x) — a lit Swing Trace chip that draws nothing says why (overlayVisibility.swingTraceNote).
   // The overlay mounts only over a body read here, so that is part of "drawn".
   const traceNote = swingTraceNote({
-    wanted: showTrace, drawn: hasPose && layers.trace, hasArc: !!clubArcPoints && clubArcPoints.length >= 3, hasBody: hasPose,
+    wanted: showTrace && traceOffered, drawn: hasPose && layers.trace, hasArc: !!clubArcPoints && clubArcPoints.length >= 3, hasBody: hasPose,
     pending: !!shot && bodyReadPendingShot === shot.id,
     settled: !!session && !!shot && storedArcIsFinal(session, shot, session.shots.find((x) => x.clipUri)?.id === shot.id),
   });
@@ -1384,8 +1389,8 @@ export default function SwingDetail() {
   // wall-clock throttle in sync with whether the heavy SVG overlay is actually mounted, so we throttle
   // position commits ONLY when they're expensive (overlay on), never penalizing plain playback.
   useEffect(() => {
-    overlayActiveRef.current = hasPose && (showSkeleton || showTrace || motionOnly);
-  }, [hasPose, showSkeleton, showTrace, motionOnly]);
+    overlayActiveRef.current = hasPose && (showSkeleton || (showTrace && traceOffered) || motionOnly);
+  }, [hasPose, showSkeleton, showTrace, traceOffered, motionOnly]);
   const scrubTrackWRef = useRef(0);
   const [scrubbing, setScrubbing] = useState(false);
   const seekFromTouch = (locationX: number) => {
@@ -2489,7 +2494,7 @@ export default function SwingDetail() {
                 // seek bar, so playback doesn't re-render the screen 25x/s for nothing.
                 // 2026-10-10 — 100ms while the replay has a fault to stop on, so the stop lands within a
                 // frame or two of it before the seek back (250ms overshot by a quarter of a swing).
-                progressUpdateIntervalMillis={hasPose && (showSkeleton || showTrace || motionOnly) ? 40 : (faultSec != null && reviewPause ? 100 : 250)}
+                progressUpdateIntervalMillis={hasPose && (showSkeleton || (showTrace && traceOffered) || motionOnly) ? 40 : (faultSec != null && reviewPause ? 100 : 250)}
                 // 2026-06-11 — native controls OFF: tap-anywhere toggles play/pause
                 // (via ZoomableView) and a thin tap-to-seek bar replaces the native
                 // scrubber, so there's no native tap-handling competing with the
@@ -2838,6 +2843,7 @@ export default function SwingDetail() {
                   <Ionicons name="body-outline" size={14} color={showSkeleton ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
                   <Text style={[styles.toggleText, showSkeleton && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.body')}</Text>
                 </TouchableOpacity>
+                {traceOffered && (
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, showTrace && { backgroundColor: colors.accent }]}
                   onPress={() => setShowTrace(v => !v)}
@@ -2847,6 +2853,7 @@ export default function SwingDetail() {
                   <Ionicons name="analytics-outline" size={14} color={showTrace ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
                   <Text style={[styles.toggleText, showTrace && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.swing_trace')}</Text>
                 </TouchableOpacity>
+                )}
                 {(session?.ball_area_norm || session?.target_norm) && (
                   <TouchableOpacity
                     style={[styles.toggleBtn, { flexDirection: 'row' }, showTargets && { backgroundColor: colors.accent }]}

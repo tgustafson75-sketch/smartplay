@@ -1199,7 +1199,7 @@ check('Swing-library position setState is wall-clock throttled when the heavy ov
     const d = read('app/swinglab/swing/[swing_id].tsx');
     return (
       /overlayActiveRef/.test(d) &&
-      /overlayActiveRef\.current = hasPose && \(showSkeleton \|\| showTrace \|\| motionOnly\)/.test(d) &&
+      /overlayActiveRef\.current = hasPose && \(showSkeleton \|\| \(showTrace && traceOffered\) \|\| motionOnly\)/.test(d) &&
       /const minGapMs = overlayActiveRef\.current \? 90 : 40/.test(d) &&
       /nowMs - playbackEmitRef\.current\.lastPosAt >= minGapMs/.test(d)
     );
@@ -6005,7 +6005,7 @@ check('Library: a multi-swing reel is reviewable SWING-BY-SWING (own skeleton + 
       // (2026-10-27: decided by faultSpotlight.shotDetailRequestFor, which also asks the body read for an Issue tap)
       // (2026-10-27 SB4x: asked through hooks/useShotDetailRequest, which spreads the ask into requestShotDetail;
       //  bodyAsked = "Read it again" on an older build's read — behaviour in __tests__/components/an-old-swing-one-…)
-      /useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked \}\),/.test(detail) &&
+      /useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked, shot: selShot \}\),/.test(detail) &&
       /requestShotDetail\(sessionId, id, \{\s*\.\.\.ask,/.test(read('hooks/useShotDetailRequest.ts')) &&
       /startMs: shot\.clipStartSeconds \* 1000, endMs: shot\.clipEndSeconds \* 1000/.test(read('services/swing/orchestrator/shotDetail.ts'))
     );

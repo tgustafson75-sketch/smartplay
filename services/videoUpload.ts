@@ -566,6 +566,8 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
    * above ran only on an upload's FIRST read, so the windows an older finder carved (practice swings and
    * all) were re-read on every Re-analyze for good. Now a Re-analyze looks again — only when the finder
    * carved every window and the player has put nothing on any swing (services/swing/practiceSwings).
+   * 2026-10-27 (Phase SB8) — or bound the single upload to one window without today's whole look: its id
+   * was never a carved one, so it was never looked at again and a swing one pass missed stayed hidden.
    */
   const { resplitEligible, resplitWouldRestoreRemoved, classifyPracticeSwings, isPracticeSwing } = require('./swing/practiceSwings') as typeof import('./swing/practiceSwings');
   const resplit = !firstSplit && resplitEligible(session);
@@ -663,6 +665,9 @@ async function runPhaseKOnSessionImpl(sessionId: string, signal?: AbortSignal, e
           // 2026-10-27 (Phase SB5) — only on a WHOLE look: a bound window closes this upload's first split, so
           // one swing found by half a look would hide the swing the other pass would have seen for good.
           store.setShotClipBoundaries(sessionId, swings[0].id, segs[0].startMs / 1000, segs[0].endMs / 1000, segs[0].strikeMs / 1000);
+          // 2026-10-27 (Phase SB8, recheck E-R12-1) — a bound window is a look Re-analyze may make again
+          // (practiceSwings.resplitEligible): today's whole look stamps it, so it is not paid for every time.
+          store.keepUploadSwings(sessionId);
           const fresh = liveSessionStore(signal).sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
           uploadLog('upload-single-swing-located', { impact_sec: Math.round((segs[0].strikeMs / 1000) * 10) / 10 }, sessionId);

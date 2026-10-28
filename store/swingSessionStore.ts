@@ -902,7 +902,7 @@ interface SwingSessionState {
    * 2026-10-27 (Phase SB6, recheck round 8) — today's finder looked at this old split and its stored swings
    * stand (the look would bring back a swing he deleted): stamp the finder without touching a swing, so the
    * next Re-analyze does not pay for the same look to reach the same answer. A no-op where replaceUploadSwings
-   * would be one.
+   * would be one. 2026-10-27 (Phase SB8) — also after a whole look bound a single upload to its one swing.
    */
   keepUploadSwings: (sessionId: string) => void;
   /** 2026-10-26 — the practice classifier's answer per shot id (null = counts). */

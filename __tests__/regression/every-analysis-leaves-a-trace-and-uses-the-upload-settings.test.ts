@@ -137,7 +137,7 @@ describe('a saved swing: settled, its windows, and what opening it does', () => 
     // the-issue-chip-shows-the-issue; issueAsked is false on every swing opened.)
     // 2026-10-27 (SB4x) — through hooks/useShotDetailRequest (a null ask asks nothing) and the per-swing hooks/useIssueAsk
     // (asked only on the swing it was asked on; behaviour: components/the-shown-swing-is-asked-for-again).
-    expect(d).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked \}\),/);
+    expect(d).toMatch(/useShotDetailRequest\(\{\s*sessionId: swing_id,\s*shotId: selShot\?\.clipUri \? selShot\.id : null,\s*ask: shotDetailRequestFor\(\{ idx: selectedShotIdx, showSkeleton, traceAsked: showTrace, issueAsked, bodyAsked, shot: selShot \}\),/);
     // (SB4x seam: the key is also "Read it again"'s — bodyAsked is keyed to the same swing (SB5: hooks/useBodyAsk,
     // every tap a new ask); opening asks nothing, by behaviour in components/an-old-swing-one-says-its-read-is-older-
     // and-reads-on-tap and regression/read-it-again-asks-again-after-a-read-that-did-not-land.)

@@ -196,9 +196,12 @@ export function spotlightShows(s: { held: boolean; hold: IssueHold; highlight: b
  * for nothing. Only on the player's ask (the library is manual, Tim 06-15): a swing other than the first,
  * Body / Swing Trace on — or the player asking to see the issue, since the ring is drawn from the body read
  * and swing 1's was otherwise never asked for. An Issue ask wants the body read only: no arc, free or paid.
+ * 2026-10-27 (Phase SB8, recheck SB8-LIB-TRACE-PRACTICE) — the trace is his ask only where Swing Trace is
+ * offered (reviewTraceOffered, the same gate as SmartMotion): the chip stays lit while he pages the reel, so
+ * on a practice swing it paid the vision model for an arc SmartMotion would not even offer.
  */
-export function shotDetailRequestFor(w: { idx: number; showSkeleton: boolean; traceAsked: boolean; issueAsked: boolean; bodyAsked?: boolean }): { arc?: boolean | 'tracker' } | null {
-  if (w.traceAsked) return { arc: true };
+export function shotDetailRequestFor(w: { idx: number; showSkeleton: boolean; traceAsked: boolean; issueAsked: boolean; bodyAsked?: boolean; shot?: ShotOnScreen }): { arc?: boolean | 'tracker' } | null {
+  if (w.traceAsked && reviewTraceOffered(w.shot)) return { arc: true };
   if (w.idx > 0 || w.showSkeleton) return { arc: 'tracker' };
   // `{}` meant arc: undefined, which the shot run reads as `true` — the PAID fallback (shotDetail.runShotDetail).
   // 2026-10-27 (SB4x seam) — "Read it again" on an older build's read (olderBodyReadNote) is the same body-only ask.
@@ -227,7 +230,8 @@ export function olderBodyReadNote(n: { shown: boolean; olderRead: boolean; pendi
 
 /**
  * 2026-10-27 (Phase SB8, recheck SM-TRACE-GATE) — whether SmartMotion's review offers Swing Trace on the swing
- * shown: every counted swing, as on the library swing page. One owner for "is this a swing": the practice
+ * shown: every counted swing. The library swing page asks the same (recheck round 13: it offered, asked and
+ * drew the trace on a practice swing too, so the two screens disagreed the other way round). One owner for "is this a swing": the practice
  * mark (practiceSwings.isPracticeSwing). It asked for a confirmed strike (an accepted ball departure, or a
  * named contact read), so a counted swing the read called 'unknown' had no chip there and one on the library.
  */

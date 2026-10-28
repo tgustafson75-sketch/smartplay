@@ -158,11 +158,27 @@ function finderShapedWindow(sh: SessionLike['shots'][number], splitBeforeImpacts
 }
 
 /**
+ * 2026-10-27 (Phase SB8, recheck E-R12-1) — AN UPLOAD THE FINDER BOUND TO ONE WINDOW, never split. When the
+ * finder found one swing, the single uploaded shot kept its ingest id (`uid('uploaded_shot')`) and only got a
+ * window — and before SB5 that bind needed no whole look, so one finder pass alone could hide the swing the
+ * other would have seen. The bind always stored its impact (08-09, with the bind itself), and from 10-04 an
+ * 'auto' source; a window with no impact on this shot is a trim. No carve ever ran, so no swing was deleted.
+ */
+function finderBoundSingle(session: SessionLike): boolean {
+  if (session.shots.length !== 1) return false;
+  const sh = session.shots[0];
+  if (sh.id.startsWith(`${session.id}_shot_`)) return false;
+  return sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && finderShapedWindow(sh, false));
+}
+
+/**
  * May a Re-analyze look for this session's swings again? Only an upload (a live capture's split fused what
  * the microphone heard), only when the finder carved EVERY window — today's 'auto', or the pre-10-26 shape
  * of the same thing (`${id}_shot_i`, one clip, 'manual', no window source) — only when an OLDER finder made
  * the split (UPLOAD_FINDER_VERSION), and only when the player has put nothing on any swing and removed none.
  * A pre-10-26 window must also be the finder's shape: a trim made before 10-04 left that same shape.
+ * 2026-10-27 (Phase SB8) — or the finder BOUND the single upload to one window (finderBoundSingle): that look
+ * is stamped only when today's whole look made it, so an older or half look is looked at again.
  */
 export function resplitEligible(session: SessionLike): boolean {
   if (session.source !== 'uploaded_video' || session.shots.length === 0) return false;
@@ -174,6 +190,7 @@ export function resplitEligible(session: SessionLike): boolean {
   if ((session.primary_issue?.detected_in_shots ?? []).some((id) => id.startsWith(`${session.id}_shot_`) && !held.has(id))) return false;
   const clip = session.shots[0].clipUri;
   if (!clip) return false;
+  if (finderBoundSingle(session)) return typeof session.shots[0].clipStartSeconds === 'number' && !shotHasUserContent(session.shots[0]);
   const splitBeforeImpacts = session.shots.every((sh) => typeof sh.locatedImpactSec !== 'number');
   return session.shots.every((sh, i) =>
     sh.id === `${session.id}_shot_${i}`
@@ -200,9 +217,11 @@ export function resplitEligible(session: SessionLike): boolean {
  * stored window, where no stored swing lies: such a window holds the stored swings back too.
  */
 export function resplitWouldRestoreRemoved(
-  session: Pick<SessionLike, 'shots'>,
+  session: Pick<SessionLike, 'id' | 'shots'>,
   windows: readonly { startSec: number; impactSec?: number }[],
 ): boolean {
+  // 2026-10-27 (Phase SB8) — a single bound window was never carved, so nothing was ever removed from it.
+  if (finderBoundSingle(session)) return false;
   const legacy = session.shots.length > 0 && session.shots.every((sh) => sh.clipWindowSource == null);
   if (!legacy) return false;
   if (windows.length > session.shots.length) return true;

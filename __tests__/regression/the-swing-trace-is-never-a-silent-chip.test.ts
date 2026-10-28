@@ -80,7 +80,7 @@ describe('both review screens render the trace note and Grab Frame\'s honest toa
   });
   it('library and SmartMotion each compute the note from their own drawn arc and render it', () => {
     const lib = read('app/swinglab/swing/[swing_id].tsx');
-    expect(lib).toMatch(/swingTraceNote\(\{\s*wanted: showTrace, drawn: hasPose && layers\.trace,/);
+    expect(lib).toMatch(/swingTraceNote\(\{\s*wanted: showTrace && traceOffered, drawn: hasPose && layers\.trace,/);
     expect(lib).toMatch(/t\('swinglab_swing\.swing_detail\.tracing_clubhead'\)/);
     expect(lib).toMatch(/t\('swinglab_swing\.swing_detail\.no_clubhead_seen'\)/);
     const sm = read('app/swinglab/smartmotion.tsx');
