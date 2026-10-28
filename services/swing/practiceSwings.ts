@@ -102,6 +102,8 @@ type SessionLike = {
   swings_edited_by_user?: boolean;
   /** The headline names the swings it was read from — a named swing missing from the list was removed. */
   primary_issue?: { detected_in_shots?: readonly string[] | null } | null;
+  /** The ingest probe's length of the uploaded clip (videoUpload.probeVideo); null when it could not tell. */
+  upload?: { duration_sec?: number | null } | null;
   shots: readonly (ShotLike & {
     clipUri?: string | null;
     clipStartSeconds?: number;
@@ -142,9 +144,20 @@ export function shotHasUserContent(sh: SessionLike['shots'][number]): boolean {
  * when NO swing of the session carries one, the window's length is the test: the finder's was never longer
  * than PRE + POST, and Analyze-at-this-moment's ran 5.5s. One impact-less window among impact-carrying ones
  * is a trim, never the finder's.
+ * Recheck round 14 (E-R13-1) — the clip's end cut Analyze-at-this-moment short too (its end was
+ * min(duration, moment + 3s)), so a moment within 1.5s of the clip's end left the finder's exact shape: its
+ * moment less 2.5s (or the clip's start) to the clip's end. The finder's own last window can end the same way
+ * and nothing stored tells the two apart, so such a window is his: re-splitting his chosen swing away is the
+ * worse error, and a swing the old finder missed can still be analyzed at its moment. A window the finder
+ * narrowed at its start (a neighbour) is still the finder's: Analyze-at-this-moment never narrowed it.
  */
 const WINDOW_SLOP_SEC = 0.05;
-function finderShapedWindow(sh: SessionLike['shots'][number], splitBeforeImpacts: boolean): boolean {
+function finderShapedWindow(
+  sh: SessionLike['shots'][number],
+  splitBeforeImpacts: boolean,
+  clipSec: number | null,
+  lastWindow: boolean,
+): boolean {
   const at = sh.locatedImpactSec;
   const start = sh.clipStartSeconds;
   const end = sh.clipEndSeconds;
@@ -152,10 +165,19 @@ function finderShapedWindow(sh: SessionLike['shots'][number], splitBeforeImpacts
   if (typeof at !== 'number') {
     return splitBeforeImpacts && start < end && end - start <= (PRE_STRIKE_MS + POST_STRIKE_MS) / 1000 + WINDOW_SLOP_SEC;
   }
-  return start <= at && at <= end
+  if (!(start <= at && at <= end
     && at - start <= PRE_STRIKE_MS / 1000 + WINDOW_SLOP_SEC
-    && end - at <= POST_STRIKE_MS / 1000 + WINDOW_SLOP_SEC;
+    && end - at <= POST_STRIKE_MS / 1000 + WINDOW_SLOP_SEC)) return false;
+  // E-R13-1 — cut by the clip's end: at its stored length when the ingest probe gave one; else only the last
+  // window can be (an earlier one's end was cut by its neighbour), and only when it falls short of POST.
+  const atClipEnd = clipSec != null && clipSec > 0
+    ? end >= clipSec - WINDOW_SLOP_SEC
+    : lastWindow && end - at < POST_STRIKE_MS / 1000 - WINDOW_SLOP_SEC;
+  return !(atClipEnd && Math.abs(start - Math.max(0, at - PRE_STRIKE_MS / 1000)) <= WINDOW_SLOP_SEC);
 }
+
+/** The upload's length as the ingest probe stored it (session.upload.duration_sec); null when unknown. */
+const clipSecOf = (session: Pick<SessionLike, 'upload'>): number | null => session.upload?.duration_sec ?? null;
 
 /**
  * 2026-10-27 (Phase SB8, recheck E-R12-1) — AN UPLOAD THE FINDER BOUND TO ONE WINDOW, never split. When the
@@ -168,7 +190,7 @@ function finderBoundSingle(session: SessionLike): boolean {
   if (session.shots.length !== 1) return false;
   const sh = session.shots[0];
   if (sh.id.startsWith(`${session.id}_shot_`)) return false;
-  return sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && finderShapedWindow(sh, false));
+  return sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && finderShapedWindow(sh, false, clipSecOf(session), true));
 }
 
 /**
@@ -196,7 +218,7 @@ export function resplitEligible(session: SessionLike): boolean {
     sh.id === `${session.id}_shot_${i}`
     && sh.clipUri === clip
     && typeof sh.clipStartSeconds === 'number'
-    && (sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && sh.detectionMethod === 'manual' && finderShapedWindow(sh, splitBeforeImpacts)))
+    && (sh.clipWindowSource === 'auto' || (sh.clipWindowSource == null && sh.detectionMethod === 'manual' && finderShapedWindow(sh, splitBeforeImpacts, clipSecOf(session), i === session.shots.length - 1)))
     && !shotHasUserContent(sh));
 }
 
@@ -217,7 +239,7 @@ export function resplitEligible(session: SessionLike): boolean {
  * stored window, where no stored swing lies: such a window holds the stored swings back too.
  */
 export function resplitWouldRestoreRemoved(
-  session: Pick<SessionLike, 'id' | 'shots'>,
+  session: Pick<SessionLike, 'id' | 'shots' | 'upload'>,
   windows: readonly { startSec: number; impactSec?: number }[],
 ): boolean {
   // 2026-10-27 (Phase SB8) — a single bound window was never carved, so nothing was ever removed from it.
