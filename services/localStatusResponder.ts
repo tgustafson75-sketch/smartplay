@@ -36,6 +36,7 @@
 import { useRoundStore } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useConversationLog } from '../store/conversationLogStore';
+import { routineAsk } from './routineUtterance';
 import { getLastFix } from './gpsManager';
 import { haversineYards, bearingDegrees } from '../utils/geoDistance';
 import { resolveGreenCoords, classifyAccuracy , holeData as resolvedHoleData } from './smartFinderService';
@@ -419,12 +420,6 @@ const RX = {
   // questions (what's this hole like, hazards, what to watch for) still match — and are AI-led online too
   // (see the hole_info exclusion on the mic path).
   holeInfo:   /\b(what(?:'s|s)?\s+(?:this|the)\s+hole\s+(?:like|play|about)|how\s+does\s+this\s+hole\s+play|what\s+(?:do|should)\s+i\s+(?:watch|look)\s+(?:out\s+)?for|(?:any\s+)?(?:hazards?|trouble|water|bunkers?)\s+(?:here|on\s+this(?:\s+hole)?)|describe\s+(?:this\s+)?hole|tell\s+me\s+about\s+(?:this\s+)?hole)\b/i,
-  // 2026-06-13 — pre-round routine (round-INDEPENDENT; handled before the round
-  // gate). Save = the stretches the caddie just gave (from the conversation log);
-  // recall = read them back. "save those stretches as my routine" / "what's my
-  // pre-round routine".
-  saveRoutine:   /\b(save|remember|keep)\b[^.?!]{0,28}\b(routine|stretches|warm.?up)\b/i,
-  recallRoutine: /\b(what(?:'s|s)?|tell\s+me|recall|show\s+me|give\s+me|read)\b[^.?!]{0,28}\b(routine|stretches|warm.?up)\b/i,
 };
 
 /**
@@ -446,7 +441,11 @@ export function tryLocalReply(
   // course), so handle it BEFORE the round-active gate. Save points at the last
   // thing the caddie said (the stretches), captured by the conversation log —
   // this is exactly what conversation ingestion unblocks. Local + offline.
-  if (RX.saveRoutine.test(t)) {
+  // "save those stretches as my routine" / "what's my pre-round routine". 2026-10-28 (Brain review r4)
+  // — the test is services/routineUtterance.routineAsk, shared with the precheck: this mirror's own
+  // looser regexes overwrote the routine on "do you remember my warm-up?" whenever the brain was down.
+  const routine = routineAsk(t);
+  if (routine === 'save') {
     const last = useConversationLog.getState().lastCaddieText();
     if (last) {
       usePlayerProfileStore.getState().setPreRoundRoutine(last);
@@ -454,7 +453,7 @@ export function tryLocalReply(
     }
     return { text: L[lang].routineNothingToSave, queryType: 'routine_saved' };
   }
-  if (RX.recallRoutine.test(t)) {
+  if (routine === 'recall') {
     const r = usePlayerProfileStore.getState().preRoundRoutine;
     return { text: r ?? L[lang].routineNone, queryType: 'routine_recall' };
   }

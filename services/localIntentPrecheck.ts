@@ -32,7 +32,8 @@ import type { VoiceIntent } from '../types/voiceIntent';
 import { ACTIVE_PERSONAS, type Persona } from '../lib/persona';
 import { isSmartMotionActive } from './smartMotionRecordBus';
 import { resolveSpokenCourse } from './courseNameResolver';
-import { isQuestionShaped, isStoryFramed } from './utteranceIsCommand';
+import { isAboutSomeoneElse, isQuestionShaped, isStoryFramed } from './utteranceIsCommand';
+import { routineAsk } from './routineUtterance';
 
 interface Pattern {
   rx: RegExp;
@@ -154,7 +155,7 @@ const PATTERNS: Pattern[] = [
    * to hijack, so each pattern needs an explicit instruction verb or the word "play".
    */
   {
-    rx: /\b(?:(?:let'?s|lets|i(?:'| a)?m\s+going\s+to|we'?ll)\s+play\s+(?:it\s+)?safe|play\s+(?:it\s+)?safe|(?:go|be|stay|keep\s+it)\s+conservative|conservative\s+mode|dial\s+(?:it\s+)?back)\b/i,
+    rx: /\b(?:(?:let'?s|lets|i(?:'| a)?m\s+going\s+to|we'?ll)\s+play\s+(?:it\s+)?safe|play\s+(?:it\s+)?safe|(?:go|be|stay|keep\s+it)\s+conservative|conservative\s+mode|dial\s+(?:it\s+)?back(?![^.?!]*\b(?:wording|words|talk|talking|chatter|tone|voice|volume|jokes?|commentary|detail|info|information|explanations?)\b))\b/i,
     build: (raw) => intent(raw, 'change_setting', { setting_name: 'risk_mode', new_value: 'safe' }),
   },
   {
@@ -206,13 +207,15 @@ const PATTERNS: Pattern[] = [
   // loose match cost nothing. Here they run BEFORE it, and a loose match INTERCEPTS. "Tell me a good
   // warm-up routine" is a request FOR a warm-up and must reach the caddie; only a POSSESSIVE or
   // demonstrative means the stored one. Same principle as NOT_ABOUT_TOOL above: naming the thing is
-  // not asking for it.
+  // not asking for it. These two only DETECT a routine sentence; precheckLocalIntent then keeps the hit
+  // only when services/routineUtterance says the whole utterance is the order (2026-10-28, r4).
+  // "my pre-round routine" is the stored one too — the mirror's own example, which never matched here.
   {
-    rx: /\b(save|remember|keep)\b[^.?!]{0,20}\b(that|this|my)\s+(routine|stretches|warm.?up)\b/i,
+    rx: /\b(save|remember|keep)\b[^.?!]{0,20}\b(that|this|my)\s+(?:pre[\s-]?round\s+)?(routine|stretches|warm.?up)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'routine_save' }),
   },
   {
-    rx: /\b(what(?:'s|s)?|tell\s+me|recall|show\s+me|give\s+me|read|run\s+me\s+through)\b[^.?!]{0,20}\bmy\s+(routine|stretches|warm.?up)\b/i,
+    rx: /\b(what(?:'s|s)?|tell\s+me|recall|show\s+me|give\s+me|read|run\s+me\s+through)\b[^.?!]{0,20}\bmy\s+(?:pre[\s-]?round\s+)?(routine|stretches|warm.?up)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'routine_recall' }),
   },
   {
@@ -587,6 +590,21 @@ const ACTING_INTENTS = new Set([
 ]);
 
 /**
+ * 2026-10-28 (Brain review r4) — query_status topics that WRITE. routine_save replaces the stored
+ * pre-round routine with the caddie's last line, so it is an acting intent wearing a lookup's type and
+ * gets the same question/story guard.
+ */
+const ACTING_TOPICS = new Set(['routine_save']);
+
+/**
+ * Intents where the PLAYER is the subject: a score on his card, his risk mode. Said about someone else
+ * ("my partner got a 4", "my buddy is going for it") they are a report, not an order.
+ */
+const PLAYER_SUBJECT_INTENTS = new Set(['log_score', 'change_setting']);
+
+const ROUTINE_ASK: Record<string, 'save' | 'recall'> = { routine_save: 'save', routine_recall: 'recall' };
+
+/**
  * 2026-10-27 (Brain review B1) — THE STATUS LOOKUPS. Each of these answers with a bare readout from
  * queryStatusHandler ("152 to the middle.", "Through 7, you're 38, +3.", "Your Index is 12.4"), and
  * off-round several of them answer "You're not in a round yet". That is the right reply to a bare
@@ -595,6 +613,7 @@ const ACTING_INTENTS = new Set([
 const STATUS_LOOKUP_TOPICS = new Set([
   'green_front', 'green_back', 'green_middle', 'distance_to_green', 'score', 'hole', 'holes_left', 'par',
   'course', 'longest_putt', 'putt_stats', 'gir', 'nine_split', 'longest_drive', 'last_round_here',
+  'routine_recall',
 ]);
 
 /**
@@ -607,6 +626,15 @@ const STATUS_LOOKUP_TOPICS = new Set([
 const DECISION_OR_REASON_RX =
   /\b(?:should|shall|why|clubs?|or|play|playing|change|expect|lay\s*up|go\s+(?:at|for)|(?:do|should|would|can|could|will)\s+i\s+hit|land|fly|aim|carry|attack|wrong|says|said|think|worried|worry|nervous|strategy|plan|lately|improve|better|fix|swing|tempo|feel|feels|mental|confidence)\b/i;
 
+/**
+ * 2026-10-28 (Brain review r4) — a GOAL or a TREND is not a status ask either. "I want to shoot under
+ * par today" → "Through 3, you're 15 — +2.", "My handicap went up after that tournament" → "Your
+ * Index is 12.4", and off-round both got "You're not in a round yet". The player is talking about his
+ * game; the caddie answers that.
+ */
+const GOAL_OR_TREND_RX =
+  /\b(?:want(?:s|ed)?\s+to|wanna|goals?|trying\s+to|try\s+to|hop(?:e|ing)\s+to|target|went\s+(?:up|down)|gone\s+(?:up|down)|going\s+(?:up|down)|go\s+(?:up|down)|dropp(?:ed|ing)|climb(?:ed|ing)|balloon\w*|blows?\s+up|this\s+(?:year|season)|break\s+\d+)\b/i;
+
 function isStatusLookup(hit: VoiceIntent): boolean {
   if (hit.intent_type === 'handicap_query') return true;
   return hit.intent_type === 'query_status' && STATUS_LOOKUP_TOPICS.has(String(hit.parameters?.query_topic ?? ''));
@@ -615,6 +643,20 @@ function isStatusLookup(hit: VoiceIntent): boolean {
 export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   const hit = classifyLocalIntent(transcript);
   if (!hit) return hit;
+  const topic = String(hit.parameters?.query_topic ?? '');
+  /**
+   * 2026-10-28 (Brain review r4) — THE ROUTINE IS SAVED OR READ ONLY ON A BARE ORDER.
+   *
+   * "Do you remember my warm-up routine?" and "I want to keep my warm-up short today" replaced the
+   * stored routine with the caddie's last line (queryStatusHandler routine_save), and "What should I
+   * add to my warm-up?" got the stored text read back. services/routineUtterance decides whether the
+   * whole utterance IS the order; anything else is a sentence about the routine, and it is the
+   * caddie's. 'conversational' for the reason given below.
+   */
+  if (hit.intent_type === 'query_status' && ROUTINE_ASK[topic] && routineAsk(transcript) !== ROUTINE_ASK[topic]) {
+    const raw = transcript.trim();
+    return intent(raw, 'conversational', { raw_utterance: raw, not_a_command: topic });
+  }
   /**
    * 2026-10-27 (Brain review B1) — A STATUS PHRASE INSIDE A QUESTION IS NOT A STATUS ASK.
    *
@@ -630,12 +672,16 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   if (isStatusLookup(hit)) {
     const raw = transcript.trim();
     const withoutCounts = raw.replace(/\b(?:left|remaining|still)\s+to\s+play\b/gi, ' ');
-    if (DECISION_OR_REASON_RX.test(withoutCounts)) {
+    // 2026-10-28 (Brain review r4) — and a story or a goal: "I was 3 over through 9 at Menifee
+    // yesterday" is not "what's my score". last_round_here is ABOUT a past round ("how did I do here
+    // last time"), so its own past framing is the ask, not a story.
+    const toldAsStory = topic !== 'last_round_here' && isStoryFramed(withoutCounts);
+    if (DECISION_OR_REASON_RX.test(withoutCounts) || GOAL_OR_TREND_RX.test(withoutCounts) || toldAsStory) {
       return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: String(hit.parameters?.query_topic ?? hit.intent_type) });
     }
     return hit;
   }
-  if (!ACTING_INTENTS.has(hit.intent_type)) return hit;
+  if (!ACTING_INTENTS.has(hit.intent_type) && !(hit.intent_type === 'query_status' && ACTING_TOPICS.has(topic))) return hit;
   /**
    * 2026-10-15 (review) — A QUESTION OR A STORY IS NEVER AN ORDER.
    *
@@ -654,11 +700,16 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
    *
    * The putt read is exempt: "how's my read" and "can you read this putt" were written as questions
    * on purpose (2026-09-13), and reading a putt changes nothing on the card.
+   *
+   * 2026-10-28 (Brain review r4) — and a score or a risk mode said about SOMEONE ELSE ("my partner got
+   * a 4 there", "he made a 5") is a report about the group, not an entry on his card.
    */
   const raw = transcript.trim();
   const blocked = hit.intent_type === 'open_tool' && hit.parameters?.tool_name === 'putt_read'
     ? false
-    : isQuestionShaped(raw) || (!VERB_ANCHORED_OPENS.has(hit.intent_type) && isStoryFramed(raw));
+    : isQuestionShaped(raw)
+      || (!VERB_ANCHORED_OPENS.has(hit.intent_type) && isStoryFramed(raw))
+      || (PLAYER_SUBJECT_INTENTS.has(hit.intent_type) && isAboutSomeoneElse(raw));
   if (blocked) return intent(raw, 'conversational', { raw_utterance: raw, not_a_command: hit.intent_type });
   return hit;
 }

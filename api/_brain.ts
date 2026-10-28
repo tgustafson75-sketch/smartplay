@@ -20,6 +20,8 @@
  * differently. Those are allowed to differ; these are not.
  */
 
+import { isAboutSomeoneElse, isHabitual, isPastOrHypothetical } from '../services/utteranceIsCommand';
+
 /** How the caddie reads "you"/"your" — the player is addressing the caddie, not narrating themselves. */
 export function selfReferenceBlock(name: string): string {
   return `SELF-REFERENCE: when ${name} says "you" or "your", they mean YOU, the caddie/app — not themselves. "Log that for you", "did you get my score?", "you have my shot?" are all the player telling YOU to record/track/confirm it. Treat "you"-directed statements as commands to you (fire the matching tool), never as the player describing their own action.`;
@@ -330,6 +332,27 @@ const EMOTION_PATTERNS: Array<{ re: RegExp; state: string; valence: 'positive' |
 const FIRST_PERSON = /\b(?:i|i'?m|im|my|me|we)\b/i;
 
 /**
+ * 2026-10-28 (Brain review r4) — "ME, NOW" WAS ONLY "CONTAINS 'MY'". Both fallbacks (api/kevin runs
+ * them when the model emitted no log_emotional_state / log_shot) accepted any sentence with an
+ * i/my/me in it, so "My buddy chunked his wedge into the bunker" logged HIS wedge on Tim's hole, "If
+ * I hit my 7 iron thin it goes over the green" logged a thin 7 iron, "I usually hit my driver right"
+ * and "Last year I hit my driver right into the water here" logged a driver right, "I am not nervous
+ * at all today" and "Am I too anxious over putts" logged anxious, and "My buddy is so frustrated he
+ * wants to quit" logged frustrated. A shot feeds the ladder and the shot map; a mood is echoed back
+ * in [HOW TIM SAYS HE FEELS] every later turn.
+ *
+ * So, for both: a question (now including "am / was / were / will / have / has"), someone else as the
+ * subject, or a past or hypothetical frame is not him, now. The past markers the precheck's story
+ * frame does not carry ("earlier", "ago", "if") are added here, where an "if" is never an order.
+ */
+const QUESTION_OPENER = /^\s*(?:how|what|where|when|which|who|why|do|does|did|am|are|is|was|were|can|could|would|will|should|have|has)\b/i;
+const NOT_NOW = /\b(?:earlier|ago|the\s+other\s+day|last\s+round|if)\b/i;
+const NOT_HIM_NOW = (t: string): boolean =>
+  QUESTION_OPENER.test(t) || isAboutSomeoneElse(t) || isPastOrHypothetical(t) || NOT_NOW.test(t);
+/** "I am NOT nervous", "I don't feel great" — the feeling named is the one he does not have. */
+const NEGATED_BEFORE = /\b(?:not|never|no\s+longer|hardly|isn'?t|aren'?t|wasn'?t|don'?t|doesn'?t|didn'?t|ain'?t)\s+(?:[\w']+\s+){0,2}$/i;
+
+/**
  * 2026-09-12 (Tim — "the topic will determine what coach is prevalent, helping logic and speed of
  * response", then: "we never want slower response that feels unnatural").
  *
@@ -411,10 +434,11 @@ export function detectEmotionalState(playerText: string): { state: string; valen
   if (!playerText) return null;
   const t = playerText.trim();
   // A question is the player asking something, not reporting how they feel.
-  if (/^\s*(?:how|what|where|when|which|who|why|do|does|did|are|is|can|could|would|should)\b/i.test(t)) return null;
+  if (NOT_HIM_NOW(t)) return null;
   if (!FIRST_PERSON.test(t)) return null;
   for (const { re, state, valence } of EMOTION_PATTERNS) {
-    if (re.test(t)) return { state, valence };
+    const m = re.exec(t);
+    if (m && !NEGATED_BEFORE.test(t.slice(0, m.index))) return { state, valence };
   }
   return null;
 }
@@ -453,7 +477,11 @@ export function extractShotReport(playerText: string): {
 } | null {
   if (!playerText) return null;
   const t = playerText.trim();
-  if (/^\s*(?:how|what|where|when|which|who|why|do|does|did|are|is|can|could|would|should)\b/i.test(t)) return null;
+  if (NOT_HIM_NOW(t)) return null;
+  // "Tell me about when I hit my driver left on 3" asks about a shot; it does not report one.
+  if (/^\s*(?:tell\s+me\s+about|remind\s+me|remember\s+when|talk\s+(?:to\s+me\s+)?about)\b/i.test(t)) return null;
+  // A habit is not a shot: "I usually hit my driver right" describes a hundred of them, not this one.
+  if (isHabitual(t)) return null;
   if (!FIRST_PERSON.test(t)) return null;
   // A plan or a recommendation is not a shot, even when it names a club and a target.
   if (FUTURE_MARKER.test(t)) return null;

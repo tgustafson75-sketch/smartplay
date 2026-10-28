@@ -2175,6 +2175,9 @@ export default function CaddieTab() {
         break;
       }
       case 'log_shot': {
+        // 2026-10-28 (Brain review r4) — no round, no shot: the earbud twin's rule. Off-round a story
+        // told at home would land in the per-club stats and the learned distances.
+        if (!useRoundStore.getState().isRoundActive) break;
         // Phase BJ — map Kevin's free-text fields to the existing
         // ShotResult shape. Wider direction enum (pull/push/hook/slice/
         // fade/draw) collapses to left/straight/right for analytics that

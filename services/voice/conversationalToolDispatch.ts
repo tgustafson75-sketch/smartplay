@@ -506,6 +506,10 @@ function dispatchOne(a: AnyAction): void {
       // Mirrors the tab dispatcher's log_shot case (caddie.tsx) — keep in sync.
       const roundMod = require('../../store/roundStore') as typeof import('../../store/roundStore');
       const round = roundMod.useRoundStore.getState();
+      // 2026-10-28 (Brain review r4) — the same dead-store rule as log_score above. Off-round there is
+      // no hole to put a shot on; a story told at home ("last year I hit my driver into the water")
+      // would otherwise land in the per-club stats and the learned distances.
+      if (!round.isRoundActive) break;
       const dirMap: Record<string, 'left' | 'straight' | 'right' | null> = {
         left: 'left', pull: 'left', hook: 'left',
         right: 'right', push: 'right', slice: 'right',

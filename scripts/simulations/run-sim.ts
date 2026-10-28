@@ -5492,13 +5492,19 @@ check('Conversation ingestion → CNS foundation + save-routine unblocked',
       /logUser\(text, Date\.now\(\)\)/.test(listenCode) &&
       /recordUserTurn\(text\)/.test(listenCode) &&
       /useConversationLog\.getState\(\)\.logUser\(text, Date\.now\(\)\)/.test(voice) &&
-      // save/recall routine: round-INDEPENDENT (before the round gate), local+offline
-      /if \(RX\.saveRoutine\.test\(t\)\)/.test(resp) &&
+      // save/recall routine: round-INDEPENDENT (before the round gate), local+offline.
+      // 2026-10-28 (Brain review r4) — through the matcher shared with the precheck
+      // (services/routineUtterance), not this file's own looser RX: "do you remember my warm-up?"
+      // overwrote the routine whenever the brain was down.
+      /import \{ routineAsk \} from '\.\/routineUtterance'/.test(resp) &&
+      /const routine = routineAsk\(t\);/.test(resp) &&
+      /if \(routine === 'save'\)/.test(resp) &&
       /useConversationLog\.getState\(\)\.lastCaddieText\(\)/.test(resp) &&
       /setPreRoundRoutine\(last\)/.test(resp) &&
-      /if \(RX\.recallRoutine\.test\(t\)\)/.test(resp) &&
+      /if \(routine === 'recall'\)/.test(resp) &&
+      !/RX\.(?:save|recall)Routine/.test(resp) &&
       // the routine handlers sit ABOVE the "!round.isRoundActive" gate
-      /RX\.recallRoutine[\s\S]*?if \(!round\.isRoundActive\)/.test(resp) &&
+      /routine === 'recall'[\s\S]*?if \(!round\.isRoundActive\)/.test(resp) &&
       // store field + setter
       /preRoundRoutine: string \| null/.test(prof) && /setPreRoundRoutine:/.test(prof)
     );
