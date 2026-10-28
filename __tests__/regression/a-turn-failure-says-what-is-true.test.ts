@@ -162,7 +162,9 @@ describe('review fixes (10-15)', () => {
     // no raw answerOffline left in the hook, and the failed-turn helper goes through the owner.
     const tapSrc = code('hooks/useVoiceCaddie.ts');
     expect(tapSrc).not.toMatch(/answerOffline\(/);
-    expect(tapSrc).toMatch(/const failedTurn = async[\s\S]{0,600}caddieFailureReply\(\{ heard: message/);
+    expect(tapSrc).toMatch(/const failedTurn = async[\s\S]{0,600}caddieFailureReply\(\{ heard,/);
+    // 2026-10-28 — `heard` is the player's words, captured BEFORE the plain-speak / sing reshape.
+    expect(tapSrc).toMatch(/const heard = message;\s*const failedTurn = async/);
     expect(code('services/listeningSession.ts')).not.toMatch(/answerOffline\(/);
     expect(code('services/listeningSession.ts')).toMatch(/\.localAnswer\(utterance, lang\)/);
   });

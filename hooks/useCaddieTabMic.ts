@@ -52,6 +52,9 @@ import type { ToolAction } from '../types/toolAction';
 const TURN_TIMEOUT_MS = 35_000;
 // History cap now lives in services/voice/conversationHistory.ts (the shared history).
 
+/** A turn waiting behind the one in flight: the player's words and, when reshaped, the brain's message. */
+interface QueuedTurn { transcript: string; brainMessage?: string }
+
 interface UsePipecatVoiceOpts {
   // 2026-08-23 — onUIEvent / onStateChange are gone with the Phase-3 WebSocket scaffold. Both were
   // fired ONLY from the WS message handler, so a caddie.tsx that passed onUIEvent was wiring a
@@ -104,8 +107,8 @@ export function useCaddieTabMic({
    * turn recorded, transcribed and then vanished — no speech, no text, state left on 'thinking'.
    * Latest wins: it runs the moment the current turn releases.
    */
-  const pendingTurnRef = useRef<string | null>(null);
-  const processTurnRef = useRef<((t: string) => Promise<void>) | null>(null);
+  const pendingTurnRef = useRef<QueuedTurn | null>(null);
+  const processTurnRef = useRef<((t: string, brainMessage?: string) => Promise<void>) | null>(null);
 
   /**
    * 2026-08-23 — the Phase-3 WebSocket scaffold is GONE (openSession / closeSession / pushMessage /
@@ -129,13 +132,18 @@ export function useCaddieTabMic({
 
   /**
    * One turn with the caddie: transcript in → the caddie's answer spoken, his tools dispatched.
+   *
+   * `brainMessage` is what the brain is asked when the caller reshaped it (the avatar mic's "explain
+   * that simply" / "sing me …", services/voice/preBrainTurn). `transcript` stays the player's own
+   * words for everything else — the log, the putt answer, the sign-off check, the history and the
+   * style learner (2026-10-28, Brain review r2: the reshape read as his words made Kevin brief for good).
    */
-  const processTurn = useCallback(async (transcript: string): Promise<void> => {
+  const processTurn = useCallback(async (transcript: string, brainMessage?: string): Promise<void> => {
     // 2026-07-06 (voice-parity F2) — block a re-entrant turn. If one is already in
     // flight, drop this call rather than start a second that races history/points.
     if (turnInFlightRef.current) {
       devLog('[pipecat] turn already in flight — queued behind it');
-      pendingTurnRef.current = transcript;
+      pendingTurnRef.current = { transcript, brainMessage };
       noteUserTurn();
       return;
     }
@@ -194,7 +202,7 @@ export function useCaddieTabMic({
         // a question asked during the putt reply was stranded (and ran stale after the NEXT turn).
         const next = pendingTurnRef.current;
         pendingTurnRef.current = null;
-        if (next) void processTurnRef.current?.(next);
+        if (next) void processTurnRef.current?.(next.transcript, next.brainMessage);
         return;
       }
     }
@@ -220,7 +228,8 @@ export function useCaddieTabMic({
      */
     try {
       const turn = await askCaddie({
-        message: transcript,
+        message: brainMessage ?? transcript,
+        heard: transcript,
         language: useSettingsStore.getState().language ?? 'en',
         timeoutMs: TURN_TIMEOUT_MS,
       });
@@ -388,7 +397,7 @@ export function useCaddieTabMic({
       turnInFlightRef.current = false;
       const next = pendingTurnRef.current;
       pendingTurnRef.current = null;
-      if (next) void processTurnRef.current?.(next);
+      if (next) void processTurnRef.current?.(next.transcript, next.brainMessage);
     }
   }, [onKevinSpoke, onReadyToListen, onSuperseded, onToolAction, onVoiceStateChange]);
   processTurnRef.current = processTurn;

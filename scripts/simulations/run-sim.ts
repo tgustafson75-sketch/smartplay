@@ -2785,7 +2785,7 @@ check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/troub
       // removed. The comment was updated and the assertion was not, so the guard went on requiring
       // the second owner and went red the moment it was deleted. What the property actually is:
       // the hook FETCHES the live half and HANDS IT to the builder, which does the merge.
-      /buildCaddieRequestBody\(\{ message, language, liveBlock/.test(voice) &&
+      /buildCaddieRequestBody\(\{ message, heard, language, liveBlock/.test(voice) &&
       /getUnifiedVisionContext\(\)\)\.promptBlock/.test(diag) &&
       /liveBlock: live,/.test(diag);
     return g1 && g3 && g5;
@@ -7704,7 +7704,8 @@ check('Pre-response conversational filler removed from the main voice path',
     // handed STRAIGHT to the brain with no filler in front of it — so it matches the call, not the
     // name of the thing passed to it. Fourth guard today pinned to a spelling rather than a
     // behaviour. [[break-test-every-guard-you-write]]
-    /await processTranscriptOverride\(\w+\)/.test(vcWarmSrc),
+    // 2026-10-28 — and it now carries the player's words beside the reshaped message.
+    /await processTranscriptOverride\(\w+(?:, \w+)?\)/.test(vcWarmSrc),
   "the 'Let me see...' bridge no longer fires before the reply (it conflicted with the now-fast brain that already opens conversationally); the conversational turn is handed straight to the pipecat brain (processTranscriptOverride) — the legacy /api/kevin fallthrough was deleted 2026-07-23");
 
 // 2026-06-11 — Environment mode phase 1: range gets a longer window AND now keeps
@@ -16527,7 +16528,9 @@ check(
     /const brainTranscript = shapeForBrain\(brainBase\);/.test(vc) &&
       /message = buildSingMessage\(sing\.song\)/.test(pre) &&
       /message = buildPlainSpeakPrefix\(\) \+ message/.test(pre) &&
-      /await processTranscriptOverride\(brainTranscript\)/.test(vc),
+      // 2026-10-28 (Brain review r2) — the reshape goes to the brain beside his own words, which the
+      // history and the style learner keep (a shaped "keep it brief" had made him brief for good).
+      /await processTranscriptOverride\(brainBase, brainTranscript\)/.test(vc),
     'these rewrite what the brain is ASKED rather than short-circuiting, so applying them only in sendToBrain meant an unshaped first turn — a refusal instead of the playful attempt, and plain-speak silently ignored',
   );
   check(
@@ -17055,7 +17058,7 @@ check(
     // until it was break-tested. [[three-ways-a-guard-is-worthless]]
     // 2026-10-28 (Brain review B10) — through brainTurnWithPreStep, which ends in conversationalBrainTurn.
     /if \(!handler\) \{[\s\S]{0,900}?brainTurnWithPreStep\(text, \{ timeoutMs: kevinTimeout\(\) \}\)/.test(listen) &&
-      /return conversationalBrainTurn\(shapeForBrain\(utterance\), opts\);/.test(listen) &&
+      /return conversationalBrainTurn\(shapeForBrain\(utterance\), \{ \.\.\.opts, heard: utterance \}\);/.test(listen) &&
       /const handler = voiceCommandRouter\.getHandler\(intent\.intent_type\);/.test(listen),
     'no tool handler is a reason to ASK THE BRAIN, not a reason to say nothing',
   );

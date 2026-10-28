@@ -635,6 +635,9 @@ async function getCourseInner(course_id: string): Promise<Course | null> {
     console.log('[golfcourseapi] cache hit:', course_id);
     return cached;
   }
+  // 2026-10-28 (Brain review r2) — a bundled or player-built course is not golfcourseapi's to know:
+  // asking cost a billed proxy call and a paid upstream one, every time, for a guaranteed miss.
+  if (course_id.startsWith('local:') || course_id.startsWith('custom:')) return cached;
 
   console.log('[golfcourseapi] getCourse fetch:', course_id);
   try {

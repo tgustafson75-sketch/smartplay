@@ -82,6 +82,6 @@ describe('the follow-up loop hands every failed turn to caddieFailureReply', () 
     expect(fn).not.toMatch(/'Give me one sec and ask me again\.'/);
     expect(fn).toMatch(/if \(isFallback\) return failedTurn\(\);/);
     expect(fn).toMatch(/if \(d\.error \|\| d\.errorType\) return failedTurn\(\);/);
-    expect(fn).toMatch(/const failedTurn = async[\s\S]{0,600}caddieFailureReply\(\{ heard: message/);
+    expect(fn).toMatch(/const failedTurn = async[\s\S]{0,600}caddieFailureReply\(\{ heard,/); // 2026-10-28 — his words, before the reshape
   });
 });

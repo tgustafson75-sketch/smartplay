@@ -721,7 +721,8 @@ function answerToCaddie(utterance: string): VoiceIntent {
 async function brainTurnWithPreStep(utterance: string, opts: { timeoutMs: number; signal?: AbortSignal }): Promise<BrainReply> {
   const spoken = await preBrainReply(utterance);
   if (spoken) return { text: spoken, audioBase64: null, toolActions: [], source: 'kevin' };
-  return conversationalBrainTurn(shapeForBrain(utterance), opts);
+  // The reshape is for the model only; history and the style learner keep what he said.
+  return conversationalBrainTurn(shapeForBrain(utterance), { ...opts, heard: utterance });
 }
 
 function customCaddieFields(): { customCaddieBasePersona: string; customCaddieName: string | null } {

@@ -74,7 +74,11 @@ export function clearConversationalHistory(): void { clearConversationHistory();
  * The one chokepoint every hands-free utterance passes through, which is why the stuck-player
  * check lives here.
  */
-export async function conversationalBrainTurn(utterance: string, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<BrainReply> {
+export async function conversationalBrainTurn(
+  utterance: string,
+  /** `heard`: the player's own words when `utterance` was reshaped for the brain (preBrainTurn). */
+  opts?: { timeoutMs?: number; signal?: AbortSignal; heard?: string },
+): Promise<BrainReply> {
   /**
    * 2026-09-05 — stamp WHICH SHOT the player was standing over when this turn began, so the
    * delivery path can tell whether the answer still applies by the time it arrives. See
@@ -85,11 +89,12 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
   // brain did not answer", so every existing caller already handles it correctly.
   if (!mayTalkToCaddie({ userInitiated: true })) return NO_ANSWER;
   const timeoutMs = opts?.timeoutMs ?? 15_000;
+  const heard = opts?.heard ?? utterance;
   // 2026-08-09 (dead-trigger audit) — the user_explicit_stuck team-intel trigger was built,
   // thresholded, given a full suggestion UI, and never called. Conservative phrase gate; the
   // store's per-session cap + pending guard bound it further.
   try {
-    if (/(i'?m (so |really )?(stuck|frustrated)|not getting (any )?better|keep (doing|hitting) the same|what am i doing wrong)/i.test(utterance)) {
+    if (/(i'?m (so |really )?(stuck|frustrated)|not getting (any )?better|keep (doing|hitting) the same|what am i doing wrong)/i.test(heard)) {
       const ti = require('./teamIntelligence') as typeof import('./teamIntelligence');
       const surf = (require('./activeSurfaceRegistry') as typeof import('./activeSurfaceRegistry')).getActiveSurface();
       const roundActive = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState().isRoundActive;
@@ -104,6 +109,7 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
   let timedOut = false;
   const turn = await askCaddie({
     message: utterance,
+    heard,
     language: useSettingsStore.getState().language ?? 'en',
     timeoutMs,
     // 2026-10-16 — the earbud session's turn signal: a shushed or superseded turn stops its brain call

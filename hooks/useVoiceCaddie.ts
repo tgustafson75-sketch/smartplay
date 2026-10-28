@@ -333,7 +333,7 @@ interface UseVoiceCaddieOptions {
   // When set, bypasses the intent router + Kevin API entirely.
   // Called with the raw transcript; caller owns TTS and tool dispatch.
   // Always supplied by the sole mount (app/(tabs)/caddie.tsx); there is no second processor.
-  processTranscriptOverride?: (transcript: string) => Promise<void>;
+  processTranscriptOverride?: (transcript: string, brainMessage?: string) => Promise<void>;
 }
 
 /**
@@ -790,16 +790,18 @@ export const useVoiceCaddie = ({
      * from real data is a real answer (logged + kept); anything else is a fallback (spoken, never
      * logged as something the caddie said).
      */
+    // The player's own words — `message` is reshaped below, and the local answer must read what he asked.
+    const heard = message;
     const failedTurn = async (): Promise<{ text: string; audioBase64: null; toolAction: null; fallback: boolean }> => {
       const failure = require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply');
       const langSafe = failure.safeLang(language);
       // Never throws: it is called inside sendToBrain's try, where a throw would fire the retry.
-      const r = await failure.caddieFailureReply({ heard: message, language: langSafe })
+      const r = await failure.caddieFailureReply({ heard, language: langSafe })
         .catch(() => ({ text: CADDIE_NOTICE_ON_US[langSafe], source: 'on_us' as const, verdict: null }));
       logVoiceSilentFail(r.source === 'local_answer' ? 'local_responder_hit' : 'local_responder_miss', {
         source: r.source,
         language: langSafe,
-        transcriptHead: message.slice(0, 60),
+        transcriptHead: heard.slice(0, 60),
       });
       return { text: r.text, audioBase64: null, toolAction: null, fallback: r.source !== 'local_answer' };
     };
@@ -910,6 +912,7 @@ export const useVoiceCaddie = ({
            */
           ...buildCaddieRequestBody({
             message,
+            heard,
             language,
             liveBlock,
             responseMode,
@@ -1012,7 +1015,7 @@ export const useVoiceCaddie = ({
           },
           signal: rc.signal,
           // The SAME payload the first attempt sent. One question, one caddie.
-          body: JSON.stringify(buildCaddieRequestBody({ message, language, liveBlock })),
+          body: JSON.stringify(buildCaddieRequestBody({ message, heard, language, liveBlock })),
         }).finally(() => clearTimeout(rt));
         if (retryRes.ok) {
           recordVoiceEndpointSuccess('kevin');
@@ -2385,7 +2388,9 @@ export const useVoiceCaddie = ({
         // — processTurn sets the final state.
         isProcessingRef.current = false;
         try {
-          await processTranscriptOverride(brainTranscript);
+          // The player's words AND what the brain is asked: the reshape is for the model only, so the
+          // history, the logs and the style learner keep what he said (2026-10-28, Brain review r2).
+          await processTranscriptOverride(brainBase, brainTranscript);
         } catch (e) {
           console.log('[voice] pipecat override error:', e);
           wrappedOnVoiceStateChange('idle');

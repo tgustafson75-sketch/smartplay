@@ -57,6 +57,7 @@ describe('the hook hands the clarified text to the brain', () => {
     expect(assigned).not.toBeNull();
     // …and that variable is what the brain is asked.
     expect(src).toMatch(new RegExp(`const\\s+brainTranscript\\s*=\\s*shapeForBrain\\(\\s*${assigned![1]}\\s*\\)`));
-    expect(src).toMatch(/processTranscriptOverride\(\s*brainTranscript\s*\)/);
+    // 2026-10-28 (Brain review r2) — beside the clarified words themselves, which the history keeps.
+    expect(src).toMatch(/processTranscriptOverride\(\s*brainBase,\s*brainTranscript\s*\)/);
   });
 });

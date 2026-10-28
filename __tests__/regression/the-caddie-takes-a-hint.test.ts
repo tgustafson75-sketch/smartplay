@@ -120,11 +120,13 @@ describe('it is heard at the ONE seam, not at five call sites', () => {
   it('caddieBrain listens on every turn, whichever surface asked', () => {
     // Hand-copying this to the askCaddie call sites is how the caddie tab went a month without a
     // putt intercept. A player must be able to say it to any surface and have it stick.
-    expect(brain).toMatch(/noteUtterance\(extras\.message\)/);
+    // 2026-10-28 — on the player's own words (`heard`), never the reshaped brain message: see
+    // explain-simply-never-makes-the-caddie-brief.test.ts.
+    expect(brain).toMatch(/noteUtterance\(heard\)/);
   });
 
   it('and learning a preference can never fail the turn it is learned in', () => {
-    const at = brain.indexOf('noteUtterance(extras.message)');
+    const at = brain.indexOf('noteUtterance(heard)');
     expect(brain.slice(at - 120, at + 120)).toMatch(/void |catch/);
   });
 

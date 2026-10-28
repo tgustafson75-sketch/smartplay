@@ -73,6 +73,9 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
   if (opts.signal?.aborted) { opts.onNoAnswer?.('aborted'); return null; }
   if (!mayTalkToCaddie({ userInitiated: !opts.overrides?.is_proactive })) { opts.onNoAnswer?.('failed'); return null; }
   const { timeoutMs, skipTts, signal, onNoAnswer, ...extras } = opts;
+  // The player's own words: what the history keeps and the style learner hears. `message` may carry a
+  // reshape meant only for the model (see CaddieRequestExtras.heard).
+  const heard = extras.heard?.trim() ? extras.heard : extras.message;
 
   const controller = new AbortController();
   let timedOut = false;
@@ -147,7 +150,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
 
     // ONE conversation, whichever surface asked. Written here so no caller can forget it — the
     // reason the caddie used to lose the thread when the player switched from earbud to typing.
-    appendConversationTurn(extras.message, text);
+    appendConversationTurn(heard, text);
 
     /**
      * 2026-09-11 — THE CADDIE ASKING IN HIS OWN WORDS COUNTS AS ASKING.
@@ -176,7 +179,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
      */
     try {
       const { noteUtterance } = require('./caddieStyle') as typeof import('./caddieStyle');
-      void noteUtterance(extras.message).catch(() => undefined);
+      void noteUtterance(heard).catch(() => undefined);
     } catch { /* never let learning a preference break a reply */ }
 
     try {

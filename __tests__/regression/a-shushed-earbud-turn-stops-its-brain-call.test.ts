@@ -26,6 +26,6 @@ describe('the earbud brain call is cancellable', () => {
     expect(calls.length).toBeGreaterThanOrEqual(3);
     for (const c of calls) expect(c).toMatch(/signal: brainSignal/);
     const wrapper = ls.slice(ls.indexOf('async function brainTurnWithPreStep('));
-    expect(wrapper.slice(0, wrapper.indexOf('\n}\n'))).toMatch(/conversationalBrainTurn\(shapeForBrain\(utterance\), opts\)/);
+    expect(wrapper.slice(0, wrapper.indexOf('\n}\n'))).toMatch(/conversationalBrainTurn\(shapeForBrain\(utterance\), \{ \.\.\.opts, heard: utterance \}\)/);
   });
 });

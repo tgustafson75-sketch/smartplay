@@ -36,7 +36,15 @@
 
 /** Values only the calling surface can know. Everything else is read from the stores below. */
 export interface CaddieRequestExtras {
+  /** What the brain is ASKED — possibly reshaped (services/voice/preBrainTurn.shapeForBrain). */
   message: string;
+  /**
+   * 2026-10-28 (Brain review r2) — what the player actually SAID, when `message` was reshaped. The
+   * [EXPLAIN SIMPLY] / [SING REQUEST] instructions are for the model only: read as the player's words
+   * they taught the style learner "keep it brief" and went into the history as something he said.
+   * Defaults to `message`. Never sent as its own key.
+   */
+  heard?: string;
   language: string;
   /** The live context block the caller composed (GPS + hole + geometry + recent shots). */
   liveBlock?: string | null;
@@ -890,7 +898,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     }, null),
     coachKnowledgeContext: safe(() => {
       const { getCoachKnowledgeForMessage } = require('../store/coachKnowledgeStore') as { getCoachKnowledgeForMessage: (m: string) => string };
-      return getCoachKnowledgeForMessage(extras.message);
+      return getCoachKnowledgeForMessage(extras.heard ?? extras.message);
     }, ''),
     watchData: safe(() => {
       const w = require('../store/watchStore').useWatchStore.getState();

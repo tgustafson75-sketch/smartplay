@@ -10,13 +10,35 @@
  * Now the payload builder reads it here, synchronously, on every route. A bundled course is built
  * from the round's own card on the spot; a golfcourseapi course is summarised once, after a warm
  * (the builder starts one on a miss, so at worst the first turn of a round goes without it).
+ *
+ * 2026-10-28 (Brain review r2) — a course he BUILT ('custom:') is on the device like a bundled one,
+ * and is read the same way (courseCard.loadCourseCard already groups the two). It used to fall to the
+ * golfcourseapi warm, which cannot know the id: a billed /api/course-proxy call (and a paid upstream
+ * one) on EVERY turn of the round, and the caddie never got the card the round store was holding.
+ * A failed warm is remembered too, for the round — a miss must not refetch on every turn — with a
+ * retry window, so a dead spot on the first tee does not cost a real course its card for four hours.
  */
 import { useRoundStore } from '../store/roundStore';
 
 const summaries = new Map<string, string>();
 const warming = new Set<string>();
+/** courseId → the failed warm: which round it was in, and when. */
+const failed = new Map<string, { round: number | null; at: number }>();
+const FAILED_RETRY_MS = 5 * 60_000;
 
-/** The bundled card for a local course, from the round store's holes. */
+/** Ids whose card is on the device: bundled ('local:') and built by the player ('custom:'). */
+function isOnDevice(courseId: string): boolean {
+  return courseId.startsWith('local:') || courseId.startsWith('custom:');
+}
+
+/** A warm that failed in THIS round, recently enough not to try again yet. A new round always retries. */
+function recentlyFailed(courseId: string, now: number): boolean {
+  const f = failed.get(courseId);
+  if (!f) return false;
+  return f.round === useRoundStore.getState().roundStartTime && now - f.at < FAILED_RETRY_MS;
+}
+
+/** The on-device card for a bundled or custom course, from the round store's holes. */
 function localCard(): string | null {
   const holes = [...(useRoundStore.getState().courseHoles ?? [])].sort((a, b) => a.hole - b.hole);
   if (holes.length === 0) return null;
@@ -26,21 +48,28 @@ function localCard(): string | null {
 /** The card for the course being played, or null when it is not known yet. Never fetches. */
 export function getCourseContextSync(courseId: string | null | undefined): string | null {
   if (!courseId) return null;
-  if (courseId.startsWith('local:')) return localCard();
+  if (isOnDevice(courseId)) return localCard();
   return summaries.get(courseId) ?? null;
 }
 
-/** Fetch and summarise a golfcourseapi course once. Best-effort; a failure leaves the card absent. */
-export async function warmCourseContext(courseId: string | null | undefined): Promise<void> {
-  if (!courseId || courseId.startsWith('local:') || summaries.has(courseId) || warming.has(courseId)) return;
+/**
+ * Fetch and summarise a golfcourseapi course once. Best-effort; a failure leaves the card absent and
+ * is not retried until the retry window passes or a new round starts.
+ */
+export async function warmCourseContext(courseId: string | null | undefined, now: number = Date.now()): Promise<void> {
+  if (!courseId || isOnDevice(courseId) || summaries.has(courseId) || warming.has(courseId)) return;
+  if (recentlyFailed(courseId, now)) return;
   warming.add(courseId);
+  let ok = false;
   try {
     const api = await import('./golfCourseApi');
     const course = await api.getCourse(courseId);
-    if (course) summaries.set(courseId, api.courseSummaryForContext(course));
+    if (course) { summaries.set(courseId, api.courseSummaryForContext(course)); ok = true; }
   } catch (e) {
     console.warn('[courseContext] preload failed:', e);
   } finally {
+    if (ok) failed.delete(courseId);
+    else failed.set(courseId, { round: useRoundStore.getState().roundStartTime, at: now });
     warming.delete(courseId);
   }
 }
@@ -49,4 +78,5 @@ export async function warmCourseContext(courseId: string | null | undefined): Pr
 export function __resetCourseContextCache(): void {
   summaries.clear();
   warming.clear();
+  failed.clear();
 }
