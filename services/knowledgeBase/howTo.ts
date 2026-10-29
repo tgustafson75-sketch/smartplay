@@ -74,8 +74,8 @@ export const HOW_TO: HowTo[] = [
   },
   {
     id: 'caddie-brevity',
-    asks: ['talk less', 'be brief', 'keep it short', 'you talk too much', 'give me the short version', 'more detail', 'explain more'],
-    steps: 'Just tell me. Say "keep it short" or "you are talking too much" and I shorten up and stay that way \u2014 say "give me more detail" and I open back up. There is no setting to hunt for; I take the hint and adjust. On the course I keep it to what a caddie would actually say walking beside you regardless.',
+    asks: ['talk less', 'be brief', 'keep it short', 'you talk too much', 'give me the short version', 'more detail', 'explain more', 'longer answers', 'how do I get more detail'],
+    steps: 'Just tell me. Say "keep it short" or "you are talking too much" and I shorten up and stay that way \u2014 say "give me longer answers" or "you can say more" and I open back up. There is no setting to hunt for; I take the hint and adjust. On the course I keep it to what a caddie would actually say walking beside you regardless.',
   },
   {
     id: 'remove-club',
