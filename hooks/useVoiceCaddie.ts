@@ -1494,8 +1494,15 @@ export const useVoiceCaddie = ({
         // CockpitCaddieScreen advice card and the Full Mode bottom bubble.
         // 2026-06-19 (Tim — dead-zone testing) — SPEAK it via device TTS (works with no
         // signal), not just a text bubble the user can't see while driving.
-        onResponseReceived("Didn't catch that — say it again?");
-        if (voiceEnabled) void speakDeviceNotice("Didn't catch that — say it again?", language, voiceGender).catch(() => {});
+        // 2026-10-28 (Brain recheck R9) — this said "Didn't catch that — say it again?" in English.
+        // The upload ARRIVED; the server failed to transcribe it (a 502 from the provider, a Vercel
+        // 5xx). That is the same untruth the abort branch below dropped on 08-17: it sends the
+        // player to repeat into the outage. The shared failure owner says what is true, in his
+        // language. Empty words on a 200 (below) is the only "didn't catch that".
+        const line = (await (require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply'))
+          .caddieFailureReply({ heard: null, language })).text;
+        onResponseReceived(line);
+        if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
@@ -2065,7 +2072,10 @@ export const useVoiceCaddie = ({
         if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
       } else {
         logVoiceError('process_audio', err);
-        const line = "Something went wrong on my end — try again?";
+        // 2026-10-28 (Brain recheck R9) — was a hard-coded English "Something went wrong on my end",
+        // to a Spanish or Chinese player too. Same owner as the abort branch above.
+        const line = (await (require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply'))
+          .caddieFailureReply({ heard: null, language })).text;
         onResponseReceived(line);
         if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
       }

@@ -162,13 +162,36 @@ export async function primeStyleCache(): Promise<void> {
   cached = await loadLearnedStyle();
 }
 
+/**
+ * 2026-10-28 (Brain recheck R9) — would the learner TODAY still have moved him on these words?
+ *
+ * R7 narrowed the lists, but a style the old lists learned was already on disk: "tell me more about
+ * that layup" had saved {style:'full'}, and his earlier Quiet / Short pick carries no
+ * responseModeSetAt (it predates the stamp), so the stale 'full' outranked it on every route and the
+ * card kept quoting a phrase that no longer counts. A stored style must still be EARNED by its own
+ * words: 'full' by a fuller signal, 'brief' by a briefer one, 'balanced' by either. `heard` is cut
+ * at 80 characters, so a cut quote cannot be judged and is kept.
+ */
+function stillASignal(v: LearnedStyle): boolean {
+  if (typeof v.heard !== 'string' || v.heard.length >= 80) return true;
+  const sig = detectStyleSignal(v.heard);
+  if (v.style === 'full') return sig === 'fuller';
+  if (v.style === 'brief') return sig === 'briefer';
+  return sig !== null;
+}
+
 export async function loadLearnedStyle(): Promise<LearnedStyle | null> {
   try {
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
     const v = JSON.parse(raw);
-    const out = v && typeof v.style === 'string' ? v as LearnedStyle : null;
+    let out = v && typeof v.style === 'string' ? v as LearnedStyle : null;
+    if (out && !stillASignal(out)) {
+      // Forget it on disk too, so the settings card stops quoting it.
+      await AsyncStorage.removeItem(KEY);
+      out = null;
+    }
     cached = out;
     return out;
   } catch { return null; }
