@@ -42,6 +42,13 @@ interface Pattern {
   build: (raw: string, match: RegExpMatchArray) => VoiceIntent;
 }
 
+/**
+ * 2026-10-28 (Brain recheck r10) — what may END a whole-utterance setting order (handedness, theme):
+ * a softener, a thanks, "for me", or the caddie's name — "I'm a lefty, Kevin", "turn on dark mode for
+ * me", "dark mode please". Anything else after the term makes it a sentence about the setting.
+ */
+const SETTING_TAIL = String.raw`(?:[\s,]+(?:now|actually|too|though|by\s+the\s+way|please|for\s+me|thanks|thank\s+you|kevin|serena))*\s*[.!]?$`;
+
 const intent = (
   raw: string,
   intent_type: string,
@@ -342,14 +349,20 @@ const PATTERNS: Pattern[] = [
   // is tough for a righty" set right. The whole utterance now has to be "I'm (a) lefty" / "I play
   // southpaw" / "set me to left-handed" / a bare "lefty"; anything else mentions the word and is the
   // caddie's.
+  //
+  // 2026-10-28 (Brain recheck r10) — but the order can still be addressed to him. "I'm a lefty,
+  // Kevin", "set me to left handed for me", "just set me to lefty, thanks" and (via LEAD_IN) "actually
+  // I'm a lefty" / "Kevin I'm left handed" missed the anchor, fell to the mention catch-all below and
+  // reached a brain with no tool for handedness — so a lefty kept right-handed reads. A trailing
+  // vocative, "for me" or a thanks is part of the order.
   {
     rx: new RegExp(
       LEAD_IN
-      + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?`
+      + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:just\s+)?`
       + String.raw`(?:(?:i'?m|im|i\s+am|i\s+play(?:\s+as)?|i\s+swing|i\s+golf|set\s+me\s+(?:to|as)|set\s+(?:my\s+)?handedness\s+to|`
       + String.raw`switch\s+(?:me\s+)?to|change\s+(?:me\s+)?to|make\s+me|put\s+me\s+(?:down\s+)?as)\s+)?(?:a\s+)?`
       + String.raw`(left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty)(?:\s+(?:golfer|player))?`
-      + String.raw`(?:[\s,]+(?:now|actually|too|though|by\s+the\s+way|please))*\s*[.!]?$`,
+      + SETTING_TAIL,
       'i',
     ),
     build: (raw, m) => intent(raw, 'change_setting', {
@@ -377,11 +390,17 @@ const PATTERNS: Pattern[] = [
     // "Dark mode is hurting my eyes" turned dark mode ON, and "turn off dark mode" did too. A bare
     // "dark mode", a switch/turn-on/use verb, or a polite "can you" in front; "turn off X mode" is the
     // other one. Anything else talks ABOUT the theme.
+    //
+    // 2026-10-28 (Brain recheck r10) — the everyday ways to say it as well: "make it dark mode", "I
+    // want dark mode", "turn on dark mode for me", "switch to dark mode, Kevin", "Kevin switch to dark
+    // mode". Each was an order the catch-all below sent to a brain with no theme tool.
     rx: new RegExp(
       LEAD_IN
-      + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?`
-      + String.raw`(?:(?:switch|change|go|set|put)\s+(?:it\s+|the\s+app\s+|(?:the\s+)?(?:theme|screen|display)\s+)?(?:to|into|in)\s+|(?:turn\s+on|use|enable|give\s+me)\s+|(turn\s+off|disable)\s+)?`
-      + String.raw`(?:the\s+)?(dark|light)\s+mode(?:\s+on)?(?:[\s,]+please)?\s*[.!]?$`,
+      + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:just\s+)?`
+      + String.raw`(?:(?:switch|change|go|set|put)\s+(?:it\s+|the\s+app\s+|(?:the\s+)?(?:theme|screen|display)\s+)?(?:to|into|in)\s+`
+      + String.raw`|(?:turn\s+on|use|enable|give\s+me|make\s+it|i\s+(?:want|prefer)|i'?d\s+(?:like|prefer)|let'?s\s+(?:do|use|go\s+with))\s+|(turn\s+off|disable)\s+)?`
+      + String.raw`(?:the\s+)?(dark|light)\s+mode(?:\s+on)?`
+      + SETTING_TAIL,
       'i',
     ),
     build: (raw, m) => {
@@ -393,8 +412,10 @@ const PATTERNS: Pattern[] = [
     // 2026-10-28 (Brain review r9) — a sentence that only MENTIONS handedness or a theme ("we got
     // paired with a lefty", "dark mode is hurting my eyes") is the caddie's. 'conversational', not
     // null: the cloud classifier would hand the same sentence back as a setting change.
-    rx: /\b(?:left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty|(?:dark|light)\s+mode)\b/i,
-    build: (raw) => intent(raw, 'conversational', { raw_utterance: raw, not_a_command: 'change_setting' }),
+    rx: /\b(?:left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty|((?:dark|light)\s+mode))\b/i,
+    build: (raw, m) => intent(raw, 'conversational', {
+      raw_utterance: raw, not_a_command: 'change_setting', setting_name: m[1] ? 'theme' : 'handedness',
+    }),
   },
   {
     // Cart mode on/off.
@@ -693,6 +714,19 @@ const LOOKUP_NEGATED = /\b(?:not|don'?t|do\s+not|doesn'?t|does\s+not)\b/i;
  */
 const INTENTION_RX = /\b(?:want(?:s|ed)?\s+to|wanna|need(?:s|ed)?\s+to|have\s+to|has\s+to|got\s+to|gotta|trying\s+to|try\s+to|hop(?:e|ing)\s+to|plan(?:ning)?\s+to)\b/i;
 
+/**
+ * 2026-10-28 (Brain recheck r10) — except the call he makes over the ball. "I want to go for it",
+ * "I wanna go for it", "I want to play it safe here" ARE how a player calls the shot, not a plan
+ * for later; INTENTION_RX sent each to a brain with no tool for risk mode, so posture stayed normal
+ * while Kevin could still answer "let's go for it". His own want, now, about the risk call itself —
+ * a negation ("I don't want to go for it") is still the caddie's.
+ */
+const RISK_CALL_RX = /\b(?:i\s+(?:really\s+|just\s+)?(?:want\s+to|wanna)|wanna)\s+(?:just\s+)?(?:go\s+(?:for|at)\s+it|play\s+(?:it\s+)?safe|(?:be|go|get)\s+aggressive|attack|(?:go|be|stay|play)\s+conservative)\b/i;
+const RISK_CALL_NEGATED = /\b(?:not|don'?t|do\s+not|dont|never|no)\b/i;
+const isRiskCall = (hit: VoiceIntent, raw: string): boolean =>
+  hit.intent_type === 'change_setting' && hit.parameters?.setting_name === 'risk_mode'
+  && RISK_CALL_RX.test(raw.replace(/’/g, "'")) && !RISK_CALL_NEGATED.test(raw.replace(/’/g, "'"));
+
 function isStatusLookup(hit: VoiceIntent): boolean {
   if (hit.intent_type === 'handicap_query') return true;
   return hit.intent_type === 'query_status' && STATUS_LOOKUP_TOPICS.has(String(hit.parameters?.query_topic ?? ''));
@@ -774,9 +808,49 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
       || (!VERB_ANCHORED_OPENS.has(hit.intent_type) && isStoryFramed(raw))
       || (PLAYER_SUBJECT_INTENTS.has(hit.intent_type) && isAboutSomeoneElse(raw))
       || isConditionalOrFuture(raw)
-      || (INTENTION_RX.test(raw) && !isPoliteRequest(raw));
-  if (blocked) return intent(raw, 'conversational', { raw_utterance: raw, not_a_command: hit.intent_type });
+      || (INTENTION_RX.test(raw) && !isPoliteRequest(raw) && !isRiskCall(hit, raw));
+  if (blocked) {
+    return intent(raw, 'conversational', {
+      raw_utterance: raw, not_a_command: hit.intent_type,
+      ...(hit.intent_type === 'change_setting' ? { setting_name: hit.parameters?.setting_name } : {}),
+    });
+  }
   return hit;
+}
+
+/** The brain's own tool for a setting, where it has one (api/_brainTools); everything else it cannot change. */
+const SETTINGS_THE_BRAIN_CAN_SET = new Set(['caddie_persona']);
+/** What it is called, and words the patterns above DO take as the order. */
+const SETTING_WORDS: Record<string, { label: string; say: string }> = {
+  handedness: { label: 'handedness', say: `"I'm left handed"` },
+  theme: { label: 'the app theme', say: '"switch to dark mode" or "switch to light mode"' },
+  risk_mode: { label: 'risk mode', say: '"play it safe" or "go for it"' },
+  cart_mode: { label: 'cart mode', say: '"cart mode on"' },
+  ghost: { label: 'the ghost round', say: '"ghost mode on"' },
+};
+
+/**
+ * 2026-10-28 (Brain recheck r10) — A SETTING THE PRECHECK DECLINED IS ONE NOBODY CHANGED.
+ *
+ * A 'conversational' answer goes straight to the brain, and api/_brainTools has no tool for
+ * handedness, theme or risk mode. Nothing outside this file read `not_a_command`, so the caddie
+ * heard "set me to left handed, if you can" with no idea it had not been applied, and could answer
+ * "done". services/caddieRequestBody (the one payload builder every route goes through) appends this
+ * directive to the turn's context, so a declined setting reaches the conversation as a fact: unchanged,
+ * and the words that do change it. Null for anything else, including a setting that was applied.
+ */
+export function settingNotAppliedNote(heard: string): string | null {
+  const t = (heard ?? '').trim();
+  if (!t) return null;
+  const hit = precheckLocalIntent(t);
+  if (hit?.intent_type !== 'conversational' || hit.parameters?.not_a_command !== 'change_setting') return null;
+  const name = String(hit.parameters?.setting_name ?? '');
+  if (!name || SETTINGS_THE_BRAIN_CAN_SET.has(name)) return null;
+  const words = SETTING_WORDS[name];
+  if (!words) return null;
+  return `[SETTING NOT CHANGED] The player's words mention ${words.label}, but they were not taken as an order and `
+    + `nothing was changed. Never say it was changed or that you will remember it. If he meant it as an order, `
+    + `tell him plainly it is not set yet and that saying ${words.say} on its own sets it.`;
 }
 
 function classifyLocalIntent(transcript: string): VoiceIntent | null {

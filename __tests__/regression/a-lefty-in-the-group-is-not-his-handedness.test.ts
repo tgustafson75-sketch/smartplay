@@ -46,6 +46,13 @@ describe('a self-declaration or an order still sets it', () => {
     ['turn on dark mode please', 'change_setting:dark'],
     ['can you switch to dark mode', 'change_setting:dark'],
     ['turn off dark mode', 'change_setting:light'],
+    // 2026-10-28 (Brain recheck r10) — addressed to him, softened, or with the comma speech drops.
+    ['Switch to dark mode, Kevin', 'change_setting:dark'],
+    ['Turn on dark mode for me', 'change_setting:dark'],
+    ['Make it dark mode', 'change_setting:dark'],
+    ["I'm a lefty, Kevin", 'change_setting:left'],
+    ["actually I'm a lefty", 'change_setting:left'],
+    ["Kevin I'm left handed", 'change_setting:left'],
   ])('"%s" → %s', (u, want) => {
     expect(kind(u)).toBe(want);
   });

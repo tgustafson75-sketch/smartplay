@@ -239,8 +239,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return vl.peekOfflineNotesBlock() || null;
     }, null);
 
+    /**
+     * 2026-10-28 (Brain recheck r10) — a setting the precheck declined to change, said as a fact
+     * (services/localIntentPrecheck.settingNotAppliedNote). He has no tool for it, so without this he
+     * could answer "done" to an order nothing applied. On the live side for the reason above.
+     */
+    const notApplied = extras.overrides?.is_proactive ? null : safe(() => {
+      const lp = require('./localIntentPrecheck') as typeof import('./localIntentPrecheck');
+      return lp.settingNotAppliedNote(extras.heard?.trim() ? extras.heard : extras.message);
+    }, null);
+
     const suffix = extras.contextSuffix?.trim();
-    const tail = [offline, suffix].filter((x): x is string => !!x && x.trim().length > 0).join('\n\n');
+    const tail = [offline, notApplied, suffix].filter((x): x is string => !!x && x.trim().length > 0).join('\n\n');
     if (!tail) return merged;
     return merged ? `${merged}\n\n${tail}` : tail;
   }, extras.liveBlock ?? null);

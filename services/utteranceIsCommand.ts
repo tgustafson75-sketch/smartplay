@@ -38,8 +38,18 @@
  * Pure and dependency-free so both callers (and their tests) can import it.
  */
 
-/** Fillers and a vocative ("Kevin, …") that may precede the real first word. */
-export const LEAD_IN = String.raw`^(?:(?:hey|ok|okay|yo|so|um|uh|hi|well|and|but|alright|all\s+right)[\s,]+)*(?:[a-z]+,\s*)?`;
+/**
+ * Fillers and a vocative ("Kevin, …") that may precede the real first word.
+ *
+ * 2026-10-28 (Brain recheck r10) — "actually", "oh", "by the way", and the caddie's own name with no
+ * comma. Speech-to-text drops the comma more often than not, so "Kevin I'm left handed" and "actually
+ * I'm a lefty" missed every whole-utterance pattern built on this and went to a brain that cannot
+ * change the setting. A bare name is accepted only for the caddies themselves: any other first word
+ * without a comma is the sentence, not a vocative. Fillers may follow the vocative too ("Kevin,
+ * actually …").
+ */
+const FILLER = String.raw`(?:hey|ok|okay|yo|so|um|uh|oh|hi|well|and|but|actually|alright|all\s+right|by\s+the\s+way|kevin|serena)`;
+export const LEAD_IN = String.raw`^(?:${FILLER}[\s,]+)*(?:[a-z]+,\s*)?(?:${FILLER}[\s,]+)*`;
 
 const INTERROGATIVE_OPENER = new RegExp(
   LEAD_IN
@@ -97,10 +107,14 @@ const SPEAKER = /\b(?:i|i'?m|im|i'?ve|i'?ll|i'?d|me|myself)\b/i;
  * that has not arrived ("after this hole", "later", "tomorrow", "next time") is the player thinking
  * aloud. "When" already opens a question. A time inside an explicit open ("my round from yesterday")
  * is in the past, so it is untouched.
+ *
+ * 2026-10-28 (Brain recheck r10) — "let me know" only when it defers HIS act ("let me know when I
+ * should"). A bare "let me know" turned "I'm going for it, let me know if that's dumb" into talk, and
+ * the risk mode he had just called stayed at normal.
  */
 const CONDITIONAL_OR_FUTURE = new RegExp(
   LEAD_IN + String.raw`(?:if|unless|even\s+if|in\s+case|suppose|supposing|assuming)\b`
-  + String.raw`|\b(?:if|unless)\s+(?:i|i'?m|im|we|my)\b|\blet\s+me\s+know\b|\bafter\s+(?:this|the|that)\s+(?:hole|round|shot|one)\b`
+  + String.raw`|\b(?:if|unless)\s+(?:i|i'?m|im|we|my)\b|\blet\s+me\s+know\s+(?:when|if|whether)\s+(?:i|we)\b|\bafter\s+(?:this|the|that)\s+(?:hole|round|shot|one)\b`
   + String.raw`|\b(?:later(?:\s+on)?|tomorrow|tonight|someday|some\s+day|next\s+(?:time|week|month|year|season|weekend))\b`,
   'i',
 );

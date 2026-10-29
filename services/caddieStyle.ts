@@ -26,21 +26,32 @@
  * PURE detection + a small persisted memory. [[feels-like-a-real-caddie]] [[no-push-nagging-no-ads]]
  */
 
+import { isAboutSomeoneElse } from './utteranceIsCommand';
+
 export type CaddieStyle = 'brief' | 'balanced' | 'full';
 export type StyleSignal = 'briefer' | 'fuller' | null;
 
 /**
  * Phrases that are unmistakably about HOW MUCH he talks. Kept narrow on purpose — see the header.
  * Each must be a thing a person says TO someone, not a thing they say about golf.
+ *
+ * 2026-10-28 (Brain recheck r10) — split by what the phrase NAMES, because a refusal turns the two
+ * halves opposite ways. A REQUEST names what he wants ("short answers", "get to the point"): "stop
+ * giving me short answers", "why are you giving me short answers" and "I don't need less detail"
+ * refuse it, and each had moved him one step toward 15 words. A COMPLAINT names what he is tired of
+ * ("talking too much"): "why are you so long winded" still asks for less, and only a plain negation
+ * ("you're not talking too much") takes it back.
  */
-const BRIEFER = [
-  'talking too much', 'talk too much', 'too much talking', 'too much chatter', 'too chatty',
+const BRIEFER_ASKS = [
   'be brief', 'be briefer', 'more brief', 'keep it brief', 'keep it short', 'keep it shorter',
   'shorter answers', 'short answers', 'less detail', 'less talking', 'talk less', 'say less',
-  'get to the point', 'cut to the chase',
-  'quick rundown', 'quick version', 'short version', 'spare me', 'stop explaining',
-  'don’t need the explanation', "don't need the explanation", 'no need to explain',
-  'too wordy', 'too long winded', 'long winded', 'wrap it up',
+  'get to the point', 'cut to the chase', 'quick rundown', 'quick version', 'short version', 'spare me',
+  'wrap it up',
+];
+const BRIEFER_COMPLAINTS = [
+  'talking too much', 'talk too much', 'too much talking', 'too much chatter', 'too chatty',
+  'stop explaining', "don't need the explanation", 'no need to explain',
+  'too wordy', 'too long winded', 'long winded',
 ];
 
 /**
@@ -50,27 +61,70 @@ const BRIEFER = [
  * only phrases about his answers IN GENERAL count. ("Just give me the number" left the brief side for
  * the same reason; the header has always named it as the remark that must not silence him.)
  */
-const FULLER = [
+const FULLER_ASKS = [
   'longer answers', 'more detailed answers', 'more detail in your answers', 'more detail from now on',
-  'explain your thinking', 'you can talk more', 'you can say more', 'too brief', 'too curt',
-  'don’t be so brief', "don't be so brief", 'stop being so brief',
+  'explain your thinking', 'you can talk more', 'you can say more',
+];
+const FULLER_COMPLAINTS = [
+  'too brief', 'too curt', "don't be so brief", 'stop being so brief',
 ];
 
 /** Normalise for matching: lowercase, collapse whitespace, strip most punctuation. */
 function norm(s: string): string {
-  return (s || '').toLowerCase().replace(/[^a-z0-9’' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return (s || '').toLowerCase().replace(/’/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** A plain negation ahead of the phrase takes it back: "you're not talking too much". */
+const NEGATED = /\b(?:not|never|no\s+longer|don't|dont|do\s+not|didn't|isn't|aren't|wasn't|won't)\b/;
+/** ...and a refusal or a WHY turns a request around: "stop giving me short answers". */
+const REFUSED = /\b(?:stop|quit|why)\b/;
+/** "Why don't you keep it short" / "why not keep it short" ask for it. */
+const WHY_NOT_ASK = /\bwhy\s+(?:don't|dont|not)\b(?:\s+(?:you|we))?/g;
+/**
+ * Phrases with an everyday golf meaning that only count when said to HIM: "get to the point where I
+ * can break 80" is a goal, "let's wrap it up, it's getting dark" is the round. "Get to the point"
+ * followed by where/that/when/of/in is never the brevity ask; "wrap it up" needs a "you", "your" or
+ * his name in the same clause.
+ */
+const NOT_THE_ASK: Record<string, (clause: string) => boolean> = {
+  'get to the point': (c) => /\bget to the point (?:where|that|when|of|in)\b/.test(c),
+  'wrap it up': (c) => !/\b(?:you|your|you're|kevin|serena)\b/.test(c),
+};
+
+/** Where the phrase starts as a whole-word run inside a normalised clause (curly apostrophes folded by norm); -1 when absent. */
+function findPhrase(clause: string, phrase: string): number {
+  return ` ${clause} `.indexOf(` ${norm(phrase)} `);
+}
+
+function signalIn(clause: string, asks: readonly string[], complaints: readonly string[]): boolean {
+  const hit = (phrase: string, refusals: RegExp[]): boolean => {
+    const at = findPhrase(clause, phrase);
+    if (at < 0) return false;
+    if (NOT_THE_ASK[phrase]?.(clause)) return false;
+    const before = clause.slice(0, at).replace(WHY_NOT_ASK, ' ');
+    return !refusals.some((rx) => rx.test(before));
+  };
+  return asks.some((p) => hit(p, [NEGATED, REFUSED])) || complaints.some((p) => hit(p, [NEGATED]));
 }
 
 /**
  * Does this utterance ask him to say more or less? Null for the overwhelming majority of things a
  * player says, which is the point.
+ *
+ * 2026-10-28 (Brain recheck r10) — judged a clause at a time ("I don't need less detail, I need
+ * more" refuses in the first clause and asks for nothing in the second), and never about someone
+ * else: "my buddy is talking too much on the tee" is about the group, not the caddie. The story frame
+ * is deliberately NOT applied — "you always talk too much" is the hint, said the way people say it.
  */
 export function detectStyleSignal(utterance: string): StyleSignal {
-  const u = norm(utterance);
-  if (!u) return null;
-  // One signal per utterance. The lists share no phrase; briefer first only settles a mixed sentence.
-  if (BRIEFER.some((p) => u.includes(norm(p)))) return 'briefer';
-  if (FULLER.some((p) => u.includes(norm(p)))) return 'fuller';
+  const clauses = (utterance || '').split(/[,.;:!?]+|\s+but\s+/i).map((c) => c.trim()).filter(Boolean);
+  for (const raw of clauses) {
+    const c = norm(raw);
+    if (!c || isAboutSomeoneElse(raw)) continue;
+    // One signal per clause. The lists share no phrase; briefer first only settles a mixed clause.
+    if (signalIn(c, BRIEFER_ASKS, BRIEFER_COMPLAINTS)) return 'briefer';
+    if (signalIn(c, FULLER_ASKS, FULLER_COMPLAINTS)) return 'fuller';
+  }
   return null;
 }
 
