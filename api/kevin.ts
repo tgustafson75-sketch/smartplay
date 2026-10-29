@@ -96,14 +96,23 @@ async function executeLookupCourse(input: Record<string, unknown>): Promise<stri
 async function executeLookupHole(
   input: Record<string, unknown>,
   bodyHoles?: Array<{ hole: number; par: number; distance: number }>,
+  bodyCourseId?: string | null,
 ): Promise<string> {
   const courseId = String(input.course_id ?? '').trim();
   const holeNumber = Number(input.hole_number ?? 0);
   const teeName = input.tee_name ? String(input.tee_name) : null;
   if (!courseId) return JSON.stringify({ error: 'No course_id provided' });
 
-  // Short-circuit: if the request body already has courseHoles, use them
-  if (bodyHoles && bodyHoles.length > 0) {
+  /**
+   * 2026-10-28 (Brain recheck) — the round's own card answers ONLY for the round's own course.
+   * bodyHoles is the active round's card (trimmed to the current hole ±1) and this used to match on
+   * hole number alone, so on hole 7 at home "what's hole 7 like at Torrey South?" came back with the
+   * home card's par and yardage tagged round_context, and the caddie spoke them as Torrey's. The
+   * prompt only sends lookup_hole to courses that are NOT loaded, so a foreign course_id is the
+   * normal case here, not the edge. No active course id (a manual round) → nothing to compare → fetch.
+   */
+  const bodyCourse = bodyCourseId == null ? '' : String(bodyCourseId).trim();
+  if (bodyHoles && bodyHoles.length > 0 && bodyCourse && bodyCourse === courseId) {
     const match = bodyHoles.find((h) => h.hole === holeNumber);
     if (match) {
       console.log(`[golfcourseapi] lookup_hole short-circuit via round_context hole=${holeNumber}`);
@@ -2650,7 +2659,7 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${onCourseContextBlock}$
       if (name === 'lookup_hole') {
         capture.dataToolCalls++;
         console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
-        return await executeLookupHole(input, courseHoles as Array<{ hole: number; par: number; distance: number }> | undefined);
+        return await executeLookupHole(input, courseHoles as Array<{ hole: number; par: number; distance: number }> | undefined, activeCourseId as string | null);
       }
       // 2026-06-26 (Tim — "take me to the tempo drill" landed on the SwingLab
       // hub) — resolve a named destination to its real route via the SAME
