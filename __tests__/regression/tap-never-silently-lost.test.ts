@@ -17,32 +17,15 @@ describe('a real tap is never silently lost', () => {
     expect(ls).toMatch(/sessionOpenTapAt = Date\.now\(\)/);
   });
 
-  it('queues a genuine tap that lands while the mic is still opening', () => {
-    expect(ls).toMatch(/if \(!isEcho && state === 'opening'\)/);
-    expect(ls).toMatch(/pendingEndpointTap = true/);
-    expect(ls).toMatch(/queued_during_opening/);
-  });
-
-  it('honours it the moment the mic is live', () => {
-    const armed = ls.indexOf("setSessionStateMirror('listening');");
-    const applied = ls.indexOf('if (pendingEndpointTap)');
-    expect(armed).toBeGreaterThan(-1);
-    expect(applied).toBeGreaterThan(armed);
-    // 2026-10-28 (VOICE-ENG-3) — "honoured" means handed to the capture AFTER it has started (an
-    // endCaptureEarly before then had no recorder to act on). The behaviour is driven end to end in
-    // a-tap-while-the-mic-opens-ends-the-capture.test.ts; this pins the hand-off.
-    expect(ls).toMatch(/pendingEndpointTap = false;\s*\n\s*queuedEndTap = true;\s*\n\s*gotItOnCaptureEnd = true;/);
-    expect(ls).toMatch(/const captureP = captureUtteranceDetailed\([^)]*\);[\s\S]{0,200}if \(queuedEndTap\) \{ queuedEndTap = false; endCaptureEarly\(\); \}/);
-  });
-
-  it('clears the flag before acting so a failure cannot arm the next session', () => {
-    const block = ls.slice(ls.indexOf('if (pendingEndpointTap)'));
-    const clear = block.indexOf('pendingEndpointTap = false');
-    const act = block.indexOf('endCaptureEarly()');
-    expect(clear).toBeLessThan(act);
+  it('acts on a genuine tap that lands while the mic is still opening: skip the cue, listen now', () => {
+    // 2026-10-28 (Tim) — "I'm ready", not "I'm done". Driven end to end in
+    // a-tap-while-the-mic-opens-ends-the-capture.test.ts; this pins the shape.
+    expect(ls).toMatch(/if \(!isEcho && state === 'opening'\) \{\s*skipOpenCue = true;\s*void stopSpeaking\(/);
+    expect(ls).toMatch(/tap_skipped_open_cue/);
+    expect(ls).toMatch(/if \(settings\.voiceEnabled && !skipOpenCue\)/);
   });
 
   it('and a fresh session starts with it disarmed', () => {
-    expect(ls).toMatch(/sessionInFlight = true;\s*\n\s*sessionOpenTapAt = Date\.now\(\);\s*\n\s*pendingEndpointTap = false;/);
+    expect(ls).toMatch(/sessionInFlight = true;\s*\n\s*sessionOpenTapAt = Date\.now\(\);\s*\n\s*skipOpenCue = false;/);
   });
 });

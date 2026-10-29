@@ -46,6 +46,6 @@ describe('the mic badge dims only when a tap would really be dropped', () => {
     // The rule's owner is the function that drops the tap: listening and opening are endpoint taps.
     const ls = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
     expect(ls).toMatch(/if \(state === 'listening'\) \{[\s\S]*?endCaptureEarly\(\);/);
-    expect(ls).toMatch(/if \(!isEcho && state === 'opening'\) \{\s*pendingEndpointTap = true;/);
+    expect(ls).toMatch(/if \(!isEcho && state === 'opening'\) \{\s*skipOpenCue = true;/);
   });
 });

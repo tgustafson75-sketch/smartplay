@@ -12,9 +12,13 @@
  *
  * Two halves, each driven for real:
  *   1. the real captureUtteranceDetailed (expo-av stubbed, createAsync delayed): an endCaptureEarly
- *      that lands after the capture started but before its recorder exists still ends it;
- *   2. the real listeningSession: the queued tap reaches the capture after it has started, and the
- *      turn plays the "Got it" cue rather than the silence-ended device ack.
+ *      that lands after the capture started but before its recorder exists still ends it (an "I'm
+ *      done" tap in 'listening' can land in that gap);
+ *   2. the real listeningSession: a press during 'opening'.
+ *
+ * 2026-10-28 (Tim) — that press means "I'm ready", not "I'm done". Ending the capture on it closed a
+ * recording too short to hold a word, and the caddie answered the press with "Didn't catch that." It
+ * now cuts the go-ahead cue and opens the mic.
  */
 
 // ── Half 1: the real capture ───────────────────────────────────────────────────────────────────
@@ -91,9 +95,9 @@ describe('an "I\'m done" that lands before the recorder is up', () => {
   });
 });
 
-// ── Half 2: the real listeningSession hands the queued tap to the capture ───────────────────────
-describe('a tap queued during opening', () => {
-  it('reaches the capture after it starts, and the turn plays the "Got it" cue', async () => {
+// ── Half 2: the real listeningSession — a press during 'opening' skips the cue ──────────────────
+describe('a press while the go-ahead cue plays', () => {
+  it('cuts the cue and listens — it does not end the capture', async () => {
     jest.resetModules();
     let clock = 5_000_000;
     const realNow = Date.now;
@@ -105,7 +109,8 @@ describe('a tap queued during opening', () => {
     jest.doMock('../../services/voiceService', () => ({
       speak: jest.fn(async () => undefined),
       speakFromBase64: jest.fn(async () => undefined),
-      stopSpeaking: jest.fn(async () => undefined),
+      // Stopping speech ends whatever cue is playing, as the real speak queue does.
+      stopSpeaking: jest.fn(async () => { order.push('stopSpeaking'); releaseCue(); }),
       captureUtteranceDetailed: jest.fn(async () => {
         order.push('capture');
         return { text: 'what club here', bail: null, heardSpeech: true, durationMs: 1500 };
@@ -168,14 +173,14 @@ describe('a tap queued during opening', () => {
       clock += 1_500;                   // a real second press — well past any echo
       void ls.toggle();
       await flush();
-      expect(order).not.toContain('endCaptureEarly'); // queued, not applied to a recorder that is not there
-      releaseCue();                     // the cue ends, the mic opens
       await flush(60);
-      // The press reaches the capture AFTER the capture has claimed the mic.
-      expect(order.indexOf('endCaptureEarly')).toBeGreaterThan(order.indexOf('capture'));
-      // ...and it is honoured as an "I'm done": the persona "Got it" cue, not the silence-ended ack.
-      expect(order).toContain('gotit_cue');
-      expect(deviceAcks).toHaveLength(0);
+      // The press cut the cue and the mic opened for him to talk.
+      expect(order.slice(0, 3)).toEqual(['open_cue', 'stopSpeaking', 'capture']);
+      // It is not an "I'm done": nothing ends the capture early, and no "Got it" cue plays.
+      expect(order).not.toContain('endCaptureEarly');
+      expect(order).not.toContain('gotit_cue');
+      // The capture then ends the ordinary way (silence), so the ordinary ack plays.
+      expect(deviceAcks).toHaveLength(1);
     } finally {
       ls.forceCloseSession();
       Date.now = realNow;

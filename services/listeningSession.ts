@@ -174,8 +174,8 @@ let gotItOnCaptureEnd = false;
 const MAX_AUTO_REOPENS = 2;
 /** When the open tap landed — lets an echo be told from a real second press during 'opening'. */
 let sessionOpenTapAt = 0;
-/** A real tap arrived while the mic was still opening: honour it as "done" once listening starts. */
-let pendingEndpointTap = false;
+/** A real tap arrived while the mic was still opening: skip the go-ahead cue and listen now. */
+let skipOpenCue = false;
 /** Hard ceiling on one listen. See the note at the capture call site — outdoors this is what stops it. */
 const MAX_UTTERANCE_MS = 8_000;
 let autoReopenChain = 0;
@@ -566,18 +566,22 @@ export async function toggle(): Promise<void> {
    * nothing told them why. Opening can take a moment on a cold mic, which is exactly when someone
    * presses again.
    *
-   * So: echoes still die; a genuine tap during 'opening' is REMEMBERED and applied the instant the
-   * mic is live, as "I'm done — submit". The intent survives the window instead of vanishing into it.
+   * So: echoes still die; a genuine tap during 'opening' is acted on.
+   *
+   * 2026-10-28 (Tim) — it means "I'm ready", not "I'm done": a press while the cue is still playing
+   * cuts the cue and opens the mic. Treating it as the endpoint closed a recording too short to hold
+   * a word, and the caddie answered his press with "Didn't catch that."
    */
   if (sessionInFlight) {
     const isEcho = Date.now() - sessionOpenTapAt < TAP_ECHO_SWALLOW_MS;
     if (!isEcho && state === 'opening') {
-      pendingEndpointTap = true;
-      // 2026-10-13 — QUEUED, not swallowed: the tap is applied the instant the mic is live (above).
-      // Mailing it as tap_swallowed filed a "failure" for a tap that worked — 34 alerts in 20 min from
-      // two store reviewers tapping through onboarding. Kept on device; the haptic still acknowledges.
+      skipOpenCue = true;
+      void stopSpeaking('screen:services-listeningsession').catch(() => {});
+      // 2026-10-13 — acted on, not swallowed. Mailing it as tap_swallowed filed a "failure" for a tap
+      // that worked — 34 alerts in 20 min from two store reviewers tapping through onboarding. Kept on
+      // device; the haptic still acknowledges.
       try { Vibration.vibrate(18); } catch { /* haptics optional */ }
-      logVoiceDiag('tap_queued_during_opening', { source: 'listeningSession', sessionState: state });
+      logVoiceDiag('tap_skipped_open_cue', { source: 'listeningSession', sessionState: state });
       return;
     }
     /**
@@ -630,7 +634,7 @@ export async function toggle(): Promise<void> {
   if (state === 'idle') {
     sessionInFlight = true;
     sessionOpenTapAt = Date.now();
-    pendingEndpointTap = false;
+    skipOpenCue = false;
     // A deliberate tap starts a fresh conversation — clear any auto-reopen chain the caddie's own
     // questions had built up, so the cap only ever bounds ONE run of unanswered questions.
     autoReopenChain = 0;
@@ -1105,9 +1109,10 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
   }
 
   let opener: VerbalCueResult | null = null;
-  if (settings.voiceEnabled) {
+  if (settings.voiceEnabled && !skipOpenCue) {
     try { opener = await playVerbalCue('listen', LISTENING_EARCON, LISTENING_EARCON_MS); } catch { /* non-fatal */ }
   }
+  skipOpenCue = false;
   console.log(`[path4:voice] opener_done allowed=${settings.voiceEnabled} text=${JSON.stringify(opener?.text ?? '')} via=${opener?.via ?? 'none'} trust=${trustLevel}`);
   // 2026-08-06 (voice audit) — the earcon is awaited (~200ms), during which cancelMic is still null. If the
   // user cancels (a second tap → closeSession → state 'idle') DURING the earcon, stopCapture would be a
@@ -1121,25 +1126,6 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
   // claim we are listening, so the strip, the halo and the tap-again endpoint all arm here.
   setSessionStateMirror('listening');
   console.log('[audit:voice] listening engaged');
-  /**
-   * A real tap arrived while we were still opening. Honour it now rather than losing it: the person
-   * pressed, and the only reason it could not act was that the mic was not up yet. Cleared first so
-   * a failure below cannot leave it armed for the next session.
-   */
-  /**
-   * 2026-10-28 (VOICE-ENG-3) — this called endCaptureEarly() HERE, before captureUtteranceDetailed
-   * had been called: no recorder existed, so it was a no-op, and the capture then reset the early-stop
-   * flag on entry anyway. The queued tap was lost and the mic ran on. It is now handed to the capture
-   * right after it starts (voiceService latches it until the recorder is up), and it asks for the
-   * "Got it" cue exactly like an "I'm done" tap in 'listening' does.
-   */
-  let queuedEndTap = false;
-  if (pendingEndpointTap) {
-    pendingEndpointTap = false;
-    queuedEndTap = true;
-    gotItOnCaptureEnd = true;
-    console.log('[audit:voice] applying tap queued during opening — ending capture as soon as it records');
-  }
   const t_capture_start = Date.now();
   console.log('[path4:voice] capture_start');
   /**
@@ -1167,8 +1153,6 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
        * let in. VAD still ends it earlier whenever it can.
        */
       const captureP = captureUtteranceDetailed(MAX_UTTERANCE_MS, apiUrl, settings.language);
-      // The capture has claimed the mic synchronously; a queued "I'm done" now latches onto it.
-      if (queuedEndTap) { queuedEndTap = false; endCaptureEarly(); }
       cancelMic = () => {
         // Phase V.7 — real cancel via stopCapture; the recording stops
         // immediately and captureUtterance resolves with null.

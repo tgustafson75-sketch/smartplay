@@ -147,10 +147,11 @@ describe('no one speaking is not mailed as a failure', () => {
     expect(ls).toContain("const tapEndedEmpty = endedByTap && bail === 'too_short' && capture.heardSpeech === false;");
   });
 
-  it('a tap queued during opening is diag, not tap_swallowed — it was applied', () => {
-    const at = ls.indexOf('pendingEndpointTap = true;');
-    expect(ls.slice(at, at + 300)).toContain("logVoiceDiag('tap_queued_during_opening'");
-    expect(ls.slice(at, at + 300)).not.toContain("swallowedTap('queued_during_opening')");
+  it('a tap during opening is diag, not tap_swallowed — it was acted on', () => {
+    const at = ls.indexOf('skipOpenCue = true;');
+    const block = ls.slice(at, ls.indexOf('return;', at));
+    expect(block).toContain("logVoiceDiag('tap_skipped_open_cue'");
+    expect(block).not.toContain('swallowedTap(');
     // every genuine swallow still reports
     for (const g of ['recording_stop_cooldown', 'open_tap_echo', 'session_in_flight', 'close_tap_echo']) {
       expect(ls).toContain(`swallowedTap('${g}'`);

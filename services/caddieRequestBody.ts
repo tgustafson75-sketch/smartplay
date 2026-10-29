@@ -263,19 +263,25 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     /**
      * 2026-09-11 (Tim — "be smart, not toggle heavy") — WHAT HE SAID BEATS WHAT HE ONCE TOGGLED.
      *
-     * The caller passes the stored Settings preference; services/caddieStyle may have LEARNED
+     * The stored Settings preference is the base (a caller may pass it; otherwise it is read from
+     * the settings store below); services/caddieStyle may have LEARNED
      * something since, from the player saying it out loud ("you're talking too much", "just give me
      * the number"). Resolved HERE, once, because this is the single payload builder — doing it at
      * the five askCaddie call sites is how two answers to one question start.
      *
      * With nothing learned the stored setting stands untouched, so a player who never mentions it is
      * exactly where they were.
+     *
+     * 2026-10-28 (Brain recheck R6) — "the stored setting" means the SAVED one, read here. Only the
+     * avatar follow-up passed it in; every other route (typed, watch, earbud, Caddie-tab mic, putt
+     * and scene reads, the diagnostic, proactive lines) fell to 'neutral', so Settings > Short and
+     * the Quiet presence preset got two sentences and Detailed never reached Kevin off the course.
      */
     responseMode: safe(() => {
       const cs = require('./caddieStyle') as typeof import('./caddieStyle');
-      const stored = (extras.responseMode ?? 'neutral') as 'short' | 'neutral' | 'detailed';
+      const stored = (extras.responseMode ?? st.responseMode ?? 'neutral') as 'short' | 'neutral' | 'detailed';
       return cs.effectiveResponseMode(stored, cs.learnedStyleSync());
-    }, extras.responseMode ?? null),
+    }, safe(() => extras.responseMode ?? st.responseMode ?? null, null)),
     clientHour: safe(() => new Date().getHours(), 0),
 
     // ─── who the player is ──────────────────────────────────────────────────

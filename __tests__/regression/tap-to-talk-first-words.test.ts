@@ -236,7 +236,7 @@ describe('neither voice path paints its pre-listening state', () => {
     // window still dedupes the echo and queues a real tap as the endpoint (see
     // the-mic-badge-is-bright-when-it-is-the-stop-button).
     const ls = read('services/listeningSession.ts');
-    expect(ls).toMatch(/if \(!isEcho && state === 'opening'\) \{\s*pendingEndpointTap = true;/);
+    expect(ls).toMatch(/if \(!isEcho && state === 'opening'\) \{\s*skipOpenCue = true;/);
     expect(ls).toContain("if (isEcho && state === 'opening') {");
     expect(read('services/listeningSession.ts')).toContain("if (state !== 'opening') return;");
   });
