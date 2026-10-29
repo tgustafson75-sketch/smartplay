@@ -13,7 +13,13 @@ const code = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../', 
 
 describe('the caddie-tab pre-round shortcut', () => {
   const v = code('hooks/useVoiceCaddie.ts');
-  const fn = v.slice(v.indexOf('function buildPreRoundShortcutIntent('), v.indexOf('function buildPreRoundShortcutIntent(') + 6000);
+  // 2026-10-28 (Brain review r5) — the shortcut moved to services/tabPreRoundShortcut (the hook still
+  // dispatches on it); its order guard is pinned behaviourally in a-sentence-about-a-round-does-not-start-one.
+  const fn = code('services/tabPreRoundShortcut.ts');
+  it('the hook still runs the shortcut, from the moved owner', () => {
+    expect(v).toMatch(/const shortcut = tabPreRoundShortcut\(transcript,/);
+    expect(v).not.toMatch(/function buildPreRoundShortcutIntent\(/);
+  });
 
   it('THE BUG: a question never becomes a shortcut ("What should I hit here?" went silent)', () => {
     expect(fn).toMatch(/if \(!cleaned\) return null;\s*if \(isNotACommand\(transcript\)\) return null;/);

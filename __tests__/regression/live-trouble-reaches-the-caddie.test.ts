@@ -111,7 +111,10 @@ describe('it reaches the brain through the ONE shared block', () => {
       // conversationalBrainTurn and the diagnostic handler now (both in this list); its own
       // in_round_diagnostic askCaddie twin was deleted.
       const usesTheBuilder = /buildCaddieRequestBody\(|askCaddie\(/.test(src)
-        || (f === 'services/listeningSession.ts' && /conversationalBrainTurn\(/.test(src));
+        || (f === 'services/listeningSession.ts' && /conversationalBrainTurn\(/.test(src))
+        // 2026-10-28 (Brain review r5) — the follow-up loop asks through askCaddie in followUpBrainTurn.
+        || (f === 'hooks/useVoiceCaddie.ts' && /followUpBrainTurn\(/.test(src)
+          && /askCaddie\(/.test(read('services/voice/followUpBrainTurn.ts')));
       expect(composesItself || usesTheBuilder).toBe(true);
     }
   });

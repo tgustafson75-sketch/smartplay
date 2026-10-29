@@ -1,8 +1,8 @@
 /**
  * 2026-10-27 (Brain review B9 / F9) — A PRESENCE BEAT NEVER SPEAKS THE SERVER'S FAILURE LINE.
  *
- * presenceCaddie and sceneReadService talk to /api/kevin with their own raw fetch (deliberately: a
- * presence beat must not enter the shared history, a scene read has its own narrow payload). Both
+ * presenceCaddie and sceneReadService talked to /api/kevin with their own raw fetch (a presence beat
+ * must not enter the shared history; the scene read has gone through askCaddie since 10-28). Both
  * read only res.ok + data.text, so kevin's outer-catch 200 — "I'm having trouble connecting — try
  * that again." plus error/errorType — came back as THE answer: "how far to the green" with no GPS
  * fix during a brain outage spoke the trouble line (cached 60s) instead of localPresenceFallback,
@@ -28,7 +28,8 @@ describe('presence and scene reads treat a 200 carrying error/errorType as no an
     jest.resetModules();
     // The plan gate is not under test; closed, every call is null and the assertions pass for the wrong reason.
     jest.doMock('../../services/featureAccess', () => ({ mayTalkToCaddie: () => true, takeCaddiePaywallBlock: () => null }));
-    jest.doMock('../../services/apiBase', () => ({ getApiBaseUrl: () => 'https://example.test' }));
+    // markEndpointWarmed: the scene read goes through askCaddie since 2026-10-28 (Brain review r5).
+    jest.doMock('../../services/apiBase', () => ({ getApiBaseUrl: () => 'https://example.test', markEndpointWarmed: () => undefined }));
     sent = [];
     global.fetch = jest.fn(async (_url: unknown, init?: { body?: string }) => {
       sent.push(init?.body ? JSON.parse(init.body) : {});

@@ -17,11 +17,9 @@
  * the local read). See memory: smartfinder-unified-brain-read, api-base-url-spine.
  */
 
-import { getApiBaseUrl } from './apiBase';
 import { mayTalkToCaddie } from './featureAccess';
-import { getActiveCaddie } from './caddieResolver';
+import { askCaddie } from './caddieBrain';
 import { useSettingsStore } from '../store/settingsStore';
-import { useRoundStore } from '../store/roundStore';
 import { buildSceneSensorContext } from './sceneReadContext';
 
 const SCENE_INSTRUCTION =
@@ -31,6 +29,9 @@ const SCENE_INSTRUCTION =
   'measured wind, temp, and distance I gave you (use that wind number — do not guess ' +
   "wind from the picture). Then tell me how to play it and how to think about it " +
   'mentally — a calm, confident plan. Keep it tight and spoken, no lists.';
+
+/** The player's ask as the shared history keeps it — the instruction above is for the model only. */
+const SCENE_HEARD = "I'm looking at this shot — read the scene for me.";
 
 export interface SceneReadResult {
   /** The caddie's spoken scene read + mental approach. */
@@ -51,67 +52,34 @@ export async function readScene(input: {
   if (!input.imageBase64) return null;
   // 2026-08-25 — the one caddie access gate. A scene read is a brain turn with a picture attached.
   if (!mayTalkToCaddie({ userInitiated: true })) return null; // the player asked for this read
-  const settings = useSettingsStore.getState();
-  const round = useRoundStore.getState();
   const ctx = buildSceneSensorContext({ targetYards: input.targetYards ?? null });
 
-  try {
-    const res = await fetch(`${getApiBaseUrl()}/api/kevin`, {
-      method: 'POST',
-      // 2026-06-21 — SmartFinder scene read was missing X-AI-Provider, locking
-      // scene reads to Gemini regardless of user's toggle (audit finding).
-      headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-      body: JSON.stringify({
-        message: SCENE_INSTRUCTION,
-        language: settings.language ?? 'en',
-        /**
-         * 2026-08-23 — the ACTIVE per-pillar caddie, not the global pick. Every other brain path
-         * resolves this through getActiveCaddie(); this one read the raw setting, so a player with
-         * the Round pillar set to Serena got her scene reads narrated in Kevin's character.
-         *
-         * NOTE — this call deliberately does NOT use buildCaddieRequestBody, and that is not an
-         * oversight. It is a 60-second multimodal read whose own comment explains the narrow
-         * payload: injecting only the current hole "halves the effective prompt size" for a request
-         * that already carries an image plus a large system prompt. The union would work against
-         * the reason this payload is shaped the way it is. It reads `raw.text` correctly, so it
-         * genuinely works today — unlike the presence path.
-         */
-        persona: getActiveCaddie(),
-        voiceGender: settings.voiceGender,
-        image_base64: input.imageBase64,
-        image_media_type: input.mediaType ?? 'image/jpeg',
-        image_caption: ctx.caption,
-        unified_context_block: ctx.block,
-        // Scene reads during a round use on-course mode (correct caddie
-        // posture) and inject only the current hole's data — NOT the full
-        // known-courses list that /api/kevin builds off-course. This halves
-        // the effective prompt size and respects the live-round context.
-        isRoundActive: round.isRoundActive,
-        currentHole: round.isRoundActive ? round.currentHole : null,
-        activeCourseId: round.isRoundActive ? round.activeCourseId : null,
-        activeCourse: round.isRoundActive ? round.activeCourse : null,
-      }),
-      // 60 s — Sonnet with a large system prompt + image can take 30-40 s on a
-      // cold Anthropic cache (5-min TTL). The prior 30 s was causing silent
-      // timeouts; the extra headroom prevents the call from aborting mid-stream.
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!res.ok) {
-      console.warn('[sceneRead] api non-ok', res.status);
-      return null;
-    }
-    const raw = (await res.json()) as { text?: string; error?: string; errorType?: string };
-    // 2026-10-27 (Brain review B9) — api/kevin answers a failed turn with HTTP 200, a "having trouble
-    // connecting" line, and error/errorType. That line is not a read of the scene.
-    if (raw.error || raw.errorType) {
-      console.warn('[sceneRead] api answered a failure as 200 —', raw.errorType ?? 'error');
-      return null;
-    }
-    const text = typeof raw.text === 'string' ? raw.text.trim() : '';
-    if (!text) return null;
-    return { text, hadWind: ctx.hasWind };
-  } catch (e) {
-    console.warn('[sceneRead] exception:', e);
-    return null;
-  }
+  /**
+   * 2026-10-28 (Brain review r5) — THROUGH askCaddie, like every other turn the player asks.
+   *
+   * This was a raw /api/kevin fetch with a hand-built body. Two things followed from that:
+   *   1. IT PAID FOR A VOICE IT THREW AWAY. No skip_tts, so the server rendered TTS for every read,
+   *      and both callers (app/smartfinder) speak `text` through speak(), which renders it again.
+   *   2. IT WAS NOT PART OF THE CONVERSATION. askCaddie writes the shared history; this did not, so
+   *      after a read "so what club?" or "what about the water?" reached a caddie with no idea he
+   *      had just read the shot.
+   * The narrow payload it kept (08-23) was for prompt size; the builder sends the same round flags
+   * and hole, and the rest is who the player is — which a read that "ties into the caddie brain"
+   * should have had. askCaddie also refuses the 200-with-error failure shape (B9) itself.
+   */
+  const turn = await askCaddie({
+    message: SCENE_INSTRUCTION,
+    heard: SCENE_HEARD,
+    language: useSettingsStore.getState().language ?? 'en',
+    image_base64: input.imageBase64,
+    image_media_type: input.mediaType ?? 'image/jpeg',
+    image_caption: ctx.caption,
+    // The measured sensor truth (wind / temp / target) the read must be grounded in.
+    liveBlock: ctx.block,
+    skipTts: true,
+    // 60 s — Sonnet with a large system prompt + image can take 30-40 s on a cold cache (5-min TTL).
+    timeoutMs: 60_000,
+  });
+  if (!turn?.text) return null;
+  return { text: turn.text, hadWind: ctx.hasWind };
 }

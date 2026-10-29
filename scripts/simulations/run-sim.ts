@@ -1604,8 +1604,10 @@ check('Custom caddie inherits a chosen base persona voice (Kevin/Serena/Harry/Ta
       // 2026-08-31 (§22c) — the inline `const base = ...customCaddieBasePersona` ladder moved into
       // services/caddieGender.customBasePersona(), the ONE owner. Assert the relationship (the base
       // persona still selects the voice) rather than the shape of the ladder that used to do it.
-      /BASE_VOICE\[cg\.customBasePersona\(\)\]/.test(vs) &&
-      /customCaddieBasePersona/.test(read('services/caddieGender.ts')) &&
+      // 2026-10-28 (recheck VC-2) — the ladder moved again, into caddieGender.ttsVoiceForPersona, so
+      // the offline clip warm (offlineVoiceCache) can ask the same owner speak() asks.
+      /customVoice = cg\.ttsVoiceForPersona\(persona\);/.test(vs) &&
+      /BASE_PERSONA_VOICE\[customBasePersona\(\)\]/.test(read('services/caddieGender.ts')) &&
       // the setup screen exposes the picker
       /setCustomCaddieBasePersona\(p\.id\)/.test(ui)
     );
@@ -2664,9 +2666,10 @@ check('Smart Finder Scene Read: meta scene + measured wind → caddie brain (OTA
     const ctx = read('services/sceneReadContext.ts');
     const sf = read('app/smartfinder.tsx');
     return (
-      // service reuses the existing multimodal brain pipe via the spine
-      /getApiBaseUrl\(\)\}\/api\/kevin/.test(svc) && /image_base64: input\.imageBase64/.test(svc) &&
-      /image_media_type/.test(svc) && /unified_context_block: ctx\.block/.test(svc) &&
+      // service reuses the existing multimodal brain pipe — since 2026-10-28 (Brain review r5) through
+      // askCaddie, so the read joins the shared history and asks for no server voice (the caller speaks it)
+      /askCaddie\(\{/.test(svc) && /image_base64: input\.imageBase64/.test(svc) &&
+      /image_media_type/.test(svc) && /liveBlock: ctx\.block/.test(svc) && /skipTts: true/.test(svc) &&
       /use that wind number/i.test(svc) &&                      // honesty in the instruction
       // sensor truth uses MEASURED weather, hands the brain the number, never fabricates
       /getCachedWeatherEvenIfStale/.test(ctx) && /use THIS number — do not estimate wind from the image/.test(ctx) &&
@@ -2754,6 +2757,7 @@ check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/troub
   (() => {
     const rs = read('store/roundStore.ts');
     const voice = read('hooks/useVoiceCaddie.ts');
+    const followUpSrc = read('services/voice/followUpBrainTurn.ts');
     // G1: reflection persists course-less (nullable course_id) and isn't gated on activeCourseId
     const g1 = /course_id: s\.activeCourseId \?\? null,/.test(rs) &&
       // 2026-09-01 — was a comment match; assert the call and the null-course field that make
@@ -2779,13 +2783,16 @@ check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/troub
     const builder = read('services/caddieRequestBody.ts');
     const g5 = /mergeMemoryIntoContext\(/.test(builder) &&
       /getCaddieContext\(/.test(builder) &&
-      /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voice) &&
+      // 2026-10-28 (Brain review r5) — the follow-up turn moved to services/voice/followUpBrainTurn
+      // (the hook calls it), and it hands the live half to askCaddie, whose builder does the merge.
+      /followUpBrainTurn\(message,/.test(voice) &&
+      /getUnifiedVisionContext\(\)\)\.promptBlock/.test(followUpSrc) &&
       // 2026-08-26 — the clause that used to sit here asserted the voice hook calls
       // mergeMemoryIntoContext ITSELF, which is the duplication the 08-23 re-aim above says it
       // removed. The comment was updated and the assertion was not, so the guard went on requiring
       // the second owner and went red the moment it was deleted. What the property actually is:
       // the hook FETCHES the live half and HANDS IT to the builder, which does the merge.
-      /buildCaddieRequestBody\(\{ message, heard, language, liveBlock/.test(voice) &&
+      /askCaddie\(\{\s*message,\s*heard,\s*language,\s*liveBlock,/.test(followUpSrc) &&
       /getUnifiedVisionContext\(\)\)\.promptBlock/.test(diag) &&
       /liveBlock: live,/.test(diag);
     return g1 && g3 && g5;
@@ -7573,9 +7580,12 @@ check('Lifecycle: GPS force-refresh is single-flight + honest on failure',
 // 2026-06-10 — Brain works the FIRST ask: minimal-body retry + warm-on-open.
 const voiceCaddieSrc = read('hooks/useVoiceCaddie.ts');
 check('Brain has a minimal-body fail-safe retry (survives context throw / 413)',
-  /brain minimal-retry failed/.test(voiceCaddieSrc) &&
-    /throw new Error\(`brain_http_\$\{res\.status\}`\)/.test(voiceCaddieSrc) &&
-    !/Hit a snag on my end/.test(voiceCaddieSrc),
+  // 2026-10-28 (Brain review r5) — the follow-up turn asks through askCaddie (services/voice/
+  // followUpBrainTurn): a FAST failure (a 5xx / 413 / dropped socket — askCaddie's 'failed') is asked
+  // once more with the same payload; the builder's safe() guards are why a context read cannot throw.
+  /if \(!turn && reason === 'failed'\) \{[\s\S]{0,300}turn = await ask\(\);/.test(readCode('services/voice/followUpBrainTurn.ts')) &&
+    /sendToBrain = \(message: string\) =>\s*followUpBrainTurn\(/.test(voiceCaddieSrc) &&
+    !/Hit a snag on my end/.test(voiceCaddieSrc + read('services/voice/followUpBrainTurn.ts')),
   'a context-builder throw or a too-large-payload 413 retries once with a minimal body against the healthy endpoint, so the first ask still answers');
 
 check('Cage-session context build is throw-proof AND shape-proof',
@@ -7881,7 +7891,9 @@ check('Caddie CNS Phase 2 wired into EVERY brain path (live + memory merged, one
     /mergeMemoryIntoContext\(/.test(requestBodySrc) &&
     /getCaddieContext\(\{/.test(requestBodySrc) &&
     /unified_context_block,/.test(requestBodySrc) &&                 // and it is actually emitted
-    /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voiceHookSrc),
+    // 2026-10-28 (Brain review r5) — the follow-up turn's live half is fetched in followUpBrainTurn.
+    /followUpBrainTurn\(/.test(voiceHookSrc) &&
+    /getUnifiedVisionContext\(\)\)\.promptBlock/.test(read('services/voice/followUpBrainTurn.ts')),
   'unified_context_block (LIVE context merged with the CNS memory slice) is built ONCE in caddieRequestBody and emitted on every payload — no surface hand-rolls it');
 
 // 2026-06-10 — CNS Phase 3 (reflection loop) + Phase 4 (signal-independence).
@@ -8307,9 +8319,15 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /markEndpointWarmed\('\/api\/transcribe'\)/.test(vcSrc),
     'a successful cloud transcribe flips the warmed flag so subsequent turns take the fast path');
   const lsSrc = read('services/listeningSession.ts');
+  // 2026-10-28 (VOICE-ENG-2) — the classify's inline race never cancelled: the hedge POSTed the
+  // utterance again 2.5s in even after the primary answered, so every healthy turn paid twice. It
+  // races through the one shared raceHedged now (behaviour proven in
+  // __tests__/regression/one-classify-per-earbud-turn.test.ts), linked to the turn's abort.
   check('LOCK voice: the earbud classify races a hedge — a 22s wait is not "cold-aware"',
-    /const CLASSIFY_HEDGE_MS = 2_500;/.test(lsSrc) && /Promise\.any\(\[primary, hedged\]\)/.test(lsSrc),
-    'the intent classify opens a second connection after 2.5s rather than betting 22 seconds on the first — the old guard asserted that 22s wait as if it were the feature, and it was the hang');
+    /const CLASSIFY_HEDGE_MS = 2_500;/.test(lsSrc) && /return raceHedged\(attempt, CLASSIFY_HEDGE_MS\);/.test(lsSrc)
+      && !/Promise\.any\(\[primary, hedged\]\)/.test(lsSrc)
+      && /\}, intentTimeout\(\), brainSignal\);/.test(lsSrc),
+    'the intent classify opens a second connection after 2.5s rather than betting 22 seconds on the first, never opens it once the first answers, aborts the loser, and dies with the turn');
   const vsSrc = read('services/voiceService.ts');
   // 2026-09-11 — the race moved into services/voice/hedgedFetch, ONE owner shared with the tap path,
   // because both inline copies leaked: nothing cancelled the loser, so a healthy turn still POSTed
@@ -9223,13 +9241,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     (() => {
       const vs = read('services/voiceService.ts');
       const pp = read('store/playerProfileStore.ts');
+      const cgSrc = read('services/caddieGender.ts');
       return (
-        /if \(persona === 'custom'\)/.test(vs) &&
+        // 2026-10-28 (recheck VC-2) — speak() asks caddieGender.ttsVoiceForPersona, the one owner the
+        // offline clip warm also asks; the ladder is asserted there.
+        /customVoice = cg\.ttsVoiceForPersona\(persona\);/.test(vs) &&
         // an explicit photo-matched voice wins, otherwise the base persona's mapped voice — one of
         // the two ALWAYS lands, which is what "never silent" actually means here
-        /customCaddieVoice\) customVoice = pp\.customCaddieVoice;/.test(vs) &&
-        /else customVoice = BASE_VOICE\[cg\.customBasePersona\(\)\]/.test(vs) &&
-        /BASE_VOICE: Record<string, string> = \{ kevin: 'onyx', serena: 'nova', harry: 'fable' \}/.test(vs) &&
+        /if \(persona !== 'custom'\) return null;/.test(cgSrc) &&
+        /if \(typeof pp\.customCaddieVoice === 'string' && pp\.customCaddieVoice\) return pp\.customCaddieVoice;/.test(cgSrc) &&
+        /return BASE_PERSONA_VOICE\[customBasePersona\(\)\] \?\? BASE_PERSONA_VOICE\.kevin;/.test(cgSrc) &&
+        /BASE_PERSONA_VOICE: Record<string, string> = \{ kevin: 'onyx', serena: 'nova', harry: 'fable' \}/.test(cgSrc) &&
         // the deleted toggle may not come back as a second owner
         !/customCaddieGender: 'male' \| 'female'/.test(pp) &&
         // ...and the migration that preserves an existing female caddie's voice must stay
@@ -10183,8 +10205,10 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
       const b = read('services/caddieRequestBody.ts');
       if (!/customCaddieBasePersona: safe/.test(b) || !/customCaddieName: safe/.test(b)) return false;
       // Reaching the brain through the ONE builder — directly, or via the one sender that uses it.
+      // 2026-10-28 (Brain review r5) — followUpBrainTurn is the hook's follow-up turn, through askCaddie.
       const throughBuilder = (src: string): boolean =>
-        /buildCaddieRequestBody\(/.test(src) || /askCaddie\(/.test(src) || /conversationalBrainTurn\(/.test(src);
+        /buildCaddieRequestBody\(/.test(src) || /askCaddie\(/.test(src) || /conversationalBrainTurn\(/.test(src)
+        || (/followUpBrainTurn\(/.test(src) && /askCaddie\(/.test(readCode('services/voice/followUpBrainTurn.ts')));
       return throughBuilder(readCode('hooks/useVoiceCaddie.ts')) && throughBuilder(readCode('services/listeningSession.ts'));
     })(),
     'voice#1: the one payload builder resolves the custom caddie base persona + name for EVERY surface, reached directly or through askCaddie, so no path can revert to Kevin/onyx');
@@ -12008,7 +12032,11 @@ check('LOCK: "Didn\'t catch that" is spoken ONLY when the mic actually heard not
     // goes to 'diag' so the inbox carries one bullet per defect, not two.
     const cascadeNotDoubleMailed =
       /alreadyReportedUpstream = bail === 'transcribe_failed'/.test(ls) &&
-      /alreadyReportedUpstream \|\| nobodySpoke \? logVoiceDiag : logVoiceSilentFail/.test(ls) &&
+      // 2026-10-28 (VOICE-ENG-3) — + tapEndedEmpty: the player ended the capture by tap before saying
+      // anything (a tap queued during 'opening'); deliberate, so kept on device. Pinned to too_short
+      // with a silent meter — heardSpeech true still mails.
+      /alreadyReportedUpstream \|\| nobodySpoke \|\| tapEndedEmpty \? logVoiceDiag : logVoiceSilentFail/.test(ls) &&
+      /const tapEndedEmpty = endedByTap && bail === 'too_short' && capture\.heardSpeech === false;/.test(ls) &&
       // 2026-10-13 — and "nobody spoke" is ONLY the case Whisper confirmed (bail 'empty') with the meter
       // agreeing. heardSpeech true + empty transcript must keep mailing: that is "it ignored me".
       /const nobodySpoke = bail === 'empty' && capture\.heardSpeech === false;/.test(ls);
@@ -16549,7 +16577,8 @@ check(
   );
   check(
     'SONG: "play [song]" is handled on the FIRST utterance, not only as a follow-up',
-    mainPath && (vc.match(/preBrainReply\(/g) ?? []).length >= 2,
+    // 2026-10-28 (Brain review r5) — the follow-up loop's call moved with its turn to followUpBrainTurn.
+    mainPath && /preBrainReply\(/.test(vc) && /preBrainReply\(message\)/.test(readCode('services/voice/followUpBrainTurn.ts')),
     'reachable only from sendToBrain means reachable only from the follow-up loop — the opening request goes to the brain and comes back as a link to tap',
   );
   check(
@@ -18105,10 +18134,13 @@ check(
       /\}, \{ timeout: Math\.min\(10_000, ttsBudgetMs\), signal: AbortSignal\.timeout\(Math\.min\(10_000, ttsBudgetMs\)\) \}\);/.test(kevin) &&
       /\{ \.\.\.loopOpts, deadlineAt \}/.test(kevin),
     `turn budget ${budget}ms must sit at least 4s under the ${client}ms client abort and reach both attempts — three 14s rounds ran 42s against a 30s phone`);
-  const retry = voice.slice(voice.indexOf('const ourTimeout ='), voice.indexOf('const retryRes = await fetch('));
+  // 2026-10-28 (Brain review r5) — the follow-up turn asks through askCaddie (followUpBrainTurn), and
+  // retries ONLY on askCaddie's 'failed' — never on 'timeout' (our timer) or 'refused' (a 200 failure).
+  const followUp = readCode('services/voice/followUpBrainTurn.ts');
   check('BRAIN: the phone never re-sends a turn it only stopped listening to',
-    /const ourTimeout = err instanceof Error && \(err\.name === 'AbortError' \|\| err\.name === 'TimeoutError'\);/.test(voice) &&
-      /if \(!ourTimeout\) try \{/.test(retry),
+    /followUpBrainTurn\(/.test(voice) && !/fetch\(apiUrl \+ '\/api\/kevin', \{\s*method: 'POST',\s*headers: \{\s*'Content-Type': 'application\/json',\s*'X-AI-Provider'/.test(voice) &&
+      /if \(!turn && reason === 'failed'\)/.test(followUp) &&
+      /\(timedOut \? 'timeout' : signal\?\.aborted \? 'aborted' : refused \? 'refused' : 'failed'\)/.test(readCode('services/caddieBrain.ts')),
     'aborting the fetch does not stop /api/kevin; a retry after our own timeout bought the same turn twice');
 }
 

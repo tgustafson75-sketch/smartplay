@@ -91,7 +91,8 @@ describe('round / score / GPS seams', () => {
   });
 
   it('re-review: "let\'s play 9" can match (normalisation turns the apostrophe into a space)', () => {
-    const v = code('hooks/useVoiceCaddie.ts');
+    // 2026-10-28 (Brain review r5) — the shortcut moved out of hooks/useVoiceCaddie.
+    const v = code('services/tabPreRoundShortcut.ts');
     expect(v).toMatch(/'let s play 9'/);
     expect(v).toMatch(/\\blet s play 9\\b/);
   });

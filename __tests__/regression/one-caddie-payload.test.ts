@@ -157,10 +157,8 @@ describe('both paths actually USE the one builder', () => {
     'components/OfflineBanner.tsx': 'reachability probe, no conversation',
     'app/ghost-debug.tsx': 'owner-only debug screen for hand-crafted payloads (DEBUG_ROUTES gate)',
     'app/api-debug.tsx': 'owner-only endpoint prober — fixture payloads by design (DEBUG_ROUTES gate)',
-    'services/sceneReadService.ts':
-      'DELIBERATE, documented in-file: a multimodal scene read already carries an image plus a ' +
-      'large system prompt, and injecting only the current hole halves the effective prompt. The ' +
-      'union would work against the reason that payload is shaped the way it is.',
+    // 2026-10-28 (Brain review r5) — services/sceneReadService left this list: it asks through
+    // askCaddie now (one voice render, one conversation history), so it no longer posts at all.
   };
 
   /** Block and line comments removed — a mention of an endpoint is not a call to it. */
@@ -199,8 +197,11 @@ describe('both paths actually USE the one builder', () => {
       // rule here: listeningSession's last askCaddie was its in_round_diagnostic twin, deleted for
       // the handler, and its one remaining /api/kevin is the warm-endpoint key for its timeout.
       const src = read(f);
+      // 2026-10-28 (Brain review r5) — or to followUpBrainTurn: the hook's follow-up loop asks through
+      // askCaddie there, and the hook's one remaining /api/kevin is the reachability ping.
       const throughTheBuilder = /buildCaddieRequestBody\(/.test(src) || /askCaddie\(/.test(src)
-        || (/conversationalBrainTurn\(/.test(src) && /askCaddie\(/.test(read('services/conversationalBrain.ts')));
+        || (/conversationalBrainTurn\(/.test(src) && /askCaddie\(/.test(read('services/conversationalBrain.ts')))
+        || (/followUpBrainTurn\(/.test(src) && /askCaddie\(/.test(read('services/voice/followUpBrainTurn.ts')));
       expect([f, throughTheBuilder]).toEqual([f, true]);
     }
   });
@@ -245,76 +246,27 @@ describe('both paths actually USE the one builder', () => {
     expect(dropped).toEqual([]);
   });
 
-  it('a spreader never re-declares a key the builder already RESOLVES', () => {
-    const OWNED_BY_THE_BUILDER = ['currentYardage', 'yardageInsight', 'unified_context_block'];
-    for (const f of ['hooks/useVoiceCaddie.ts']) {
-      const src = stripComments(read(f));
-      const spread = src.indexOf('...buildCaddieRequestBody(');
-      expect(spread).toBeGreaterThan(-1);
-      // the object literal that follows the spread, to its closing brace
-      let depth = 1;
-      let i = spread;
-      while (depth > 0 && i < src.length) {
-        i += 1;
-        if ('({['.includes(src[i])) depth += 1;
-        else if (')}]'.includes(src[i])) depth -= 1;
-      }
-      const literal = src.slice(spread, i);
-      for (const key of OWNED_BY_THE_BUILDER) {
-        expect([f, key, new RegExp(`^\\s*${key}\\s*[,:]`, 'm').test(literal)]).toEqual([f, key, false]);
-      }
-    }
-  });
-
   /**
-   * 2026-08-26 — THIS USED TO ASSERT SPREAD-ORDER. It no longer can, because there is no longer a
-   * literal to be ordered against: useVoiceCaddie's 58-key hand-built payload is gone, and what it
-   * genuinely owns now goes IN, through `overrides`, rather than being pasted on top.
+   * 2026-08-26 → 2026-10-28 — NO SENDER PASTES ANYTHING OVER THE UNION.
    *
-   * Spread-order was always the weaker property anyway. It guaranteed every KEY was present while
-   * leaving each caller free to re-answer it — which is exactly how the resolved working yardage
-   * lost to the raw card number on this surface for two days with every builder test green.
+   * These used to assert two things about useVoiceCaddie's `...buildCaddieRequestBody(...)` spread:
+   * no key the builder RESOLVES (currentYardage, yardageInsight, unified_context_block) re-declared
+   * after it — how the resolved working yardage lost to the raw card number on that surface for two
+   * days with every builder test green — and nothing at all added on top of it.
    *
-   * So the assertion is now the strong one: after the spread, a sender adds NOTHING. Anything it
-   * genuinely owns is threaded in as an input, where the builder's own contract keeps it honest.
+   * 2026-10-28 (Brain review r5) — that spread was the last one. The follow-up loop now asks through
+   * askCaddie (services/voice/followUpBrainTurn), which hands the builder its inputs and sends the
+   * result whole. So the strong statement is that no client module spreads the builder into a
+   * hand-built literal anywhere; a new one fails here, and its POST fails
+   * a-follow-up-answer-is-a-caddie-turn (only services/caddieBrain posts a player turn).
    */
-  it('a sender adds nothing after the spread — what it owns goes IN, not on top', () => {
-    /**
-     * Returns the TOP-LEVEL entries of the object literal passed to JSON.stringify that contains
-     * the builder spread. A spread reads as "...", anything else is a re-declared key.
-     *
-     * The first version of this walked forward from the spread counting braces, starting at the
-     * "." with depth 1 — so the count was off by the builder call's own paren and the walk sailed
-     * past the literal to an outer brace. `tail` came back as "}" and it passed VACUOUSLY. Caught
-     * by break-testing it: re-adding a key produced no failure. A guard that cannot fail is worse
-     * than no guard, because it is also a claim.
-     */
-    const topLevelEntries = (src: string): string[] => {
-      const anchor = src.indexOf('...buildCaddieRequestBody(');
-      expect(anchor).toBeGreaterThan(-1);
-      const open = src.lastIndexOf('{', anchor);
-      let depth = 0;
-      let i = open;
-      const entries: string[] = [];
-      let buf = '';
-      for (; i < src.length; i += 1) {
-        const c = src[i];
-        if ('({['.includes(c)) { depth += 1; if (depth === 1) continue; }
-        else if (')}]'.includes(c)) { depth -= 1; if (depth === 0) break; }
-        if (depth === 1 && c === ',') { entries.push(buf.trim()); buf = ''; continue; }
-        if (depth >= 1) buf += c;
-      }
-      if (buf.trim()) entries.push(buf.trim());
-      return entries.filter(Boolean);
-    };
-
-    for (const f of ['hooks/useVoiceCaddie.ts']) {
-      const entries = topLevelEntries(stripComments(read(f)));
-      const declared = entries.filter((e) => !e.startsWith('...'));
-      expect([f, declared]).toEqual([f, []]);
-      // and the spread must actually be there — an empty literal would otherwise pass
-      expect(entries.some((e) => e.startsWith('...buildCaddieRequestBody'))).toBe(true);
-    }
+  it('no module spreads the builder into a hand-built literal — the union goes out whole', () => {
+    const files = ['hooks', 'services', 'app', 'components'].flatMap(walk);
+    const callers = files.filter((f) => /buildCaddieRequestBody\(/.test(stripComments(read(f))));
+    // Not vacuous: the builder is really called (caddieBrain, presenceCaddie, …).
+    expect(callers).toContain('services/caddieBrain.ts');
+    const spreaders = files.filter((f) => /\.\.\.\s*buildCaddieRequestBody\(/.test(stripComments(read(f))));
+    expect(spreaders).toEqual([]);
   });
 });
 

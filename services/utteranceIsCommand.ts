@@ -128,3 +128,28 @@ export function isAboutSomeoneElse(utterance: string): boolean {
 export function isNotACommand(utterance: string): boolean {
   return isQuestionShaped(utterance) || isStoryFramed(utterance) || isAboutSomeoneElse(utterance);
 }
+
+/**
+ * 2026-10-28 (Brain review r5) — AN ORDER OPENS WITH ITS VERB.
+ *
+ * isNotACommand catches questions, stories, habits and other people. It cannot catch a plain
+ * statement, and the tab mic's pre-round shortcut acts on a substring: "That was a quick round today"
+ * and "Tomorrow I want to start a round at Hemet with my dad" each started a round with no confirm,
+ * "I did cage mode for an hour this morning" started the camera recording. For the shortcuts that ACT
+ * (start a round, start recording), the whole utterance has to be the order: after fillers and a
+ * vocative it opens with an action verb, a polite "can you / let's", or the named thing itself
+ * ("cage mode", "quick round at Hemet"). A leading subject or time frame ("that was", "I did",
+ * "tomorrow", "I want to") is a sentence about it, and goes to the caddie.
+ */
+const ORDER_VERB = String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please\s+)?)?(?:just\s+)?`
+  + String.raw`(?:let'?s|let\s+us|start|begin|open|launch|play|run|fire\s+up|turn\s+on|enter|switch\s+(?:to|into)|go\s+(?:to|into)|`
+  + String.raw`pull\s+up|bring\s+up|take\s+me|show|record|watch|kick\s+off|time\s+for)\b`;
+
+/** True when the utterance opens with an order: an action verb, or one of `named` (the thing itself). */
+export function opensWithOrder(utterance: string, named: readonly string[] = []): boolean {
+  const t = (utterance ?? '').replace(/’/g, "'").trim();
+  if (!t || isNotACommand(t)) return false;
+  const names = named.map(n => n.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, String.raw`\s+`)).filter(Boolean);
+  const head = names.length ? String.raw`(?:${ORDER_VERB}|(?:a\s+|the\s+)?(?:${names.join('|')})\b)` : ORDER_VERB;
+  return new RegExp(LEAD_IN + head, 'i').test(t);
+}

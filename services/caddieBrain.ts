@@ -54,7 +54,11 @@ export interface AskCaddieOptions extends CaddieRequestExtras {
   onNoAnswer?: (reason: NoAnswerReason) => void;
 }
 
-export type NoAnswerReason = 'timeout' | 'aborted' | 'failed';
+/**
+ * 'refused' (2026-10-28, Brain review r5) — the server ANSWERED, with its own failure (the 200 with
+ * error/errorType below). Fast like 'failed', but asking again asks a brain that just said it is down.
+ */
+export type NoAnswerReason = 'timeout' | 'aborted' | 'refused' | 'failed';
 
 /**
  * A single turn with the caddie.
@@ -81,9 +85,10 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
 
   const controller = new AbortController();
   let timedOut = false;
+  let refused = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   const noAnswer = (): null => {
-    onNoAnswer?.(timedOut ? 'timeout' : signal?.aborted ? 'aborted' : 'failed');
+    onNoAnswer?.(timedOut ? 'timeout' : signal?.aborted ? 'aborted' : refused ? 'refused' : 'failed');
     return null;
   };
   const onOuterAbort = () => controller.abort();
@@ -132,6 +137,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
      */
     if (raw.error || raw.errorType) {
       console.log('[caddieBrain] /api/kevin answered a failure as 200 —', raw.errorType ?? 'error', '— treated as no answer');
+      refused = true;
       return noAnswer();
     }
 

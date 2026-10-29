@@ -6,7 +6,6 @@ import { prewarmVoice, abortVoiceWarmup } from '../services/voiceWarmup';
 import { noteUserTurn } from '../services/userTurnClock';
 import { noteCaddieTurn } from '../services/funnelEvents';
 import { mayTalkToCaddie, takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from '../services/featureAccess';
-import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS, COLD_BRAIN_FETCH_TIMEOUT_MS as COLD_BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
 import { endsAsQuestion } from '../services/voice/endsAsQuestion';
 import {
@@ -27,7 +26,6 @@ import {
   speakDeviceNotice,
 } from '../services/voiceService';
 import { initFillerLibrary } from '../services/fillerLibrary';
-import { buildCaddieRequestBody } from '../services/caddieRequestBody';
 import { checkContent } from '../services/contentGuardrail';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
 import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
@@ -57,6 +55,7 @@ import { useRelationshipStore } from '../store/relationshipStore';
 import { recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
 import { warmCourseContext } from '../services/courseContextCache';
 import { preBrainReply, shapeForBrain } from '../services/voice/preBrainTurn';
+import { followUpBrainTurn } from '../services/voice/followUpBrainTurn';
 import { hasPendingOpenOffer } from '../services/voice/pendingOpenOffer';
 import { answerToClarification } from '../services/voice/clarifiedTurn';
 import { resolvePendingCourseUtterance } from '../services/pendingDisambiguation';
@@ -67,7 +66,7 @@ import { getApiBaseUrl, ensureBackendReachable, markEndpointWarmed, isEndpointWa
 import { probeReachability, isProvenOffline } from '../services/reachability';
 import { CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 import { tabBypassKind } from '../services/tabVoiceBypass';
-import { isNotACommand } from '../services/utteranceIsCommand';
+import { tabPreRoundShortcut } from '../services/tabPreRoundShortcut';
 import { createMeterTracker } from '../services/micStanddown';
 import { createEndpointer } from '../services/voice/endpointer';
 
@@ -174,14 +173,6 @@ const VOICE_TOTAL_BUDGET_MS = 35000;
  * seconds" into an answer.
  */
 const HEDGE_AFTER_MS = 2_500;
-// 2026-07-25 (Tim — "first ask errors EVERY time; warmup still broken at the start") — the transcribe
-// step is cold-aware (22s) but the BRAIN step used a fixed 30s. The FIRST turn after launch is cold on
-// BOTH the Lambda (10-15s) AND the provider SDK init (8-12s) AND then runs tool rounds — that can exceed
-// 30s and abort → the guaranteed first-ask error. Give the brain a longer budget ONLY while the
-// connection isn't yet confirmed warm; every warm turn keeps the tight 30s. Abort still falls back to
-// the local responder, so a genuinely dead network still fails fast enough.
-// 2026-09-28 — per function: the boot ping flipped the shared flag, so the cold brain got the warm budget.
-const brainTimeoutMs = (): number => (isEndpointWarmed('/api/kevin') ? BRAIN_TIMEOUT_MS : COLD_BRAIN_TIMEOUT_MS);
 // 2026-06-23 — 25s → 30s. Kevin's per-round AI timeout is now 12s and the
 // realistic worst-case (cold round + local-short-circuit tool rounds) is ~20s.
 // The CLIENT must be the OUTER bound so a healthy-but-slow brain isn't aborted
@@ -355,107 +346,6 @@ function pathnameToSurface(pathname: string | null | undefined): string {
   return 'caddie';
 }
 
-function normalizeForMatch(text: string): string {
-  return text
-    .trim()
-    .toLowerCase()
-    .replace(/[’'".,!?]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function splitGuestNames(text: string): string[] {
-  return text
-    .split(/,|\band\b/i)
-    .map(name => name.trim())
-    .filter(name => name.length > 0)
-    .map(name => name.replace(/^(?:my|our|the)\s+/i, ''));
-}
-
-function stripLeadIn(text: string): string {
-  return text.replace(/^(?:please\s+)?(?:can you\s+|could you\s+|would you\s+|hey\s+\w+\s+|me\s+)?/i, '').trim();
-}
-
-function includesAny(text: string, phrases: string[]): boolean {
-  return phrases.some(phrase => text.includes(phrase));
-}
-
-function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_tool' | 'quick_round'; parameters: Record<string, unknown> } | null {
-  const cleaned = normalizeForMatch(transcript);
-  if (!cleaned) return null;
-  /**
-   * 2026-10-16 (voice seam review) — this runs on EVERY caddie-tab turn, before the bypasses, the
-   * router and the brain, and matched substrings with no question guard: "What should I hit here?"
-   * opened TightLie, openToolHandler then declined (no explicit verb → route_to_brain), and the turn
-   * went idle in SILENCE — on the most common in-round question. A question or a story is never a
-   * shortcut; it goes to the caddie (services/utteranceIsCommand, the same guard as the precheck).
-   */
-  if (isNotACommand(transcript)) return null;
-
-  const familyHomeCourse = primaryHomeCourseName(usePlayerProfileStore.getState().homeCourses).trim();
-
-  const toolText = stripLeadIn(cleaned.replace(/^(?:open|show|pull up|go to|launch|bring up|take me to)\s+(?:me\s+)?/i, ''));
-  const toolMatchers: { tool_name: string; aliases: string[] }[] = [
-    { tool_name: 'smartvision', aliases: ['smart vision', 'smartvision', 'vision', 'analyze the hole', 'read the hole'] },
-    { tool_name: 'smartfinder', aliases: ['smart finder', 'smartfinder', 'finder', 'rangefinder', 'course map', 'hole map', 'show me the course', 'show the course'] },
-    // 2026-06-29 (Tim — "natural caddie, not a prompting system") — REMOVED the vague
-    // 'practice'/'drills' (and below 'cage'/'start practice', and 'course'/'the course'
-    // above): a conversational "I want to practice" must reach the BRAIN for the
-    // dialogue-first confirm ("what do you want to work on?"), not deterministically
-    // open Smart Motion. Explicit "open swing lab" still matches.
-    { tool_name: 'swinglab', aliases: ['swing lab', 'swinglab', 'swing library'] },
-    { tool_name: 'scorecard', aliases: ['scorecard', 'score card', 'scores', 'show the scorecard'] },
-    { tool_name: 'dashboard', aliases: ['dashboard', 'stats', 'overview', 'home stats'] },
-    { tool_name: 'settings', aliases: ['settings', 'preferences', 'voice settings', 'audio settings'] },
-    // 2026-10-16 — bare 'coach' removed: "My coach told me to stay down" opened Coach Mode for "told".
-    { tool_name: 'coach_mode', aliases: ['coach mode', 'coachmode', 'watch my student', 'record their swing'] },
-    { tool_name: 'cage_mode', aliases: ['cage mode', 'cagemode', 'start cage session'] },
-    { tool_name: 'library', aliases: ['player library', 'swing library', 'library', 'show my swings', 'my swings', 'show best shots', 'show my best shots', 'best shots'] },
-    { tool_name: 'smartmotion', aliases: ['smart motion', 'smartmotion', 'record my swing', 'capture my swing', 'down the line', 'face on'] },
-    { tool_name: 'issue_log', aliases: ['issue log', 'bug log', 'log an issue', 'send issue log', 'email issue log'] },
-    // 2026-10-16 — 'what should i hit' removed: it is a strategy question for the caddie (api/voice-intent
-    // says so), never a TightLie open.
-    { tool_name: 'tightlie', aliases: ['tightlie', 'tight lie', 'open tightlie', 'check my lie'] },
-  ];
-
-  for (const matcher of toolMatchers) {
-    if (includesAny(toolText, matcher.aliases)) {
-      const params: Record<string, unknown> = { tool_name: matcher.tool_name };
-      if (matcher.tool_name === 'smartmotion' && includesAny(toolText, ['down the line', 'face on'])) {
-        params.auto_start = true;
-        params.angle = toolText.includes('down the line') ? 'down_the_line' : 'face_on';
-      }
-      if (matcher.tool_name === 'issue_log' && includesAny(toolText, ['send', 'email', 'share', 'export'])) {
-        params.send_log = true;
-      }
-      if (matcher.tool_name === 'coach_mode') {
-        // "coach mode for Lily" → Lily, not "mode" (re-review 10-16).
-        const playerMatch = transcript.match(/\b(?:coach(?:\s+mode)?(?:\s+for)?|watch my student|watching|i'?m coaching|let's coach)\s+(?!mode\b|for\b)([A-Z][a-zA-Z'-]*)/i);
-        if (playerMatch?.[1]) params.player_name = playerMatch[1];
-      }
-      return { intent_type: 'open_tool', parameters: params };
-    }
-  }
-
-  // 2026-10-16 — bare "let's play" / "another round" removed: "let's play it safe" and "I don't want another
-  // round like that" started a quick round at the home course.
-  // normalizeForMatch turns apostrophes into spaces, so "let's" is matched as "let s" (re-review 10-16:
-  // the apostrophe forms could never match).
-  if (includesAny(cleaned, ['quick round', 'start a round', 'start round', 'let s play a round', 'let us play a round', 'let s play 9', 'let s play 18', 'play a quick round', 'start another round', 'start a quick round'])) {
-    const holeCount = /\b9[- ]?hole\b|\blet s play 9\b|\bplay 9\b/.test(cleaned) ? 9 : 18;
-    const courseMatch = transcript.match(/\b(?:at|on|for)\s+(.+?)(?:\s+with\s+|\s+today\b|\s+now\b|\s*$)/i);
-    const courseHint = courseMatch?.[1]?.trim() || familyHomeCourse;
-    const guestMatch = transcript.match(/\bwith\s+(.+?)(?:\s+at\b|\s+on\b|\s+for\b|\s+today\b|\s+now\b|$)/i);
-    const guestNames = guestMatch?.[1] ? splitGuestNames(guestMatch[1]) : [];
-    const params: Record<string, unknown> = { hole_count: holeCount };
-    if (courseHint) params.course_hint = courseHint;
-    if (guestNames.length > 0) params.guest_names = guestNames.slice(0, 4);
-    return { intent_type: 'quick_round', parameters: params };
-  }
-
-  return null;
-}
-
 export const useVoiceCaddie = ({
   onVoiceStateChange,
   onResponseReceived,
@@ -578,13 +468,11 @@ export const useVoiceCaddie = ({
     voiceGender,
     voiceEnabled,
     language,
-    responseMode,
   } = useSettingsStore(
     useShallow((s) => ({
       voiceGender: s.voiceGender,
       voiceEnabled: s.voiceEnabled,
       language: s.language,
-      responseMode: s.responseMode,
     }))
   );
 
@@ -682,8 +570,6 @@ export const useVoiceCaddie = ({
   // Function refs pulled separately — they're stable across renders
   // and including them in the shallow selector would cost nothing
   // either way, but separating clarifies "these are actions, not data."
-  const getTopObservations = useRelationshipStore((s) => s.getTopObservations);
-  const markObservationsUsed = useRelationshipStore((s) => s.markObservationsUsed);
   const addHeroMoment = useRelationshipStore((s) => s.addHeroMoment);
 
   const apiUrl = getApiBaseUrl();
@@ -779,274 +665,13 @@ export const useVoiceCaddie = ({
 
   // ── SEND TO BRAIN ─────────────────────────
 
-  // 2026-07-06 (voice-parity F3) — `fallback` marks a canned degrade line (the
-  // server returns a graceful HTTP 200 with an `error`/`errorType` when the brain
-  // is down, or we hit the local dead-end). The caller still SPEAKS it, but must
-  // NOT log it as a real conversational turn or award engagement points for it.
-  const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null; toolActions?: ToolAction[]; fallback: boolean }> => {
-    /**
-     * 2026-10-15 (review) — what a FAILED follow-up turn says, from the one owner. A local answer
-     * from real data is a real answer (logged + kept); anything else is a fallback (spoken, never
-     * logged as something the caddie said).
-     */
-    // The player's own words — `message` is reshaped below, and the local answer must read what he asked.
-    const heard = message;
-    const failedTurn = async (): Promise<{ text: string; audioBase64: null; toolAction: null; fallback: boolean }> => {
-      const failure = require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply');
-      const langSafe = failure.safeLang(language);
-      // Never throws: it is called inside sendToBrain's try, where a throw would fire the retry.
-      const r = await failure.caddieFailureReply({ heard, language: langSafe })
-        .catch(() => ({ text: CADDIE_NOTICE_ON_US[langSafe], source: 'on_us' as const, verdict: null }));
-      logVoiceSilentFail(r.source === 'local_answer' ? 'local_responder_hit' : 'local_responder_miss', {
-        source: r.source,
-        language: langSafe,
-        transcriptHead: heard.slice(0, 60),
-      });
-      return { text: r.text, audioBase64: null, toolAction: null, fallback: r.source !== 'local_answer' };
-    };
-    // 2026-06-29 (fix A) — read the LIVE host at call-time. The hook-level
-    // apiUrl (~line 671) is captured per render, so a mid-session dual-host
-    // failover (ensureBackendReachable → activeBase switch) never reached these
-    // fetches — they kept hitting the dead custom domain even after the app had
-    // already failed over. getApiBaseUrl() here uses the host the device can
-    // actually reach. Shadows the render-captured const on purpose.
-    const apiUrl = getApiBaseUrl();
-    // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off). Count a
-    // voice turn whenever the caddie brain is engaged. No message content sent.
-    try {
-      require('../services/usageTelemetry').track('voice_turn');
-    } catch { /* telemetry never throws */ }
-    // 2026-06-13 (Cecily) — if the player asked the caddie to SING, reshape the brain
-    // message into a playful "attempt to sing" prompt so the caddie gives it a go
-    // (charming, brief, kid-friendly) instead of answering flat or refusing.
-    // 2026-06-13 (Tim) — "how do I use this / how does X work" → speak the quick how-to
-    // for that feature (shared SCREEN_HELP copy, same as the first-time tutorials).
-    // Checked first so "how do I play this" is help, not a song request.
-    // 2026-10-27 (Brain review B10) — help, the song portal and the two reshapes are ONE shared step
-    // (services/voice/preBrainTurn) that every surface runs, in one order.
-    {
-      const spoken = await preBrainReply(message);
-      if (spoken) return { text: spoken, audioBase64: null, toolAction: null, fallback: false };
-      message = shapeForBrain(message);
-    }
-
-    /**
-     * Declared out here, not inside the try, so the RETRY below can send the same context the first
-     * attempt did. Scoped inside, it was invisible to the retry — which is half of why the retry
-     * ended up hand-building a thinner body of its own.
-     */
-    let liveBlock: string | null = null;
-
-    try {
-      const topObs = getTopObservations();
-      // 2026-05-17 — record the use AFTER we read, so the bump
-      // happens exactly once per brain send (not per re-render).
-      if (topObs.length > 0) markObservationsUsed(topObs.map(o => o.id));
-
-      // 2026-10-27 (Brain review F5) — the pattern read, the penalty history and the course card that
-      // used to be composed here are the payload builder's now, so every route sends them, not only
-      // this follow-up loop.
-      // 2026-06-06 — Phase 2.5: web-search-grounded course intelligence
-      // brief. Cached client-side by services/courseIntelligenceService
-      // via the round-prefetch path; null when no fetch has landed yet
-      // (off-course, or first turn before prefetch resolves, or cold-
-      // launched mid-round before warm runs). Read sync from the
-      // module-level memory mirror; if miss, fire-and-forget a warm
-      // from AsyncStorage so the NEXT brain call lands the intel.
-      let courseIntelligence: string | null = null;
-      try {
-        if (isRoundActive && activeCourseId) {
-          const intelMod = require('../services/courseIntelligenceService') as typeof import('../services/courseIntelligenceService');
-          courseIntelligence = intelMod.getCachedCourseIntelligenceSync(activeCourseId);
-          if (!courseIntelligence) {
-            // Fire-and-forget warm. Mirror will be populated for next turn.
-            void intelMod.warmCourseIntelligenceMirror(activeCourseId);
-          }
-        }
-      } catch { /* non-fatal — brain still works without intel */ }
-
-      // 2026-06-10 — FAIL-SAFE: always attempt the brain. (Removed the
-      // breaker short-circuit that pre-skipped the fetch — it caused false
-      // "no network" / silent failures on good Wi-Fi. The fetch has its own
-      // timeout below and the catch path still routes to the local-status
-      // responder fallback if it genuinely fails.)
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), brainTimeoutMs());
-
-      // 2026-06-13 (audit G5) — the voice path was sending ONLY the CNS memory slice;
-      // the LIVE context block (GPS/geometry/hazards/recent shots) the chat path sends
-      // was missing. Fetch it and MERGE (same as hooks/useKevin) so the in-round voice
-      // brain sees everything. Best-effort; null on failure → unchanged behavior.
-      try {
-        const uv = await import('../services/unifiedVisionContext');
-        liveBlock = (await uv.getUnifiedVisionContext()).promptBlock;
-      } catch { /* live context optional */ }
-
-      const res = await fetch(apiUrl + '/api/kevin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-AI-Provider': useSettingsStore.getState().aiProvider ?? 'gemini',
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          /**
-           * 2026-08-26 — THE LAST HAND-BUILT CADDIE PAYLOAD IN THE APP.
-           *
-           * This literal carried 58 keys. 57 of them shadowed a key services/caddieRequestBody
-           * already builds from the same stores, and because the spread comes first and the literal
-           * second, THE COPY WON. That is how the resolved working yardage lost to the raw card
-           * number on this exact surface for two days while every regression test — all of which
-           * exercise the builder — stayed green.
-           *
-           * A union that guarantees KEYS but lets each caller re-answer them is not one payload. It
-           * is ten payloads with a shared spell-checker.
-           *
-           * What remains below is only what this hook genuinely OWNS and the builder cannot see:
-           * a React context, and three values composed from refs this hook fills during the round.
-           * They go through `overrides`, which the builder applies to keys it already emits — so
-           * the contract stays closed and a caller still cannot invent a field.
-           *
-           * `forceTier` is gone rather than moved: see the note where it used to live.
-           */
-          ...buildCaddieRequestBody({
-            message,
-            heard,
-            language,
-            liveBlock,
-            responseMode,
-            // SmartVision, the course card and the penalty history are read by the builder itself.
-            overrides: {
-              // The sync cache MISS path here also kicks off a fetch; the builder only reads cache.
-              ...(courseIntelligence != null ? { courseIntelligence } : {}),
-            },
-          }),
-        }),
-      }).finally(() => clearTimeout(timeout));
-
-      if (!res.ok) {
-        // Throw so the catch's minimal-body retry fires. A non-200 here is
-        // often a 413 from the LARGE context body (golfer model + analyses +
-        // course geometry + vision can exceed Vercel's payload cap); the
-        // minimal retry strips all that and succeeds against the healthy
-        // endpoint — so the user still gets a real answer on the first ask.
-        throw new Error(`brain_http_${res.status}`);
-      }
-      recordVoiceEndpointSuccess('kevin');
-      // 2026-09-29 (review) — a real answer proves the brain awake; without this the follow-up path sat
-      // on the 48s cold budget for the whole conversation.
-      markEndpointWarmed('/api/kevin');
-      const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; toolActions?: ToolAction[] | null; error?: string; errorType?: string };
-
-      // 2026-07-06 (voice-parity F3) — the brain endpoint returns a graceful HTTP
-      // 200 with an `error`/`errorType` when the real brain is down (canned "having
-      // trouble connecting" / "servers are busy"). res.ok is true, so the client
-      // was treating it as a genuine answer: it awarded points AND logged it as a
-      // real turn. Detect the flag and mark it a fallback — still spoken, never
-      // scored/logged.
-      const isFallback = Boolean(data.error || data.errorType);
-
-      // 2026-07-10 (audit V1) — the server cascade fully failed but returned a graceful HTTP
-      // 200 (not a throw), so this SUCCESS path never reached the catch's offline responder →
-      // the player heard "having trouble connecting" instead of the local round-state answer.
-      //
-      // 2026-10-15 (review) — and when there was no local answer it STILL spoke the server's
-      // "I'm having trouble connecting" (data.text) as the caddie's reply, blaming the signal on a
-      // failure that was ours. The failed turn now goes to the one failure owner, which answers from
-      // real local data first and otherwise says what is TRUE (services/caddieFailureReply).
-      if (isFallback) return failedTurn();
-
-      // Points — every REAL caddie response is a 3-pt interaction (Tim's spec). (A failed turn
-      // returned above, so everything reaching here is real.)
-      try {
-        const pointsMod = require('../store/pointsStore');
-        pointsMod.usePointsStore.getState().addPoints(3, 'caddie_interaction');
-      } catch (e) { console.log('[points] caddie-interaction emit failed:', e); }
-
-      return {
-        text:        data.text       ?? 'Got nothing back from the brain. Try again.',
-        audioBase64: data.audioBase64 ?? null,
-        toolAction:  data.toolAction  ?? null,
-        // 2026-07-10 (audit V3) — all actions from a multi-action turn (dispatched below).
-        toolActions: (data.toolActions ?? undefined) as ToolAction[] | undefined,
-        fallback:    false,
-      };
-
-    } catch (err) {
-      recordVoiceEndpointFailure('kevin');
-      console.log('[voice] brain error:', err);
-      logVoiceError('kevin_response', err);
-
-      // 2026-06-10 — FAIL-SAFE retry. The big context-building block above can
-      // throw (a malformed store entry, a service hiccup) and that would wall
-      // the caddie with "Hit a snag" even though the brain endpoint is healthy.
-      /**
-       * Retry ONCE.
-       *
-       * 2026-08-23 — this used to retry with a deliberately MINIMAL body: message, name, handicap
-       * and persona. Seven fields. Its comment gave the reason — "a MINIMAL body that can't throw" —
-       * and that reason is no longer true. services/caddieRequestBody wraps every single store read
-       * in its own guard precisely so a brain turn can never die over a missing optional; there is
-       * nothing left in the payload that can throw.
-       *
-       * What was left was a silent downgrade. A retry fires on a blip the player never sees, and the
-       * answer that came back was from a caddie that did not know the course, the hole, the bag, the
-       * round, or them — while the first attempt's answer would have. Tim, on the course: "it's
-       * generic, and then the tone of the voice changes a little bit, and the information's more
-       * accurate." A retry is a second attempt at the SAME question; it is not a reason to ask a
-       * lesser caddie. [[no-half-fixes-enforce-every-surface]]
-       *
-       * 2026-09-23 — BUT NOT AFTER OUR OWN TIMEOUT. Aborting the fetch hangs up on the server; it
-       * does not stop it. The first turn is still running on /api/kevin and is billed in full, so a
-       * retry after a timeout bought the same Sonnet turn twice and made the player wait a second
-       * full window. A timeout goes straight to the on-device fallback below; the retry still covers
-       * a fast failure (a 5xx, a dropped socket).
-       */
-      const ourTimeout = err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
-      if (!ourTimeout) try {
-        const rc = new AbortController();
-        const rt = setTimeout(() => rc.abort(), brainTimeoutMs());
-        const retryRes = await fetch(apiUrl + '/api/kevin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-AI-Provider': useSettingsStore.getState().aiProvider ?? 'gemini',
-          },
-          signal: rc.signal,
-          // The SAME payload the first attempt sent. One question, one caddie.
-          body: JSON.stringify(buildCaddieRequestBody({ message, heard, language, liveBlock })),
-        }).finally(() => clearTimeout(rt));
-        if (retryRes.ok) {
-          recordVoiceEndpointSuccess('kevin');
-          const d = await retryRes.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; toolActions?: ToolAction[] | null; error?: string; errorType?: string };
-          // 2026-07-06 (voice-parity F3) — same graceful-200 masking applies on the
-          // minimal retry; don't log/score a canned degrade line.
-          // 2026-10-15 (review) — and never speak the server's canned failure as the reply.
-          if (d.error || d.errorType) return failedTurn();
-          return {
-            text: d.text ?? 'Ready when you are.',
-            audioBase64: d.audioBase64 ?? null,
-            toolAction: d.toolAction ?? null,
-            toolActions: (d.toolActions ?? undefined) as ToolAction[] | undefined,
-            fallback: false,
-          };
-        }
-      } catch (retryErr) {
-        console.log('[voice] brain minimal-retry failed:', retryErr);
-      }
-
-      try { Vibration.vibrate(120); } catch {}
-      // 2026-06-06 — Phase 3 of on-course resilience sprint. Tim's Echo Hills round hit this catch
-      // ~28 times (cellular died at the course); the player got a canned line every time. A failed
-      // turn answers LOCALLY where it can (round state + GPS, the on-device golf-knowledge KB).
-      //
-      // 2026-10-15 (review) — through the ONE failure owner (services/caddieFailureReply), which runs
-      // that same local answer (with the "no data" filter) and otherwise says why the turn failed on
-      // evidence. This path used to end in its own "Give me one sec and ask me again." — the last
-      // failure line in the app that bypassed the owner, on the follow-up loop.
-      return failedTurn();
-    }
-  };
+  /**
+   * The follow-up loop's brain turn. 2026-10-28 (Brain review r5) — it was a raw /api/kevin fetch
+   * that skipped everything askCaddie does after a turn (the putt-ask note, the style learner, the
+   * shared history); it now goes through askCaddie in services/voice/followUpBrainTurn.
+   */
+  const sendToBrain = (message: string) =>
+    followUpBrainTurn(message, { language, responseMode: useSettingsStore.getState().responseMode });
 
   // ── SPEAK RESPONSE ────────────────────────
 
@@ -2011,7 +1636,7 @@ export const useVoiceCaddie = ({
         active_group_size: familyMembers.filter(m => !m.archived).length,
       };
 
-      const shortcut = buildPreRoundShortcutIntent(transcript);
+      const shortcut = tabPreRoundShortcut(transcript, primaryHomeCourseName(usePlayerProfileStore.getState().homeCourses));
       if (shortcut) {
         if (shortcut.intent_type === 'open_tool') {
           const result = await openToolHandler.execute({

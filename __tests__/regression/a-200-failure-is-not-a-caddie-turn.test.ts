@@ -67,21 +67,36 @@ describe('a 200 carrying error/errorType is no answer', () => {
 });
 
 /**
- * The tap mic's follow-up loop (useVoiceCaddie.sendToBrain) is a second transport to /api/kevin. On a
+ * The tap mic's follow-up loop (useVoiceCaddie.sendToBrain) was a second transport to /api/kevin. On a
  * 200-with-error and no local answer it spoke the server's "having trouble connecting" (data.text) as
  * the reply, and its catch ended in its own "Give me one sec and ask me again." — both bypassing the
- * failure owner. The hook cannot be loaded under jest (its import chain pulls native modules — tried,
- * endRoundFlow fails to load), so this is a structural pin of the wiring; the owner's behaviour is
- * tested in a-turn-failure-says-what-is-true.
+ * failure owner.
+ *
+ * 2026-10-28 (Brain review r5) — it now asks through askCaddie (services/voice/followUpBrainTurn), so
+ * this is BEHAVIOURAL: the real follow-up turn against the same 200-with-error body.
  */
 describe('the follow-up loop hands every failed turn to caddieFailureReply', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '../../hooks/useVoiceCaddie.ts'), 'utf8') as string;
-  const fn = src.slice(src.indexOf('const sendToBrain = async'), src.indexOf('// ── SPEAK RESPONSE'));
-  it('no failure line of its own, and the server canned text is never the reply', () => {
-    expect(fn.length).toBeGreaterThan(1000);
-    expect(fn).not.toMatch(/'Give me one sec and ask me again\.'/);
-    expect(fn).toMatch(/if \(isFallback\) return failedTurn\(\);/);
-    expect(fn).toMatch(/if \(d\.error \|\| d\.errorType\) return failedTurn\(\);/);
-    expect(fn).toMatch(/const failedTurn = async[\s\S]{0,600}caddieFailureReply\(\{ heard,/); // 2026-10-28 — his words, before the reshape
+  const realFetch = global.fetch;
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('../../services/featureAccess', () => ({ mayTalkToCaddie: () => true, takeCaddiePaywallBlock: () => null }));
+    jest.doMock('../../services/unifiedVisionContext', () => ({ getUnifiedVisionContext: async () => ({ promptBlock: null }) }));
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => FAILURE_BODY })) as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    global.fetch = realFetch;
+    jest.dontMock('../../services/featureAccess');
+    jest.dontMock('../../services/unifiedVisionContext');
+  });
+
+  it('the server canned text is never the reply, and the failed turn is a fallback', async () => {
+    const hist = require('../../services/voice/conversationHistory') as typeof import('../../services/voice/conversationHistory');
+    hist.setConversationHistory([]);
+    const { followUpBrainTurn } = require('../../services/voice/followUpBrainTurn') as typeof import('../../services/voice/followUpBrainTurn');
+    const r = await followUpBrainTurn('what club from 150', { language: 'en' });
+    expect(r.text).not.toMatch(/trouble connecting/i);
+    expect(r.text).not.toBe('Give me one sec and ask me again.');
+    expect(r.text.length).toBeGreaterThan(0);
+    expect(hist.getConversationHistory()).toEqual([]);
   });
 });
