@@ -31,7 +31,8 @@ describe('a cached clip is identified by its WORDS, not just its slug', () => {
   });
 
   it('the in-memory key carries it too — otherwise resolve and disk disagree', () => {
-    expect(src).toContain('return `${personaSlug(persona)}:${gender}:${slug}:${textFingerprint(text)}`;');
+    // 2026-10-28 (recheck VC-2) — the voice tag joined the key (empty for built-in personas).
+    expect(src).toContain('return `${personaSlug(persona)}:${gender}${voiceTag(voice)}:${slug}:${textFingerprint(text)}`;');
   });
 
   it('every path that names a clip passes the text', () => {

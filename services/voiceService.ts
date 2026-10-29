@@ -322,6 +322,8 @@ export const releaseExternalMic = async (): Promise<MicReleaseVerdict> => {
 // useVoiceCaddie's handleMicPress when the user taps during an
 // in-flight captureUtterance.
 let captureEarlyStop = false;
+/** An endCaptureEarly that arrived before this capture's recorder existed (see endCaptureEarly). */
+let captureEarlyStopLatched = false;
 
 /**
  * 2026-09-11 (field log: three empty_transcript / listen_no_transcript entries with heardSpeech
@@ -363,8 +365,14 @@ export const isCapturing = (): boolean => currentRecording !== null;
  * recording.
  */
 export const endCaptureEarly = (): void => {
-  if (!currentRecording) return;
-  captureEarlyStop = true;
+  if (currentRecording) { captureEarlyStop = true; return; }
+  /**
+   * 2026-10-28 (VOICE-ENG-3) — a capture has started but its recorder is not up yet (permission,
+   * audio-mode switch and createAsync are all awaited first). That was a silent no-op, so an "I'm
+   * done" tap landing in that gap was lost and the mic ran on to the VAD or the 8s cap. Latched now,
+   * and applied the moment the recorder exists.
+   */
+  if (captureInProgress) captureEarlyStopLatched = true;
 };
 
 /**
@@ -419,6 +427,7 @@ export const captureUtteranceDetailed = async (
   let recording: Audio.Recording | null = null;
   captureCancelled = false;
   captureEarlyStop = false;
+  captureEarlyStopLatched = false;
   currentCaptureHeardSpeech = false;
   try {
     noteAudioActivity('capture');
@@ -466,6 +475,7 @@ export const captureUtteranceDetailed = async (
     );
     recording = r.recording;
     currentRecording = recording;
+    if (captureEarlyStopLatched) { captureEarlyStopLatched = false; captureEarlyStop = true; }
 
     // 2026-06-05 — Mic warm-up gap. Audio.Recording.createAsync fuses
     // prepare+start; on some Android OEMs (Samsung especially) the
@@ -684,6 +694,7 @@ export const captureUtteranceDetailed = async (
   } finally {
     // Always release the re-entry guard, on every exit path.
     captureInProgress = false;
+    captureEarlyStopLatched = false;
   }
 };
 
@@ -2075,15 +2086,11 @@ export const speak = async (
      */
     const cg = require('./caddieGender') as typeof import('./caddieGender');
     effectiveGender = cg.genderForPersona(persona);
-    if (persona === 'custom') {
-      const pp = require('../store/playerProfileStore').usePlayerProfileStore.getState();
-      // 2026-07-30 (Tim — "tie my custom persona to one of the caddies"). The custom caddie INHERITS its
-      // base persona's voice, so it always has a real, on-character voice instead of a generic gender
-      // default. A photo-matched customCaddieVoice still wins when the user set one.
-      const BASE_VOICE: Record<string, string> = { kevin: 'onyx', serena: 'nova', harry: 'fable' };
-      if (typeof pp.customCaddieVoice === 'string' && pp.customCaddieVoice) customVoice = pp.customCaddieVoice;
-      else customVoice = BASE_VOICE[cg.customBasePersona()];
-    }
+    // 2026-07-30 (Tim — "tie my custom persona to one of the caddies"). The custom caddie INHERITS its
+    // base persona's voice, so it always has a real, on-character voice instead of a generic gender
+    // default. A photo-matched customCaddieVoice still wins when the user set one. 2026-10-28 — the
+    // ladder lives in caddieGender.ttsVoiceForPersona, which the offline clip warm also asks.
+    customVoice = cg.ttsVoiceForPersona(persona);
   } catch { /* ignore */ }
 
   try {

@@ -926,9 +926,21 @@ export const useSettingsStore = create<SettingsState>()(
       setFoamBallMode: (on) => set({ foamBallMode: on }),
       setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
-      setCaddieForPillar: (pillar, p) => set((s) => ({
-        caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
-      })),
+      setCaddieForPillar: (pillar, p) => {
+        const prev = get().caddieAssignments?.[pillar];
+        set((s) => ({
+          caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
+        }));
+        // 2026-10-28 (recheck VC-1) — a pillar caddie speaks (activeVoice), so its cue/ack clips must
+        // exist in ITS voice. setCaddiePersonality re-warms; this did not, so a Round-only Serena's
+        // listening cue was a beep and her offline notices silent until the next launch's warm.
+        if (prev !== p) {
+          try {
+            (require('../services/voiceService') as { prewarmOfflineVoiceClips?: () => Promise<void> })
+              .prewarmOfflineVoiceClips?.()?.catch?.(() => {});
+          } catch { /* ignore */ }
+        }
+      },
       resetCaddieAssignments: () => set({
         caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       }),

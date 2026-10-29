@@ -62,3 +62,24 @@ export function genderForPersona(persona: string | null | undefined): CaddieGend
   if (persona === 'custom') return customBasePersona() === 'serena' ? 'female' : 'male';
   return 'male';
 }
+
+/**
+ * 2026-10-28 (recheck VC-2) — THE VOICE THE CUSTOM CADDIE SPEAKS IN, with one owner.
+ *
+ * speak() spelled this ladder inline, and the offline clip warm (offlineVoiceCache) did not spell it
+ * at all: it sent no `voice`, so api/voice fell to the gender default and every cue, ack and failure
+ * line of a Harry-based or photo-matched custom caddie came back in onyx/nova while the answer
+ * between them came in fable or sage — two caddies in one turn. Both now ask here.
+ *
+ * Order: the photo-matched / hand-picked voice (customCaddieVoice), else the base persona's voice.
+ * Null for a built-in persona — the server's persona map owns those, so nothing is sent.
+ */
+const BASE_PERSONA_VOICE: Record<string, string> = { kevin: 'onyx', serena: 'nova', harry: 'fable' };
+export function ttsVoiceForPersona(persona: string | null | undefined): string | null {
+  if (persona !== 'custom') return null;
+  try {
+    const pp = (require('../store/playerProfileStore') as typeof import('../store/playerProfileStore')).usePlayerProfileStore.getState();
+    if (typeof pp.customCaddieVoice === 'string' && pp.customCaddieVoice) return pp.customCaddieVoice;
+  } catch { /* not hydrated — the base persona's voice is the honest answer */ }
+  return BASE_PERSONA_VOICE[customBasePersona()] ?? BASE_PERSONA_VOICE.kevin;
+}

@@ -38,7 +38,6 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useShallow } from 'zustand/react/shallow';
-import { getCaddieName } from '../../lib/persona';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { usePointsStore } from '../../store/pointsStore';
@@ -86,6 +85,7 @@ import { useTourTarget } from '../../hooks/useTourTarget';
 // stays here (apiUrl/voice/language can change at any time).
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
 import { setActiveSurface, clearActiveSurface } from '../../services/activeSurfaceRegistry';
+import { roundCaddieIdentity } from '../../services/caddieResolver';
 import { evaluateRoundProgress } from '../../services/teamIntelligence';
 import QuickLogShotSheet from '../../components/QuickLogShotSheet';
 import { fetchCourseGeometry, mappedHoleCount } from '../../services/courseGeometryService';
@@ -999,24 +999,33 @@ export default function CaddieTab() {
     autoListenEnabled: s.autoListenEnabled,
   })));
 
-  const { firstName: _firstName, goal: _goal, subscription_status, trial_started_at, dominantMiss: _dominantMiss, useCustomCaddie, customCaddiePortraitB64 } = usePlayerProfileStore(useShallow((s) => ({
+  const { firstName: _firstName, goal: _goal, subscription_status, trial_started_at, dominantMiss: _dominantMiss, customCaddiePortraitB64 } = usePlayerProfileStore(useShallow((s) => ({
     firstName: s.firstName,
     goal: s.goal,
     subscription_status: s.subscription_status,
     trial_started_at: s.trial_started_at,
     dominantMiss: s.dominantMiss,
-    useCustomCaddie: s.useCustomCaddie,
     customCaddiePortraitB64: s.customCaddiePortraitB64,
   })));
   // 2026-06-11 (audit 4c) — portrait moved to its own store; read it there,
   // fall back to the legacy profile field until migration completes.
   const mediaPortrait = useCustomCaddieMediaStore((s) => s.customCaddiePortraitB64);
-  const activeCustomPortrait = useCustomCaddie ? (mediaPortrait ?? customCaddiePortraitB64) : null;
   const { skip_briefings, proactive_kevin_enabled: _proactive_kevin_enabled } = useSettingsStore(useShallow((s) => ({
     skip_briefings: s.skip_briefings,
     proactive_kevin_enabled: s.proactive_kevin_enabled,
   })));
-  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  /**
+   * 2026-10-28 (recheck VC-1) — the caddie on THIS screen is the Round pillar's, not the global pick:
+   * it is the one the brain writes as and the voice speaks as on the 'caddie' surface. Drawing
+   * caddiePersonality put Kevin's face on Serena's voice the moment the Round row differed. The
+   * subscriptions only re-render; roundCaddieIdentity() is the one answer for face, gender and name.
+   */
+  useSettingsStore(s => s.caddieAssignments?.round);
+  usePlayerProfileStore(useShallow((s) => ({ b: s.customCaddieBasePersona, n: s.customCaddieName })));
+  const homeCaddie = roundCaddieIdentity();
+  // The custom portrait belongs to the custom caddie: shown when the Round caddie IS custom (the
+  // useCustomCaddie flag tracks only the global pick, so a Round-only custom caddie lost its face).
+  const activeCustomPortrait = homeCaddie.persona === 'custom' ? (mediaPortrait ?? customCaddiePortraitB64) : null;
   // 2026-05-30 — Fix FY: Local Mode indicator subscription. Re-renders
   // the leaf icon when the user toggles Local Mode in Settings.
   const localMode = useSettingsStore(s => s.localMode);
@@ -2015,7 +2024,7 @@ export default function CaddieTab() {
           } catch { return null; }
         })();
         console.log('[caddie] opener: generating from brain', {
-          persona: liveSettings.caddiePersonality, gap: planHint ? null : gap?.key ?? null, plan: !!planHint,
+          persona: roundCaddieIdentity().persona, gap: planHint ? null : gap?.key ?? null, plan: !!planHint,
         });
         const r = await generateProactiveOpener({ gapHint: planHint ?? gap?.hint });
         /**
@@ -3823,8 +3832,8 @@ export default function CaddieTab() {
               >
                 <CaddieAvatar
                   key={`${W}x${H}-${insets.top}`}
-                  gender={voiceGender === 'female' ? 'female' : 'male'}
-                  persona={caddiePersonality}
+                  gender={homeCaddie.gender}
+                  persona={homeCaddie.face}
                   isOnCourse={isRoundActive}
                   isCageMode={false}
                   voiceState={effectiveVoiceState}
@@ -3870,8 +3879,8 @@ export default function CaddieTab() {
             >
               <CaddieAvatar
                 key={`${W}x${H}-${insets.top}`}
-                gender={voiceGender === 'female' ? 'female' : 'male'}
-                persona={caddiePersonality}
+                gender={homeCaddie.gender}
+                persona={homeCaddie.face}
                 isOnCourse={isRoundActive}
                 isCageMode={false}
                 voiceState={effectiveVoiceState}
@@ -3923,8 +3932,8 @@ export default function CaddieTab() {
         const kevinAvatar = (
           <CaddieAvatar
             key={`${W}x${H}`}
-            gender={voiceGender === 'female' ? 'female' : 'male'}
-            persona={caddiePersonality}
+            gender={homeCaddie.gender}
+            persona={homeCaddie.face}
             isOnCourse={isRoundActive}
             isCageMode={false}
             voiceState={effectiveVoiceState}
@@ -3972,7 +3981,7 @@ export default function CaddieTab() {
               activeOpacity={0.85}
               onPress={swap}
               accessibilityRole="button"
-              accessibilityLabel={caddiePrimary ? 'Bring SmartVision forward' : `Bring ${getCaddieName(caddiePersonality)} forward`}
+              accessibilityLabel={caddiePrimary ? 'Bring SmartVision forward' : `Bring ${homeCaddie.name} forward`}
               style={{
                 position: 'absolute',
                 left: 12,

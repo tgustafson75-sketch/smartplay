@@ -373,6 +373,15 @@ interface PlayerProfileState {
 
 // ─── STORE ────────────────────────────────
 
+/** Re-render the offline persona-voice clips (voiceService.prewarmOfflineVoiceClips). Lazy require: the
+ *  voice service imports this store. Best-effort and never throws — a cold cache only waits a warm. */
+function rewarmCaddieClips(): void {
+  try {
+    (require('../services/voiceService') as { prewarmOfflineVoiceClips?: () => Promise<void> })
+      .prewarmOfflineVoiceClips?.()?.catch?.(() => {});
+  } catch { /* ignore */ }
+}
+
 export const usePlayerProfileStore = create<PlayerProfileState>()(
   persist(
     (set, get) => ({
@@ -526,8 +535,20 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         set({ persistentPatterns: p, patternsSynthesizedAt: p ? Date.now() : null }),
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
       setPreRoundRoutine: (r) => set({ preRoundRoutine: r && r.trim() ? r.trim() : null }),
-      setCustomCaddieVoice: (voice) => set({ customCaddieVoice: voice }),
-      setCustomCaddieBasePersona: (p) => set({ customCaddieBasePersona: (['kevin', 'serena', 'harry'] as const).includes(p) ? p : 'kevin' }),
+      /**
+       * 2026-10-28 (recheck VC-2) — both of these change the voice the custom caddie SPEAKS in, and
+       * the offline cue/ack/failure clips are keyed by that voice, so re-render them now (AFTER set():
+       * the warm reads the voice from this store). Without it the new voice missed every cached line
+       * until the next launch's warm — silence offline, and a beep for the listening cue.
+       */
+      setCustomCaddieVoice: (voice) => {
+        set({ customCaddieVoice: voice });
+        rewarmCaddieClips();
+      },
+      setCustomCaddieBasePersona: (p) => {
+        set({ customCaddieBasePersona: (['kevin', 'serena', 'harry'] as const).includes(p) ? p : 'kevin' });
+        rewarmCaddieClips();
+      },
       setCustomCaddieName: (name) => {
         const trimmed = typeof name === 'string' ? name.trim() : '';
         set({ customCaddieName: trimmed.length > 0 ? trimmed : null });

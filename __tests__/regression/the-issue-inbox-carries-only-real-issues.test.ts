@@ -142,7 +142,9 @@ describe('no one speaking is not mailed as a failure', () => {
 
   it('listen_no_transcript: Whisper-empty AND meter-silent is diag; meter heard speech still mails', () => {
     expect(ls).toContain("const nobodySpoke = bail === 'empty' && capture.heardSpeech === false;");
-    expect(ls).toMatch(/\(alreadyReportedUpstream \|\| nobodySpoke \? logVoiceDiag : logVoiceSilentFail\)\('listen_no_transcript'/);
+    // 2026-10-28 (VOICE-ENG-3) — + a capture the player ended by tap before saying anything.
+    expect(ls).toMatch(/\(alreadyReportedUpstream \|\| nobodySpoke \|\| tapEndedEmpty \? logVoiceDiag : logVoiceSilentFail\)\('listen_no_transcript'/);
+    expect(ls).toContain("const tapEndedEmpty = endedByTap && bail === 'too_short' && capture.heardSpeech === false;");
   });
 
   it('a tap queued during opening is diag, not tap_swallowed — it was applied', () => {

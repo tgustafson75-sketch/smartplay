@@ -46,7 +46,7 @@ let lastTapForwardedAt: number | null = null;
  * earbuds in mid-round and the answer changes. Both lookups are defensive — on a build without the
  * glasses module, or before audio routing has a reading, this still returns a usable class.
  */
-function currentTapDevice(): TapDevice {
+export function currentTapDevice(): TapDevice {
   let glassesConnected = false;
   let route: 'phone_speaker' | 'wired' | 'bluetooth' | 'unknown' | undefined;
   try {

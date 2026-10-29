@@ -158,14 +158,33 @@ function textFingerprint(text: string): string {
   return h.toString(36);
 }
 
-function cacheKey(slug: string, gender: Gender, persona: string, text: string): string {
-  return `${personaSlug(persona)}:${gender}:${slug}:${textFingerprint(text)}`;
+/**
+ * 2026-10-28 (recheck VC-2) — the VOICE is part of a clip's identity too. A custom caddie speaks in
+ * its matched or base-persona voice (caddieGender.ttsVoiceForPersona), and the warm used to send no
+ * voice at all, so its cues and failure lines came back in the gender default while the answer
+ * between them used the real one. Keying by voice also means re-matching the voice re-renders the
+ * clips instead of replaying the old voice forever. Empty for a built-in persona, whose voice the
+ * server's persona map owns — so their filenames, and the clips already on disk, are unchanged.
+ */
+function clipVoice(persona: string): string | null {
+  try {
+    return (require('./caddieGender') as typeof import('./caddieGender')).ttsVoiceForPersona(persona);
+  } catch { return null; }
 }
 
-function fileFor(slug: string, gender: Gender, persona: string, text: string): File {
+function voiceTag(voice: string | null): string {
+  const v = (voice ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return v ? `_v${v}` : '';
+}
+
+function cacheKey(slug: string, gender: Gender, persona: string, text: string, voice: string | null): string {
+  return `${personaSlug(persona)}:${gender}${voiceTag(voice)}:${slug}:${textFingerprint(text)}`;
+}
+
+function fileFor(slug: string, gender: Gender, persona: string, text: string, voice: string | null): File {
   return new File(
     Paths.cache,
-    `offline_voice_${personaSlug(persona)}_${gender}_${slug}_${textFingerprint(text)}.mp3`,
+    `offline_voice_${personaSlug(persona)}_${gender}${voiceTag(voice)}_${slug}_${textFingerprint(text)}.mp3`,
   );
 }
 
@@ -185,8 +204,9 @@ const cachedKeys = new Set<string>();
 export function resolveCachedOfflineClipUri(text: string, gender: Gender, persona: string): string | null {
   const line = TEXT_TO_LINE.get(norm(text));
   if (!line) return null;
-  const key = cacheKey(line.slug, gender, persona, line.text);
-  const file = fileFor(line.slug, gender, persona, line.text);
+  const voice = clipVoice(persona);
+  const key = cacheKey(line.slug, gender, persona, line.text, voice);
+  const file = fileFor(line.slug, gender, persona, line.text, voice);
   if (!cachedKeys.has(key)) {
     /**
      * 2026-10-15 — registration used to happen ONLY inside the warm pass, which is deferred 45s past
@@ -217,7 +237,9 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
    * persona's pass and render nothing for the new one, so every notice in the new voice was a cache
    * miss (silent) until the next launch. A different voice now queues its own pass behind this one.
    */
-  const want = `${persona}:${gender}`;
+  // The voice is part of it: re-matching a custom caddie's voice is a different render, not a repeat.
+  const voice = clipVoice(persona);
+  const want = `${persona}:${gender}:${voice ?? ''}`;
   if (warmInFlight && warmInFlightFor === want) return warmInFlight;
   if (warmInFlight) {
     const prior = warmInFlight;
@@ -227,9 +249,9 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
   warmInFlight = (async () => {
     const apiBase = getApiBaseUrl();
     for (const line of OFFLINE_LINES) {
-      const key = cacheKey(line.slug, gender, persona, line.text);
+      const key = cacheKey(line.slug, gender, persona, line.text, voice);
       if (cachedKeys.has(key)) continue;
-      const file = fileFor(line.slug, gender, persona, line.text);
+      const file = fileFor(line.slug, gender, persona, line.text, voice);
       // Already on disk from a prior session → register and skip the network.
       try {
         if (file.exists && (file.size ?? 0) >= MIN_CLIP_BYTES) { cachedKeys.add(key); continue; }
@@ -239,7 +261,8 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
         const resp = await fetch(apiBase + '/api/voice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: line.text, gender, language: line.language, persona }),
+          // `voice` is the same answer speak() sends (null for a built-in → the server's persona map).
+          body: JSON.stringify({ text: line.text, gender, language: line.language, persona, voice }),
           // 2026-09-03 — bounded. This runs in a loop with no user waiting on it, so an unbounded
           // request does not hang a screen — it holds a connection slot indefinitely, which is the
           // documented way this app starves its own foreground: concurrent background traffic
@@ -267,7 +290,7 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
     try {
       const expected = new Set<string>();
       for (const g of ['male', 'female'] as Gender[]) {
-        for (const l of OFFLINE_LINES) expected.add(fileFor(l.slug, g, persona, l.text).name);
+        for (const l of OFFLINE_LINES) expected.add(fileFor(l.slug, g, persona, l.text, voice).name);
       }
       // 2026-08-12 — readDirectoryAsync, not Paths.cache.list(): the latter was used exactly once
       // here (by me, today) and nowhere else in the app, so it was unproven on this engine. This is
@@ -298,5 +321,5 @@ export function __markCachedForTest(slug: string, gender: Gender, persona = 'kev
   // path computes — otherwise the seam would register a key that can never be hit.
   const line = OFFLINE_LINES.find((l) => l.slug === slug);
   if (!line) return;
-  cachedKeys.add(cacheKey(slug, gender, persona, line.text));
+  cachedKeys.add(cacheKey(slug, gender, persona, line.text, clipVoice(persona)));
 }

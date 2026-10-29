@@ -28,7 +28,11 @@ describe('a real tap is never silently lost', () => {
     const applied = ls.indexOf('if (pendingEndpointTap)');
     expect(armed).toBeGreaterThan(-1);
     expect(applied).toBeGreaterThan(armed);
-    expect(ls).toMatch(/pendingEndpointTap = false;\s*\n\s*console\.log\('\[audit:voice\] applying tap queued/);
+    // 2026-10-28 (VOICE-ENG-3) — "honoured" means handed to the capture AFTER it has started (an
+    // endCaptureEarly before then had no recorder to act on). The behaviour is driven end to end in
+    // a-tap-while-the-mic-opens-ends-the-capture.test.ts; this pins the hand-off.
+    expect(ls).toMatch(/pendingEndpointTap = false;\s*\n\s*queuedEndTap = true;\s*\n\s*gotItOnCaptureEnd = true;/);
+    expect(ls).toMatch(/const captureP = captureUtteranceDetailed\([^)]*\);[\s\S]{0,200}if \(queuedEndTap\) \{ queuedEndTap = false; endCaptureEarly\(\); \}/);
   });
 
   it('clears the flag before acting so a failure cannot arm the next session', () => {

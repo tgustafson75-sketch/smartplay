@@ -46,6 +46,20 @@ import { NativeModules, Platform } from 'react-native';
 import { onBluetoothMediaEvent } from './bluetoothMediaEvents';
 import { notifyEarbudTap } from './earbudControl';
 import { devLog } from './devLog';
+import { shouldForwardTap, type TapDevice } from './tapCoalescer';
+
+/**
+ * 2026-10-28 (VOICE-ENG-1) — ONE PRESS, ONE TAP, ON THIS PATH TOO. iOS answers one button press with
+ * TWO remote commands (play/pause AND togglePlayPause — BluetoothMediaButtonModule registers all
+ * three), and this forwarded each, so earbudControl counted every press as a 'double'. mediaKeyBridge
+ * learned this on 09-01 and coalesces through services/tapCoalescer; this path never did. The same
+ * coalescer, the same device-sized window.
+ */
+let lastBtTapForwardedAt: number | null = null;
+function btTapDevice(): TapDevice {
+  try { return (require('./mediaKeyBridge') as typeof import('./mediaKeyBridge')).currentTapDevice(); }
+  catch { return 'unknown'; }
+}
 
 let inited = false;
 let btEnabled = false;
@@ -83,6 +97,13 @@ export function initVoiceTriggers(): () => void {
     const event = payload as { type?: string; at?: number } | null;
     const t = String(event?.type ?? '');
     if (t === 'play' || t === 'pause' || t === 'playPause') {
+      const now = Date.now();
+      const device = btTapDevice();
+      if (!shouldForwardTap(now, lastBtTapForwardedAt, device)) {
+        devLog(`[voiceTriggers] BT button → ${t} coalesced — same press on ${device}`);
+        return;
+      }
+      lastBtTapForwardedAt = now;
       devLog(`[voiceTriggers] BT button → ${t}`);
       try { notifyEarbudTap(); } catch (e) { devLog('[voiceTriggers] notify err: ' + String(e)); }
     }

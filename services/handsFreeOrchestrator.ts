@@ -13,11 +13,9 @@
  *   triple        → stop/mute current playback ("Kevin shush")
  *   long_press    → reserved (Pass 2: persona quick-switch)
  *
- * Smart-audio-routing behavior on any inbound tap:
- *   - If voiceService is currently speaking, stop it gracefully before
- *     opening the listening window. The user tapped because they want
- *     to talk OVER the caddie — they shouldn't have to wait for the
- *     line to finish.
+ * Speech on a tap (2026-10-28): a single press is listeningSession.toggle()'s alone (it opens, ends
+ *   the capture, or shushes the reply); triple stops playback as its meaning. Nothing here stops
+ *   speech unconditionally any more — see handleTap.
  *   - (Retired 2026-08-29) audio routed to the phone speaker AND voiceOnPhoneSpeaker
  *     setting is false, suppress the listening session (the user
  *     doesn't have earbuds in; the conversation would broadcast).
@@ -109,49 +107,72 @@ export function stopHandsFreeOrchestrator(): void {
 
 type TapSource = 'earbud' | 'watch';
 
+/**
+ * 2026-10-28 (voice engineering review, VOICE-ENG-1) — ONE OWNER PER TAP.
+ *
+ * Every earbud press reached listeningSession.toggle() TWICE: listeningSession's own subscriber acts
+ * on the press at once (subscribeEarbudTap — the low-latency path, and the one the trigger haptic and
+ * every echo guard are built around), and this pattern handler then called toggle() again ~350 ms
+ * later for 'single'. The second reach was absorbed by an echo guard — and, in 'responding', mailed
+ * as a tap_swallowed "failure" for a tap that had worked. Worse, this handler ran stopSpeaking()
+ * unconditionally first, so the second reach CLIPPED the caddie's own "Yeah?" open cue (and any line
+ * after a close) mid-word.
+ *
+ * Now:
+ *   • earbud 'single' belongs to listeningSession alone — nothing here acts on it;
+ *   • the watch has no other path, so its 'single' is its one toggle;
+ *   • double / triple act only while the session is IDLE. While a turn is live the presses that
+ *     made the chain were already consumed by toggle() (open, "I'm done", shush), and acting on them
+ *     again is the double owner this removes;
+ *   • nothing stops speech unconditionally: the triple "shush" stops it because that is its meaning,
+ *     and a replay's speak() replaces whatever was playing on its own.
+ */
+async function sessionIsIdle(): Promise<boolean> {
+  try {
+    const ls = await import('./listeningSession');
+    return ls.getSessionState() === 'idle';
+  } catch { return true; }
+}
+
 async function handleTap(source: TapSource, pattern: TapPattern): Promise<void> {
   devLog(`[handsFree] tap source=${source} pattern=${pattern}`);
 
-  // Stop in-flight voice playback BEFORE any other action — the tap
-  // signals the user wants to talk over the caddie OR change mode.
+  if (pattern === 'single') {
+    if (source === 'earbud') return; // listeningSession's subscriber already acted on this press
+    try {
+      const ls = await import('./listeningSession');
+      await ls.toggle();
+    } catch (e) {
+      devLog('[handsFree] toggle failed: ' + String(e));
+    }
+    return;
+  }
+
+  if (pattern === 'long_press') {
+    // Reserved for Pass 2 — persona quick-switch via long press.
+    devLog('[handsFree] long_press received — no action wired in Pass 1');
+    return;
+  }
+
+  if (!(await sessionIsIdle())) {
+    devLog(`[handsFree] ${pattern} ignored — a turn is live; its presses were the session's`);
+    return;
+  }
+
+  if (pattern === 'double') {
+    await replayLastCaddieLine();
+    return;
+  }
+
+  // triple — the explicit "shush": stop what is playing, confirm without voice.
   try {
     const voice = await import('./voiceService');
-    if (voice.isSpeaking?.()) {
-      devLog('[handsFree] stopping in-flight voice before tap-action');
-      await voice.stopSpeaking?.()?.catch?.(() => undefined);
-    }
+    await voice.stopSpeaking?.('screen:handsFree-triple')?.catch?.(() => undefined);
   } catch { /* non-fatal */ }
-
-  switch (pattern) {
-    case 'single': {
-      // Toggle the existing listening session.
-      try {
-        const ls = await import('./listeningSession');
-        await ls.toggle();
-      } catch (e) {
-        devLog('[handsFree] toggle failed: ' + String(e));
-      }
-      return;
-    }
-    case 'double': {
-      await replayLastCaddieLine();
-      return;
-    }
-    case 'triple': {
-      // Triple = explicit "shush" — already stopped in-flight above; just
-      // surface a confirmation via toast (no voice over the shush).
-      try {
-        const toast = await import('../store/toastStore');
-        toast.useToastStore.getState().show('Quieted.');
-      } catch { /* non-fatal */ }
-      return;
-    }
-    case 'long_press': {
-      // Reserved for Pass 2 — persona quick-switch via long press.
-      devLog('[handsFree] long_press received — no action wired in Pass 1');
-      return;
-    }
-  }
+  try {
+    const toast = await import('../store/toastStore');
+    toast.useToastStore.getState().show('Quieted.');
+  } catch { /* non-fatal */ }
 }
 
 async function handleWatchVoice(utterance: string): Promise<void> {

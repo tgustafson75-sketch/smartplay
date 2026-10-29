@@ -86,6 +86,39 @@ function audioInUse(): boolean {
   } catch { return false; }
 }
 
+/**
+ * 2026-10-28 (voice engineering review, VOICE-ENG-4) — the idle teardown asked audioInUse(); the two
+ * EVENT teardowns did not. A phone locked into the pocket mid-turn (app_backgrounded) or a flip to
+ * Quiet mid-reply (trust_quiet) ran goCold at once: allowsRecordingIOS false under a live recording
+ * pauses the iOS recorder (the capture reads 0 ms and is dropped), and playsInSilentModeIOS false
+ * under a live reply silences it. Pocketed earbud talk is the core on-course flow, so a busy turn is
+ * never torn down: the teardown is DEFERRED and the 15s tick applies it once the turn is over.
+ */
+let deferredColdReason: string | null = null;
+
+/** A turn is live: audio playing or recording, or the earbud session anywhere but idle. */
+function turnInFlight(): boolean {
+  if (audioInUse()) return true;
+  try {
+    const ls = require('./listeningSession') as typeof import('./listeningSession');
+    return ls.getSessionState() !== 'idle';
+  } catch { return false; }
+}
+
+function goColdWhenIdle(reason: string): void {
+  if (state === 'cold') return;
+  if (turnInFlight()) {
+    if (deferredColdReason !== reason) {
+      breadcrumb('audio_cold_deferred', { reason });
+      console.log('[audio] cold deferred (' + reason + ') — a turn is live');
+    }
+    deferredColdReason = reason;
+    return;
+  }
+  deferredColdReason = null;
+  void goCold(reason);
+}
+
 /** Called from voiceService whenever TTS or capture begins. */
 export function noteAudioActivity(reason = 'tts_or_capture'): void {
   lastActivityAt = Date.now();
@@ -100,6 +133,7 @@ export function getAudioState(): AudioState {
 export function initAudioLifecycle(): void {
   if (idleTimer) return;
   idleTimer = setInterval(() => {
+    if (deferredColdReason) { goColdWhenIdle(deferredColdReason); return; }
     if (state === 'warm' && lastActivityAt > 0 && Date.now() - lastActivityAt > IDLE_TEARDOWN_MS) {
       if (audioInUse()) { lastActivityAt = Date.now(); return; }
       void goCold('idle_90s');
@@ -107,7 +141,9 @@ export function initAudioLifecycle(): void {
   }, 15_000);
 
   appStateSub = AppState.addEventListener('change', (next) => {
-    if (next !== 'active') void goCold('app_backgrounded');
+    if (next !== 'active') goColdWhenIdle('app_backgrounded');
+    // Back in front before the turn ended: there is nothing left to tear down for the background.
+    else if (deferredColdReason === 'app_backgrounded') deferredColdReason = null;
   });
 
   // Trust-level subscription — Quiet forces cold immediately.
@@ -116,7 +152,8 @@ export function initAudioLifecycle(): void {
     // Audit 101 / S1 — Zustand `subscribe` returns the unsub fn; store
     // it so teardown can release the listener.
     trustUnsub = trustMod.useTrustLevelStore.subscribe((s: { level: number }) => {
-      if (s.level === 1) void goCold('trust_quiet');
+      if (s.level === 1) goColdWhenIdle('trust_quiet');
+      else if (deferredColdReason === 'trust_quiet') deferredColdReason = null;
     });
   } catch {}
 }
@@ -134,4 +171,5 @@ export function teardownAudioLifecycle(): void {
     trustUnsub();
     trustUnsub = null;
   }
+  deferredColdReason = null;
 }

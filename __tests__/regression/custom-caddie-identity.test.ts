@@ -44,14 +44,27 @@ describe('a custom caddie is described by its own name', () => {
     const builder = fs.readFileSync(path.join(root, 'services/caddieRequestBody.ts'), 'utf-8');
     const kevin = fs.readFileSync(path.join(root, 'api/kevin.ts'), 'utf-8');
     const voice = fs.readFileSync(path.join(root, 'services/voiceService.ts'), 'utf-8');
-    // The client already applied it on its own TTS fallback...
-    expect(voice).toMatch(/pp\.customCaddieVoice/);
+    // The client already applied it on its own TTS fallback (2026-10-28: through the one owner,
+    // caddieGender.ttsVoiceForPersona, which reads customCaddieVoice)...
+    const gender = fs.readFileSync(path.join(root, 'services/caddieGender.ts'), 'utf-8');
+    expect(voice).toContain('customVoice = cg.ttsVoiceForPersona(persona);');
+    expect(gender).toMatch(/pp\.customCaddieVoice/);
     // ...so the SERVER, which renders the audio on the primary path, must be told too.
     expect(builder).toMatch(/customCaddieVoice: safe\(/);
     expect(kevin).toMatch(/customCaddieVoice = null,/);
     expect(kevin).toMatch(/const ttsVoice = matched \?\?/);
     // and it must be allow-listed, not passed through to a paid API
     expect(kevin).toMatch(/OPENAI_VOICES as readonly string\[\]\)\.includes\(customCaddieVoice\)/);
+  });
+
+  it('the offline cue/ack clips are warmed in that same voice, and keyed by it (recheck VC-2)', () => {
+    // Behavioural coverage: a-custom-caddie-cues-in-its-own-voice.test.ts. This pins the wire.
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const cache = fs.readFileSync(path.resolve(__dirname, '../../services/offlineVoiceCache.ts'), 'utf-8');
+    expect(cache).toContain('body: JSON.stringify({ text: line.text, gender, language: line.language, persona, voice }),');
+    expect(cache).toContain('ttsVoiceForPersona(persona)');
+    expect(cache).toMatch(/function cacheKey\([^)]*voice: string \| null\)/);
   });
 
   it('api/kevin performs the substitution, and only when the name differs', () => {

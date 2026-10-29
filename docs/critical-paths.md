@@ -236,19 +236,30 @@ continuation or close.
     are multiple mic owners with no arbiter, and the tab avatar runs
     `useVoiceCaddie`'s own recorder. Watch for the cue speaking *before* the mic
     is claimed ("I'm here." → busy → "Didn't catch that.").
-- Filler clip plays from local cache (or speaks live TTS fallback if cache cold).
+- At L2+, a turn the router marks for a filler plays ONE soft thinking earcon (`earcon_start`), never
+  a spoken bridge line (2026-08-06). *(Corrected 2026-10-28 — said "filler clip … or live TTS
+  fallback"; there is no spoken filler and no device voice.)*
 - Response audio plays (TTFA target: <500ms direct intents, <1500ms Haiku, <8s Sonnet perceived).
 - Role register shifts per surface (Caddie / Coach / Psychologist) per active screen.
-- L1 Quiet: opener/filler suppressed; user-initiated reply still speaks.
+- L1 Quiet: the opener is the terse spoken go-ahead **"Yeah?"** (`TRUST_L1_OPENER`), not the
+  role's chattier `earbud_open` line; no thinking-earcon filler (`ttsAllowed`); the user-initiated
+  reply still speaks.
+  *(Corrected 2026-10-28 — this said "opener/filler suppressed", the 07-26 behaviour. Since
+  08-08/08-23 the tap's go-ahead is SPOKEN at every level in the caddie's voice, because the player
+  just tapped and a word survives the BT route handoff a tock does not; `opener_done` reports it.)*
 - VAD doesn't cut user off mid-thought (silence threshold 2800ms, gated on Kevin-not-speaking).
 
 **Diagnostic markers (grep `[path4:voice]`):**
-- `[path4:voice] tap_open trust=N source=earbud|onscreen`
-- `[path4:voice] opener_done allowed=true|false`
+- `[path4:voice] tap_open trust=N source=tap|auto_reopen`
+  *(corrected 2026-10-28 — documented `source=earbud|onscreen`, which nothing emitted: every
+  physical source — earbud, glasses, badge — reaches `openSession` through `toggle()` as `tap`;
+  `auto_reopen` is the caddie reopening the mic after its own question)*
+- `[path4:voice] opener_done allowed=true|false text="<spoken line>" via=clip|earcon|none trust=N`
+  *(`allowed` is `voiceEnabled`; `via=earcon` means the caddie's clip was not cached yet)*
 - `[path4:voice] capture_start`
 - `[path4:voice] capture_done text_len=N cancelled=true|false`
 - `[path4:voice] intent=X topic=Y`
-- `[path4:voice] earcon_start` / `[path4:voice] earcon_end`
+- `[path4:voice] earcon_start category=X` / `[path4:voice] earcon_end ms=N`
   *(corrected 2026-08-19 — documented as `filler_start`/`filler_end`, which the
   code has never emitted)*
 <!-- 2026-08-23 — `local_primary` REMOVED. It marked the local-first intercept that answered 16
@@ -257,26 +268,31 @@ query types on-device without ever calling the brain, including yardage and wind
 creating separate paths." Every spoken question now reaches the caddie, so there is no on-device
 answer to mark. Removed here as well as in code, because a documented marker nothing emits makes
 the MIN VERIFY grep return nothing whether the path is healthy or broken. -->
-- `[path4:voice] mic_handover` — a second owner took the mic
-- `[path4:voice] capture_retry` — mic was busy/errored; retried once
+- `[path4:voice] mic_handover=<owner>` — a second owner held the mic and was released
+- `[path4:voice] capture_retry after bail=X` — mic was busy/errored; retried once
 - `[path4:voice] response_start ms_since_capture=X`
 - `[path4:voice] response_end`
-- `[path4:voice] close reason=natural|user_tap|state_change`
+- `[path4:voice] close reason=user_close|dormancy_timeout`
+  *(corrected 2026-10-28 — the code printed `close (reason=x)` and the doc listed reasons it has
+  never had; a turn that simply ends returns to idle without a close)*
 
-Existing `[ttfa]` log line at `services/listeningSession.ts:266` already captures TTFA timing — keep using it.
+Existing `[ttfa]` log line in `services/listeningSession.ts` (grep `'[ttfa]'`) already captures TTFA timing — keep using it.
 
 **MIN VERIFY (~5 min):**
 1. Tap Kevin avatar on caddie home → confirm listening session opens (visual state change).
 2. Ask: "How far to the green?" → confirm tactical response within ~5s.
 3. Ask: "What should I think about over this shot?" → confirm conversational response within ~10s.
 4. Ask: "Did you get that?" (hero moment) → confirm "Got it. That's yours." canned response.
-5. Toggle Quiet (L1) → tap badge → ask question → confirm opener+filler silent, response speaks (user-initiated opt-in).
+5. Toggle Quiet (L1) → tap badge → ask question → confirm the go-ahead is just "Yeah?"
+   (`opener_done … text="Yeah?"`), no thinking-earcon filler, and the response speaks (user-initiated).
 
 **Failure modes to watch:**
 - Tap doesn't engage listening (stuck in idle).
 - Filler library empty (voiceHash regen never fired) → silent bridge.
 - Response cut off mid-sentence (SPEAK_TIMEOUT_MS regression).
-- Opener speaks at L1 (Quiet leak regression).
+- At L1 the go-ahead is anything but the terse "Yeah?", or a thinking earcon plays (Quiet leak
+  regression). *(Corrected 2026-10-28 — said "Opener speaks at L1", which is the intended
+  behaviour since 08-08.)*
 - VAD finalises mid-thought (silence threshold regression).
 
 ---

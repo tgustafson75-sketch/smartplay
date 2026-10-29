@@ -2,6 +2,7 @@ import { Vibration } from 'react-native';
 
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS, COLD_BRAIN_FETCH_TIMEOUT_MS as COLD_KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
+import { raceHedged, type HedgeAttempt } from './voice/hedgedFetch';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, isCapturing, isExternalMicActive, isSpeaking, isSpeakingUserInitiated, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
 import { noteTurnState, noteTurnIntent, noteTurnClosing, noteTurnActed } from './voice/turnAnswerWatch';
@@ -313,7 +314,11 @@ function pickCue(pool: string[]): string {
   lastCueIdx = i;
   return pool[i];
 }
-async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, fallbackMs: number): Promise<void> {
+/** What a cue actually played — the spoken line (empty when none was picked) and whether it was the
+ *  caddie's own cached clip or the earcon fallback. openSession logs it as the Path 4 opener marker. */
+type VerbalCueResult = { text: string; via: 'clip' | 'earcon' };
+async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, fallbackMs: number): Promise<VerbalCueResult> {
+  let text = '';
   try {
     /**
      * 2026-08-23 — the LISTEN opener now comes from pickOpener() (role + trust aware, via the
@@ -325,14 +330,15 @@ async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, f
      * three roles' earbud_open templates were added there in the same change for exactly that
      * reason.
      */
-    const text = kind === 'gotit' ? pickCue(GOTIT_CUES) : pickOpener();
+    text = kind === 'gotit' ? pickCue(GOTIT_CUES) : pickOpener();
     // Review G2 (finding 7) — the active caddie and its gender: the same pair the clips are warmed under.
     const { persona, gender } = (require('./voiceService') as typeof import('./voiceService')).activeVoice();
     const cache = await import('./offlineVoiceCache');
     const uri = text ? cache.resolveCachedOfflineClipUri(text, gender, persona) : null;
-    if (uri) { await playLocalFile(uri, undefined, { userInitiated: true }); return; }
+    if (uri) { await playLocalFile(uri, undefined, { userInitiated: true }); return { text, via: 'clip' }; }
   } catch { /* additive — fall through to the earcon */ }
   try { await playLocalFile(fallbackEarcon, fallbackMs, { userInitiated: true }); } catch { /* non-fatal */ }
+  return { text, via: 'earcon' };
 }
 
 function setSessionStateMirror(next: SessionState): void {
@@ -405,21 +411,28 @@ function setSessionStateMirror(next: SessionState): void {
  */
 const CLASSIFY_HEDGE_MS = 2_500;
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  const once = (budget: number) => {
+/**
+ * 2026-10-28 (voice engineering review, VOICE-ENG-2) — THE HEDGE NEVER CANCELLED. The inline race
+ * here slept 2.5s and then POSTed the utterance again whether or not the first classify had already
+ * answered, and nothing aborted the loser — so every healthy turn paid /api/voice-intent twice. It
+ * now races through services/voice/hedgedFetch.raceHedged, the one owner the transcribe paths use:
+ * the hedge is never opened once the primary answers, and the losing connection is aborted. `signal`
+ * (the session's turnAbort) cancels both attempts when the player closes the turn.
+ */
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number, signal?: AbortSignal): Promise<Response> {
+  const attempt = (isHedge: boolean): HedgeAttempt<Response> => {
+    // A turn closed before the hedge woke opens no second connection.
+    if (signal?.aborted) return { result: Promise.reject(new Error('aborted')), abort: () => {} };
+    const budget = isHedge ? Math.max(5_000, timeoutMs - CLASSIFY_HEDGE_MS) : timeoutMs;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), budget);
-    return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timeout));
+    const abort = (): void => { try { controller.abort(); } catch { /* aborting never throws */ } };
+    const timeout = setTimeout(abort, budget);
+    signal?.addEventListener('abort', abort);
+    // The turn's abort stays linked through the body read, so a close mid-read cancels that too.
+    const result = fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timeout));
+    return { result, abort };
   };
-  const primary = once(timeoutMs);
-  primary.catch(() => {});
-  const hedged = (async () => {
-    await new Promise(r => setTimeout(r, CLASSIFY_HEDGE_MS));
-    const alt = once(Math.max(5_000, timeoutMs - CLASSIFY_HEDGE_MS));
-    alt.catch(() => {});
-    return alt;
-  })();
-  return Promise.any([primary, hedged]);
+  return raceHedged(attempt, CLASSIFY_HEDGE_MS);
 }
 
 /**
@@ -443,11 +456,19 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
  * guards decide — the dedupe/echo logic is load-bearing and was each written for a real double-fire.
  * What changes is that a swallow is no longer invisible. [[feels-like-a-real-caddie]]
  */
-function swallowedTap(guard: string, extra?: Record<string, unknown>): void {
-  try { Vibration.vibrate(18); } catch { /* haptics optional */ }
-  console.log(`[path4:voice] tap_swallowed guard=${guard} state=${state}`);
+/**
+ * 2026-10-28 (VOICE-ENG-1) — AN ECHO IS NOT A LOST TAP. `echo` marks a guard that absorbed the SAME
+ * press arriving a second time (iOS fires two remote commands for one button; a glasses temple
+ * jitters). The press it echoes already acted and already buzzed, so an echo gets no second haptic
+ * and is kept on device as a diag instead of mailed as tap_swallowed — the 10-13 and 10-25 rule for
+ * the 'opening' echo, applied to every echo guard.
+ */
+function swallowedTap(guard: string, extra?: Record<string, unknown>, opts?: { echo?: boolean }): void {
+  const echo = opts?.echo === true;
+  if (!echo) { try { Vibration.vibrate(18); } catch { /* haptics optional */ } }
+  console.log(`[path4:voice] tap_swallowed guard=${guard} state=${state}${echo ? ' echo=1' : ''}`);
   try {
-    logVoiceSilentFail('tap_swallowed', { source: 'listeningSession', guard, sessionState: state, ...extra });
+    (echo ? logVoiceDiag : logVoiceSilentFail)(echo ? 'tap_echo_absorbed' : 'tap_swallowed', { source: 'listeningSession', guard, sessionState: state, ...extra });
   } catch { /* never throw from a guard */ }
 }
 
@@ -468,6 +489,10 @@ export function isActiveListeningEnabled(): boolean {
   return useSettingsStore.getState().autoListenEnabled;
 }
 
+// 2026-10-28 (recheck VC-4) — which states drop a tap, for the mic badge's dim. A leaf module so the
+// badge can read it without loading the whole voice graph; it must stay in step with toggle() below.
+export { tapIsDroppedIn } from './voice/tapIsDroppedIn';
+
 /**
  * Toggle the listening session. Open if idle; close if any other state.
  */
@@ -484,22 +509,25 @@ export async function toggle(): Promise<void> {
   // 2026-06-16 (Tim — earbud-tap-to-stop) — if Smart Motion is actively RECORDING,
   // the camera owns the mic. A tap must STOP the capture, NOT open a listen session
   // (opening one races the camera's audio = "Only one Recording object" crash). This
-  // is the single chokepoint: BOTH the boot-level earbud tap and handsFreeOrchestrator's
-  // single-tap route through toggle(). After recording stops the mic frees and the
+  // is the single chokepoint: the earbud tap, the badge and the watch's single tap (through
+  // handsFreeOrchestrator) route through toggle(). After recording stops the mic frees and the
   // next tap opens listening normally.
   if (isSmartMotionRecording()) {
     recordingStopTapAt = Date.now();
     emitSmartMotionCommand('stop');
     return;
   }
-  // 2026-06-16 (Tim) — a single tap reaches toggle() TWICE (the boot-level earbud
-  // sub fires immediately; handsFreeOrchestrator's 'single' pattern fires ~350ms
-  // later). Normally sessionInFlight dedupes that, but the recording-stop branch
-  // above returns WITHOUT opening a session — so the 350ms follow-up would see
-  // recording already stopped and open listening right over the just-freed mic.
-  // Swallow toggles for a short window after a tap-stop (covers the pattern
-  // follow-up + the camera's audio-session release).
-  if (Date.now() - recordingStopTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) { swallowedTap('recording_stop_cooldown'); return; }
+  // 2026-06-16 (Tim) — a single press could reach toggle() twice. Since 2026-10-28 (VOICE-ENG-1)
+  // handsFreeOrchestrator no longer re-toggles an earbud 'single', but iOS still fires two remote
+  // commands for one button. The recording-stop branch above returns WITHOUT opening a session, so a
+  // duplicate would see recording already stopped and open listening right over the just-freed mic.
+  // Swallow toggles for a short window after a tap-stop (the duplicate + the camera's audio-session
+  // release); only the part inside the echo window is an echo.
+  if (Date.now() - recordingStopTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) {
+    const msSinceStop = Date.now() - recordingStopTapAt;
+    swallowedTap('recording_stop_cooldown', { msSinceStop }, { echo: msSinceStop < TAP_ECHO_SWALLOW_MS });
+    return;
+  }
   // 2026-08-07 (regression audit — the endpoint branch below was DEAD: sessionInFlight is true for the
   // whole 'listening' window, so `if (sessionInFlight) return` swallowed the tap-again endpoint before it
   // could run). Handle the endpoint HERE, before that guard. A tap while the mic is OPEN means "I'm done,
@@ -516,7 +544,7 @@ export async function toggle(): Promise<void> {
      * a second or more past the press and ate real "I'm done" taps. An echo belongs to the tap.
      */
     if (Date.now() - sessionOpenTapAt < TAP_ECHO_SWALLOW_MS) {
-      swallowedTap('open_tap_echo', { msSinceOpenTap: Date.now() - sessionOpenTapAt, windowMs: TAP_ECHO_SWALLOW_MS });
+      swallowedTap('open_tap_echo', { msSinceOpenTap: Date.now() - sessionOpenTapAt, windowMs: TAP_ECHO_SWALLOW_MS }, { echo: true });
       return;
     }
     // ...and dedupe THIS endpoint tap's own double-fire (echo window only).
@@ -567,14 +595,15 @@ export async function toggle(): Promise<void> {
     return;
   }
   // 2026-07-06 (voice-lifecycle audit #2) — same double-fire as the recording-stop
-  // branch, on the CLOSE side: one physical tap reaches toggle() twice (legacy sub
-  // immediately + pattern sub ~350ms later). During 'responding' sessionInFlight is
+  // branch, on the CLOSE side: one physical tap could reach toggle() twice (until 2026-10-28 the
+  // orchestrator's pattern sub re-toggled ~350ms later; iOS still sends two commands for one press).
+  // During 'responding' sessionInFlight is
   // already false, so tap #1 closed the session and tap #2 saw 'idle' and REOPENED
   // the mic right after the user tried to shush the caddie. Swallow toggles for a
   // short window after any close — the ECHO window only (600ms): reusing the 1.5s camera-release
   // constant here meant a genuine shush tap at a fast-responding caddie was eaten for a full 1.5s
   // after every "I'm done" endpoint tap.
-  if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) { swallowedTap('close_tap_echo'); return; }
+  if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) { swallowedTap('close_tap_echo', { msSinceClose: Date.now() - sessionCloseTapAt }, { echo: true }); return; }
   /**
    * 2026-09-01 (Tim, on the glasses: "I think it just mirrors earbud behavior... this is why it
    * works") — HE IS RIGHT, AND IT PREDICTS THE STOP-TAP BUG.
@@ -978,7 +1007,10 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
   spokenLineAtOpen = getLastSpokenLine();
   const settings = useSettingsStore.getState();
   const apiUrl = getApiBaseUrl();
-  console.log(`[path4:voice] tap_open trust=${getTrustLevel()}`);
+  // 2026-10-28 (recheck VC-6) — `source=` is the documented field (docs/critical-paths.md Path 4).
+  // Every physical source (earbud, glasses, badge) reaches here through toggle() as 'tap'; the
+  // caddie re-opening the mic after its own question is 'auto_reopen'.
+  console.log(`[path4:voice] tap_open trust=${getTrustLevel()} source=${origin}`);
 
   // 2026-06-15 (Tim — ~5s lag, wants ~3s) — warm the WHOLE voice chain the
   // instant listening opens. The manual-tap path already prewarms at mic-press;
@@ -1001,11 +1033,6 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
   noteUserTurn();
   noteCaddieTurn('earbud'); // 1.0.2 funnel: first_caddie_turn (fires once)
 
-  // Audio routing safety: if route is the phone speaker AND the user hasn't
-  // opted into "Voice on phone speaker", suppress TTS — show text instead.
-  // Phase V.7+ — Quiet (L1) is also a hard suppress for the spoken opener
-  // and any filler. The user gets text-only feedback at L1; voice is only
-  // for L2+. This closes the leak where "Yeah?" played on every earbud tap.
   /**
    * 2026-08-29 — "Voice on Phone Speaker" RETIRED (Tim). The route no longer gates speech.
    *
@@ -1020,17 +1047,22 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
    * drives captions, not silence. [[hands-free-zero-setup-is-the-product]]
    */
   const trustLevel = getTrustLevel();
-  const ttsAllowed = settings.voiceEnabled && trustLevel !== 1;
 
-  // Phase 1 — NO canned spoken opener.
-  // 2026-07-26 (Tim — "we were supposed to remove the canned speech when I tap the earbuds w/ haptics;
-  // unify the caddie mic and take out the prompts") — a tap-to-listen no longer announces itself with a
-  // scripted line ("Yeah?" / the earbud_open dialog). The HAPTIC at the trigger chokepoint + the
-  // universal "Listening…" status strip are the confirmation now — consistent across every mic source
-  // (earbud, glasses, the mic badge). Go straight to the mic. `ttsAllowed` is still computed above and
-  // used by the reply path below.
-  void ttsAllowed;
-  console.log('[path4:voice] opener_done (canned opener removed — haptic + Listening strip)');
+  /**
+   * 2026-10-28 (recheck VC-6) — THE OPENER IS SPOKEN, AT EVERY TRUST LEVEL. This block used to log
+   * "opener_done (canned opener removed — haptic + Listening strip)" from the 07-26 removal, and a
+   * comment above it called L1 "a hard suppress for the spoken opener". Neither has been true since
+   * 08-08/08-23: playVerbalCue below speaks pickOpener() in the caddie's voice with userInitiated:true
+   * — at L1 the terse TRUST_L1_OPENER "Yeah?", at L2+ the role's earbud_open line — because the
+   * player just tapped and a spoken go-ahead survives the BT route handoff a tock does not. The log
+   * line and the Path 4 L1 pass criterion both described the removed behaviour, so the checklist
+   * could neither pass nor fail truthfully. opener_done is now logged AFTER the cue, saying what
+   * played.
+   *
+   * What L1 DOES suppress is the filler: `ttsAllowed` gates the "thinking" earcon and its long-wait
+   * pulses further down, so a Quiet turn is go-ahead, silence, answer.
+   */
+  const ttsAllowed = settings.voiceEnabled && trustLevel !== 1;
 
   // Phase 2 — open mic for utterance
   //
@@ -1072,9 +1104,11 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
     return;
   }
 
+  let opener: VerbalCueResult | null = null;
   if (settings.voiceEnabled) {
-    try { await playVerbalCue('listen', LISTENING_EARCON, LISTENING_EARCON_MS); } catch { /* non-fatal */ }
+    try { opener = await playVerbalCue('listen', LISTENING_EARCON, LISTENING_EARCON_MS); } catch { /* non-fatal */ }
   }
+  console.log(`[path4:voice] opener_done allowed=${settings.voiceEnabled} text=${JSON.stringify(opener?.text ?? '')} via=${opener?.via ?? 'none'} trust=${trustLevel}`);
   // 2026-08-06 (voice audit) — the earcon is awaited (~200ms), during which cancelMic is still null. If the
   // user cancels (a second tap → closeSession → state 'idle') DURING the earcon, stopCapture would be a
   // no-op and we'd open a phantom 12s recording after the session already closed. Re-check state here so a
@@ -1092,10 +1126,19 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
    * pressed, and the only reason it could not act was that the mic was not up yet. Cleared first so
    * a failure below cannot leave it armed for the next session.
    */
+  /**
+   * 2026-10-28 (VOICE-ENG-3) — this called endCaptureEarly() HERE, before captureUtteranceDetailed
+   * had been called: no recorder existed, so it was a no-op, and the capture then reset the early-stop
+   * flag on entry anyway. The queued tap was lost and the mic ran on. It is now handed to the capture
+   * right after it starts (voiceService latches it until the recorder is up), and it asks for the
+   * "Got it" cue exactly like an "I'm done" tap in 'listening' does.
+   */
+  let queuedEndTap = false;
   if (pendingEndpointTap) {
     pendingEndpointTap = false;
-    console.log('[audit:voice] applying tap queued during opening — ending capture immediately');
-    endCaptureEarly();
+    queuedEndTap = true;
+    gotItOnCaptureEnd = true;
+    console.log('[audit:voice] applying tap queued during opening — ending capture as soon as it records');
   }
   const t_capture_start = Date.now();
   console.log('[path4:voice] capture_start');
@@ -1124,6 +1167,8 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
        * let in. VAD still ends it earlier whenever it can.
        */
       const captureP = captureUtteranceDetailed(MAX_UTTERANCE_MS, apiUrl, settings.language);
+      // The capture has claimed the mic synchronously; a queued "I'm done" now latches onto it.
+      if (queuedEndTap) { queuedEndTap = false; endCaptureEarly(); }
       cancelMic = () => {
         // Phase V.7 — real cancel via stopCapture; the recording stops
         // immediately and captureUtterance resolves with null.
@@ -1247,8 +1292,18 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
      * "I talked and it ignored me", the one this line exists for.
      */
     const nobodySpoke = bail === 'empty' && capture.heardSpeech === false;
-    if (!silentBail) (alreadyReportedUpstream || nobodySpoke ? logVoiceDiag : logVoiceSilentFail)('listen_no_transcript', {
+    /**
+     * 2026-10-28 (VOICE-ENG-3) — the player ended the capture themselves before saying anything (an
+     * "I'm done" tap, typically one queued during 'opening'), so the recording is under the
+     * transcribe floor. They did what they meant to; the honest "Didn't catch that" still tells them
+     * nothing was sent, but it is not mailed as a failure.
+     */
+    const endedByTap = gotItOnCaptureEnd;
+    gotItOnCaptureEnd = false;
+    const tapEndedEmpty = endedByTap && bail === 'too_short' && capture.heardSpeech === false;
+    if (!silentBail) (alreadyReportedUpstream || nobodySpoke || tapEndedEmpty ? logVoiceDiag : logVoiceSilentFail)('listen_no_transcript', {
       source: 'listeningSession',
+      endedByTap,
       bail,
       // 2026-08-17 — lets a field report tell "the mic was open and the player said nothing" from
       // "the mic was never open", which the old log could not.
@@ -1483,7 +1538,7 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
             persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
             ...customCaddieFields(),
           }),
-        }, intentTimeout());
+        }, intentTimeout(), brainSignal);
       } catch (e) {
         console.log('[listeningSession] classifier threw — routing to the brain as a plain question', e);
       }
@@ -1971,7 +2026,7 @@ export function forceCloseSession(): void {
 }
 
 function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
-  console.log(`[path4:voice] close (reason=${reason})`);
+  console.log(`[path4:voice] close reason=${reason}`);
   noteTurnClosing(reason);
   // Review G2 — the turn in flight belongs to a session that no longer exists: retire its serial so
   // it can neither write state nor speak nor reopen, and abort its brain request.

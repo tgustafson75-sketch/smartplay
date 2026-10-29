@@ -231,7 +231,13 @@ describe('neither voice path paints its pre-listening state', () => {
 
   it('but the state still EXISTS and still gates a second tap', () => {
     // Removing the paint must not remove the guard — that would reopen the double-tap race.
-    expect(read('components/caddie/CaddieMicBadge.tsx')).toContain("listeningState === 'opening' || listeningState === 'listening'");
+    // 2026-10-28 (recheck VC-4) — the guard is toggle()'s, not the badge's dim: the badge used to
+    // pin "opening || listening" here, which dimmed it while it was the stop button. The opening
+    // window still dedupes the echo and queues a real tap as the endpoint (see
+    // the-mic-badge-is-bright-when-it-is-the-stop-button).
+    const ls = read('services/listeningSession.ts');
+    expect(ls).toMatch(/if \(!isEcho && state === 'opening'\) \{\s*pendingEndpointTap = true;/);
+    expect(ls).toContain("if (isEcho && state === 'opening') {");
     expect(read('services/listeningSession.ts')).toContain("if (state !== 'opening') return;");
   });
 });

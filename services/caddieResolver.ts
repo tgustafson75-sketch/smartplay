@@ -27,6 +27,7 @@ import { useSettingsStore, DEFAULT_CADDIE_ASSIGNMENTS } from '../store/settingsS
 import type { Persona, CaddiePillar } from '../store/settingsStore';
 import { getActiveSurface, type ActiveSurface } from './activeSurfaceRegistry';
 import { getCaddieName } from '../lib/persona';
+import { genderForPersona, customBasePersona, type CaddieGender } from './caddieGender';
 
 export type { Persona, CaddiePillar };
 
@@ -101,4 +102,23 @@ export function displayCaddieName(persona?: Persona | null): string {
     if (typeof chosen === 'string' && chosen.trim()) return chosen.trim();
   } catch { /* not hydrated — the static name is the honest answer */ }
   return getCaddieName('custom');
+}
+
+/**
+ * 2026-10-28 (recheck VC-1) — THE FACE ON CADDIE HOME. Caddie home is the 'caddie' surface, which
+ * mapSurfaceToPillar sends to 'round', so the round-pillar caddie is the one the brain writes as
+ * (caddieRequestBody → getActiveCaddie) and the one that speaks (voiceService.activeVoice). The tab
+ * drew the GLOBAL pick instead, so with Serena on the Round row and Kevin as Active Caddie, Kevin's
+ * portrait answered in Serena's voice with Serena's words. Review G2 finding 7 brought the voice and
+ * the brain together; this brings the face along. Persona, gender and name come as one answer so
+ * the three cannot be read from different owners again. [[two-owners-is-the-root-cause]]
+ */
+export function roundCaddieIdentity(): { persona: Persona; face: Persona; gender: CaddieGender; name: string } {
+  const persona = getActiveCaddieForPillar('round');
+  // `face` is the built-in portrait set to draw. A custom caddie with no portrait yet wears its BASE
+  // persona's face — the one its voice inherits (caddieGender.ttsVoiceForPersona) — not Kevin's,
+  // which is what CaddieAvatar's default branch drew for 'custom' (a Serena-based caddie answered in
+  // nova under Kevin's face). A custom portrait, when there is one, still covers it.
+  const face: Persona = persona === 'custom' ? customBasePersona() : persona;
+  return { persona, face, gender: genderForPersona(persona), name: displayCaddieName(persona) };
 }
