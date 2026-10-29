@@ -37,7 +37,7 @@ export type CaptureBail =
 
 /** What the caddie should say about it. */
 export type CaptureBailResponse =
-  /** Say nothing — the user caused this on purpose, or is already being prompted by the OS. */
+  /** Say nothing — the user caused this on purpose, or just answered the OS prompt. */
   | 'silent'
   /** Own it: the microphone failed. Never blame the player's voice for our own dead mic. */
   | 'mic_trouble'
@@ -52,8 +52,11 @@ export type CaptureBailResponse =
  *   mic_busy / error / no_uri  → the microphone never produced audio. Ours to own.
  *   transcribe_failed          → the mic was fine; the network wasn't. Say the true one.
  *   cancelled                  → the user shushed us. Silence is the correct response.
- *   no_permission              → the OS is already asking (or the user has refused); talking over
- *                                that with a mic complaint just adds noise to a dialog.
+ *   no_permission              → the OS dialog was just on screen and the player answered it; talking
+ *                                over that with a mic complaint just adds noise. A PERMANENT refusal
+ *                                (no dialog can show) never reaches here from a listening session:
+ *                                openSession checks isMicPermissionBlocked before its cue and says
+ *                                CADDIE_NOTICE_MIC_OFF instead (2026-10-28, VOICE-ENG-R2-2).
  *   too_short/small/large/empty→ we really did record and really did get nothing usable.
  */
 export function responseForCaptureBail(bail: CaptureBail | null): CaptureBailResponse {

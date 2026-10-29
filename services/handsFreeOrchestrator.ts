@@ -9,8 +9,8 @@
  *
  * Pattern → Action mapping (Pass 1; later passes can expand):
  *   single        → toggle listening (Kevin/Serena starts/stops the mic)
- *   double        → repeat the last spoken caddie line
- *   triple        → stop/mute current playback ("Kevin shush")
+ *   double        → repeat the last spoken caddie line   (watch only — see handleTap)
+ *   triple        → stop/mute current playback ("Kevin shush")   (watch only)
  *   long_press    → reserved (Pass 2: persona quick-switch)
  *
  * Speech on a tap (2026-10-28): a single press is listeningSession.toggle()'s alone (it opens, ends
@@ -119,9 +119,9 @@ type TapSource = 'earbud' | 'watch';
  * after a close) mid-word.
  *
  * Now:
- *   • earbud 'single' belongs to listeningSession alone — nothing here acts on it;
+ *   • every earbud press belongs to listeningSession alone — nothing here acts on it (R2-4, in handleTap);
  *   • the watch has no other path, so its 'single' is its one toggle;
- *   • double / triple act only while the session is IDLE. While a turn is live the presses that
+ *   • the watch's double / triple act only while the session is IDLE. While a turn is live the presses that
  *     made the chain were already consumed by toggle() (open, "I'm done", shush), and acting on them
  *     again is the double owner this removes;
  *   • nothing stops speech unconditionally: the triple "shush" stops it because that is its meaning,
@@ -137,8 +137,22 @@ async function sessionIsIdle(): Promise<boolean> {
 async function handleTap(source: TapSource, pattern: TapPattern): Promise<void> {
   devLog(`[handsFree] tap source=${source} pattern=${pattern}`);
 
+  /**
+   * 2026-10-28 (recheck VOICE-ENG-R2-4) — EVERY EARBUD PRESS IS listeningSession's, NOT ONLY THE SINGLE.
+   * Its subscriber acts on each press the instant it lands, so the presses of a double or triple were
+   * already an open, an "I'm ready" or a close by the time the chain classified here:
+   *   • from idle, press 1 opens the mic — the session is never idle when a 'double' resolves;
+   *   • on earbuds / unknown routes the bridge coalesces presses closer than 350 ms (tapCoalescer), the
+   *     same as the classify window, so a second press never even joined the chain;
+   *   • on a wired remote (150 ms) a close-then-press DID resolve as 'double' with the session idle again,
+   *     and replayed from the start the very line the player had just stopped.
+   * So the earbud double / triple could only ever fire as that wrong replay. The replay and the shush
+   * stay on the watch, which has no other path; on an earbud, a press during a reply is already the
+   * shush (toggle), and "what did you say?" is a question the caddie answers from the conversation.
+   */
+  if (source === 'earbud' && pattern !== 'long_press') return;
+
   if (pattern === 'single') {
-    if (source === 'earbud') return; // listeningSession's subscriber already acted on this press
     try {
       const ls = await import('./listeningSession');
       await ls.toggle();

@@ -14,7 +14,7 @@ import { noteUserTurn, getUserTurnEpoch } from './userTurnClock';
 import { noteCaddieTurn } from './funnelEvents';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from './featureAccess';
 import { getDialog } from './dialogEngine';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_NEEDS_APP, CADDIE_NOTICE_MIC_TROUBLE, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_NEEDS_APP, CADDIE_NOTICE_MIC_OFF, CADDIE_NOTICE_MIC_TROUBLE, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { settleForegroundForMic, micMayBeRefusedNow } from './appForeground';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
@@ -1089,6 +1089,34 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
    * pulses further down, so a Quiet turn is go-ahead, silence, answer.
    */
   const ttsAllowed = settings.voiceEnabled && trustLevel !== 1;
+
+  /**
+   * 2026-10-28 (recheck VOICE-ENG-R2-2) — A MIC THE PLAYER REFUSED IS NOT OURS TO PROMISE. With the
+   * permission permanently denied, the go-ahead cue played, captureUtterance's request came back
+   * refused with no dialog, and bail 'no_permission' is 'silent' (it assumes the OS prompt is on
+   * screen). So the caddie said "What's on your mind?" and then nothing, every press, with no caption
+   * and no log — and an earbud press with the phone pocketed could never have seen a prompt anyway.
+   * Checked before the cue: say where the fix is instead. Logged as diag, not mailed: the player's
+   * own setting is not a defect, but the owner log must show why his presses go nowhere.
+   */
+  // Loaded lazily: voicePermissionService pulls in expo-av, which a screen importing this module must
+  // not need just to render. A load failure fails open (the mic is tried as before).
+  const micBlocked = await import('./voicePermissionService').then((m) => m.isMicPermissionBlocked(), () => false);
+  if (micBlocked) {
+    logVoiceDiag('mic_permission_blocked', { source: 'listeningSession', origin });
+    const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
+    const line = CADDIE_NOTICE_MIC_OFF[lang];
+    try { flashCaption(line); } catch { /* caption optional */ }
+    if (settings.voiceEnabled) {
+      try {
+        const { speakDeviceNotice } = await import('./voiceService');
+        await speakDeviceNotice(line, lang, settings.voiceGender);
+      } catch { /* notice is best-effort */ }
+    }
+    setMine('idle');
+    return;
+  }
+  if (!live()) return;
 
   // Phase 2 — open mic for utterance
   //

@@ -39,6 +39,33 @@ export async function checkMicPermission(): Promise<boolean> {
 }
 
 /**
+ * 2026-10-28 (recheck VOICE-ENG-R2-2) — TRUE ONLY WHEN THE OS WILL NOT EVEN ASK: the microphone is
+ * denied and canAskAgain is false. The listening session reads this BEFORE its go-ahead cue, because
+ * captureUtterance's own request comes back refused at once with no dialog in that state — the caddie
+ * invited the player to talk and then said nothing, on every press. Never prompts. Still askable
+ * (undetermined, or an Android first denial) is false: the capture's request shows the real dialog.
+ * Fails open — a permission read that throws must not take the mic away from a player who has it.
+ * Keeps mic_permission_denied in step both ways, as checkMicPermission does.
+ */
+export async function isMicPermissionBlocked(): Promise<boolean> {
+  try {
+    const current = await Audio.getPermissionsAsync();
+    const hints = useVoiceHintsStore.getState();
+    if (current.granted) {
+      if (hints.mic_permission_denied) hints.setMicGranted();
+      return false;
+    }
+    if (current.canAskAgain === false) {
+      if (!hints.mic_permission_denied) hints.setMicDenied(true);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * True when the user has actively denied microphone access AND hasn't re-enabled
  * voice via Settings. Voice prompts (hints, conversational logging) consult this
  * to stay quiet rather than nag.

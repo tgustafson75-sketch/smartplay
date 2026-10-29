@@ -43,6 +43,18 @@ export const CADDIE_NOTICE_MIC_NEEDS_APP: Record<'en' | 'es' | 'zh', string> = {
 };
 
 /**
+ * 2026-10-28 (recheck VOICE-ENG-R2-2) — the player refused SmartPlay the microphone and the OS will
+ * not ask again (iOS after one "Don't Allow", Android after "Don't allow again"). No tap can fix that,
+ * and no dialog is coming, so the true thing to say is where it gets fixed. Spoken INSTEAD of the
+ * go-ahead cue: inviting him to talk into a mic we are not allowed to open is the defect.
+ */
+export const CADDIE_NOTICE_MIC_OFF: Record<'en' | 'es' | 'zh', string> = {
+  en: 'My mic is off for SmartPlay — turn it on in your phone\'s Settings and I\'m all ears.',
+  es: 'Mi micrófono está desactivado para SmartPlay — actívalo en los Ajustes del teléfono y te escucho.',
+  zh: 'SmartPlay 的麦克风权限已关闭——在手机设置里打开，我就能听到你。',
+};
+
+/**
  * 2026-08-17 — the lines for when the CONNECTION failed, shared by every path that can hit it.
  *
  * These lived privately inside listeningSession while useVoiceCaddie's aborted-transcribe branch

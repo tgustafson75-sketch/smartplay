@@ -223,6 +223,37 @@ describe('one earbud press, one owner', () => {
     cue.release();
   });
 
+  // 2026-10-28 (recheck VOICE-ENG-R2-4) — a wired remote forwards presses 150 ms apart, so the shush
+  // and a quick second press resolved as 'double' with the session already idle: the caddie replayed,
+  // from the start, the line the player had just stopped.
+  it('a wired close-then-press does not replay the line it just stopped', async () => {
+    const reply = deferred();
+    mockState.replyHold = reply.p;
+    const cue = deferred();
+    mockState.cueHold = cue.p;
+    mockState.captures.push({ text: 'what club from here', bail: null, heardSpeech: true, durationMs: 1500 });
+    await press(clock + 5_000);
+    await waitPattern();
+    cue.release();
+    await flush(80);
+    expect(ls.getSessionState()).toBe('responding');
+    expect(mockState.spoken).toEqual(['Hit the seven.']);
+    const at = clock + 4_000;
+    await press(at);                                 // the shush
+    await press(at + 200);                           // a second press inside the pattern window
+    expect(ls.getSessionState()).toBe('idle');
+    await waitPattern();                             // resolves as 'double' with the session idle
+    expect(mockState.spoken).toEqual(['Hit the seven.']);   // not spoken a second time
+    expect(ls.getSessionState()).toBe('idle');
+    reply.release();
+  });
+
+  it('the watch double still replays the last line from idle', async () => {
+    mockState.watchTap!('double');
+    await flush(80);
+    expect(mockState.spoken).toEqual(['Hit the seven.']);
+  });
+
   it('the watch, which has no other path, still opens the mic with one tap', async () => {
     const cue = deferred();
     mockState.cueHold = cue.p;
