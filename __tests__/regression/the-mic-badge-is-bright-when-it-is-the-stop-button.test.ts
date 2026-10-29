@@ -19,7 +19,7 @@ jest.setTimeout(120_000);
 
 describe('the mic badge dims only when a tap would really be dropped', () => {
   const { tapIsDroppedIn } = require('../../services/listeningSession') as typeof import('../../services/listeningSession'); // re-exported from services/voice/tapIsDroppedIn
-  // What the badge renders for a state (CaddieMicBadge: `tapIsDroppedIn(listeningState) ? 0.4 : 1`).
+  // What the badge renders for a state (CaddieMicBadge: `micTapLook(listeningState).opacity`).
   const badgeOpacityFor = (st: string) => (tapIsDroppedIn(st) ? 0.4 : 1);
 
   it('THE BUG: full opacity while LISTENING — tapping now is "I\'m done"', () => {
@@ -41,7 +41,8 @@ describe('the mic badge dims only when a tap would really be dropped', () => {
 
   it('the dim is the one the badge renders, and toggle() still takes listening/opening taps', () => {
     const badge = fs.readFileSync(path.resolve(__dirname, '../../components/caddie/CaddieMicBadge.tsx'), 'utf-8');
-    expect(badge).toContain('const badgeOpacity = tapIsDroppedIn(listeningState) ? 0.4 : 1;');
+    // 2026-10-28 (VC-R2-5) — through micTapLook, which the bottom-bar mic shares.
+    expect(badge).toContain('const badgeOpacity = micTapLook(listeningState).opacity;');
     expect(badge).toContain('opacity: badgeOpacity');
     // The rule's owner is the function that drops the tap: listening and opening are endpoint taps.
     const ls = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');

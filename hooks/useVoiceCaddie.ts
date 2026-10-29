@@ -36,6 +36,7 @@ import {
   forceCloseSession,
   getSessionState,
   toggle as toggleListeningSession,
+  avatarTapRoute,
 } from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
 import { carriesYardageCorrection } from '../services/intents/stateYardageHandler';
@@ -376,10 +377,13 @@ export const useVoiceCaddie = ({
     // Knowing this path held the mic wasn't enough — the listening session had no way to TAKE it.
     // Hand it over on demand instead of letting the other path talk to a busy microphone.
     // Indirected through a ref so this mount-once effect always calls the CURRENT implementation.
-    registerExternalMicRelease(() => releaseMicRef.current());
+    const leaveMicRelease = registerExternalMicRelease(() => releaseMicRef.current());
     // Leave the SET with our own check only — register(null) cleared every holder's, so an unmount
     // here made the audio meter and impact detector invisible as mic holders. (2026-09-29 review)
-    return () => { leaveMicCheck(); registerExternalMicRelease(null); };
+    // 2026-10-28 (recheck VC-R2-2) — the release half still did exactly that: register(null) emptied
+    // the release set, so after a tab remount nothing could take the mic back from the impact
+    // detector, the audio meter or the auto-listen recorder. Leave with our own release only.
+    return () => { leaveMicCheck(); leaveMicRelease(); };
   }, []);
   const isProcessingRef = useRef(false);
   /**
@@ -2208,12 +2212,18 @@ export const useVoiceCaddie = ({
      * Now the avatar defers to the session's own endpoint semantics: while the mic is open a tap
      * means "I'm done, take it" on every surface. Only a session that is thinking or speaking gets
      * force-closed — there, a tap genuinely does mean "stop". [[no-half-fixes-enforce-every-surface]]
+     *
+     * 2026-10-28 (recheck VC-R2-3) — that was applied to 'listening' only. 'opening' (painted as idle,
+     * so it is when he taps the face to talk) force-closed the turn the badge had just opened, where
+     * the badge's own tap means "I'm ready". toggle() now owns every state of its session; only a hung
+     * one (in flight, state back at idle) is force-closed here. See avatarTapRoute.
      */
-    if (getSessionState() === 'listening') {
+    const sessionRoute = avatarTapRoute(getSessionState(), isSessionInFlight());
+    if (sessionRoute === 'session') {
       try { void toggleListeningSession(); } catch { /* toggle guards itself */ }
       return;
     }
-    if (isSessionInFlight()) {
+    if (sessionRoute === 'force_close') {
       try { forceCloseSession(); } catch { /* best-effort */ }
       isProcessingRef.current = false;
       wrappedOnVoiceStateChange('idle');

@@ -4,7 +4,8 @@ import { Audio } from 'expo-av';
 // 2026-06-08 (audit M1) — route audio-mode writes through the serial queue
 // so an Auto-Listen mic restart can't race a TTS playback mode write and
 // flip routing / silent-mode mid-utterance.
-import { setAudioModeSerial } from '../services/voiceService';
+import { setAudioModeSerial, registerExternalMicCheck, registerExternalMicRelease, type MicReleaseVerdict } from '../services/voiceService';
+import { getSessionState, isSessionInFlight } from '../services/listeningSession';
 import { useSettingsStore } from '../store/settingsStore';
 import { isSmartMotionActive, isSmartMotionRecording } from '../services/smartMotionRecordBus';
 import { createSpeechOnsetGate } from '../services/voice/speechOnset';
@@ -20,6 +21,12 @@ import { createSpeechOnsetGate } from '../services/voice/speechOnset';
 export { SPEECH_THRESHOLD_DB } from '../services/voice/speechOnset';
 export const SILENCE_DURATION_MS   = 2800;
 export const MIN_SPEECH_DURATION_MS = 500;
+/**
+ * 2026-10-28 (recheck VC-R2-2) — an utterance this long is finished whether or not the room went
+ * quiet (wind, a cart engine, a TV in the clubhouse). Same cap the Caddie tab's own tap capture uses,
+ * so a held noise cannot keep the avatar on 'listening' for the rest of the visit.
+ */
+export const MAX_UTTERANCE_MS = 18_000;
 
 // 2026-06-16 (Tim — voice sensitivity in background noise) — the bar rides a live ambient floor.
 // 2026-10-20 (practice bay) — floor seeded from the room, and a strike from the next bay no longer
@@ -33,6 +40,11 @@ interface UseVoiceActivityDetectionOptions {
   enabled: boolean;
   onSpeechStart: () => void;
   onSpeechEnd: (audioUri: string) => void;
+  /**
+   * A turn onSpeechStart announced will not reach onSpeechEnd: too short to be a word, or the mic was
+   * stopped or handed to a session mid-utterance. The caller undoes what onSpeechStart did.
+   */
+  onSpeechAbandoned?: () => void;
 }
 
 interface UseVoiceActivityDetectionResult {
@@ -75,6 +87,7 @@ export function useVoiceActivityDetection({
   enabled,
   onSpeechStart,
   onSpeechEnd,
+  onSpeechAbandoned,
 }: UseVoiceActivityDetectionOptions): UseVoiceActivityDetectionResult {
   const [isListening, setIsListening] = useState(false);
   /**
@@ -104,6 +117,8 @@ export function useVoiceActivityDetection({
   const onSpeechEndRef   = useRef(onSpeechEnd);
   useEffect(() => { onSpeechStartRef.current = onSpeechStart; }, [onSpeechStart]);
   useEffect(() => { onSpeechEndRef.current   = onSpeechEnd;   }, [onSpeechEnd]);
+  const onSpeechAbandonedRef = useRef(onSpeechAbandoned);
+  useEffect(() => { onSpeechAbandonedRef.current = onSpeechAbandoned; }, [onSpeechAbandoned]);
   // 2026-06-08 (audit M3) — read `enabled` through a ref in
   // finishRecording's restart check; the status-update callback captured
   // the value at recording-creation time, so a TRAILING→finish in flight
@@ -124,6 +139,10 @@ export function useVoiceActivityDetection({
     // caddie-tab gate didn't re-render when SmartMotion took over, this catches
     // the camera owning the mic on the next cycle. No phantom recorder under it.
     if (isSmartMotionActive() || isSmartMotionRecording()) return;
+    // 2026-10-28 (recheck VC-R2-2) — and the same for a listening session (badge, bottom bar,
+    // earbud): it owns the mic from the tap. The caddie-tab gate re-renders a beat later; this
+    // catches the self-restart in finishRecording landing in that gap.
+    if (isSessionInFlight() || getSessionState() !== 'idle') return;
     startingRef.current = true;
     const myToken = stopTokenRef.current;
     try {
@@ -177,6 +196,9 @@ export function useVoiceActivityDetection({
             speakStartRef.current = now;
             onSpeechStartRef.current();
           }
+        } else if (now - speakStartRef.current >= MAX_UTTERANCE_MS) {
+          vadStateRef.current = 'IDLE';
+          finishRecording();
         } else if (state === 'SPEAKING') {
           if (!isAbove) {
             vadStateRef.current = 'TRAILING';
@@ -195,6 +217,11 @@ export function useVoiceActivityDetection({
             ) {
               vadStateRef.current = 'IDLE';
               finishRecording();
+            } else if (silenceDuration >= SILENCE_DURATION_MS) {
+              // A cough or a click — too short to be a word. It used to sit in TRAILING until the
+              // next sound, with the caller still showing 'listening'. Drop it and keep waiting.
+              vadStateRef.current = 'IDLE';
+              discardAndRestart();
             }
           }
         }
@@ -236,11 +263,29 @@ export function useVoiceActivityDetection({
     }
   };
 
+  /** Throw the clip away (the turn onSpeechStart announced is not happening) and listen again. */
+  const discardAndRestart = async (): Promise<void> => {
+    const rec = recordingRef.current;
+    recordingRef.current = null;
+    onsetGateRef.current.reset();
+    try { onSpeechAbandonedRef.current?.(); } catch { /* caller's state only */ }
+    if (rec) {
+      try { await rec.stopAndUnloadAsync(); } catch { /* noop */ }
+    }
+    if (enabledRef.current) startRecording();
+    else setIsListening(false);
+  };
+
   const stopRecording = async (): Promise<void> => {
     stopTokenRef.current += 1; // cancel any startRecording in flight (audit)
     const rec = recordingRef.current;
     recordingRef.current = null;
+    // A turn cut off here never reaches onSpeechEnd — tell the caller, or its 'listening' sticks.
+    const midUtterance = vadStateRef.current !== 'IDLE';
     vadStateRef.current = 'IDLE';
+    if (midUtterance) {
+      try { onSpeechAbandonedRef.current?.(); } catch { /* caller's state only */ }
+    }
     onsetGateRef.current.reset();
     setIsListening(false);
     currentLevelRef.current = -160;
@@ -251,6 +296,32 @@ export function useVoiceActivityDetection({
       } catch {}
     }
   };
+
+  /**
+   * 2026-10-28 (recheck VC-R2-2) — JOIN THE MICROPHONE-OWNER REGISTRY. This recorder held the mic for
+   * the whole round and was in neither set, so a badge / bottom-bar / earbud turn could neither see it
+   * nor take the mic back: its capture died on "Only one Recording object" (bail 'error', the retry,
+   * then the mic-trouble line). It reports itself as a holder only while it has heard a human — the
+   * idle wait is not a turn, and reporting it would hush every proactive line for the round. The
+   * release always runs (voiceService asks every owner) and, like the tap path's, submits a capture
+   * that heard the player rather than binning his words.
+   */
+  useEffect(() => {
+    const leaveCheck = registerExternalMicCheck(() => recordingRef.current !== null && vadStateRef.current !== 'IDLE');
+    const leaveRelease = registerExternalMicRelease(async (): Promise<MicReleaseVerdict> => {
+      if (!recordingRef.current && !startingRef.current) return 'none';
+      const heard = recordingRef.current !== null && vadStateRef.current !== 'IDLE'
+        && Date.now() - speakStartRef.current >= MIN_SPEECH_DURATION_MS;
+      if (heard) {
+        vadStateRef.current = 'IDLE';
+        await finishRecording();   // its restart is refused while the session holds the mic
+        return 'submitted';
+      }
+      await stopRecording();
+      return 'discarded';
+    });
+    return () => { leaveCheck(); leaveRelease(); };
+  }, []);
 
   useEffect(() => {
     if (enabled && Platform.OS !== 'web') {

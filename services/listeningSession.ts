@@ -491,7 +491,29 @@ export function isActiveListeningEnabled(): boolean {
 
 // 2026-10-28 (recheck VC-4) — which states drop a tap, for the mic badge's dim. A leaf module so the
 // badge can read it without loading the whole voice graph; it must stay in step with toggle() below.
-export { tapIsDroppedIn } from './voice/tapIsDroppedIn';
+export { tapIsDroppedIn, avatarTapRoute } from './voice/tapIsDroppedIn';
+
+/**
+ * 2026-10-28 (recheck VC-R2-1) — AN AUTOMATIC MIC HAND-OFF YIELDS TO A SESSION THE PLAYER OPENED.
+ *
+ * The Caddie tab hands the mic over on its own after a reply that asks a question (onReadyToListen),
+ * after the get-to-know opener, and after a SmartMotion set. All three called the avatar's tap
+ * handler, which reads a live session as a TAP on it. But the commonest moment for the player to
+ * press the badge, the bottom bar or an earbud is while the caddie is asking — so the hand-off then
+ * landed on HIS session: during 'opening' it force-closed it (cue cut, turn gone), during 'listening'
+ * it ended his capture at ~0 s ("Didn't catch that"). Nothing said why.
+ *
+ * The hand-off is an offer of the turn. If a session is open the player has already taken it, so the
+ * offer is dropped — logged on device, never mailed: nothing failed.
+ */
+export function handMicToPlayer(open: () => void, from: string): boolean {
+  if (sessionInFlight || state !== 'idle') {
+    try { logVoiceDiag('auto_listen_yielded', { source: 'listeningSession', from, sessionState: state }); } catch { /* diag only */ }
+    return false;
+  }
+  open();
+  return true;
+}
 
 /**
  * Toggle the listening session. Open if idle; close if any other state.

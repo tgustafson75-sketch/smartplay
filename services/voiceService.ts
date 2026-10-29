@@ -299,16 +299,22 @@ export const releaseExternalMic = async (): Promise<MicReleaseVerdict> => {
   // (b) EVERY other registered owner — the tap path's recording (useVoiceCaddie recordingRef) and
   // the acoustic impact detector's session recording. Release them all: a deliberate user turn
   // outranks any of them, and releasing only the first is how a second holder stayed invisible.
-  if (isExternalMicActive()) {
-    for (const release of externalMicReleases) {
-      try {
-        const ownerVerdict = await release();
-        if (ownerVerdict !== 'none') {
-          verdict = ownerVerdict === 'submitted' ? 'submitted' : verdict === 'none' ? ownerVerdict : verdict;
-        }
-      } catch (e) {
-        console.log('[voice] mic handover failed for one owner', e);
+  /**
+   * 2026-10-28 (recheck VC-R2-2) — asked of EVERY release, not only when isExternalMicActive() says
+   * so. The Caddie tab's auto-listen recorder holds the mic for the whole round while it waits for
+   * speech, but it reports itself as a holder only once it has heard a human: reporting the idle wait
+   * would read as "the player is mid-turn" to every proactive line and supersede check for the whole
+   * round. So the check can be false while a recorder is still physically open. Each release already
+   * answers 'none' when it holds nothing, so asking all of them is safe.
+   */
+  for (const release of externalMicReleases) {
+    try {
+      const ownerVerdict = await release();
+      if (ownerVerdict !== 'none') {
+        verdict = ownerVerdict === 'submitted' ? 'submitted' : verdict === 'none' ? ownerVerdict : verdict;
       }
+    } catch (e) {
+      console.log('[voice] mic handover failed for one owner', e);
     }
   }
 

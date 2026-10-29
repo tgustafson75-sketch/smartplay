@@ -42,6 +42,7 @@ import {
   type Persona,
 } from '../../lib/persona';
 import { detectStrikes, type MeterSample } from '../../services/swing/strikeDetector';
+import { avatarTapRoute } from '../../services/voice/tapIsDroppedIn';
 import { classifyStroke } from '../../utils/geometryFitting';
 import { mergeSwingDetections, correlateStrikesWithVideo, filterReboundStrikes } from '../../services/swing/swingSegmentation';
 import { evaluateFraming } from '../../services/swing/framingCheck';
@@ -12078,12 +12079,15 @@ check('LOCK: a second tap means the same thing on the avatar and on the caddie m
   (() => {
     const v = read('hooks/useVoiceCaddie.ts');
     const h = v.slice(v.indexOf('const handleMicPress = useCallback'));
-    const iSubmit = h.indexOf("getSessionState() === 'listening'");
+    const iSubmit = h.indexOf("if (sessionRoute === 'session')");
     const iForceClose = h.indexOf('forceCloseSession()');
     // While the mic is open the avatar must DEFER to the session's own endpoint (submit), and that
     // check must come FIRST — reaching forceCloseSession while listening discards the utterance,
     // which is the asymmetry: same two taps, answered or binned depending on which icon you touched.
-    const defersFirst = iSubmit > -1 && iForceClose > iSubmit && /toggleListeningSession\(\)/.test(h);
+    // 2026-10-28 (VC-R2-3) — the deferral is avatarTapRoute: every live session state goes to toggle().
+    const defersFirst = iSubmit > -1 && iForceClose > iSubmit && /toggleListeningSession\(\)/.test(h) &&
+      /const sessionRoute = avatarTapRoute\(getSessionState\(\), isSessionInFlight\(\)\);/.test(h) &&
+      avatarTapRoute('listening', true) === 'session' && avatarTapRoute('opening', true) === 'session';
     // And the reverse direction: a handover of a capture that heard speech submits it.
     const submitsSpeech = /if \(heardSpeech && uri\)[\s\S]{0,300}?processAudioUri\(uri\)[\s\S]{0,80}?return 'submitted';/.test(v);
     // ALL THREE mic owners must be releasable. The follow-up-listen loop holds the mic through

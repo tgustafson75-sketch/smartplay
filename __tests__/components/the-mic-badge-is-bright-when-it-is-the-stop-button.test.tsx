@@ -15,7 +15,10 @@ const mockToggle = jest.fn(async () => undefined);
 // The voice graph (expo-av) cannot load here; the badge's dim rule is its own leaf module and stays real.
 jest.mock('../../services/listeningSession', () => ({ toggle: () => mockToggle() }));
 jest.mock('../../services/caddiePresence', () => ({ applyPresence: jest.fn() }));
-jest.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ colors: { accent: '#00c896' } }) }));
+// Every other token falls back to one colour — the bottom bar reads several (VC-R2-5).
+jest.mock('../../contexts/ThemeContext', () => ({
+  useTheme: () => ({ colors: new Proxy({ accent: '#00c896' } as Record<string, string>, { get: (t, k: string) => t[k] ?? '#123456' }) }),
+}));
 
 beforeAll(async () => {
   await i18n.use(initReactI18next).init({
@@ -67,5 +70,41 @@ describe('the mic badge as a control', () => {
   it('full opacity at rest and while the caddie speaks', async () => {
     await mountIn('idle');
     expect(badgeOpacity()).toBe(1);
+  }, 60_000);
+});
+
+/**
+ * 2026-10-28 (recheck VC-R2-5) — and the bottom-bar mic, the other half of the pair. It stayed bright
+ * (and labelled "Tap to talk") while toggle() dropped its taps.
+ */
+jest.mock('../../hooks/useTourTarget', () => ({ useTourTarget: () => ({ ref: () => undefined, onLayout: () => undefined }) }));
+jest.mock('../../store/flagStore', () => ({ useFlag: () => true }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, usePathname: () => '/caddie' }));
+jest.mock('../../services/safeBack', () => ({ safeBack: jest.fn() }));
+
+async function mountBarIn(state: State) {
+  const { useListeningSessionStore } = require('../../store/listeningSessionStore');
+  useListeningSessionStore.getState().setState(state);
+  const { CaddieBottomBar } = require('../../components/caddie/CaddieBottomBar');
+  render(<CaddieBottomBar />);
+}
+function barMic(): { opacity: number; label: string } {
+  const el = screen.getByLabelText(/^(Tap to talk to your caddie|Your caddie is thinking)$/);
+  const flat = StyleSheet.flatten((el as unknown as { props: { style?: unknown } }).props.style as never) as { opacity?: number } | undefined;
+  return { opacity: flat?.opacity ?? 1, label: String((el as unknown as { props: { accessibilityLabel?: string } }).props.accessibilityLabel) };
+}
+
+describe('the bottom-bar mic as a control', () => {
+  it('THE BUG: dims while THINKING and says why', async () => {
+    await mountBarIn('thinking');
+    expect(barMic()).toEqual({ opacity: 0.4, label: 'Your caddie is thinking' });
+  }, 60_000);
+
+  it('full opacity while LISTENING (a tap is "I\'m done"), OPENING and at rest', async () => {
+    for (const st of ['listening', 'opening', 'idle'] as State[]) {
+      await mountBarIn(st);
+      expect(barMic()).toEqual({ opacity: 1, label: 'Tap to talk to your caddie' });
+      screen.unmount();
+    }
   }, 60_000);
 });

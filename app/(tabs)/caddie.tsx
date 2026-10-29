@@ -74,7 +74,8 @@ import { Asset } from 'expo-asset';
 // (bundled-mp3 opener) is no longer used.
 import { generateProactiveOpener, proactiveLineOrFallback, type ProactiveLine } from '../../services/conversationalBrain';
 import { noteUserTurn } from '../../services/userTurnClock';
-import { isSessionInFlight } from '../../services/listeningSession';
+import { isSessionInFlight, handMicToPlayer } from '../../services/listeningSession';
+import { autoListenMayHoldMic } from '../../services/voice/autoListenGate';
 import { awaitGreetingComplete } from '../greeting';
 import { isOpenerClaimed, claimOpenerSlot } from '../../services/openerGuard';
 import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
@@ -1190,7 +1191,8 @@ export default function CaddieTab() {
               setVoiceState((prev) => (prev === 'proactive' ? 'idle' : prev));
               // Hand the mic to the player so the answer is heard without hunting for a
               // button — hands-free is the product. Best-effort; a failure just means a tap.
-              try { handleMicPressRef.current(); } catch { /* best-effort */ }
+              // Yields if he already tapped the badge / bar / earbud to answer (VC-R2-1).
+              try { handMicToPlayer(() => handleMicPressRef.current(), 'get_to_know_opener'); } catch { /* best-effort */ }
             });
         }
         })();
@@ -1465,7 +1467,7 @@ export default function CaddieTab() {
         configureAudioForSpeech()
           .then(() => speak(line, vg, lang, apiUrl, { userInitiated: true }))
           .then(() => new Promise<void>((r) => setTimeout(r, 500)))
-          .then(() => { handleMicPressRef.current(); })
+          .then(() => { handMicToPlayer(() => handleMicPressRef.current(), 'smartmotion_session_complete'); })
           .catch(() => {});
       }
     });
@@ -1910,8 +1912,15 @@ export default function CaddieTab() {
   // toggle the user flipped. Local Mode is the master conservation switch: it now truly
   // suppresses always-listening (and Proactive, below). Settings greys these out under
   // Local Mode so the conflict is visible, not silent.
-  const vadEnabled = autoListenEnabled && !localMode && isRoundActive && appActive && voiceState === 'idle'
-    && !isSmartMotionActive() && !isSmartMotionRecording();
+  // 2026-10-28 (recheck VC-R2-2) — and on the listening session (badge, bottom bar, earbud), which
+  // never touches voiceState; and a 'listening' VAD itself announced no longer cancels VAD's own turn.
+  // See services/voice/autoListenGate.
+  const [vadOwnsTurn, setVadOwnsTurn] = useState(false);
+  const vadEnabled = autoListenMayHoldMic({
+    autoListen: autoListenEnabled, localMode, roundActive: isRoundActive, appActive,
+    tabVoiceState: voiceState, sessionState: earbudState, vadOwnsTurn,
+    smartMotion: isSmartMotionActive() || isSmartMotionRecording(),
+  });
 
   // ── Keep Vercel warm ────────────────────
   // 2026-06-16 (Tim — voice cleanup) — REMOVED the per-tab keepWarm setInterval that
@@ -2726,7 +2735,9 @@ export default function CaddieTab() {
       setVoiceState(state);
       if (state !== 'listening') setKevinEmotion(null);
     },
-    onReadyToListen: () => { handleMicPressRef.current(); },
+    // 2026-10-28 (recheck VC-R2-1) — an offer of the turn, not a tap: if the player already opened a
+    // session (badge, bottom bar, earbud) while the question was being asked, this yields to it.
+    onReadyToListen: () => { handMicToPlayer(() => handleMicPressRef.current(), 'tab_reply_question'); },
     // 2026-09-29 (review) — a superseded reply releases only its own 'thinking'; a newer turn's
     // 'listening' / 'arming' stands.
     onSuperseded: () => { setVoiceState((prev) => (prev === 'thinking' ? 'idle' : prev)); },
@@ -2830,16 +2841,25 @@ export default function CaddieTab() {
     onSpeechStart: () => {
       // The player started talking — a proactive line generating now must not land on this turn.
       noteUserTurn();
+      setVadOwnsTurn(true);
       setKevinEmotion('listening');
       setVoiceState('listening');
     },
     onSpeechEnd: (uri) => {
+      setVadOwnsTurn(false);
       setKevinEmotion(null);
       // source: 'vad' is a breadcrumb only — there is NO wake-word gate.
       // The gate was removed because it broke nameless queries like "how
       // are you". VAD-detected speech is routed to the brain exactly like a
       // tap; VAD itself is already scoped to in-round idle.
       processAudioUri(uri, { source: 'vad' });
+    },
+    // Too short to be a word, or the mic went to a session mid-utterance: undo onSpeechStart's
+    // 'listening' (only if nothing newer has moved the tab on).
+    onSpeechAbandoned: () => {
+      setVadOwnsTurn(false);
+      setKevinEmotion(null);
+      setVoiceState((prev) => (prev === 'listening' ? 'idle' : prev));
     },
   });
 

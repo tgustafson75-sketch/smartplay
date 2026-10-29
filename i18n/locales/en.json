@@ -3250,6 +3250,7 @@
     "accessibility_label": {
       "back": "Back",
       "tap_to_talk_to_your": "Tap to talk to your caddie",
+      "caddie_is_thinking": "Your caddie is thinking",
       "type_a_question_or_command": "Type a question or command for your caddie",
       "send_to_caddie": "Send to caddie",
       "hide_keyboard": "Hide keyboard",

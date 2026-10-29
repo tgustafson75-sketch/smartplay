@@ -26,7 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import { toggle as toggleListening } from '../../services/listeningSession';
-import { tapIsDroppedIn } from '../../services/voice/tapIsDroppedIn';
+import { micTapLook } from '../../services/voice/tapIsDroppedIn';
 import {
   useTrustLevelStore,
   type TrustLevel,
@@ -85,7 +85,8 @@ export function CaddieMicBadge({
   // opening / listening / thinking, so the badge looked locked at the exact moment it was the "I'm
   // done" button (its own label: "Stop talking to caddie"). The session owns the rule — see
   // tapIsDroppedIn — so the dim cannot drift from what toggle() does with the tap again.
-  const badgeOpacity = tapIsDroppedIn(listeningState) ? 0.4 : 1;
+  // 2026-10-28 (VC-R2-5) — micTapLook, shared with the bottom-bar mic so the two cannot disagree.
+  const badgeOpacity = micTapLook(listeningState).opacity;
 
   const ringColor = isThinking ? '#F5A623' : isActive ? colors.accent : 'transparent';
   const micColor = isActive ? '#060f09' : '#060f09';

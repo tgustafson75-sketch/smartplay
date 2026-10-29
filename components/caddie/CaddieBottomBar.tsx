@@ -24,6 +24,7 @@ import { router, usePathname } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { safeBack } from '../../services/safeBack';
 import { toggle as toggleListening , handleTranscribedUtterance } from '../../services/listeningSession';
+import { micTapLook } from '../../services/voice/tapIsDroppedIn';
 import { useTourTarget } from '../../hooks/useTourTarget';
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import { useFlag } from '../../store/flagStore';
@@ -71,6 +72,10 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
   const listeningState = useListeningSessionStore((s) => s.state);
   const isListening = listeningState === 'listening';
   const busy = listeningState === 'thinking' || listeningState === 'responding';
+  // 2026-10-28 (recheck VC-R2-5) — the same rule as the header badge: dim exactly while toggle() would
+  // drop a tap ('thinking'). The bar stayed bright there, so the player kept tapping THE talk surface
+  // and got a buzz and nothing else. One rule (micTapLook) for both mics.
+  const micLook = micTapLook(listeningState);
   const [text, setText] = useState('');
   const [canForward, setCanForward] = useState(false);
   // 2026-08-01 (tester — "need to be able to minimize the keyboard"). When the field is focused and
@@ -139,9 +144,12 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         ref={micTarget.ref}
         onLayout={micTarget.onLayout}
         onPress={onMic}
-        style={[s.mic, isListening && s.micActive]}
+        style={[s.mic, isListening && s.micActive, { opacity: micLook.opacity }]}
         accessibilityRole="button"
-        accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.tap_to_talk_to_your')}
+        accessibilityLabel={micLook.dropped
+          ? t('caddie_caddie_bottom_bar.accessibility_label.caddie_is_thinking')
+          : t('caddie_caddie_bottom_bar.accessibility_label.tap_to_talk_to_your')}
+        accessibilityState={{ disabled: micLook.dropped }}
       >
         <Image source={MIC_CADDIE} style={s.micImg} resizeMode="contain" />
       </TouchableOpacity>
