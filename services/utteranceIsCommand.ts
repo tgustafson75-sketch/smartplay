@@ -26,7 +26,9 @@
  *     "last year", "yesterday", "should have" …), a HABIT ("always", "every time", "usually",
  *     "once"), or REPORTED speech ("told me", "no way I …");
  *   · about someone else — "my partner got a 4", "the guys ahead parred it", "he made a 5". The
- *     player is telling the caddie what happened in his group, not giving it an order.
+ *     player is telling the caddie what happened in his group, not giving it an order;
+ *   · a conditional or a plan — "if I go for it and miss", "let me know when", "after this hole",
+ *     "later", "tomorrow". The act is for a moment that has not arrived.
  *
  * WHAT STILL IS: a polite request is a command in English. "Can you open SmartFinder", "could you
  * pull up my last round", "will you mark the pin" all name an action verb straight after "can you" —
@@ -37,7 +39,7 @@
  */
 
 /** Fillers and a vocative ("Kevin, …") that may precede the real first word. */
-const LEAD_IN = String.raw`^(?:(?:hey|ok|okay|yo|so|um|uh|hi|well|and|but|alright|all\s+right)[\s,]+)*(?:[a-z]+,\s*)?`;
+export const LEAD_IN = String.raw`^(?:(?:hey|ok|okay|yo|so|um|uh|hi|well|and|but|alright|all\s+right)[\s,]+)*(?:[a-z]+,\s*)?`;
 
 const INTERROGATIVE_OPENER = new RegExp(
   LEAD_IN
@@ -87,12 +89,38 @@ const OTHER_PERSON = new RegExp(
 const NAMED_SCORER = /(?:^|[,.;]\s*)(?!(?:I|Just|Finally|So|Ok|Okay|Yeah|Well|Hey|Then|And|But|Also|Actually|Only|Still|We|Kevin|Serena)\b)[A-Z][a-z]+\s+(?:got|made|shot|had|carded|scored|took|bogeyed|birdied|eagled|parred|double[\s-]*bogeyed)\b/;
 const SPEAKER = /\b(?:i|i'?m|im|i'?ve|i'?ll|i'?d|me|myself)\b/i;
 
+/**
+ * 2026-10-28 (Brain review r9) — A CONDITIONAL OR A PLAN IS NOT AN ORDER EITHER. "If I go for it and
+ * miss I'm dead" and "Let me know when I should go for it" set risk mode to aggressive, "I need to go
+ * home after this hole" left the round screen mid-hole, "I want to scan my scorecard after the round"
+ * opened the importer. A leading if/unless, an "if I / if my" clause, "let me know when", or a moment
+ * that has not arrived ("after this hole", "later", "tomorrow", "next time") is the player thinking
+ * aloud. "When" already opens a question. A time inside an explicit open ("my round from yesterday")
+ * is in the past, so it is untouched.
+ */
+const CONDITIONAL_OR_FUTURE = new RegExp(
+  LEAD_IN + String.raw`(?:if|unless|even\s+if|in\s+case|suppose|supposing|assuming)\b`
+  + String.raw`|\b(?:if|unless)\s+(?:i|i'?m|im|we|my)\b|\blet\s+me\s+know\b|\bafter\s+(?:this|the|that)\s+(?:hole|round|shot|one)\b`
+  + String.raw`|\b(?:later(?:\s+on)?|tomorrow|tonight|someday|some\s+day|next\s+(?:time|week|month|year|season|weekend))\b`,
+  'i',
+);
+
 /** True when the utterance is shaped like a question (and is not a polite request). */
 export function isQuestionShaped(utterance: string): boolean {
   const t = (utterance ?? '').trim();
   if (!t) return false;
   if (POLITE_REQUEST.test(t)) return false;
   return INTERROGATIVE_OPENER.test(t) || /\?\s*$/.test(t);
+}
+
+/** True when the utterance is a polite request ("can you take me home") — a command, whatever else it says. */
+export function isPoliteRequest(utterance: string): boolean {
+  return POLITE_REQUEST.test((utterance ?? '').trim());
+}
+
+/** True when the act is conditional or for later — "if I …", "let me know when", "after this hole", "tomorrow". */
+export function isConditionalOrFuture(utterance: string): boolean {
+  return CONDITIONAL_OR_FUTURE.test((utterance ?? '').replace(/’/g, "'").trim());
 }
 
 /** True when the utterance is told as a story — negated, past, hypothetical, habitual or reported — not given as an order. */
@@ -122,11 +150,12 @@ export function isAboutSomeoneElse(utterance: string): boolean {
 
 /**
  * The shared guard: true when a pre-brain shortcut must NOT act on this utterance, because it is a
- * question, a story or a report about someone else rather than an instruction. Callers send it to the
- * caddie instead.
+ * question, a story, a report about someone else or a conditional/plan rather than an instruction.
+ * Callers send it to the caddie instead.
  */
 export function isNotACommand(utterance: string): boolean {
-  return isQuestionShaped(utterance) || isStoryFramed(utterance) || isAboutSomeoneElse(utterance);
+  return isQuestionShaped(utterance) || isStoryFramed(utterance) || isAboutSomeoneElse(utterance)
+    || isConditionalOrFuture(utterance);
 }
 
 /**

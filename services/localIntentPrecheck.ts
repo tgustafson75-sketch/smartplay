@@ -32,7 +32,9 @@ import type { VoiceIntent } from '../types/voiceIntent';
 import { ACTIVE_PERSONAS, type Persona } from '../lib/persona';
 import { isSmartMotionActive } from './smartMotionRecordBus';
 import { resolveSpokenCourse } from './courseNameResolver';
-import { isAboutSomeoneElse, isQuestionShaped, isStoryFramed } from './utteranceIsCommand';
+import {
+  LEAD_IN, isAboutSomeoneElse, isConditionalOrFuture, isPoliteRequest, isQuestionShaped, isStoryFramed,
+} from './utteranceIsCommand';
 import { routineAsk } from './routineUtterance';
 
 interface Pattern {
@@ -333,8 +335,23 @@ const PATTERNS: Pattern[] = [
   // Anchored on UNAMBIGUOUS handedness terms ("left/right-handed", "lefty", "righty", "southpaw")
   // so aiming/direction talk ("aim left", "the green's to the right", "go left") can NEVER trigger it.
   // Routes to changeSettingHandler, which sets the profile the swing analysis reads.
+  //
+  // 2026-10-28 (Brain review r9) — and only as a SELF-DECLARATION or an ORDER. Matched anywhere,
+  // "We got paired with a lefty", "Phil Mickelson is a lefty", "I'm playing with a lefty today" and
+  // "I putt left handed" each set handedness=left — mirroring every later swing read — and "This hole
+  // is tough for a righty" set right. The whole utterance now has to be "I'm (a) lefty" / "I play
+  // southpaw" / "set me to left-handed" / a bare "lefty"; anything else mentions the word and is the
+  // caddie's.
   {
-    rx: /\b(left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty)\b/i,
+    rx: new RegExp(
+      LEAD_IN
+      + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?`
+      + String.raw`(?:(?:i'?m|im|i\s+am|i\s+play(?:\s+as)?|i\s+swing|i\s+golf|set\s+me\s+(?:to|as)|set\s+(?:my\s+)?handedness\s+to|`
+      + String.raw`switch\s+(?:me\s+)?to|change\s+(?:me\s+)?to|make\s+me|put\s+me\s+(?:down\s+)?as)\s+)?(?:a\s+)?`
+      + String.raw`(left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty)(?:\s+(?:golfer|player))?`
+      + String.raw`(?:[\s,]+(?:now|actually|too|though|by\s+the\s+way|please))*\s*[.!]?$`,
+      'i',
+    ),
     build: (raw, m) => intent(raw, 'change_setting', {
       setting_name: 'handedness',
       new_value: /left|lefty|southpaw/i.test(m[1]) ? 'left' : 'right',
@@ -355,8 +372,29 @@ const PATTERNS: Pattern[] = [
   },
   {
     // Theme — "mode" anchors it (never "turn on the lights").
-    rx: /\b(?:switch to |turn on |use |go )?(dark|light)\s+mode\b/i,
-    build: (raw, m) => intent(raw, 'change_setting', { setting_name: 'theme', new_value: m[1].toLowerCase() }),
+    //
+    // 2026-10-28 (Brain review r9) — and the whole utterance is the order. Every verb was optional, so
+    // "Dark mode is hurting my eyes" turned dark mode ON, and "turn off dark mode" did too. A bare
+    // "dark mode", a switch/turn-on/use verb, or a polite "can you" in front; "turn off X mode" is the
+    // other one. Anything else talks ABOUT the theme.
+    rx: new RegExp(
+      LEAD_IN
+      + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?`
+      + String.raw`(?:(?:switch|change|go|set|put)\s+(?:it\s+|the\s+app\s+|(?:the\s+)?(?:theme|screen|display)\s+)?(?:to|into|in)\s+|(?:turn\s+on|use|enable|give\s+me)\s+|(turn\s+off|disable)\s+)?`
+      + String.raw`(?:the\s+)?(dark|light)\s+mode(?:\s+on)?(?:[\s,]+please)?\s*[.!]?$`,
+      'i',
+    ),
+    build: (raw, m) => {
+      const named = m[2].toLowerCase();
+      return intent(raw, 'change_setting', { setting_name: 'theme', new_value: m[1] ? (named === 'dark' ? 'light' : 'dark') : named });
+    },
+  },
+  {
+    // 2026-10-28 (Brain review r9) — a sentence that only MENTIONS handedness or a theme ("we got
+    // paired with a lefty", "dark mode is hurting my eyes") is the caddie's. 'conversational', not
+    // null: the cloud classifier would hand the same sentence back as a setting change.
+    rx: /\b(?:left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty|(?:dark|light)\s+mode)\b/i,
+    build: (raw) => intent(raw, 'conversational', { raw_utterance: raw, not_a_command: 'change_setting' }),
   },
   {
     // Cart mode on/off.
@@ -597,10 +635,11 @@ const ACTING_INTENTS = new Set([
 const ACTING_TOPICS = new Set(['routine_save']);
 
 /**
- * Intents where the PLAYER is the subject: a score on his card, his risk mode. Said about someone else
- * ("my partner got a 4", "my buddy is going for it") they are a report, not an order.
+ * Intents where the PLAYER is the subject: a score on his card, his risk mode, his bag. Said about
+ * someone else ("my partner got a 4", "my buddy is going for it", "my son's 7 iron carries 140") they
+ * are a report, not an order.
  */
-const PLAYER_SUBJECT_INTENTS = new Set(['log_score', 'change_setting']);
+const PLAYER_SUBJECT_INTENTS = new Set(['log_score', 'change_setting', 'set_club_distance', 'correct_last_shot']);
 
 const ROUTINE_ASK: Record<string, 'save' | 'recall'> = { routine_save: 'save', routine_recall: 'recall' };
 
@@ -634,6 +673,25 @@ const DECISION_OR_REASON_RX =
  */
 const GOAL_OR_TREND_RX =
   /\b(?:want(?:s|ed)?\s+to|wanna|goals?|trying\s+to|try\s+to|hop(?:e|ing)\s+to|target|went\s+(?:up|down)|gone\s+(?:up|down)|going\s+(?:up|down)|go\s+(?:up|down)|dropp(?:ed|ing)|climb(?:ed|ing)|balloon\w*|blows?\s+up|this\s+(?:year|season)|break\s+\d+)\b/i;
+
+/**
+ * 2026-10-28 (Brain review r9) — A STATEMENT IS NOT AN ASK. "I hit a 7 iron to the back of the green"
+ * → "N yards to the back", "I'm not hitting the greens today" → a GIR count, "I don't care about my
+ * score today" → the score, "I'm on the front nine of my life" → a nine split. A lookup is claimed
+ * when the sentence ASKS — a question word, a "tell me / give me", or a bare noun phrase ("my score",
+ * "yards to the back"). One that opens with the player as the subject and asks nothing is him talking
+ * about his round, and a negation ("not", "don't") never asks for a readout either.
+ */
+const FIRST_PERSON_STATEMENT = new RegExp(LEAD_IN + String.raw`(?:i|i'?m|im|i'?ve|i'?d|i'?ll|we|we'?re|we'?ve)\b`, 'i');
+const ASKS = /\?|\b(?:how|what|what'?s|whats|where|which|tell\s+me|give\s+me|show\s+me|remind\s+me|read\s+me|know|wondering)\b/i;
+const LOOKUP_NEGATED = /\b(?:not|don'?t|do\s+not|doesn'?t|does\s+not)\b/i;
+
+/**
+ * 2026-10-28 (Brain review r9) — a WANT or a NEED is not an order. "I need to go home" left the round
+ * screen, "I want to scan my scorecard" opened the importer. The goal half of GOAL_OR_TREND_RX, not
+ * the trend half: "went up and down for a 4" is a score, not a trend. A polite request is exempt.
+ */
+const INTENTION_RX = /\b(?:want(?:s|ed)?\s+to|wanna|need(?:s|ed)?\s+to|have\s+to|has\s+to|got\s+to|gotta|trying\s+to|try\s+to|hop(?:e|ing)\s+to|plan(?:ning)?\s+to)\b/i;
 
 function isStatusLookup(hit: VoiceIntent): boolean {
   if (hit.intent_type === 'handicap_query') return true;
@@ -676,7 +734,8 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     // yesterday" is not "what's my score". last_round_here is ABOUT a past round ("how did I do here
     // last time"), so its own past framing is the ask, not a story.
     const toldAsStory = topic !== 'last_round_here' && isStoryFramed(withoutCounts);
-    if (DECISION_OR_REASON_RX.test(withoutCounts) || GOAL_OR_TREND_RX.test(withoutCounts) || toldAsStory) {
+    const statement = (FIRST_PERSON_STATEMENT.test(withoutCounts) && !ASKS.test(withoutCounts)) || LOOKUP_NEGATED.test(withoutCounts);
+    if (DECISION_OR_REASON_RX.test(withoutCounts) || GOAL_OR_TREND_RX.test(withoutCounts) || toldAsStory || statement) {
       return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: String(hit.parameters?.query_topic ?? hit.intent_type) });
     }
     return hit;
@@ -703,13 +762,19 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
    *
    * 2026-10-28 (Brain review r4) — and a score or a risk mode said about SOMEONE ELSE ("my partner got
    * a 4 there", "he made a 5") is a report about the group, not an entry on his card.
+   *
+   * 2026-10-28 (Brain review r9) — and a conditional, a plan or a want ("if I go for it and miss",
+   * "after this hole", "I need to go home") — on the verb-anchored opens too, since "I want to scan
+   * my scorecard after the round" is a plan, not a past time naming what to open.
    */
   const raw = transcript.trim();
   const blocked = hit.intent_type === 'open_tool' && hit.parameters?.tool_name === 'putt_read'
     ? false
     : isQuestionShaped(raw)
       || (!VERB_ANCHORED_OPENS.has(hit.intent_type) && isStoryFramed(raw))
-      || (PLAYER_SUBJECT_INTENTS.has(hit.intent_type) && isAboutSomeoneElse(raw));
+      || (PLAYER_SUBJECT_INTENTS.has(hit.intent_type) && isAboutSomeoneElse(raw))
+      || isConditionalOrFuture(raw)
+      || (INTENTION_RX.test(raw) && !isPoliteRequest(raw));
   if (blocked) return intent(raw, 'conversational', { raw_utterance: raw, not_a_command: hit.intent_type });
   return hit;
 }
@@ -927,6 +992,18 @@ function classifyLocalIntent(transcript: string): VoiceIntent | null {
      * number and nothing has to be inferred at all, which is the best case.
      */
     const sm = t.match(/\bmy\s+(.{2,24}?)\s+(goes|carries|carry\s+is|flies)\s+(?:about\s+|around\s+|roughly\s+)?(\d{2,3})\b/i);
+    /**
+     * 2026-10-28 (Brain review r9) — HIS number, stated as fact. "My buddy's driver goes 300" captured
+     * "buddy's driver", parseSpokenClub found 'driver', and 300 was written over Tim's own driver;
+     * "Maybe my 7 iron goes 160 now" and "Mike says my 7 iron goes 170" did the same. A possessive
+     * inside the club phrase is someone else's club, and a hedge or reported speech ahead of "my" is
+     * not a number he is giving. Both go to the caddie ('conversational' — the cloud classifier would
+     * re-steal a null). The conditionals ("if my driver carries 250") are the shared guard's.
+     */
+    if (sm && (/\w['’]s\b/i.test(sm[1])
+      || /\b(?:maybe|perhaps|probably|might|whether|says|said|thinks|thought|claims|reckons|swears|supposedly|guess)\b/i.test(t.slice(0, sm.index ?? 0)))) {
+      return intent(t, 'conversational', { raw_utterance: t, not_a_command: 'set_club_distance' });
+    }
     if (sm && /\b(driver|wood|hybrid|rescue|iron|wedge|pitching|sand|lob|gap|degree|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(sm[1])) {
       const primaryKind: 'carry' | 'total' = /^goes$/i.test(sm[2].trim()) ? 'total' : 'carry';
       const primary = Number(sm[3]);
