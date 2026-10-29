@@ -187,7 +187,8 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
      */
     try {
       const { noteUtterance } = require('./caddieStyle') as typeof import('./caddieStyle');
-      void noteUtterance(heard).catch(() => undefined);
+      const st = (require('../store/settingsStore') as typeof import('../store/settingsStore')).useSettingsStore.getState();
+      void noteUtterance(heard, { mode: st.responseMode ?? 'neutral', at: st.responseModeSetAt ?? 0 }).catch(() => undefined);
     } catch { /* never let learning a preference break a reply */ }
 
     try {

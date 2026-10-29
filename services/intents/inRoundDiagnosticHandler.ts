@@ -184,14 +184,18 @@ export const inRoundDiagnosticHandler: IntentHandler = {
          * pays twice and makes him wait a second window. So a timeout is answered HERE, by the one
          * failure owner (services/caddieFailureReply), as a handled turn every route speaks. A failure
          * that came back fast is the brain's to own — no line, so every route takes it to the caddie.
+         *
+         * 2026-10-28 (Brain recheck R7) — a REFUSAL is answered here too. The server already ran its
+         * whole model ladder and said the brain is down; handing the words on started that ladder
+         * again on every route before he heard the failure line.
          */
-        if (noAnswer === 'timeout') {
+        if (noAnswer === 'timeout' || noAnswer === 'refused') {
           const failure = require('../caddieFailureReply') as typeof import('../caddieFailureReply');
           const reply = await failure.caddieFailureReply({ heard: intent.raw_text ?? patternText, language: ctx.language });
           return {
             success: true,
             voice_response: reply.text,
-            side_effects: ['in_round_diagnostic:timeout:' + reply.source],
+            side_effects: [`in_round_diagnostic:${noAnswer}:` + reply.source],
             follow_up_needed: false,
           };
         }

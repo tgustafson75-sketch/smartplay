@@ -80,7 +80,8 @@ describe('a follow-up reply that asks for putts opens the question', () => {
     replies = [{ ok: true, status: 200, body: { text: 'Got it, I will keep it short.', audioBase64: null } }];
     await followUpBrainTurn("you're talking too much", { language: 'en' });
     expect(hist.getConversationHistory().map((m) => m.content)).toEqual(["you're talking too much", 'Got it, I will keep it short.']);
-    expect(noteUtterance).toHaveBeenCalledWith("you're talking too much");
+    // With where he stands now, so a newer pick outranks an older hint (the-newest-length-choice-wins).
+    expect(noteUtterance).toHaveBeenCalledWith("you're talking too much", expect.objectContaining({ mode: expect.any(String) }));
   });
 
   it('the turn reaches kevin once, with the one payload', async () => {

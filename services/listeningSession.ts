@@ -1650,6 +1650,7 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
           //   (3) fetch itself throws (network error, AbortController)
           let chatSpoken = false;
           let firstTimedOut = false;
+          let firstRefused = false;
           // 2026-07-01 (whole-app audit — MIC CONVERGENCE) — route the badge / earbud / hands-free
           // conversational turn to the SAME unified pipecat brain the caddie-tab mic uses.
           // conversationalBrainTurn falls back to legacy kevin internally on any pipecat failure, and
@@ -1661,6 +1662,7 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
           try {
             const r = await brainTurnWithPreStep(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
             firstTimedOut = !!r.timedOut;
+            firstRefused = !!r.refused;
             // 2026-07-01 (re-audit — voice H2) — dispatch service-safe tool actions
             // (switch_caddie / navigate) the conversational brain returned; this
             // branch previously spoke the reply but dropped them.
@@ -1715,8 +1717,12 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
            * still running on the server and will be billed in full; a retry pays for a second turn and
            * makes him wait another whole window. useVoiceCaddie learned this on 09-23 ("ourTimeout");
            * this path never did, so the two routes had opposite rules.
+           *
+           * 2026-10-28 (Brain recheck R7) — NOR AFTER A REFUSAL. The server answered, and what it said
+           * was that the brain is down (followUpBrainTurn's rule since round 5): a retry only runs the
+           * whole server ladder again before he hears the failure line.
            */
-          if (!chatSpoken && live() && !firstTimedOut) try { // a shushed turn does not retry (voice seam review)
+          if (!chatSpoken && live() && !firstTimedOut && !firstRefused) try { // a shushed turn does not retry (voice seam review)
             const retry = await brainTurnWithPreStep(utterance, { timeoutMs: kevinTimeout(), signal: brainSignal });
             if (retry.toolActions?.length) {
               const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');

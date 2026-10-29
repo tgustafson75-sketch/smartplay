@@ -93,6 +93,7 @@ export default function Settings() {
     // (services/caddiePresence), so the mic is one decision instead of two that could disagree.
     language,
     responseMode,
+    responseModeSetAt,
     highContrast,
     autoListenEnabled,
     cartMode,
@@ -283,8 +284,11 @@ export default function Settings() {
 
   /**
    * 2026-09-11 — what the caddie has LEARNED about how much to talk, in the player's own words.
-   * Loaded once; the card shows it and offers a reset. Null means nothing learned, which is a
-   * perfectly good state and reads as "Normal length" rather than an error.
+   * The card shows it and offers a reset. Null means nothing learned, which is a perfectly good state
+   * and reads as "Following your setting" rather than an error.
+   *
+   * 2026-10-28 (Brain recheck R7) — re-read whenever the saved length changes: a presence picked
+   * below replaces what he said, and the card must stop quoting a hint that no longer applies.
    */
   const [learnedStyleLine, setLearnedStyleLine] = useState<string | null>(null);
   useEffect(() => {
@@ -292,12 +296,12 @@ export default function Settings() {
     void (async () => {
       try {
         const cs = await import('../services/caddieStyle');
-        const line = cs.describeLearnedStyle(await cs.loadLearnedStyle());
+        const line = cs.describeLearnedStyle(await cs.loadLearnedStyle(), responseModeSetAt ?? 0);
         if (alive) setLearnedStyleLine(line);
       } catch { /* nothing learned yet */ }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [responseModeSetAt]);
   /**
    * The sentinel a picker uses to mean "none of these" — never stored. `setGoal` receives the
    * chosen text verbatim, so the store never holds a magic string.

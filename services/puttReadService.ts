@@ -49,6 +49,16 @@ const PUTT_INSTRUCTION =
   'it tight and spoken, no lists.';
 
 /**
+ * The player's ask as the shared history keeps it — the instructions here are for the model only.
+ *
+ * 2026-10-28 (Brain recheck R7) — the scene read got this in 7bfcb2d1 and the putt read did not: all of
+ * PUTT + FLAG + GRAZING (~1.8KB) was saved as the PLAYER's words, so for the next exchanges Kevin read
+ * "ask me to lay the phone on the green… tell me to re-tap it" as standing requests from him, every
+ * later turn paid for it in input tokens, and the style learner listened to it.
+ */
+const PUTT_HEARD = 'Read this putt for me.';
+
+/**
  * 2026-09-13 (Tim) — "See if you can bake in a vision step to look for the flag stick and flag and hole."
  *
  * THE PICTURE'S JOB IS TO CHECK THE MEASUREMENT, not to decorate the answer.
@@ -219,6 +229,8 @@ export async function readPutt(input: PuttReadMeasurement & {
     // The flag cross-check is only asked for when there is actually a picture to check against —
     // asking a text-only turn to look at a frame invites it to invent one.
     message: composeInstruction(input),
+    // His own read is his words, so it stays in what the history remembers him asking.
+    heard: input.spokenRead?.trim() ? `${PUTT_HEARD} My read: ${input.spokenRead.trim()}` : PUTT_HEARD,
     language: settings.language ?? 'en',
     /** The measurements are FACTS, so they ride in the live block with the rest of the situation. */
     liveBlock: buildPuttMeasurementBlock(input),

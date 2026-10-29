@@ -85,6 +85,6 @@ describe('the brain call', () => {
 
   it('the earbud does not retry a turn that was shushed', () => {
     // 2026-10-28 (Brain review F7) — nor one the phone itself timed out (that turn is still billed).
-    expect(code('services/listeningSession.ts')).toMatch(/if \(!chatSpoken && live\(\) && !firstTimedOut\) try \{/);
+    expect(code('services/listeningSession.ts')).toMatch(/if \(!chatSpoken && live\(\) && !firstTimedOut && !firstRefused\) try \{/);
   });
 });

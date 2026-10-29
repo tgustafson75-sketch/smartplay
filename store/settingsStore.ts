@@ -129,6 +129,12 @@ interface SettingsState {
    */
   continuousConversationMode: boolean;
   responseMode: 'short' | 'neutral' | 'detailed';
+  /**
+   * 2026-10-28 (Brain recheck R7) — WHEN the player last chose `responseMode` (ms; 0 = never). What he
+   * says to the caddie (services/caddieStyle) only beats this choice when he said it AFTER making it:
+   * picking Quiet the day after a "tell me more" has to mean Quiet.
+   */
+  responseModeSetAt: number;
   // Phase 105 — single caddiePersonality is preserved as the "current
   // primary persona" used by surfaces that pre-date the team architecture
   // (greeting, intro, tools menu cycler). New per-pillar usage should
@@ -493,6 +499,7 @@ export const useSettingsStore = create<SettingsState>()(
       voiceGender: 'male', // mirror; corrected by setCaddiePersonality + the boot reconcile
       language: 'en',
       responseMode: 'neutral',
+      responseModeSetAt: 0,
       // 2026-05-28 — Fix FS: hydration flag (see onRehydrateStorage below).
       // Defaults false; flipped true by the persist middleware once
       // AsyncStorage rehydration completes. Audio-kickoff paths (greeting,
@@ -640,7 +647,7 @@ export const useSettingsStore = create<SettingsState>()(
           } catch { /* ignore */ }
         }
       },
-      setResponseMode: (m) => set({ responseMode: m }),
+      setResponseMode: (m) => set({ responseMode: m, responseModeSetAt: Date.now() }),
       setCaddiePersonality: (p) => {
         // 2026-08-25 — the removed persona's setter guard is gone with it. It is no longer a type,
         // so no surface can name it; a persisted value is migrated to Kevin by v22.
@@ -1249,6 +1256,7 @@ export const useSettingsStore = create<SettingsState>()(
         voiceGender: s.voiceGender, // mirror, persisted only so a cold read before hydration agrees
         language: s.language,
         responseMode: s.responseMode,
+        responseModeSetAt: s.responseModeSetAt,
         caddiePersonality: s.caddiePersonality,
         caddieAssignments: s.caddieAssignments,
         caddieSuggestions: s.caddieSuggestions,

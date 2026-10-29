@@ -276,11 +276,14 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * avatar follow-up passed it in; every other route (typed, watch, earbud, Caddie-tab mic, putt
      * and scene reads, the diagnostic, proactive lines) fell to 'neutral', so Settings > Short and
      * the Quiet presence preset got two sentences and Detailed never reached Kevin off the course.
+     *
+     * 2026-10-28 (Brain recheck R7) — and WHEN he saved it: a hint he spoke before his latest choice
+     * no longer outranks it.
      */
     responseMode: safe(() => {
       const cs = require('./caddieStyle') as typeof import('./caddieStyle');
       const stored = (extras.responseMode ?? st.responseMode ?? 'neutral') as 'short' | 'neutral' | 'detailed';
-      return cs.effectiveResponseMode(stored, cs.learnedStyleSync());
+      return cs.effectiveResponseMode(stored, cs.learnedStyleSync(), st.responseModeSetAt ?? 0);
     }, safe(() => extras.responseMode ?? st.responseMode ?? null, null)),
     clientHour: safe(() => new Date().getHours(), 0),
 

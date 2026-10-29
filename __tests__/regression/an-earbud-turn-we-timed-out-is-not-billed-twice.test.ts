@@ -189,6 +189,23 @@ describe('F7 — the earbud conversational retry respects our own timeout', () =
     expect(mockState.spoken.length + mockState.captions.length).toBeGreaterThan(0);
   });
 
+  /**
+   * 2026-10-28 (Brain recheck R7) — the server answered "brain is down" (a 200 with error/errorType,
+   * after its own model ladder and fallback). Retrying ran that whole ladder again before he heard the
+   * failure line; followUpBrainTurn has refused this since round 5, this route never did.
+   */
+  it('THE BUG: a first attempt the server refused is NOT retried', async () => {
+    mockState.precheck = () => ({ intent_type: 'unknown', confidence: 'high', raw_text: 'tell me about this hole' });
+    mockState.captures.push(said('tell me about this hole'));
+    mockState.brain.push(async () => ({ text: null, audioBase64: null, toolActions: [], refused: true } as never));
+    mockState.brain.push(async () => ({ text: 'Second ladder answer.', audioBase64: null, toolActions: [] }));
+    await tap();
+    await flush();
+    expect(mockState.brainCalls).toBe(1);
+    expect(mockState.spoken).not.toContain('Second ladder answer.');
+    expect(mockState.spoken.length + mockState.captions.length).toBeGreaterThan(0);
+  });
+
   it('a fast failure (not our timeout) still gets the one retry', async () => {
     mockState.precheck = () => ({ intent_type: 'unknown', confidence: 'high', raw_text: 'tell me about this hole' });
     mockState.captures.push(said('tell me about this hole'));

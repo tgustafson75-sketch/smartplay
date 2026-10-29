@@ -26,7 +26,6 @@ describe('he hears it when it is about the talking', () => {
     'be brief',
     'keep it short',
     'get to the point',
-    'just give me the number',
     'less detail please',
     'give me the quick rundown',
     'stop explaining',
@@ -34,7 +33,9 @@ describe('he hears it when it is about the talking', () => {
     it(`"${said}" → briefer`, () => expect(detectStyleSignal(said)).toBe('briefer'));
   }
 
-  for (const said of ['tell me more', 'more detail', 'walk me through it', 'elaborate']) {
+  // 2026-10-28 (Brain recheck R7) — about his answers in GENERAL; "tell me more" about one shot is
+  // not (see the-newest-length-choice-wins.test.ts).
+  for (const said of ['give me longer answers', "you're too brief", 'explain your thinking', 'you can talk more']) {
     it(`"${said}" → fuller`, () => expect(detectStyleSignal(said)).toBe('fuller'));
   }
 });
@@ -50,6 +51,9 @@ describe('and deaf to everything else, which is the harder half', () => {
     'give me the line',
     'what did I score',
     'this hole is long',
+    'just give me the number',               // about ONE shot — the header's own example
+    'tell me more about that layup',         // about one thing, not about him
+    'walk me through this putt',
     '',
   ]) {
     it(`"${said}" moves nothing`, () => expect(detectStyleSignal(said)).toBeNull());
@@ -122,11 +126,11 @@ describe('it is heard at the ONE seam, not at five call sites', () => {
     // putt intercept. A player must be able to say it to any surface and have it stick.
     // 2026-10-28 — on the player's own words (`heard`), never the reshaped brain message: see
     // explain-simply-never-makes-the-caddie-brief.test.ts.
-    expect(brain).toMatch(/noteUtterance\(heard\)/);
+    expect(brain).toMatch(/noteUtterance\(heard,/);
   });
 
   it('and learning a preference can never fail the turn it is learned in', () => {
-    const at = brain.indexOf('noteUtterance(heard)');
+    const at = brain.indexOf('noteUtterance(heard,');
     expect(brain.slice(at - 120, at + 120)).toMatch(/void |catch/);
   });
 
@@ -134,6 +138,6 @@ describe('it is heard at the ONE seam, not at five call sites', () => {
     const body = require('fs').readFileSync(
       require('path').join(__dirname, '../../services/caddieRequestBody.ts'), 'utf8',
     ) as string;
-    expect(body).toMatch(/cs\.effectiveResponseMode\(stored, cs\.learnedStyleSync\(\)\)/);
+    expect(body).toMatch(/cs\.effectiveResponseMode\(stored, cs\.learnedStyleSync\(\), st\.responseModeSetAt/);
   });
 });

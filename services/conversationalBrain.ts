@@ -29,7 +29,7 @@
  * inconsistent caddie. One real attempt, honestly reported.
  */
 
-import { askCaddie } from './caddieBrain';
+import { askCaddie, type NoAnswerReason } from './caddieBrain';
 import { markAdviceTurnStart } from './adviceFreshness';
 import { mayTalkToCaddie } from './featureAccess';
 import { setConversationHistory, clearConversationHistory, getConversationHistory, removeConversationExchange } from './voice/conversationHistory';
@@ -50,6 +50,12 @@ export interface BrainReply {
    * running (and billing) that turn, so the caller must not retry it.
    */
   timedOut?: boolean;
+  /**
+   * 2026-10-28 (Brain recheck R7) — no answer because the SERVER said its brain is down (a 200 with
+   * error/errorType: the model ladder and its fallback already ran). Asking again runs that whole
+   * ladder a second time before he hears the failure line, so the caller must not retry it either.
+   */
+  refused?: boolean;
   /**
    * 2026-09-29 (review) — proactive lines only: remember the line in the shared history. Call it
    * right before the line is SHOWN or SPOKEN, never before the caller's own busy check. A no-op for
@@ -106,7 +112,7 @@ export async function conversationalBrainTurn(
     }
   } catch { /* suggestion is best-effort — never blocks the turn */ }
 
-  let timedOut = false;
+  let noAnswer: NoAnswerReason | null = null;
   const turn = await askCaddie({
     message: utterance,
     heard,
@@ -115,9 +121,13 @@ export async function conversationalBrainTurn(
     // 2026-10-16 — the earbud session's turn signal: a shushed or superseded turn stops its brain call
     // (it used to run to completion and bill, its answer dropped or captioned).
     signal: opts?.signal,
-    onNoAnswer: (reason) => { timedOut = reason === 'timeout'; },
+    onNoAnswer: (reason) => { noAnswer = reason; },
   });
-  if (!turn) return timedOut ? { ...NO_ANSWER, timedOut: true } : NO_ANSWER;
+  if (!turn) {
+    return noAnswer === 'timeout' ? { ...NO_ANSWER, timedOut: true }
+      : noAnswer === 'refused' ? { ...NO_ANSWER, refused: true }
+      : NO_ANSWER;
+  }
   return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
 }
 

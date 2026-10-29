@@ -14,7 +14,8 @@
  *
  * So this listens for the player SAYING it, in their own words, and remembers. The stored
  * `responseMode` preference stays as the starting point and the floor of what they explicitly chose;
- * what they actually say to the caddie beats a toggle they set once and forgot.
+ * what they actually say to the caddie beats a toggle they set once and forgot — but not one they
+ * set AFTER saying it (the newest choice wins, see learnedStyleInForce).
  *
  * WHY IT IS DELIBERATELY DEAF TO MOST THINGS. A caddie who goes quiet because you said "just tell me
  * the number" once, about one shot, is worse than one who never listens — you cannot tell what you
@@ -36,16 +37,23 @@ const BRIEFER = [
   'talking too much', 'talk too much', 'too much talking', 'too much chatter', 'too chatty',
   'be brief', 'be briefer', 'more brief', 'keep it brief', 'keep it short', 'keep it shorter',
   'shorter answers', 'short answers', 'less detail', 'less talking', 'talk less', 'say less',
-  'get to the point', 'cut to the chase', 'just the number', 'just give me the number',
+  'get to the point', 'cut to the chase',
   'quick rundown', 'quick version', 'short version', 'spare me', 'stop explaining',
   'don’t need the explanation', "don't need the explanation", 'no need to explain',
   'too wordy', 'too long winded', 'long winded', 'wrap it up',
 ];
 
+/**
+ * 2026-10-28 (Brain recheck R7) — the "more" side was the one place this file broke its own rule.
+ * "Tell me more", "walk me through", "elaborate", "more detail" are how a player asks about ONE
+ * thing — tell me more about that layup — and each of them left him on long answers for good. So
+ * only phrases about his answers IN GENERAL count. ("Just give me the number" left the brief side for
+ * the same reason; the header has always named it as the remark that must not silence him.)
+ */
 const FULLER = [
-  'tell me more', 'more detail', 'more details', 'explain more', 'go deeper', 'elaborate',
-  'walk me through', 'full rundown', 'full version', 'longer answer', 'talk me through it',
-  'give me the detail', 'more information',
+  'longer answers', 'more detailed answers', 'more detail in your answers', 'more detail from now on',
+  'explain your thinking', 'you can talk more', 'you can say more', 'too brief', 'too curt',
+  'don’t be so brief', "don't be so brief", 'stop being so brief',
 ];
 
 /** Normalise for matching: lowercase, collapse whitespace, strip most punctuation. */
@@ -60,7 +68,7 @@ function norm(s: string): string {
 export function detectStyleSignal(utterance: string): StyleSignal {
   const u = norm(utterance);
   if (!u) return null;
-  // Longer phrases first so "more detail" cannot be swallowed by a shorter accidental match.
+  // One signal per utterance. The lists share no phrase; briefer first only settles a mixed sentence.
   if (BRIEFER.some((p) => u.includes(norm(p)))) return 'briefer';
   if (FULLER.some((p) => u.includes(norm(p)))) return 'fuller';
   return null;
@@ -85,23 +93,42 @@ export function applySignal(current: CaddieStyle, signal: Exclude<StyleSignal, n
   return order[next];
 }
 
+export type ResponseMode = 'short' | 'neutral' | 'detailed';
+
+const MODE_OF: Record<CaddieStyle, ResponseMode> = { brief: 'short', balanced: 'neutral', full: 'detailed' };
+const STYLE_OF: Record<ResponseMode, CaddieStyle> = { short: 'brief', neutral: 'balanced', detailed: 'full' };
+
 /**
- * The response length the brain should actually use.
+ * The learned style, or null once the player has CHOSEN a length since saying it.
  *
- * The learned style WINS over the stored setting, because the player said it out loud and more
- * recently than they touched a toggle. With nothing learned, the setting stands — so a player who
- * never says anything about it is exactly where they were.
+ * 2026-10-28 (Brain recheck R7) — the newest choice wins, whichever way he made it. This used to
+ * assume the spoken one was always newer, so one "tell me more" outranked every Quiet / Short / Detailed
+ * he picked afterwards, on every route, and nothing on the picker said why. `storedAt` is
+ * settingsStore.responseModeSetAt; 0 (never chosen) leaves the learned style in force.
  */
-export function effectiveResponseMode(
-  stored: 'short' | 'neutral' | 'detailed',
-  learned: LearnedStyle | null,
-): 'short' | 'neutral' | 'detailed' {
-  if (!learned) return stored;
-  return learned.style === 'brief' ? 'short' : learned.style === 'full' ? 'detailed' : 'neutral';
+export function learnedStyleInForce(learned: LearnedStyle | null, storedAt = 0): LearnedStyle | null {
+  if (!learned) return null;
+  return learned.at > storedAt ? learned : null;
 }
 
-/** One plain sentence for the settings card — what he learned, in the player's own words. */
-export function describeLearnedStyle(learned: LearnedStyle | null): string | null {
+/**
+ * The response length the brain should actually use: whichever the player expressed MOST RECENTLY,
+ * out loud or on a picker. With nothing learned, the setting stands — so a player who never says
+ * anything about it is exactly where they were.
+ */
+export function effectiveResponseMode(
+  stored: ResponseMode,
+  learned: LearnedStyle | null,
+  storedAt = 0,
+): ResponseMode {
+  const live = learnedStyleInForce(learned, storedAt);
+  return live ? MODE_OF[live.style] : stored;
+}
+
+/** One plain sentence for the settings card — what he learned, in the player's own words. Null
+ *  when nothing learned is in force, so the card never credits a hint a later choice replaced. */
+export function describeLearnedStyle(learned: LearnedStyle | null, storedAt = 0): string | null {
+  learned = learnedStyleInForce(learned, storedAt);
   if (!learned) return null;
   const when = new Date(learned.at).toLocaleDateString();
   return learned.style === 'brief'
@@ -160,13 +187,21 @@ export async function saveLearnedStyle(v: LearnedStyle | null): Promise<void> {
  * Hear one utterance. Returns the new style when it moved, else null — the caller can acknowledge
  * it, which is the difference between a caddie who adjusts and an app that silently changed a
  * setting on you.
+ *
+ * `stored` is the player's chosen length and when he chose it. The step is taken from where he
+ * actually IS — a "be brief" after picking Detailed moves him to balanced, not from a stale
+ * learned "full" a later choice already replaced.
  */
-export async function noteUtterance(utterance: string): Promise<LearnedStyle | null> {
+export async function noteUtterance(
+  utterance: string,
+  stored?: { mode: ResponseMode; at: number },
+): Promise<LearnedStyle | null> {
   const sig = detectStyleSignal(utterance);
   if (!sig) return null;
-  const cur = await loadLearnedStyle();
-  const next = applySignal(cur?.style ?? 'balanced', sig);
-  if (cur && cur.style === next) return null;      // already there — nothing to say
+  const live = learnedStyleInForce(await loadLearnedStyle(), stored?.at ?? 0);
+  const cur = live?.style ?? (stored ? STYLE_OF[stored.mode] : 'balanced');
+  const next = applySignal(cur, sig);
+  if (cur === next) return null;      // already there — nothing to say
   const learned: LearnedStyle = { style: next, at: Date.now(), heard: (utterance || '').trim().slice(0, 80) };
   await saveLearnedStyle(learned);
   return learned;
