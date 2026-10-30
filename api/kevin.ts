@@ -2540,7 +2540,7 @@ ${sv.measureYards != null ? sv.measureYards + ' yards to tapped target' : ''}
 ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 [/SMARTVISION OPEN]
 
-${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`
+${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`
       : `${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`;
 
     // 2026-05-22 — Vision frame normalization. When the client passed
@@ -2646,14 +2646,22 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${onCourseContextBlock}$
        */
       timeoutMs: 14_000,
     };
+    // Grounded search results for THIS turn, keyed by normalized query. The retry below re-runs the
+    // whole model prompt, so without this a search that ran in attempt 1 would be paid again in attempt 2.
+    const searchMemo = new Map<string, string>();
     const toolDispatch = async (name: string, input: Record<string, unknown>): Promise<string> => {
       if (name === 'search_web') {
         capture.dataToolCalls++;
+        const memoKey = String(input.query ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const memo = searchMemo.get(memoKey);
+        if (memo !== undefined) return memo;
         // 2026-08-10 — Gemini Google-Search grounding (universal: both brain paths can search).
         try {
           const { groundedSearch, formatGroundedForBrain } = await import('./_webSearch');
           const r = await groundedSearch(String(input.query ?? ''), { context: activeCourse ? `at ${activeCourse}` : null });
-          return formatGroundedForBrain(r);
+          const out = formatGroundedForBrain(r);
+          if (r.grounded) searchMemo.set(memoKey, out);
+          return out;
         } catch (e) { return `Web search failed: ${e instanceof Error ? e.message : String(e)}`; }
       }
       if (name === 'lookup_course') {
@@ -2829,7 +2837,7 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${onCourseContextBlock}$
     // to the outer catch → graceful text → local brain. No cross-provider cloud fallback.
     let loopResult;
     {
-      // Single provider (OpenAI) gets the window; we retry ONCE, but only when the first
+      // Single provider (the pinned brain provider) gets the window; we retry ONCE, but only when the first
       // attempt failed FAST (a cold-start / transient blip, not a slow timeout that already
       // spent the budget). Retrying after a full timeout would just blow the client's window
       // for nothing — better to hand that turn to the local responder. (Tim: "let one agent
@@ -2858,6 +2866,7 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${turnContextPrefix}${onCourseContextBlock}$
           break;
         } catch (err) {
           lastErr = err;
+          // Tool state is reset; searchMemo is not, so a paid search from this attempt is reused, not re-billed.
           capture.action = null; capture.actions = []; capture.dataToolCalls = 0; // reset partial tool state
           const attemptMs = Date.now() - attemptStart;
           console.warn(`[kevin] ${provider} attempt ${attempt} failed in ${attemptMs}ms: ${err instanceof Error ? err.message : String(err)}`);
