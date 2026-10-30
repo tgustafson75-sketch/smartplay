@@ -429,7 +429,11 @@ const PATTERNS: Pattern[] = [
     // 2026-10-29 (Brain recheck r12) — "dark theme", "the theme is dark", and "handedness" were not
     // words this caught, so an order phrased with them reached Kevin with no declined note. The note
     // is what stops him saying "done" to a setting nothing changed.
-    rx: /\b(?:left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty|handedness|(?:dark|light)\s+(?:mode|theme)|theme)\b/i,
+    //
+    // 2026-10-29 (Brain recheck r13) — a bare "theme" is a golf word too ("what's the theme of the
+    // hole"), and the note told Kevin about app settings on a course-design question. "theme" counts only
+    // when it is the app's: "my/the app's theme", "set/change/turn the theme", "the theme is/to/on …".
+    rx: /\b(?:left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty|handedness|(?:dark|light)\s+(?:mode|theme)|(?:app'?s?|my|set|switch|change|make|turn)\s+(?:the\s+)?theme|theme\s+(?:is|was|to|into|on|off|setting|settings))\b/i,
     build: (raw, m) => intent(raw, 'conversational', {
       raw_utterance: raw, not_a_command: 'change_setting', setting_name: /theme|dark|light/i.test(m[0]) ? 'theme' : 'handedness',
     }),

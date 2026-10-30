@@ -20,8 +20,8 @@
  * the DISPATCHER, once, so the next pattern somebody adds inherits it.
  *
  * WHAT IS NOT A COMMAND:
- *   · a question — it opens with an interrogative/auxiliary ("should", "is", "what", "did" …) or
- *     ends with "?";
+ *   · a question — it opens with an interrogative/auxiliary ("should", "is", "what", "did" …), ends
+ *     with "?", or carries a question clause after a comma or "and/but" ("I'll go for it, should I");
  *   · a story — negated, past or hypothetical framing ("haven't", "never", "didn't", "wish",
  *     "last year", "yesterday", "should have" …), a HABIT ("always", "every time", "usually",
  *     "once"), or REPORTED speech ("told me", "no way I …");
@@ -119,12 +119,27 @@ const CONDITIONAL_OR_FUTURE = new RegExp(
   'i',
 );
 
+/**
+ * 2026-10-29 (Brain recheck r13) — A QUESTION CLAUSE AFTER THE ORDER. "I'll go for it, should I" and
+ * "Kevin, I want to go for it, is that smart" are an order with a question hung on it, and the order
+ * half set risk mode while Kevin was never asked. Only a subject-bearing question counts ("should I",
+ * "what would you", "is that", "does that", "do you think", "is it") after a comma, semicolon, "and",
+ * "but", "or" or "so" — "The pin is short, should be an easy putt" is a statement and stays one.
+ */
+const QUESTION_CLAUSE = new RegExp(
+  String.raw`(?:[,;]\s*(?:(?:and|but|or|so)\s+)?|\s+(?:and|but|or|so)\s+)`
+  + String.raw`(?:(?:should|shall|can|could|is|are|was|would|will|have|has)\s+(?:i|we|you|it|that|this|there|he|she|they)\b`
+  + String.raw`|(?:do|does|did)\s+(?:you|that|this)\b`
+  + String.raw`|(?:what|how|why|when|where|which|who)\s+(?:would|should|do|did|is|are|was|will|can|could)\s+(?:i|we|you|it|that|this|there)\b)`,
+  'i',
+);
+
 /** True when the utterance is shaped like a question (and is not a polite request). */
 export function isQuestionShaped(utterance: string): boolean {
   const t = (utterance ?? '').trim();
   if (!t) return false;
   if (POLITE_REQUEST.test(t)) return false;
-  return INTERROGATIVE_OPENER.test(t) || /\?\s*$/.test(t);
+  return INTERROGATIVE_OPENER.test(t) || /\?\s*$/.test(t) || QUESTION_CLAUSE.test(t);
 }
 
 /** True when the utterance is a polite request ("can you take me home") — a command, whatever else it says. */

@@ -12888,7 +12888,15 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
       '_ghostContext', '_recentAnalyses', '_coachKnowledgeContext', 'is_proactive', 'topObservations',
       'patternInsights',
       // Found by the widened parse: this round's shots, a phrase learned per parsed shot, a hero saved mid-round.
-      'club_tendencies', 'playerVocabulary', 'recentHeroMoments'];
+      'club_tendencies', 'playerVocabulary', 'recentHeroMoments',
+      /**
+       * 2026-10-29 (Brain recheck r13) — both were registered on the ALLOWED side as round-stable and
+       * were not. _golferModel folds in the live round's shots (its feel and miss shares print from
+       * them); _puttingRecord folds in the live round's putts once the floor is met. A logged shot or
+       * a holed putt moved the cached block. Both now ride turnContextBlock. Pinned by the F4 guard
+       * __tests__/regression/the-cached-prompt-survives-a-round.test.ts.
+       */
+      '_golferModel', '_puttingRecord'];
     if (DENY.some((d) => names.has(d) || exprs.some((e) => new RegExp(`\\b${d}\\b`).test(e)))) return false;
 
     // Frozen 2026-08-25 at 57; 59 since 2026-09-12; 60 with _mentalPattern; 61 with _trainingImpact. Shrinking is always
@@ -12909,7 +12917,7 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * Capped at three names of 120 chars, so it cannot grow the cached block meaningfully.
        */
       '_handicap', '_homeCourses',
-      '_golferModel', '_kevinContext', '_knownCoursesBlock',
+      '_kevinContext', '_knownCoursesBlock',
       '_persistentPatterns', '_personalBest', '_physicalLimitation', '_playerHistory',
       '_practiceContext', '_practicePlan', '_recentCageInsights', '_recentRoundInsights',
       '_routineImpact', 'c', 'caddieName',
@@ -12963,30 +12971,6 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * so a player who has never practised carries no prompt weight for it.
        */
       '_practiceFocus',
-      /**
-       * 2026-09-13 — _puttingRecord, added deliberately. Tim: "unify Green logic and everything green
-       * related according to course play, GPS, and putting practice… unified engine of truth is the
-       * design if I am not mistaken."
-       *
-       * CACHE-SAFE for the same reason _practiceImpact is: services/putting/greenHeat builds it from
-       * COMPLETED rounds, and the shared assembler (services/putting/greenHeatInput) folds the live
-       * round in only as a whole-round aggregate of putts already logged. It cannot move between two
-       * shots on the same hole — a putt logged now changes the number after the hole is scored, not
-       * mid-shot, and even then it is a per-hole aggregate rather than per-stroke state.
-       *
-       * Why it exists at all: the green had THREE legs and they met nowhere. Course play's yardage is
-       * unified in services/yardageResolver; the GPS read reaches the caddie as `priorGreenRead`; and
-       * the measured putting record — where the strokes actually go, by how he reached the green —
-       * reached GreenHeatCard, PuttReadLine and useGreenHeat and the caddie NOT AT ALL. Asked "how's my
-       * putting" he answered from puttStatsFrom, which is one round's putt count from the same raw
-       * input. He now has the record.
-       *
-       * Capped at 500 — two distance classes, an overall line and the caveat sentence — and null until
-       * the shared MIN_PUTT_HOLES floor is met, so a player with eight scored holes carries no prompt
-       * weight for it. The block also states that it is a RECORD and not a read of the green in front
-       * of him, because quoting a career three-putt rate at a specific putt would be a fabrication.
-       */
-      '_puttingRecord',
       /**
        * 2026-09-12 — _trainingImpact, added deliberately per the note above and cached for the same
        * reason as _practiceImpact: it reads LOGGED WORKOUTS and COMPLETED rounds, neither of which

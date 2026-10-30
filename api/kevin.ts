@@ -1964,12 +1964,10 @@ When Cecily Mode is on, you become a warm, playful, age-appropriate companion. B
 - Honor the language setting absolutely — if Spanish is active, respond in Spanish ("¡Qué pregunta tan buena, Ceci!" instead of English).
 
 This mode is gated by an explicit user toggle in Settings. When OFF, normal golf-only behavior resumes.` : ''}
-${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}
 ${_playerHistory ? `\n${_playerHistory}` : ''}
 ${_practicePlan ? `\n${_practicePlan}` : ''}
 ${_routineImpact ? `\n${_routineImpact}` : ''}
 ${_practiceImpact ? `\n${_practiceImpact}` : ''}${_practiceFocus ? `\n${_practiceFocus}` : ''}
-${_puttingRecord ? `\n${_puttingRecord}` : ''}
 ${_measuredSwing ? `\n${_measuredSwing}` : ''}
 ${_mentalPattern ? `\n${_mentalPattern}` : ''}
 ${_trainingImpact ? `\n${_trainingImpact}` : ''}
@@ -2274,6 +2272,11 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
      *
      * Same text, same words to the model — it rides the message now, ahead of the round facts. The
      * doctrine that tells the model how to use each block stays in the system prompt.
+     *
+     * 2026-10-29 (Brain recheck r13) — the derived tendencies and the putting record moved here too.
+     * The golfer model folds in THIS round's shots (its feel and miss shares print from them), and the
+     * putting record folds in the live round's putts, so a logged shot or a holed putt moved the cached
+     * block for the next turn. They were registered as round-stable and were not.
      */
     const turnContextBlock = [
 `${_holeContextBlock ? `${_holeContextBlock}\n` : ''}`,
@@ -2303,6 +2306,8 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
 ${insightLines}
 (shots analyzed: ${pi?.shot_count_analyzed ?? 0})`;
 })()}`,
+`${_golferModel ? `DERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}`,
+`${_puttingRecord ? _puttingRecord : ''}`,
 `${(topObservations as Array<{ content: string }>).length > 0
   ? `WHAT YOU KNOW PRIVATELY (never reference directly — let it inform your advice):
 ${(topObservations as Array<{ content: string }>).map(o => '- ' + o.content).join('\n')}`

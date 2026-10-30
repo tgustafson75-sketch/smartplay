@@ -65,7 +65,17 @@ export function removeConversationExchange(userText: string, assistantText: stri
   }
 }
 
+/**
+ * 2026-10-29 (Brain recheck r13) — counts every clear. A caller that asked BEFORE a clear and is answered
+ * AFTER it compares the count and files nothing: that answer belongs to a thread that has ended.
+ */
+let clears = 0;
+export function getConversationClearCount(): number {
+  return clears;
+}
+
 /** Wipe the shared history (round boundary / explicit reset). */
 export function clearConversationHistory(): void {
   history = [];
+  clears++;
 }

@@ -158,7 +158,9 @@ describe('the measured record reaches the caddie', () => {
   });
 
   it('is a registered cached interpolation, so the ratchet was answered not bypassed', () => {
-    expect(code('scripts/simulations/run-sim.ts')).toMatch(/'_puttingRecord',/);
+    // 2026-10-29 (Brain recheck r13) — registered on the DENY list: it folds in the live round's putts,
+    // so it moved to the per-turn context and must not come back to the cached block.
+    expect(code('scripts/simulations/run-sim.ts')).toMatch(/'_puttingRecord'/);
   });
 });
 

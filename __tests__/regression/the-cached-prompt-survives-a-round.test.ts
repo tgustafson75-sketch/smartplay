@@ -19,10 +19,25 @@
 import handler from '../../api/kevin';
 import { buildCaddieRequestBody } from '../../services/caddieRequestBody';
 import { getKnownCoursesBlock } from '../../services/holeContextResolver';
+import { buildGolferModel } from '../../services/golferModel';
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 
 jest.mock('../../services/featureAccess', () => ({ mayTalkToCaddie: () => true, takeCaddiePaywallBlock: () => null }));
+/**
+ * 2026-10-29 (Brain recheck r13) — the golfer model prints its feel and miss shares only once it is
+ * confident (30 data points: rounds + sessions + analyses), and the analyses history is not a fixture a
+ * guard can fill honestly. Only the COUNT of recent analyses reaches the model's confidence, so this
+ * gives it twenty swing entries and nothing else.
+ */
+jest.mock('../../services/smartAnalysisEngine', () => {
+  const actual = jest.requireActual('../../services/smartAnalysisEngine');
+  return {
+    ...actual,
+    getRecentAnalyses: () => Array.from({ length: 20 }, (_, i) => ({ id: `a${i}`, kind: 'swing', voice_summary: `Swing ${i} was on line.`, timestamp: Date.now() - i })),
+  };
+});
 
 const seen: Array<{ system: string; user: string }> = [];
 jest.mock('../../api/_aiProvider', () => {
@@ -96,7 +111,8 @@ function turnBody(t: {
 describe('F4 — the cached system prompt survives an in-round turn', () => {
   beforeEach(() => {
     seen.length = 0;
-    useRoundStore.setState({ isRoundActive: true, currentHole: 4, shots: [], activeCourse: 'Test Course' } as never);
+    useRoundStore.setState({ isRoundActive: true, currentHole: 4, shots: [], putts: {}, scores: {}, activeCourse: 'Test Course' } as never);
+    useSwingSessionStore.setState({ sessionHistory: [] } as never);
     useRelationshipStore.setState({
       observations: [
         obs('a', 'Grips it tighter after a bogey', 'mental'),
@@ -140,6 +156,49 @@ describe('F4 — the cached system prompt survives an in-round turn', () => {
       throw new Error(`cached system prompt moved between in-round turns at char ${i}:\n  turn 1: …${JSON.stringify(a.system.slice(Math.max(0, i - 80), i + 120))}\n  turn 2: …${JSON.stringify(b.system.slice(Math.max(0, i - 80), i + 120))}`);
     }
     expect(a.system).toBe(b.system);
+  });
+
+  it('a logged shot and a holed putt move the derived tendencies and the putting record, and the cached block still does not move', async () => {
+    const shotsOf = (n: number, feel: string) => Array.from({ length: n }, (_, i) =>
+      ({ id: `${feel}${i}`, timestamp: now - 60_000 * (i + 1), feel, direction: 'right', club: '7 iron' }));
+    const holes = (n: number, per: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [i + 1, per]));
+    useSwingSessionStore.setState({ sessionHistory: Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, shots: [], startedAt: now - i })) } as never);
+    useRoundStore.setState({ shots: shotsOf(30, 'flush'), putts: holes(9, 2), scores: holes(9, 4) } as never);
+    // The 5-minute memo is what rebuilds the derived model; forcing it here is that rebuild.
+    buildGolferModel(true);
+    const t1 = turnBody({
+      message: 'what should I hit from here', hole: 4, carry: 152, shots: 30, lock: null,
+      coach: '', proactive: false, heroes: 0, phrases: [], tendencies: [],
+    });
+    await callKevin(t1);
+
+    // The phone logs a fat shot and holes a putt on the tenth: the round moves, and the next rebuild sees it.
+    useRoundStore.setState({ shots: [...shotsOf(30, 'flush'), ...shotsOf(15, 'fat')], putts: { ...holes(9, 2), 10: 1 }, scores: { ...holes(9, 4), 10: 3 } } as never);
+    buildGolferModel(true);
+    const t2 = turnBody({
+      message: 'how do I play this bunker shot', hole: 4, carry: 141, shots: 45, lock: null,
+      coach: '', proactive: false, heroes: 0, phrases: [], tendencies: [],
+    });
+    // The fixture must move both values, or the assertion below proves nothing.
+    expect(String(t1.golfer_model_snippet)).toContain('Most-common contact feel: flush');
+    expect(String(t2.golfer_model_snippet)).toContain('Most-common contact feel: flush');
+    expect(t2.golfer_model_snippet).not.toEqual(t1.golfer_model_snippet);
+    expect(String(t1.puttingRecordBlock)).toContain('Overall 2.00 putts per hole across 9 scored holes');
+    expect(t2.puttingRecordBlock).not.toEqual(t1.puttingRecordBlock);
+    await callKevin(t2);
+
+    expect(seen.length).toBe(2);
+    const [a, b] = seen;
+    if (a.system !== b.system) {
+      let i = 0; while (i < a.system.length && a.system[i] === b.system[i]) i++;
+      throw new Error(`cached system prompt moved when a shot and a putt were logged, at char ${i}:\n  turn 1: …${JSON.stringify(a.system.slice(Math.max(0, i - 80), i + 120))}\n  turn 2: …${JSON.stringify(b.system.slice(Math.max(0, i - 80), i + 120))}`);
+    }
+    expect(a.system).toBe(b.system);
+    // Nothing dropped: the derived tendencies and the putting record reach the model on the message side.
+    expect(b.user).toContain('DERIVED TENDENCIES');
+    expect(b.user).toContain('Overall 1.90 putts per hole across 10 scored holes');
+    expect(b.system).not.toContain('DERIVED TENDENCIES');
+    expect(b.system).not.toContain('putts per hole across');
   });
 
   it('a new hole does not move it either (the hole block rides the message)', async () => {

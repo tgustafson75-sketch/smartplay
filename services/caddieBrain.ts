@@ -30,7 +30,7 @@
 import { getApiBaseUrl, markEndpointWarmed } from './apiBase';
 import { mayTalkToCaddie } from './featureAccess';
 import { buildCaddieRequestBody, type CaddieRequestExtras } from './caddieRequestBody';
-import { appendConversationTurn } from './voice/conversationHistory';
+import { appendConversationTurn, getConversationClearCount } from './voice/conversationHistory';
 import type { ToolAction } from '../types/toolAction';
 
 export interface CaddieTurn {
@@ -82,6 +82,8 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
   const heard = extras.heard?.trim() ? extras.heard : extras.message;
   // When he asked — the history orders this exchange against the router's turns by it.
   const askedAt = Date.now();
+  // 2026-10-29 (Brain recheck r13) — the thread this question was asked in. See the append below.
+  const threadClears = getConversationClearCount();
 
   const controller = new AbortController();
   let timedOut = false;
@@ -156,9 +158,17 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
     if (!text && toolActions.length) text = 'Done.';
     if (!text) return noAnswer();
 
-    // ONE conversation, whichever surface asked. Written here so no caller can forget it — the
-    // reason the caddie used to lose the thread when the player switched from earbud to typing.
-    appendConversationTurn(heard, text, askedAt);
+    /**
+     * ONE conversation, whichever surface asked. Written here so no caller can forget it — the reason
+     * the caddie used to lose the thread when the player switched from earbud to typing.
+     *
+     * 2026-10-29 (Brain recheck r13) — but only into the thread he asked in. Start Round clears the
+     * history, and a question still in flight at that tap is answered into the NEW round: last round's
+     * exchange would read as current context for its first turns, and the putt-ask note could mark the
+     * new hole as awaiting putts. The turn still reaches the player; only the record is dropped.
+     */
+    const sameThread = getConversationClearCount() === threadClears;
+    if (sameThread) appendConversationTurn(heard, text, askedAt);
 
     /**
      * 2026-09-11 — THE CADDIE ASKING IN HIS OWN WORDS COUNTS AS ASKING.
@@ -192,9 +202,11 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
     } catch { /* never let learning a preference break a reply */ }
 
     try {
-      const { noteCaddieAskedForPutts } = require('./pendingPuttAsk') as typeof import('./pendingPuttAsk');
-      const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
-      noteCaddieAskedForPutts(text, rs.isRoundActive ? rs.currentHole : null);
+      if (sameThread) {
+        const { noteCaddieAskedForPutts } = require('./pendingPuttAsk') as typeof import('./pendingPuttAsk');
+        const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
+        noteCaddieAskedForPutts(text, rs.isRoundActive ? rs.currentHole : null);
+      }
     } catch { /* never let this affect the turn */ }
     return { text, audioBase64: raw.audioBase64 ?? null, toolActions };
   } catch {
