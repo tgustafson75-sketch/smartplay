@@ -1,16 +1,22 @@
 /**
  * Pre-beta — Discrete Mode quick-toggle handlers.
  *
- * Voice intents that flip the global Trust Spectrum to L1 (Quiet) or
- * L2 (Companion) without making the user open the menu. Useful when
- * the player is on the tee in a quiet group, or when they want Kevin
- * back after the hole settles down.
+ * Voice intents that move the caddie's presence to Quiet or back to Balanced without making the user
+ * open the menu. Useful when the player is on the tee in a quiet group, or when they want Kevin back
+ * after the hole settles down.
+ *
+ * 2026-10-28 (recheck VC-R3-2) — these moved ONLY the trust level. Quiet is five flags
+ * (services/caddiePresence PRESENCE_PROFILES), so "Kevin, talk to me" after a Quiet set from the
+ * badge, the swap or Settings flipped the layout to caddie-leads and said "Back with you." while
+ * localMode and proactive-off kept him silent, and Settings still read Quiet. The badge, the swap,
+ * the Tools pill and Settings all go through applyPresence; the voice now does too — one writer.
+ * [[two-owners-is-the-root-cause]]
  *
  * Speak time budget ≤ 1.5s — keep responses to one short sentence.
  */
 
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
-import { useTrustLevelStore } from '../../store/trustLevelStore';
+import { applyPresence } from '../caddiePresence';
 
 export const setTrustQuietHandler: IntentHandler = {
   intent_type: 'set_trust_quiet',
@@ -25,7 +31,7 @@ export const setTrustQuietHandler: IntentHandler = {
     'quiet please',
   ],
   async execute(): Promise<IntentResult> {
-    useTrustLevelStore.getState().setLevel(1);
+    applyPresence('quiet');
     return {
       success: true,
       voice_response: "Got it. I'll be here when you need me.",
@@ -46,7 +52,7 @@ export const setTrustCompanionHandler: IntentHandler = {
     'back to normal',
   ],
   async execute(): Promise<IntentResult> {
-    useTrustLevelStore.getState().setLevel(2);
+    applyPresence('balanced');
     return {
       success: true,
       voice_response: 'Back with you.',

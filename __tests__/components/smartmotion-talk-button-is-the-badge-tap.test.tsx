@@ -6,6 +6,9 @@
  */
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react-native';
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import en from '../../i18n/locales/en.json';
 
 const mockToggle = jest.fn(async () => undefined);
 jest.mock('../../services/listeningSession', () => ({ toggle: () => mockToggle() }));
@@ -17,6 +20,12 @@ import { TalkToCaddieButton } from '../../components/smartmotion/TalkToCaddieBut
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
 
 describe('the SmartMotion talk button is the caddie badge\'s tap', () => {
+  beforeAll(async () => {
+    await i18n.use(initReactI18next).init({
+      lng: 'en', fallbackLng: 'en', resources: { en: { translation: en } },
+      interpolation: { escapeValue: false },
+    });
+  });
   beforeEach(() => { mockToggle.mockClear(); mockCapture.mockClear(); useListeningSessionStore.getState().setState('idle'); });
 
   it('THE REPORT: a press opens the listening session (which owns the offline reply), never a private capture', () => {

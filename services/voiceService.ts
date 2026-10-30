@@ -2155,9 +2155,9 @@ export const speak = async (
      * truncation retry exists precisely to avoid, because it "is precisely what reads as broken".
      *
      * So the two paths get the same policy. ONE retry, tight budget, and only for a genuine
-     * connectivity error: an AbortError means a newer utterance preempted us or the budget ran out,
-     * and both correctly stay quiet. A second failure means the link really cannot carry it, and
-     * device TTS is the kinder answer. [[voice-one-voice-invariant]] [[feels-like-a-real-caddie]]
+     * connectivity error: an AbortError means a newer utterance preempted us (stay quiet) or the
+     * budget ran out (no retry — the outer catch takes the failure road, see VOICE-ENG-R3-1).
+     * A second failure means the link really cannot carry it, and device TTS is the kinder answer. [[voice-one-voice-invariant]] [[feels-like-a-real-caddie]]
      */
     const ttsBody = JSON.stringify({ text: preprocessTtsText(text, language), gender: effectiveGender, language, persona, model_id: ttsModel, voice: customVoice });
     const isConnectivityError = (e: unknown): boolean =>
@@ -2508,7 +2508,23 @@ export const speak = async (
       notifySpeaking(false);
       notifyCaption(null);
     }
-    if (!(err instanceof Error && err.name === 'AbortError')) {
+    /**
+     * 2026-10-28 (recheck VOICE-ENG-R3-1) — A HUNG REQUEST IS A FAILURE, NOT A PREEMPTION.
+     *
+     * Every abort that means "someone else owns the speaker" (stop(), a newer speak, a prewarm, a
+     * base64 line) claims a new speech id BEFORE aborting. Only our own 20 s budget (or the retry's
+     * 8 s one) aborts with the id unchanged. On a 1-bar link that hang was treated as a preemption:
+     * twenty seconds of nothing, the caption cleared, the cached "trouble connecting" clip skipped
+     * exactly when the link was bad, and no log. A budget abort now takes the failure road: logged,
+     * counted, and the cached clip (or the logged suppression) — never the device voice.
+     */
+    const aborted = err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
+    if (aborted && myId === currentSpeechId) {
+      logVoiceSilentFail('speak_timeout', { speechId: myId, textHead: text.slice(0, 60) });
+      // 'timeout', not 'network': a slow server on good Wi-Fi must not read as signal loss.
+      cbRecordFailure('voice', 'timeout');
+      await deviceSpeakFallback(text, language, myId, effectiveGender);
+    } else if (!aborted) {
       console.log('[voice] speak error:', err);
       logVoiceSilentFail('speak_catch', { speechId: myId, error: err instanceof Error ? err.message : String(err) });
       const emsg = err instanceof Error ? err.message : String(err);
@@ -2517,8 +2533,8 @@ export const speak = async (
       // abort (timeout) or server error. "Network request failed" = real signal loss.
       if (/network request failed|connection refused|network error/i.test(emsg)) cbReportNetworkFailure();
       // THE Lakes-round fix: a real fetch failure (no signal) no longer goes
-      // mute — speak the line on the device instead. (AbortError = a newer
-      // utterance preempted us; that correctly stays silent.)
+      // mute — speak the line on the device instead. (A preempted abort lands
+      // in neither branch above; that correctly stays silent.)
       await deviceSpeakFallback(text, language, myId, effectiveGender);
     }
   }

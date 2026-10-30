@@ -22,7 +22,7 @@ describe('a real tap is never silently lost', () => {
     // a-tap-while-the-mic-opens-ends-the-capture.test.ts; this pins the shape.
     expect(ls).toMatch(/if \(!isEcho && state === 'opening'\) \{\s*skipOpenCue = true;\s*void stopSpeaking\(/);
     expect(ls).toMatch(/tap_skipped_open_cue/);
-    expect(ls).toMatch(/if \(settings\.voiceEnabled && !skipOpenCue\)/);
+    expect(ls).toMatch(/if \(settings\.voiceEnabled && !skipOpenCue && origin !== 'auto_reopen'\)/);
   });
 
   it('and a fresh session starts with it disarmed', () => {

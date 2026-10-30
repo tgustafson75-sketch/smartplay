@@ -255,7 +255,9 @@ continuation or close.
   physical source — earbud, glasses, badge — reaches `openSession` through `toggle()` as `tap`;
   `auto_reopen` is the caddie reopening the mic after its own question)*
 - `[path4:voice] opener_done allowed=true|false text="<spoken line>" via=clip|earcon|none trust=N`
-  *(`allowed` is `voiceEnabled`; `via=earcon` means the caddie's clip was not cached yet)*
+  *(`allowed` is `voiceEnabled`; `via=earcon` means the caddie's clip was not cached yet;
+  `text="" via=none` after `source=auto_reopen` is correct since 2026-10-28 — the caddie's own
+  question is the invitation, so no go-ahead plays and the mic opens at once)*
 - `[path4:voice] capture_start`
 - `[path4:voice] capture_done text_len=N cancelled=true|false`
 - `[path4:voice] intent=X topic=Y`

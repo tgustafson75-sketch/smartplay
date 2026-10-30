@@ -1158,8 +1158,17 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
     return;
   }
 
+  /**
+   * 2026-10-28 (recheck VOICE-ENG-R3-2) — NO GO-AHEAD AFTER THE CADDIE'S OWN QUESTION.
+   *
+   * An auto-reopen exists because the caddie just ASKED something ("Driver or three wood off this
+   * tee?"). Speaking the go-ahead on top — "What's the play?" — put a second, different question
+   * after the first, and held the mic closed for the ~1 s it played: the player who answered the
+   * question straight away lost his first words, the 08-11 defect on every reopen. The question is
+   * the invitation; the mic opens at once.
+   */
   let opener: VerbalCueResult | null = null;
-  if (settings.voiceEnabled && !skipOpenCue) {
+  if (settings.voiceEnabled && !skipOpenCue && origin !== 'auto_reopen') {
     try { opener = await playVerbalCue('listen', LISTENING_EARCON, LISTENING_EARCON_MS); } catch { /* non-fatal */ }
   }
   skipOpenCue = false;

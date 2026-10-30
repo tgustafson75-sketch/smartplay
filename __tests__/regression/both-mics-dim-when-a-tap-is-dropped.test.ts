@@ -38,8 +38,39 @@ describe('both primary mics dim exactly when a tap is dropped', () => {
     expect(badge).toContain('const badgeOpacity = micTapLook(listeningState).opacity;');
   });
 
+  /**
+   * 2026-10-28 (recheck VC-R3-3) — the pair above was a HAND-MADE list, and SmartMotion's talk button
+   * (a third control that taps toggle()) was not on it. Every component that imports toggle() from the
+   * listening session is found by walking components/, and each must take its look from micTapLook.
+   */
+  it('EVERY component that taps toggle() renders through micTapLook (found by walking, not listed)', () => {
+    const root = path.resolve(__dirname, '../..');
+    const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(dir, e.name)) : /\.tsx$/.test(e.name) ? [path.join(dir, e.name)] : []);
+    const tappers = walk(path.join(root, 'components')).filter((f) =>
+      /import\s*\{[^}]*\btoggle\b[^}]*\}\s*from\s*'[./]*\/services\/listeningSession'/.test(fs.readFileSync(f, 'utf8')));
+    const rel = tappers.map((f) => path.relative(root, f).split(path.sep).join('/')).sort();
+    // A walk that finds nothing certifies nothing — the known three must be among them.
+    expect(rel).toEqual(expect.arrayContaining([
+      'components/caddie/CaddieBottomBar.tsx',
+      'components/caddie/CaddieMicBadge.tsx',
+      'components/smartmotion/TalkToCaddieButton.tsx',
+    ]));
+    const missing = rel.filter((f) => !/\bmicTapLook\(/.test(read(f)));
+    expect(missing).toEqual([]);
+  });
+
+  it("SmartMotion's talk button says why it is dim, and is marked disabled", () => {
+    const btn = read('components/smartmotion/TalkToCaddieButton.tsx');
+    expect(btn).toContain('const micLook = micTapLook(state);');
+    expect(btn).toContain('opacity: micLook.opacity');
+    expect(btn).toContain("t('smartmotion_talk_to_caddie_button.accessibility_label.caddie_is_thinking')");
+    expect(btn).toContain('accessibilityState={{ disabled: micLook.dropped }}');
+  });
+
   it('the label is a real string', () => {
-    const en = JSON.parse(read('i18n/locales/en.json')) as { caddie_caddie_bottom_bar: { accessibility_label: Record<string, string> } };
+    const en = JSON.parse(read('i18n/locales/en.json')) as Record<'caddie_caddie_bottom_bar' | 'smartmotion_talk_to_caddie_button', { accessibility_label: Record<string, string> }>;
     expect(en.caddie_caddie_bottom_bar.accessibility_label.caddie_is_thinking).toBe('Your caddie is thinking');
+    expect(en.smartmotion_talk_to_caddie_button.accessibility_label.caddie_is_thinking).toBe('Your caddie is thinking');
   });
 });

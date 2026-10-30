@@ -108,3 +108,35 @@ describe('the bottom-bar mic as a control', () => {
     }
   }, 60_000);
 });
+
+/**
+ * 2026-10-28 (recheck VC-R3-3) — and SmartMotion's talk button, the third control that taps toggle().
+ * It kept its idle look and "Talk to your caddie" while toggle() dropped its taps.
+ */
+async function mountTalkIn(state: State) {
+  const { useListeningSessionStore } = require('../../store/listeningSessionStore');
+  useListeningSessionStore.getState().setState(state);
+  const { TalkToCaddieButton } = require('../../components/smartmotion/TalkToCaddieButton');
+  render(<TalkToCaddieButton accent="#00c896" />);
+}
+function talkMic(): { opacity: number; label: string; disabled: boolean } {
+  const el = screen.getByRole('button') as unknown as { props: { style?: unknown; accessibilityLabel?: string; accessibilityState?: { disabled?: boolean } } };
+  const flat = StyleSheet.flatten(el.props.style as never) as { opacity?: number } | undefined;
+  return { opacity: flat?.opacity ?? 1, label: String(el.props.accessibilityLabel), disabled: !!el.props.accessibilityState?.disabled };
+}
+
+describe("SmartMotion's talk button as a control", () => {
+  it('THE BUG: dims while THINKING and says why', async () => {
+    await mountTalkIn('thinking');
+    expect(talkMic()).toEqual({ opacity: 0.4, label: 'Your caddie is thinking', disabled: true });
+  }, 60_000);
+
+  it('full opacity while LISTENING and OPENING (the stop button) and at rest', async () => {
+    const want: Record<string, string> = { listening: 'Listening — tap to stop', opening: 'Listening — tap to stop', idle: 'Talk to your caddie' };
+    for (const st of ['listening', 'opening', 'idle'] as State[]) {
+      await mountTalkIn(st);
+      expect(talkMic()).toEqual({ opacity: 1, label: want[st], disabled: false });
+      screen.unmount();
+    }
+  }, 60_000);
+});

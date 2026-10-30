@@ -32,6 +32,8 @@ const mockState = {
   speaking: false,
   stopCalls: 0,
   speakImpl: null as null | ((text: string) => Promise<void>),
+  /** What the player hears and when the mic opens, in order (VOICE-ENG-R3-2). */
+  timeline: [] as string[],
 };
 
 const noCapture: Capture = { text: null, bail: 'cancelled', heardSpeech: false, durationMs: 0 };
@@ -43,6 +45,7 @@ const diagnosticHandler = () =>
 jest.mock('../../services/voiceService', () => ({
   speak: jest.fn(async (text: string) => {
     mockState.spoken.push(text);
+    mockState.timeline.push(`speak:${text}`);
     mockState.lastSpoken = text;
     if (mockState.speakImpl) await mockState.speakImpl(text);
   }),
@@ -53,12 +56,13 @@ jest.mock('../../services/voiceService', () => ({
   stopSpeaking: jest.fn(async () => { mockState.stopCalls += 1; mockState.speaking = false; }),
   captureUtteranceDetailed: jest.fn(async () => {
     mockState.captureCalls += 1;
+    mockState.timeline.push('capture');
     const next = mockState.captures.shift();
     if (!next) return noCapture;
     return typeof next === 'function' ? next() : next;
   }),
   releaseExternalMic: jest.fn(async () => 'none'),
-  playLocalFile: jest.fn(async () => undefined),
+  playLocalFile: jest.fn(async () => { mockState.timeline.push('cue'); }),
   stopCapture: jest.fn(async () => undefined),
   endCaptureEarly: jest.fn(),
   flashCaption: jest.fn((t: string) => { mockState.captions.push(t); }),
@@ -168,7 +172,7 @@ beforeEach(() => {
   Object.assign(mockState, {
     lastSpoken: null, captures: [], captureCalls: 0, spoken: [], captions: [], brain: [], brainCalls: 0,
     askCaddie: [], askCaddieSignals: [], precheck: null, handler: null, roundActive: false,
-    speakingUserInitiated: false, speaking: false, stopCalls: 0, speakImpl: null,
+    speakingUserInitiated: false, speaking: false, stopCalls: 0, speakImpl: null, timeline: [],
   });
   realNow = Date.now;
   clock = 1_000_000;
@@ -201,6 +205,14 @@ describe('finding 1 — a brain QUESTION reopens the mic for the answer', () => 
     await tap();
     await flush();
     expect(mockState.captureCalls).toBe(2);
+    // 2026-10-28 (recheck VOICE-ENG-R3-2) — the question IS the invitation. A go-ahead cue spoken
+    // after it ("What's the play?") was a second question, and the mic stayed closed while it played,
+    // so an immediate "driver" was lost. Nothing may play between the question and the second capture.
+    const q = mockState.timeline.indexOf('speak:Driver or three wood off this tee?');
+    expect(q).toBeGreaterThanOrEqual(0);
+    expect(mockState.timeline.slice(q + 1, q + 2)).toEqual(['capture']);
+    // A tapped session still gets its go-ahead before the mic opens.
+    expect(mockState.timeline.slice(0, 2)).toEqual(['cue', 'capture']);
   });
 
   // 2026-10-28 (Brain review r3) — the session has no diagnostic branch of its own any more: the turn

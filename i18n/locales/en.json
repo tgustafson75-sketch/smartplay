@@ -3257,6 +3257,13 @@
       "forward": "Forward"
     }
   },
+  "smartmotion_talk_to_caddie_button": {
+    "accessibility_label": {
+      "listening_tap_to_stop": "Listening — tap to stop",
+      "talk_to_your_caddie": "Talk to your caddie",
+      "caddie_is_thinking": "Your caddie is thinking"
+    }
+  },
   "caddie_caddie_mic_badge": {
     "accessibility_hint": {
       "starts_recording_tap_again_to": "Starts recording. Tap again to stop."
