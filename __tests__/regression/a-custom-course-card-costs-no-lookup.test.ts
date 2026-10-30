@@ -10,6 +10,7 @@
  */
 const mockRound = {
   roundStartTime: 1 as number | null,
+  activeCourseId: null as string | null,
   courseHoles: [] as { hole: number; par: number; distance: number }[],
 };
 jest.mock('../../store/roundStore', () => ({ useRoundStore: { getState: () => mockRound } }));
@@ -33,6 +34,8 @@ describe('the course card the caddie reads', () => {
   const cache = () => require('../../services/courseContextCache') as typeof import('../../services/courseContextCache');
 
   it('THE BUG: a custom course gets its card from the round, on the spot', () => {
+    // The round's holes are the card of the course being played, so the round must be on this course.
+    mockRound.activeCourseId = 'custom:home-abc123';
     expect(cache().getCourseContextSync('custom:home-abc123')).toBe('Hole 1: Par 4, 380 yds. Hole 2: Par 3, 160 yds.');
   });
 
@@ -57,6 +60,7 @@ describe('the course card the caddie reads', () => {
   });
 
   it('a real course whose fetch failed still has the round\'s card', async () => {
+    mockRound.activeCourseId = '12345';
     const c = cache();
     await c.warmCourseContext('12345', 10_000_000);               // offline / quota spent
     expect(c.getCourseContextSync('12345')).toBe('Hole 1: Par 4, 380 yds. Hole 2: Par 3, 160 yds.');

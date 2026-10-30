@@ -38,9 +38,15 @@ function recentlyFailed(courseId: string, now: number): boolean {
   return f.round === useRoundStore.getState().roundStartTime && now - f.at < FAILED_RETRY_MS;
 }
 
-/** The on-device card for a bundled or custom course, from the round store's holes. */
-function localCard(): string | null {
-  const holes = [...(useRoundStore.getState().courseHoles ?? [])].sort((a, b) => a.hole - b.hole);
+/**
+ * The on-device card for a bundled or custom course. The round store's holes are the card of the
+ * course being PLAYED; any other on-device course (a pre-round preview) is read from its own record.
+ */
+function localCard(courseId: string): string | null {
+  const round = useRoundStore.getState();
+  const fromRound = round.activeCourseId === courseId && (round.courseHoles ?? []).length > 0;
+  const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
+  const holes = [...(fromRound ? round.courseHoles : getBundledHoles(courseId))].sort((a, b) => a.hole - b.hole);
   if (holes.length === 0) return null;
   return holes.map((h) => `Hole ${h.hole}: Par ${h.par}, ${h.distance} yds`).join('. ') + '.';
 }
@@ -55,8 +61,8 @@ function localCard(): string | null {
  */
 export function getCourseContextSync(courseId: string | null | undefined): string | null {
   if (!courseId) return null;
-  if (isOnDevice(courseId)) return localCard();
-  return summaries.get(courseId) ?? localCard();
+  if (isOnDevice(courseId)) return localCard(courseId);
+  return summaries.get(courseId) ?? localCard(courseId);
 }
 
 /**

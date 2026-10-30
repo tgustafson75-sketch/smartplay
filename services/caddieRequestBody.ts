@@ -163,6 +163,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
   const currentHole = safe(() => r.currentHole ?? null, null);
   const activeCourseId = safe(() => r.activeCourseId ?? null, null);
   /**
+   * 2026-10-29 (Brain recheck r16) — THE COURSE IN PLAY, one owner. The card, the intelligence and the
+   * pro-shop number all read this, so a course picked on the Play tab before the round is the course
+   * the caddie is asked about. activeCourseId is set only at round start, and the chain is the one
+   * smartFinderService resolves for SmartFinder and SmartVision. [[two-owners-is-the-root-cause]]
+   */
+  const courseInPlayId = safe(() => (require('./smartFinderService') as typeof import('./smartFinderService')).resolveSmartFinderCourseId(r), null);
+  /**
    * 2026-09-10 — the declared club EXPIRES, and the rule lives in one place.
    *
    * This read `r.club` raw. `club` is only cleared at round start, round end and by an explicit
@@ -341,7 +348,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * the other half — "what's the pro shop's number?" is a question the caddie can answer.
      */
     proShop: safe(() => {
-      const id = activeCourseId ?? r.previewCourseId ?? null;
+      const id = courseInPlayId;
       if (!id) return null;
       const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
       const book = mem.useCaddieMemoryStore.getState().getCourseBook(id);
@@ -582,17 +589,22 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * services/courseContextCache owns it; the warm (the API course's fuller summary) is started on
      * every turn because the round's own card stands in until it lands — it runs once, and a failed one
      * is not retried every turn.
+     *
+     * 2026-10-29 (Brain recheck r16) — gated on the course in play, not on a live round. A pre-round
+     * preview was read by proShop alone, so "how should I play Pebble tomorrow" reached Kevin with no
+     * card. The warm is a one-time fetch per golfcourseapi course for the app session (failures retry
+     * on a window), so asking about a previewed course costs one lookup, not one per turn.
      */
     courseContext: safe(() => {
-      if (!isRoundActive || !activeCourseId) return null;
+      if (!courseInPlayId) return null;
       const cc = require('./courseContextCache') as typeof import('./courseContextCache');
-      void cc.warmCourseContext(activeCourseId);
-      return cc.getCourseContextSync(activeCourseId);
+      void cc.warmCourseContext(courseInPlayId);
+      return cc.getCourseContextSync(courseInPlayId);
     }, null),
     courseIntelligence: safe(() => {
-      if (!isRoundActive || !activeCourseId) return null;
+      if (!courseInPlayId) return null;
       const intel = require('./courseIntelligenceService') as typeof import('./courseIntelligenceService');
-      return intel.getCachedCourseIntelligenceSync(activeCourseId);
+      return intel.getCachedCourseIntelligenceSync(courseInPlayId);
     }, null),
     /**
      * 2026-08-23 — read here rather than left to the caller. Every hand-built payload remembered

@@ -12896,7 +12896,12 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * a holed putt moved the cached block. Both now ride turnContextBlock. Pinned by the F4 guard
        * __tests__/regression/the-cached-prompt-survives-a-round.test.ts.
        */
-      '_golferModel', '_puttingRecord'];
+      /**
+       * 2026-10-29 (Brain recheck r16) — the watch's session summary. watchStore.recordSwing appends on
+       * every watch swing, so the summary moves shot to shot. It was on the ALLOWED side as "pre-approved"
+       * with no stability rationale, and it rode the cached block. Now it rides turnContextBlock.
+       */
+      'wd', '_golferModel', '_puttingRecord'];
     if (DENY.some((d) => names.has(d) || exprs.some((e) => new RegExp(`\\b${d}\\b`).test(e)))) return false;
 
     // Frozen 2026-08-25 at 57; 59 since 2026-09-12; 60 with _mentalPattern; 61 with _trainingImpact. Shrinking is always
@@ -12989,7 +12994,7 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
       'handednessRule', 'isRoundActive', 'langRule', 'mentalGameBlock',
       'personaIntensity', 'perspectiveBlock', 'playerAddressRule', 'r', 'registerBlock',
       'responseMode', 'roundsTogether', 'selfReferenceBlock', 'sessionsTogether', 'shotAnswerShapeBlock',
-      'sim_round', 'todBlock', 'wd']);
+      'sim_round', 'todBlock']);
     return [...names].every((n) => ALLOWED.has(n));
   })(),
   'the cached prompt interpolates only reviewed, round-stable values; per-shot state rides the message');

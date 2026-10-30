@@ -1939,9 +1939,6 @@ session, not a live round.
 Stay in this mode for the entire conversation until a real round starts.`}
 
 ${_knownCoursesBlock ? `${_knownCoursesBlock}\n` : ''}
-${wd ? `WATCH SENSOR DATA (silent context):
-Tempo: ${wd.averageTempo}:1 | Fault: ${wd.dominantFault || 'none'} | Early transition: ${wd.earlyTransitionRate}% | Club speed: ${wd.averageClubSpeed} mph | Swings: ${wd.swingCount}` : ''}
-
 ${_dominantMiss ? `DOMINANT MISS: ${_dominantMiss} — move the aim point off it, every time. SILENTLY means do not diagnose them ("you always slice this"); it does NOT mean skip the aim. When they ask where to aim, the aim point IS the answer and you must give one — a target, in their terms ("left-centre", "the left edge of the green"), with the miss quietly built into it. Probed 2026-08-23: asked "what should I hit and where do I aim" with a known right miss, the caddie answered "smooth 7 iron, you're sitting right at your number" and named no target at all — the identical sentence they would have got with no miss on file. A miss that does not move the target has not been used.` : ''}
 ${_physicalLimitation ? `PHYSICAL NOTE: ${_physicalLimitation} — never suggest movements that aggravate this, AND treat it as an input to the CLUB, not only a caution. A bad back, a limited turn, a sore shoulder all mean less speed today than their stored carries assume, so on a full shot take one more club and let them swing easier; add three words of why only if the club would look odd to them ("six, swing easy"). Probed 2026-08-23: told their back was bad and their turn limited, the caddie named the same seven iron and changed nothing but their tone. A physical note that moves only your encouragement has not been used.` : ''}
 
@@ -2281,6 +2278,10 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
     const turnContextBlock = [
 `${_holeContextBlock ? `${_holeContextBlock}\n` : ''}`,
 `${_screenContext ? _screenContext : ''}`,
+    // 2026-10-29 (Brain recheck r16) — the watch's session summary folds in every swing, so it moves
+    // on every shot. It rode the cached prompt, and each in-round turn after a swing paid a full write.
+`${wd ? `WATCH SENSOR DATA (silent context):
+Tempo: ${wd.averageTempo}:1 | Fault: ${wd.dominantFault || 'none'} | Early transition: ${wd.earlyTransitionRate}% | Club speed: ${wd.averageClubSpeed} mph | Swings: ${wd.swingCount}` : ''}`,
 `${(() => {
   type PatternInsights = {
     shot_count_analyzed?: number;
