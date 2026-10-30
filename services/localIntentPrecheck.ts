@@ -36,6 +36,7 @@ import {
   LEAD_IN, isAboutSomeoneElse, isConditionalOrFuture, isPoliteRequest, isQuestionShaped, isStoryFramed,
 } from './utteranceIsCommand';
 import { routineAsk } from './routineUtterance';
+import { parseSpokenHole } from './spokenHole';
 
 interface Pattern {
   rx: RegExp;
@@ -115,10 +116,12 @@ const NOT_ABOUT_MY_CLUBS =
 
 // Optional explicit hole for a spoken score ("...on hole 7"); otherwise the handler uses the current
 // hole. The stroke count itself is parsed from raw_text by logScoreHandler.
+// 2026-10-29 (Brain recheck r15) — "on the 12th", "on 12", "on number 12", "the 2nd" and "hole six" all
+// name a hole too (services/spokenHole). Read only "on hole N" and a score on "the 12th" was written to
+// whatever hole was lowest unscored, not the one he said.
 const scoreHoleParam = (raw: string): Record<string, unknown> => {
-  const m = raw.match(/\bon\s+hole\s+(\d{1,2})\b/i) ?? raw.match(/\bhole\s+(\d{1,2})\b/i);
-  if (m) { const h = parseInt(m[1], 10); if (h >= 1 && h <= 18) return { hole_number: h }; }
-  return {};
+  const h = parseSpokenHole(raw);
+  return h != null ? { hole_number: h } : {};
 };
 
 // Ordered list — first match wins. Yardage patterns come before
@@ -729,6 +732,34 @@ const ASKS = /\?|\b(?:how|what|what'?s|whats|where|which|tell\s+me|give\s+me|sho
 const LOOKUP_NEGATED = /\b(?:not|don'?t|do\s+not|doesn'?t|does\s+not)\b/i;
 
 /**
+ * 2026-10-29 (Brain recheck r15) — A CONDITION ON THE SHOT is a question too. "How far do I hit my 7 iron
+ * INTO THE WIND" and "what's the yardage to the pin, it's DOWNHILL" were answered with the bare bag number
+ * or the bare green yardage: the wind, the slope, the rough and the lie are the reason he is asking, and
+ * DECISION_OR_REASON_RX has none of them. "Into" alone is left out — "how many yards into the green" is a
+ * plain yardage — so only the words that change the number count.
+ */
+const SITUATION_RX = /\b(?:wind|windy|downhill|uphill|sidehill|sloping|slope|rough|bunker|trouble|lie|if|behind\s+me|against\s+me)\b/i;
+const DISTANCE_TOPICS = new Set(['green_front', 'green_back', 'green_middle', 'distance_to_green']);
+
+/**
+ * 2026-10-29 (Brain recheck r15) — a NAMED hole. queryStatusHandler answers score, putts, par, GIR and the
+ * distances for the CURRENT hole or the round total, and reads no hole from the utterance, so "what's my
+ * score on hole 7" got the round total and "what's the par on the 12th" got the par of the hole he stands
+ * on. The brain has the spoken hole in its tool dispatch, so the named-hole ask goes there.
+ */
+const HOLE_SCOPED_TOPICS = new Set([
+  'score', 'putt_stats', 'par', 'gir', 'distance_to_green', 'green_front', 'green_back', 'green_middle',
+]);
+
+/**
+ * 2026-10-29 (Brain recheck r15) — a score for a PAST round. "What was my score last round" hit the score
+ * lookup and the off-round gate deflected it ("You're not in a round yet"), while the putts for that same
+ * round were answered from it. The score lookup reads the round in progress, so a past-round marker is the
+ * caddie's question.
+ */
+const PAST_ROUND_RX = /\b(?:last\s+round|yesterday|last\s+time|last\s+week)\b/i;
+
+/**
  * 2026-10-28 (Brain review r9) — a WANT or a NEED is not an order. "I need to go home" left the round
  * screen, "I want to scan my scorecard" opened the importer. The goal half of GOAL_OR_TREND_RX, not
  * the trend half: "went up and down for a 4" is a score, not a trend. A polite request is exempt.
@@ -784,6 +815,12 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
    */
   if (isStatusLookup(hit)) {
     const raw = transcript.trim();
+    if (HOLE_SCOPED_TOPICS.has(topic) && parseSpokenHole(raw) != null) {
+      return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: topic });
+    }
+    if (topic === 'score' && PAST_ROUND_RX.test(raw)) {
+      return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: topic });
+    }
     /**
      * 2026-10-29 (Brain review r14) — A CLUB QUESTION WITH A DECISION IN IT. "What's my 7 iron, should I
      * go for the green?" and "how far do I hit my driver, should I lay up?" took the whole tail as the
@@ -793,7 +830,8 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
      * words. Club words themselves match nothing in it, so "what's my 7 iron" stays the bag read.
      */
     if (hit.intent_type === 'query_status' && topic === 'club_distance') {
-      return DECISION_OR_REASON_RX.test(String(hit.parameters?.club_phrase ?? ''))
+      const phrase = String(hit.parameters?.club_phrase ?? '');
+      return DECISION_OR_REASON_RX.test(phrase) || SITUATION_RX.test(phrase)
         ? intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: 'club_distance' })
         : hit;
     }
@@ -803,7 +841,8 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     // last time"), so its own past framing is the ask, not a story.
     const toldAsStory = topic !== 'last_round_here' && isStoryFramed(withoutCounts);
     const statement = (FIRST_PERSON_STATEMENT.test(withoutCounts) && !ASKS.test(withoutCounts)) || LOOKUP_NEGATED.test(withoutCounts);
-    if (DECISION_OR_REASON_RX.test(withoutCounts) || GOAL_OR_TREND_RX.test(withoutCounts) || toldAsStory || statement) {
+    const conditioned = DISTANCE_TOPICS.has(topic) && SITUATION_RX.test(withoutCounts);
+    if (DECISION_OR_REASON_RX.test(withoutCounts) || GOAL_OR_TREND_RX.test(withoutCounts) || toldAsStory || statement || conditioned) {
       return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: String(hit.parameters?.query_topic ?? hit.intent_type) });
     }
     return hit;
