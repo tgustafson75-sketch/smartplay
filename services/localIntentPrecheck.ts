@@ -694,7 +694,7 @@ const ROUTINE_ASK: Record<string, 'save' | 'recall'> = { routine_save: 'save', r
 const STATUS_LOOKUP_TOPICS = new Set([
   'green_front', 'green_back', 'green_middle', 'distance_to_green', 'score', 'hole', 'holes_left', 'par',
   'course', 'longest_putt', 'putt_stats', 'gir', 'nine_split', 'longest_drive', 'last_round_here',
-  'routine_recall',
+  'routine_recall', 'club_distance',
 ]);
 
 /**
@@ -784,6 +784,19 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
    */
   if (isStatusLookup(hit)) {
     const raw = transcript.trim();
+    /**
+     * 2026-10-29 (Brain review r14) — A CLUB QUESTION WITH A DECISION IN IT. "What's my 7 iron, should I
+     * go for the green?" and "how far do I hit my driver, should I lay up?" took the whole tail as the
+     * club phrase, and the bag readout answered "Your seven iron goes about 165 yards." The decision is
+     * the part AFTER the club, so only that part is tested. The bag head is not: "how far do I HIT my 7
+     * iron" and "how far do I CARRY my 3 wood" are bag questions, and DECISION_OR_REASON_RX matches both
+     * words. Club words themselves match nothing in it, so "what's my 7 iron" stays the bag read.
+     */
+    if (hit.intent_type === 'query_status' && topic === 'club_distance') {
+      return DECISION_OR_REASON_RX.test(String(hit.parameters?.club_phrase ?? ''))
+        ? intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: 'club_distance' })
+        : hit;
+    }
     const withoutCounts = raw.replace(/\b(?:left|remaining|still)\s+to\s+play\b/gi, ' ');
     // 2026-10-28 (Brain review r4) — and a story or a goal: "I was 3 over through 9 at Menifee
     // yesterday" is not "what's my score". last_round_here is ABOUT a past round ("how did I do here

@@ -69,9 +69,12 @@ export function shotEpochChanged(epoch: string | null): boolean {
 export function isPositionalAdvice(toolActions: readonly unknown[] | null | undefined): boolean {
   if (!toolActions || toolActions.length === 0) return false;
   // BrainReply types these as unknown[], so narrow here rather than making every caller assert.
+  // 2026-10-29 (Brain review r14) — the discriminant is `type`, as ToolAction defines it. This read
+  // `name`, which no production action carries, so a club call for a shot already played was always
+  // judged non-positional and spoken anyway. The fixtures had the wrong shape and hid it.
   return toolActions.some((a) => {
-    const name = (a as { name?: unknown } | null | undefined)?.name;
-    return typeof name === 'string' && POSITIONAL_TOOLS.has(name);
+    const type = (a as { type?: unknown } | null | undefined)?.type;
+    return typeof type === 'string' && POSITIONAL_TOOLS.has(type);
   });
 }
 

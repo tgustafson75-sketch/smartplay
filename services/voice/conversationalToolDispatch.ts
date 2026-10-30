@@ -584,7 +584,9 @@ function dispatchOne(a: AnyAction): void {
        * and adherence is scored against advice for a different position entirely. Stale advice must
        * not become data. [[two-owners-is-the-root-cause]]
        */
-      if (!adviceIsStillWorthSaying(currentTurnEpoch(), [{ name: 'recommend_club' }])) {
+      // 2026-10-29 (Brain review r14) — the gate reads the real action, not a literal with the same
+      // shape. The literal was always positional, so this check could never tell a payload apart.
+      if (!adviceIsStillWorthSaying(currentTurnEpoch(), [a])) {
         break;
       }
       if (typeof a.club === 'string' && a.club.trim()) {

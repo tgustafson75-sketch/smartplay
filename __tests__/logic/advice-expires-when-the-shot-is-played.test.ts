@@ -29,8 +29,10 @@ import {
 } from '../../services/adviceFreshness';
 import { useRoundStore } from '../../store/roundStore';
 
-const REC = [{ name: 'recommend_club' }];
-const ASK = [{ name: 'get_handicap' }];
+// The real ToolAction shape: the discriminant is `type`. A `{name}` fixture here is what let the
+// freshness gate read the wrong property and still pass (2026-10-29, Brain review r14).
+const REC = [{ type: 'recommend_club', club: '7i' }];
+const ASK = [{ type: 'open_swinglab' }]; // a real, non-positional ToolAction
 
 function setRound(hole: number, shotCount: number, active = true): void {
   useRoundStore.setState({
@@ -74,7 +76,7 @@ describe('the epoch tracks the shot the player is standing over', () => {
 describe('only positional advice expires', () => {
   it('a club call is positional', () => {
     expect(isPositionalAdvice(REC)).toBe(true);
-    expect(isPositionalAdvice([{ name: 'plan_shot' }])).toBe(true);
+    expect(isPositionalAdvice([{ type: 'plan_shot' }])).toBe(true);
   });
 
   it('a fact about the player is not', () => {
