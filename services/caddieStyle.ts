@@ -44,7 +44,10 @@ export type StyleSignal = 'briefer' | 'fuller' | null;
  */
 const BRIEFER_ASKS = [
   'be brief', 'be briefer', 'more brief', 'keep it brief', 'keep it short', 'keep it shorter',
-  'shorter answers', 'short answers', 'less detail', 'less talking', 'talk less', 'say less',
+  'give me short answers', 'give me shorter answers', 'want short answers', 'want shorter answers',
+  'like short answers', 'like shorter answers', 'short answers from now on', 'shorter answers from now on',
+  'short answers please', 'shorter answers please',
+  'less detail', 'less talking', 'talk less', 'say less',
   'get to the point', 'cut to the chase', 'quick rundown', 'quick version', 'short version', 'spare me',
   'wrap it up',
 ];
@@ -81,14 +84,22 @@ const REFUSED = /\b(?:stop|quit|why)\b/;
 /** "Why don't you keep it short" / "why not keep it short" ask for it. */
 const WHY_NOT_ASK = /\bwhy\s+(?:don't|dont|not)\b(?:\s+(?:you|we))?/g;
 /**
+ * 2026-10-29 (Brain recheck r12) — "you" anywhere in the clause was too loose: "we should wrap it up
+ * when you are done" is the round, not an order to him. A clause is addressed to him when it names
+ * him, opens with an imperative, or has "you" followed directly by a modal and then the verb.
+ */
+const ADDRESSED_TO_HIM =
+  /\b(?:kevin|serena)\b|^(?:(?:just|please|now|ok|okay|and|so|hey)[\s,]+)*(?:get|cut|wrap|keep|be|give|stop|spare)\b|\byou(?:\s+(?:can|could|should|need\s+to|have\s+to|must|will|would|please|just))*\s+(?:get|cut|wrap)\b/;
+
+/**
  * Phrases with an everyday golf meaning that only count when said to HIM: "get to the point where I
  * can break 80" is a goal, "let's wrap it up, it's getting dark" is the round. "Get to the point"
- * followed by where/that/when/of/in is never the brevity ask; "wrap it up" needs a "you", "your" or
- * his name in the same clause.
+ * followed by where/that/when/of/in is never the brevity ask; "get to the point" and "wrap it up"
+ * count only when the clause is addressed to him (see ADDRESSED_TO_HIM).
  */
 const NOT_THE_ASK: Record<string, (clause: string) => boolean> = {
-  'get to the point': (c) => /\bget to the point (?:where|that|when|of|in)\b/.test(c),
-  'wrap it up': (c) => !/\b(?:you|your|you're|kevin|serena)\b/.test(c),
+  'get to the point': (c) => !ADDRESSED_TO_HIM.test(c) || /\bget to the point (?:where|that|when|of|in)\b/.test(c),
+  'wrap it up': (c) => !ADDRESSED_TO_HIM.test(c),
 };
 
 /** Where the phrase starts as a whole-word run inside a normalised clause (curly apostrophes folded by norm); -1 when absent. */

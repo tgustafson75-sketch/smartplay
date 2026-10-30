@@ -359,7 +359,7 @@ const PATTERNS: Pattern[] = [
     rx: new RegExp(
       LEAD_IN
       + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:just\s+)?`
-      + String.raw`(?:(?:i'?m|im|i\s+am|i\s+play(?:\s+as)?|i\s+swing|i\s+golf|set\s+me\s+(?:to|as)|set\s+(?:my\s+)?handedness\s+to|`
+      + String.raw`(?:(?:i'?m|im|i\s+am|i\s+play(?:\s+as)?|i\s+swing|i\s+golf|set\s+me\s+(?:up\s+)?(?:to|as)|(?:set|change|switch)\s+(?:my\s+)?handedness\s+to|`
       + String.raw`switch\s+(?:me\s+)?to|change\s+(?:me\s+)?to|make\s+me|put\s+me\s+(?:down\s+)?as)\s+)?(?:a\s+)?`
       + String.raw`(left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty)(?:\s+(?:golfer|player))?`
       + SETTING_TAIL,
@@ -397,9 +397,9 @@ const PATTERNS: Pattern[] = [
     rx: new RegExp(
       LEAD_IN
       + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:just\s+)?`
-      + String.raw`(?:(?:switch|change|go|set|put)\s+(?:it\s+|the\s+app\s+|(?:the\s+)?(?:theme|screen|display)\s+)?(?:to|into|in)\s+`
-      + String.raw`|(?:turn\s+on|use|enable|give\s+me|make\s+it|i\s+(?:want|prefer)|i'?d\s+(?:like|prefer)|let'?s\s+(?:do|use|go\s+with))\s+|(turn\s+off|disable)\s+)?`
-      + String.raw`(?:the\s+)?(dark|light)\s+mode(?:\s+on)?`
+      + String.raw`(?:(?:switch|change|go|set|put)\s+(?:me\s+|it\s+|the\s+app\s+|(?:the\s+)?(?:theme|screen|display)\s+)?(?:to|into|in)\s+`
+      + String.raw`|(?:turn\s+on|use|enable|give\s+me|make\s+it|put\s+me\s+in|i\s+(?:want|prefer)|i'?d\s+(?:like|prefer)|let'?s\s+(?:do|use|go\s+with))\s+|(turn\s+off|disable)\s+)?`
+      + String.raw`(?:the\s+)?(dark|light)\s+(?:mode|theme)(?:\s+on)?`
       + SETTING_TAIL,
       'i',
     ),
@@ -409,12 +409,29 @@ const PATTERNS: Pattern[] = [
     },
   },
   {
+    // 2026-10-29 (Brain recheck r12) — "switch to light", "set the theme to dark", "turn the theme to
+    // dark": a verb, the theme (or nothing), "to", and the colour. The colour is the order on its own;
+    // only "dark mode" / "dark theme" were matched above, so these went nowhere and Kevin pretended.
+    rx: new RegExp(
+      LEAD_IN
+      + String.raw`(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:just\s+)?`
+      + String.raw`(?:switch|change|set|put|turn)\s+(?:me\s+|it\s+|the\s+app\s+|(?:the\s+)?(?:theme|screen|display)\s+)?(?:to|into)\s+(?:the\s+)?(dark|light)`
+      + SETTING_TAIL,
+      'i',
+    ),
+    build: (raw, m) => intent(raw, 'change_setting', { setting_name: 'theme', new_value: m[1].toLowerCase() }),
+  },
+  {
     // 2026-10-28 (Brain review r9) — a sentence that only MENTIONS handedness or a theme ("we got
     // paired with a lefty", "dark mode is hurting my eyes") is the caddie's. 'conversational', not
     // null: the cloud classifier would hand the same sentence back as a setting change.
-    rx: /\b(?:left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty|((?:dark|light)\s+mode))\b/i,
+    //
+    // 2026-10-29 (Brain recheck r12) — "dark theme", "the theme is dark", and "handedness" were not
+    // words this caught, so an order phrased with them reached Kevin with no declined note. The note
+    // is what stops him saying "done" to a setting nothing changed.
+    rx: /\b(?:left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty|handedness|(?:dark|light)\s+(?:mode|theme)|theme)\b/i,
     build: (raw, m) => intent(raw, 'conversational', {
-      raw_utterance: raw, not_a_command: 'change_setting', setting_name: m[1] ? 'theme' : 'handedness',
+      raw_utterance: raw, not_a_command: 'change_setting', setting_name: /theme|dark|light/i.test(m[0]) ? 'theme' : 'handedness',
     }),
   },
   {
