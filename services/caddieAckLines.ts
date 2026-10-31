@@ -148,3 +148,35 @@ export const LISTEN_CUES: { idle: string[]; round: string[] } = {
 export const TRUST_L1_OPENER = 'Yeah?';
 
 export const GOTIT_CUES: string[] = ['Got it.', 'On it.', 'Okay.', 'Heard you.'];
+
+/**
+ * 2026-10-31 (caddie-voice-3) — the earbud opener and got-it cue, per language. These were English
+ * whatever the player's language, so an es or zh player heard the caddie open and close in English on
+ * every tap. Each set is pre-rendered by offlineVoiceCache in the caddie's voice, so the cached clip
+ * matches the player's language. English stays on the dialog templates and GOTIT_CUES above.
+ */
+export const GOTIT_CUES_BY_LANG: Record<'en' | 'es' | 'zh', string[]> = {
+  en: GOTIT_CUES,
+  es: ['Entendido.', 'Vale.', 'Hecho.', 'Te escucho.'],
+  zh: ['明白了。', '好的。', '收到。', '我听到了。'],
+};
+/** The trust level 1 opener in each language (see TRUST_L1_OPENER). */
+export const TRUST_L1_OPENER_BY_LANG: Record<'en' | 'es' | 'zh', string> = {
+  en: TRUST_L1_OPENER,
+  es: 'Dime.',
+  zh: '嗯？',
+};
+export type EarbudOpenerRole = 'caddie' | 'coach' | 'psychologist';
+/** The role's earbud_open lines in es and zh (English comes from constants/dialogTemplates). */
+export const EARBUD_OPEN_BY_LANG: Record<'es' | 'zh', Record<EarbudOpenerRole, string[]>> = {
+  es: {
+    caddie: ['¿Qué estás viendo?', '¿Qué estás pensando?', '¿Cuál es la jugada?', 'Háblame.', '¿Qué tienes en mente?'],
+    coach: ['¿En qué estás trabajando?', '¿Cuál es el foco?', '¿Qué quieres afinar?'],
+    psychologist: ['¿Qué tal?', '¿Cómo vas?', '¿Sí?', '¿Qué te preocupa?', '¿Qué estás enfrentando?'],
+  },
+  zh: {
+    caddie: ['你看到了什么？', '你在想什么？', '这一杆怎么打？', '跟我说说。', '你心里有什么？'],
+    coach: ['你在练什么？', '这次的重点是什么？', '你想调整哪里？'],
+    psychologist: ['怎么样？', '最近怎么样？', '嗯？', '你在应对什么？', '有什么想聊的？'],
+  },
+};

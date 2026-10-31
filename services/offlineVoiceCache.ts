@@ -37,7 +37,7 @@
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
 import { FIXED_OFFLINE_REPLIES_EN } from './localStatusResponder';
-import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_SAVED_OFFLINE, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_MIC_NEEDS_APP, CADDIE_NOTICE_MIC_OFF, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_SAVED_OFFLINE, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_MIC_NEEDS_APP, CADDIE_NOTICE_MIC_OFF, LISTEN_CUES, GOTIT_CUES, GOTIT_CUES_BY_LANG, EARBUD_OPEN_BY_LANG, TRUST_L1_OPENER, TRUST_L1_OPENER_BY_LANG } from './caddieAckLines';
 import { _allCaddieTemplates } from '../constants/dialogTemplates/caddieTemplates';
 import { _allCoachTemplates } from '../constants/dialogTemplates/coachTemplates';
 import { _allPsychologistTemplates } from '../constants/dialogTemplates/psychologistTemplates';
@@ -90,6 +90,8 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   ...LISTEN_CUES.idle.map((text, i) => ({ slug: `listen_idle_${i}`, language: 'en' as const, text })),
   ...LISTEN_CUES.round.filter(t => !LISTEN_CUES.idle.includes(t)).map((text, i) => ({ slug: `listen_round_${i}`, language: 'en' as const, text })),
   ...GOTIT_CUES.filter(t => !ACK_PHRASES.en.includes(t)).map((text, i) => ({ slug: `gotit_${i}`, language: 'en' as const, text })),
+  // 2026-10-31 (caddie-voice-3) — the es and zh got-it cues, the same as the English set above.
+  ...(['es', 'zh'] as const).flatMap((language) => GOTIT_CUES_BY_LANG[language].map((text, i) => ({ slug: `gotit_${language}_${i}`, language, text }))),
   /**
    * 2026-08-23 — the EARBUD OPENERS, in every role.
    *
@@ -100,9 +102,14 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
    * would become a beep, which is exactly the kind of quiet degrade this app keeps paying for.
    */
   { slug: 'trust_l1_open', language: 'en', text: TRUST_L1_OPENER },
+  // 2026-10-31 (caddie-voice-3) — the es and zh L1 opener, and the es and zh role openers. Without these an
+  // es or zh player's tap resolves to no clip and the caddie speaks English (or a beep).
+  ...(['es', 'zh'] as const).map((language) => ({ slug: `trust_l1_open_${language}`, language, text: TRUST_L1_OPENER_BY_LANG[language] })),
   ..._allCaddieTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_caddie_${i}`, language: 'en' as const, text })),
   ..._allCoachTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_coach_${i}`, language: 'en' as const, text })),
   ..._allPsychologistTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_psych_${i}`, language: 'en' as const, text })),
+  ...(['es', 'zh'] as const).flatMap((language) => (['caddie', 'coach', 'psychologist'] as const).flatMap((role) =>
+    EARBUD_OPEN_BY_LANG[language][role].map((text, i) => ({ slug: `open_${role}_${language}_${i}`, language, text })))),
   // 2026-10-15 — the off-course practice nudge (DEAD_END_PRACTICE) is retired: no path speaks it, and
   // the warm pass's sweep deletes its old recordings. Its replacement, the proven-offline notice:
   ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `notice_offline_${language}`, language, text: CADDIE_NOTICE_OFFLINE[language] })),

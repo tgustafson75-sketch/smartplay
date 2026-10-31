@@ -14,7 +14,7 @@ import { noteUserTurn, getUserTurnEpoch } from './userTurnClock';
 import { noteCaddieTurn } from './funnelEvents';
 import { takeCaddiePaywallBlock, CADDIE_PAYWALL_DEFERRED_LINE } from './featureAccess';
 import { getDialog } from './dialogEngine';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_NEEDS_APP, CADDIE_NOTICE_MIC_OFF, CADDIE_NOTICE_MIC_TROUBLE, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_NEEDS_APP, CADDIE_NOTICE_MIC_OFF, CADDIE_NOTICE_MIC_TROUBLE, EARBUD_OPEN_BY_LANG, GOTIT_CUES_BY_LANG, TRUST_L1_OPENER_BY_LANG } from './caddieAckLines';
 import { settleForegroundForMic, micMayBeRefusedNow } from './appForeground';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
@@ -326,6 +326,12 @@ function pickCue(pool: string[]): string {
 /** What a cue actually played — the spoken line (empty when none was picked) and whether it was the
  *  caddie's own cached clip or the earcon fallback. openSession logs it as the Path 4 opener marker. */
 type VerbalCueResult = { text: string; via: 'clip' | 'earcon' };
+/** The player's language as the cue sets know it. Anything unknown is English, as everywhere else. */
+type SpokenLanguage = 'en' | 'es' | 'zh';
+function spokenLanguage(): SpokenLanguage {
+  const lang = useSettingsStore.getState().language;
+  return lang === 'es' || lang === 'zh' ? lang : 'en';
+}
 async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, fallbackMs: number): Promise<VerbalCueResult> {
   let text = '';
   try {
@@ -339,7 +345,8 @@ async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, f
      * three roles' earbud_open templates were added there in the same change for exactly that
      * reason.
      */
-    text = kind === 'gotit' ? pickCue(GOTIT_CUES) : pickOpener();
+    const language = spokenLanguage();
+    text = kind === 'gotit' ? pickCue(GOTIT_CUES_BY_LANG[language]) : pickOpener(language);
     // Review G2 (finding 7) — the active caddie and its gender: the same pair the clips are warmed under.
     const { persona, gender } = (require('./voiceService') as typeof import('./voiceService')).activeVoice();
     const cache = await import('./offlineVoiceCache');
@@ -722,7 +729,7 @@ export async function toggle(): Promise<void> {
  * range greets you as the coach, between shots as the psychologist, and in a round as the caddie —
  * which is what the templates were written for.
  */
-function pickOpener(): string {
+function pickOpener(language: SpokenLanguage): string {
   const round = useRoundStore.getState();
   const trustLevel = getTrustLevel();
   const surface = getActiveSurface();
@@ -732,7 +739,10 @@ function pickOpener(): string {
     round.isRoundActive ? 'caddie' : 'coach';
 
   // L1 has not earned conversation yet — acknowledge and listen, do not chat.
-  if (trustLevel === 1) return TRUST_L1_OPENER;
+  if (trustLevel === 1) return TRUST_L1_OPENER_BY_LANG[language];
+
+  // 2026-10-31 (caddie-voice-3) — the dialog templates are English; es and zh take the same role split.
+  if (language !== 'en') return pickCue(EARBUD_OPEN_BY_LANG[language][role]);
 
   return getDialog(role, 'earbud_open');
 }
@@ -2468,8 +2478,14 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       }
       return;
     }
+    // 2026-10-31 (caddie-voice-1 / CV-B) — a handler's voice_response is a typed answer that is SPOKEN, so it
+    // counts as one: replyIsSpeaking() keeps the store 'responding' and a tap shushes it, and the speech is
+    // awaited (below the tool dispatch, so the action still fires as soon as the line starts) so the turn does
+    // not end and drop the counters while the answer is still playing. Every other typed speech branch does this.
+    let handlerSpeech: Promise<unknown> | undefined;
     if (result?.voice_response) {
-      void speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
+      replyIsSpeaking();
+      handlerSpeech = speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
         ?.catch?.(() => undefined);
       try { recordKevinTurn(result.voice_response); } catch { /* non-fatal */ }
     }
@@ -2482,6 +2498,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         dispatchConversationalToolActions([result.tool_action]);
       } catch (e) { console.log('[handsFree-route] tool_action dispatch failed:', e); }
     }
+    await handlerSpeech;
   } catch (e) {
     console.log('[handsFree-route] failed:', e);
   } finally {
