@@ -7584,7 +7584,7 @@ check('Brain has a minimal-body fail-safe retry (survives context throw / 413)',
   // 2026-10-28 (Brain review r5) — the follow-up turn asks through askCaddie (services/voice/
   // followUpBrainTurn): a FAST failure (a 5xx / 413 / dropped socket — askCaddie's 'failed') is asked
   // once more with the same payload; the builder's safe() guards are why a context read cannot throw.
-  /if \(!turn && reason === 'failed'\) \{[\s\S]{0,300}turn = await ask\(\);/.test(readCode('services/voice/followUpBrainTurn.ts')) &&
+  /if \(!turn && reason === 'failed' && Date\.now\(\) - startedAt < FAST_FAILURE_MS\) \{[\s\S]{0,300}turn = await ask\(\);/.test(readCode('services/voice/followUpBrainTurn.ts')) &&
     /sendToBrain = \(message: string\) =>\s*followUpBrainTurn\(/.test(voiceCaddieSrc) &&
     !/Hit a snag on my end/.test(voiceCaddieSrc + read('services/voice/followUpBrainTurn.ts')),
   'a context-builder throw or a too-large-payload 413 retries once with a minimal body against the healthy endpoint, so the first ask still answers');
@@ -18132,7 +18132,7 @@ check(
   const followUp = readCode('services/voice/followUpBrainTurn.ts');
   check('BRAIN: the phone never re-sends a turn it only stopped listening to',
     /followUpBrainTurn\(/.test(voice) && !/fetch\(apiUrl \+ '\/api\/kevin', \{\s*method: 'POST',\s*headers: \{\s*'Content-Type': 'application\/json',\s*'X-AI-Provider'/.test(voice) &&
-      /if \(!turn && reason === 'failed'\)/.test(followUp) &&
+      /if \(!turn && reason === 'failed' && Date\.now\(\) - startedAt < FAST_FAILURE_MS\)/.test(followUp) &&
       /\(timedOut \? 'timeout' : signal\?\.aborted \? 'aborted' : refused \? 'refused' : 'failed'\)/.test(readCode('services/caddieBrain.ts')),
     'aborting the fetch does not stop /api/kevin; a retry after our own timeout bought the same turn twice');
 }

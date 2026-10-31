@@ -7,7 +7,9 @@
  * (skipOpenCue; until 10-28 it was queued as the endpoint). So the badge read as locked at the one moment it was the stop button, and the
  * player waited on VAD in the wind instead of tapping. e3a6e54f (06-24) fixed it once ("listening no
  * longer DIMS the badge — backwards"); a rollback restored it. 'thinking' is the only state where a
- * non-echo tap falls to swallowedTap('session_in_flight'). Keep this in step with listeningSession.toggle().
+ * non-echo tap falls to swallowedTap('session_in_flight'). A typed or watch turn sets the same 'thinking'
+ * in the shared store and toggle() drops its taps too (swallowedTap('typed_turn_in_flight')), so the rule
+ * holds on every path. Keep this in step with listeningSession.toggle().
  */
 export function tapIsDroppedIn(s: string): boolean {
   return s === 'thinking';

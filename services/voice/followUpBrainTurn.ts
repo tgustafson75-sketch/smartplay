@@ -41,6 +41,9 @@ export interface FollowUpReply {
 // pass the warm 30s budget; give the brain the longer budget only until /api/kevin itself is warm.
 const brainTimeoutMs = (): number => (isEndpointWarmed('/api/kevin') ? BRAIN_FETCH_TIMEOUT_MS : COLD_BRAIN_FETCH_TIMEOUT_MS);
 
+// A failure inside this window is a blip worth one retry; anything slower was already billed on the server.
+const FAST_FAILURE_MS = 5_000;
+
 export async function followUpBrainTurn(message: string, opts: { language: string; responseMode?: string | null }): Promise<FollowUpReply> {
   const { language } = opts;
   // The player's own words — `message` is reshaped below, and the local answer must read what he asked.
@@ -106,14 +109,17 @@ export async function followUpBrainTurn(message: string, opts: { language: strin
     onNoAnswer: (r) => { reason = r; },
   });
 
+  const startedAt = Date.now();
   let turn = await ask();
   /**
    * Retry ONCE, the SAME question to the SAME caddie, on a FAST failure only (a 5xx, a dropped socket).
    * 2026-09-23 — never after our own timeout: the first turn is still running on the server and is
    * billed in full, so a retry buys it twice and makes the player wait a second window. Never after a
    * 'refused' either: the server answered, and what it said was that the brain is down.
+   * 2026-10-29 (Brain review S1-1) — "fast" is measured, not assumed: a socket can drop late in the
+   * window, and that request is already billed on the server.
    */
-  if (!turn && reason === 'failed') {
+  if (!turn && reason === 'failed' && Date.now() - startedAt < FAST_FAILURE_MS) {
     recordVoiceEndpointFailure('kevin');
     logVoiceError('kevin_response', new Error('brain_fast_failure'));
     reason = null;

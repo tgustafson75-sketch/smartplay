@@ -134,6 +134,9 @@ let unsubEarbud: (() => void) | null = null;
 // consumers; React UI should subscribe to listeningSessionStore.state
 // directly for reactive updates.
 let sessionInFlight = false;
+// 2026-10-30 (caddie-voice-1) — typed / watch turns still answering (handleTranscribedUtterance). They
+// never raise sessionInFlight, so toggle() reads this count to drop a tap while one is in flight.
+let typedTurnsInFlight = 0;
 // 2026-06-16 (Tim — earbud-tap-to-stop) — timestamp of the last tap that STOPPED a
 // Smart Motion recording; toggles within the cooldown are swallowed so the duplicate
 // tap signal (immediate sub + ~350ms pattern) can't open listening over the just-
@@ -507,7 +510,7 @@ export { tapIsDroppedIn, avatarTapRoute } from './voice/tapIsDroppedIn';
  * offer is dropped — logged on device, never mailed: nothing failed.
  */
 export function handMicToPlayer(open: () => void, from: string): boolean {
-  if (sessionInFlight || state !== 'idle') {
+  if (sessionInFlight || state !== 'idle' || typedTurnsInFlight > 0) {
     try { logVoiceDiag('auto_listen_yielded', { source: 'listeningSession', from, sessionState: state }); } catch { /* diag only */ }
     return false;
   }
@@ -620,6 +623,14 @@ export async function toggle(): Promise<void> {
     swallowedTap('session_in_flight');
     return;
   }
+  /**
+   * 2026-10-30 (caddie-voice-1) — A TYPED TURN IS IN FLIGHT TOO. handleTranscribedUtterance (the bottom
+   * bar's send, the watch) drives only the shared store to 'thinking' and never raises sessionInFlight,
+   * so the guard above passed the tap and opened a mic over an answer still coming back — while the
+   * badge and the bar, which read that same store through micTapLook, dimmed for it. Dropped here like
+   * a voice turn's tap, so the dim tells the truth on every path.
+   */
+  if (state === 'idle' && typedTurnsInFlight > 0) { swallowedTap('typed_turn_in_flight'); return; }
   // 2026-07-06 (voice-lifecycle audit #2) — same double-fire as the recording-stop
   // branch, on the CLOSE side: one physical tap could reach toggle() twice (until 2026-10-28 the
   // orchestrator's pattern sub re-toggled ~350ms later; iOS still sends two commands for one press).
@@ -2124,7 +2135,11 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   const setSharedState = (s: 'thinking' | 'idle') => {
     try { require('../store/listeningSessionStore').useListeningSessionStore.getState().setState(s); } catch { /* non-fatal */ }
   };
-  setSharedState('thinking');
+  // 2026-10-30 (caddie-voice-1) — typed turns are counted, so toggle() drops taps for as long as any of
+  // them is answering. Only a turn that starts from idle owns the shared state: a typed turn during a
+  // live voice session must not overwrite that session's state, nor write 'idle' over it.
+  const drivesStore = state === 'idle' && !sessionInFlight;
+  if (drivesStore) setSharedState('thinking');
   /**
    * 2026-08-26 — RECORD THE PLAYER'S TURN. This function is what the global bottom bar sends a
    * TYPED question to, what the watch sends a dictated one to, and what handsFreeOrchestrator
@@ -2148,6 +2163,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   const answeringCaddie = !offeredOpen && !isAnsweringOffer() && isAwaitingFollowUp() && !carriesYardageCorrection(text);
   try { require('../store/conversationLogStore').useConversationLog.getState().logUser(text, Date.now()); } catch { /* non-fatal */ }
   try { recordUserTurn(text); } catch { /* non-fatal */ }
+  typedTurnsInFlight += 1;
   try {
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
@@ -2366,6 +2382,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   } finally {
     // Clear "Thinking…"; the response text keeps showing via the caption/speaking signals while the
     // caddie is talking, then the strip hides once speech ends.
-    setSharedState('idle');
+    typedTurnsInFlight -= 1;
+    if (drivesStore && typedTurnsInFlight === 0) setSharedState('idle');
   }
 }
