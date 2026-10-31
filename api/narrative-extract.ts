@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-07-07 (Tim — narrative profile intake): extract golfer-narrative FACTS from
  * free conversation. The relationship layer: the caddie gets to know the golfer —
@@ -64,6 +65,7 @@ const TOOL: Anthropic.Tool = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'narrative-extract');
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!(await allowInference(req, res, 'narrative-extract'))) return;
   if (!process.env.ANTHROPIC_API_KEY) return res.status(200).json({ configured: false });

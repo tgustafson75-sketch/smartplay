@@ -39,3 +39,14 @@ export function requireAppKey(req: VercelRequest, res: VercelResponse): boolean 
   res.status(401).json({ error: 'unauthorized' });
   return false;
 }
+
+/**
+ * LOG ONLY, on purpose. Records whether a request carries the app key and lets it through
+ * either way. Turning enforcement on (requireAppKey) before the app has sent the key everywhere
+ * would break any build that has not picked up the OTA. Read the `[app-key]` lines in the Vercel
+ * logs; enforce once the missing-key count is zero.
+ */
+export function noteAppKey(req: VercelRequest, route: string): void {
+  if (isAppKeyValid(req)) return;
+  console.log(`[app-key] ${route} without a valid key`);
+}

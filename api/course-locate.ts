@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { applyCors } from './_cors';
@@ -455,6 +456,7 @@ async function searchNearbyLegacy(lat: number, lng: number, radius: number, time
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'course-locate');
   // 2026-08-08 (server audit #4) — paid Google Places behind zero throttle; IP-limit it (partner-shaped
   // endpoint stays keyless by design, but a curl loop can't burn quota anymore).
   // 2026-08-08 (verification wave) — CORS first: preflight OPTIONS must not burn rate-limit quota,

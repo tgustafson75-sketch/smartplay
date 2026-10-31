@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * TopTracer range session parser.
  *
@@ -132,6 +133,7 @@ const TOPTRACER_SCHEMA: StructuredSchema = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'toptracer-parse');
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!(await allowInference(req, res, 'toptracer-parse'))) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {

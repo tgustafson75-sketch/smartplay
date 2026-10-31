@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * Ball-departure verifier — 2026-06-09.
  *
@@ -140,6 +141,7 @@ const BALL_LOCATE_TOOL: Anthropic.Tool = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'ball-departure');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
   }

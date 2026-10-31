@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 // ── THE INTENT VOCABULARY — ONE OWNER ────────────────────────────────────────
 //
 // 2026-08-19 (reconciliation pass). This file used to open with a LOCKSTEP TWIN
@@ -754,6 +755,7 @@ Reminder of the catch-all rule above: greetings → social_greeting; ANY other n
 /** Warmup prompt. Must name JSON: json_object mode rejects messages that do not (HTTP 400). */
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'voice-intent');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

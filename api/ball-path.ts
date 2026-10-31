@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * Ball-path tracker — 2026-06-25 (Shot Tracing).
  *
@@ -78,6 +79,7 @@ const BALL_PATH_TOOL: Anthropic.Tool = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'ball-path');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
   }

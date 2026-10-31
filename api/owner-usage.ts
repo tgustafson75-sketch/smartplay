@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { getSmartPlaySupabase } from './_supabase';
@@ -63,6 +64,7 @@ export function aggregateUsage(rows: EventRow[], now: number): OwnerUsageReport[
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'owner-usage');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await allowInference(req, res, 'owner-usage', 20))) return;
   res.setHeader('Cache-Control', 'no-store');

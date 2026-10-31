@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-07-29 (Tim — Arccos Air trial) — read a golfer's per-club distances from a SCREENSHOT of
  * the Arccos app's "Smart Club Distances" (or club-averages) screen and return them structured.
@@ -106,6 +107,7 @@ HONESTY (critical):
 type FrameIn = { b64?: unknown; media_type?: unknown };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'arccos-import');
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await allowInference(req, res, 'arccos-import'))) return;

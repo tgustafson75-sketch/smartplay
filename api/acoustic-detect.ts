@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * Acoustic detection — server-side endpoint.
  *
@@ -68,6 +69,7 @@ const CLUB_TYPICAL: Record<string, number> = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'acoustic-detect');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' } as ErrorBody);
   }

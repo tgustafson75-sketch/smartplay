@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-05-22 — Meta AI bridge endpoint.
  *
@@ -419,6 +420,7 @@ function fallbackResponse(
 // ─── Main handler ───────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'meta-voice');
   const t0 = Date.now();
 
   if (req.method === 'GET') {

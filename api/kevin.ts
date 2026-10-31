@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
@@ -233,6 +234,7 @@ export const RESPONSE_MARGIN_MS = 3_000;
 const MIN_TTS_MS = 1_500;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'kevin');
   const requestStartedAt = Date.now();
   if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') {

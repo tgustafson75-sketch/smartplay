@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
@@ -116,6 +117,7 @@ Rules:
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'club-recognition');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

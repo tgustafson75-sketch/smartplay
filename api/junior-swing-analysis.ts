@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-05-22 — Vercel handler: Junior Swing Analysis.
  *
@@ -169,6 +170,7 @@ interface RequestBody {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'junior-swing-analysis');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

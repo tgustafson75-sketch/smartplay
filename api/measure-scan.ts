@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-07-22 (Tim — SmartFinder auto-detect / "wrap SmartVision around it").
  *
@@ -84,6 +85,7 @@ Rules:
 - real_height_m must be the object's TRUE height in the range 0.1 to 3.0 m; never 0 when found=true.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'measure-scan');
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await allowInference(req, res, 'measure-scan'))) return;

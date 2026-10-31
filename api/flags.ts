@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * GET /flags — remote kill switches (Layer 0).
  *
@@ -126,6 +127,7 @@ function mergeDisabledCourses(raw: unknown): string[] {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  noteAppKey(req, 'flags');
   if (applyCors(req, res)) return;
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {

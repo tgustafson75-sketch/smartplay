@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import Anthropic from '@anthropic-ai/sdk';
@@ -159,6 +160,7 @@ const COURSE_CONTENT_TOOL: Anthropic.Tool = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'course-content');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

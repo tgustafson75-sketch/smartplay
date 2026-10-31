@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-05-22 — Vercel handler: PuttingLab analysis.
  *
@@ -297,6 +298,7 @@ interface RequestBody {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'putting-analysis');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

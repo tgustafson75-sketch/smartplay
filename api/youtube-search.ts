@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 
@@ -20,6 +21,7 @@ import { allowInference } from './_inferLimit';
 const TIMEOUT_MS = 8_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'youtube-search');
   /**
    * 2026-09-01 (adversarial audit) — RATE LIMIT: proxies the YouTube Data API on OUR key, which has a hard DAILY quota — exhausting it is an outage, not a bill.
    * Nothing bounded the request COUNT. Placed first so a flood is refused before it costs

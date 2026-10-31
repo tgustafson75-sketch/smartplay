@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender, type Persona, personaInputFrom } from '../lib/persona';
 import { allowInference } from './_inferLimit';
@@ -128,6 +129,7 @@ Output ONLY valid JSON. No code fences, no preamble.`;
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'tutorial-analysis');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

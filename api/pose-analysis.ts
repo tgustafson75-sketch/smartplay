@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * Pose Detection API proxy.
  *
@@ -122,6 +123,7 @@ function buildMultipart(buffer: Buffer, contentType: string): { body: Buffer; bo
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'pose-analysis');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

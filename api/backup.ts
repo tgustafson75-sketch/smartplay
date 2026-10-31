@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-07-06 / hardened 2026-07-07 — Server-mediated data backup (the OTA way, no
  * client Supabase key). The client posts its snapshot to OUR API; the SERVER writes
@@ -184,6 +185,7 @@ async function isRateLimited(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'backup');
   const db = getSmartPlaySupabase();
   if (!db) return res.status(200).json({ ok: false, error: 'not_configured' });
 

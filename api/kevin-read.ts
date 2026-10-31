@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-06-04 — Kevin's Read (AI prevailing-tendency assessment).
  *
@@ -139,6 +140,7 @@ function summarizeRounds(rounds: RoundLite[]): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'kevin-read');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

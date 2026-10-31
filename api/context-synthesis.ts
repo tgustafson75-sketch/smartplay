@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * Phase AQ — Context synthesis endpoint.
  *
@@ -100,6 +101,7 @@ Write the cross-session pattern summary.`,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'context-synthesis');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await allowInference(req, res, 'context-synthesis'))) return;
   try {

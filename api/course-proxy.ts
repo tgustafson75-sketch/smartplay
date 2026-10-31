@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 
@@ -46,6 +47,7 @@ function upstreamError(status: number, body: unknown): { error: string; raw: unk
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'course-proxy');
   // 2026-08-08 (course-engine audit gap #4) — proxies the PAID golfcourseapi key; add the same IP
   // throttle as course-geometry so the quota can't be burned by a loop.
   if (!(await allowInference(req, res, 'course-proxy', 60))) return;

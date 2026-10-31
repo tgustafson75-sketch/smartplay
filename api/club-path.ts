@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * Clubhead-path tracker — 2026-07-07 (Tim — real clubhead swing arc, not the wrist).
  *
@@ -109,6 +110,7 @@ const CLUB_PATH_TOOL: Anthropic.Tool = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'club-path');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
   }

@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-09-12 (Tim) — FIND THE BULLSEYE SO NOBODY HAS TO TAP IT.
  *
@@ -84,6 +85,7 @@ costs one tap; a wrong target silently corrupts every aim and dispersion number 
 Do NOT report a golf ball, a club, a logo, a light fixture, or a hole in the net as a target.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'target-scan');
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await allowInference(req, res, 'target-scan'))) return;

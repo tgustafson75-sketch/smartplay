@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender, getCaddieNameFor } from '../lib/persona';
 import { allowInference } from './_inferLimit';
@@ -217,6 +218,7 @@ total_clips_reviewed: ${total_reviewed}`;
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'cage-review');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

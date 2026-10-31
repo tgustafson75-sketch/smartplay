@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { completeJSON, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
@@ -141,6 +142,7 @@ const LIE_FOLLOWUP_SCHEMA: StructuredSchema = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'parse-shot');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { completeVision, type StructuredSchema } from './_aiProvider';
@@ -282,6 +283,7 @@ const toIntOrNull = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'round-import');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

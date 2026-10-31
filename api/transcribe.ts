@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { applyCors } from './_cors';
@@ -55,6 +56,7 @@ interface DgResponse {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'transcribe');
   if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await allowInference(req, res, 'transcribe'))) return;

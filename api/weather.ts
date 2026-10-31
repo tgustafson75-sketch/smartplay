@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 
@@ -15,6 +16,7 @@ import { allowInference } from './_inferLimit';
 const TIMEOUT_MS = 8_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'weather');
   /**
    * 2026-09-01 (adversarial audit) — RATE LIMIT: proxies a third-party weather API on OUR key — an abuse loop exhausts the quota and takes weather out for every real player.
    * Nothing bounded the request COUNT. Placed first so a flood is refused before it costs

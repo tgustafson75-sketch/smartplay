@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
 import { googleKeys, withGoogleKeys, isCapabilityMiss, keyFailure } from './_googleKeys';
@@ -22,6 +23,7 @@ const TIMEOUT_MS = 8_000;
 function isNum(v: unknown): v is number { return typeof v === 'number' && Number.isFinite(v); }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'course-places');
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   /**

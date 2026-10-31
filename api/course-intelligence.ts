@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-06-06 — Phase 2.5: Course intelligence prefetch.
  *
@@ -58,6 +59,7 @@ Output ONLY the 2-3 sentence brief as plain text. No headers, no bullets, no pre
 Length target: 200-400 characters total. Tight is good.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'course-intelligence');
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

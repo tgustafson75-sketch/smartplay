@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
 import { allowInference } from './_inferLimit';
@@ -121,6 +122,7 @@ async function checkOne(h: InHole, provider: ReturnType<typeof providerFromHeade
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'course-verify');
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   // Spends up to one vision read per hole: a tight per-IP budget. A course is normally checked once.

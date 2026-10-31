@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-06-30 — Minimal in-app messaging (Tim ↔ Tank to start; Tim: "minimal way…
  * not the full social integration"). Identity = account email. A REAL backend on the
@@ -32,6 +33,7 @@ const ALLOWED_EMAILS = new Set(
 const emailAllowed = (e: string): boolean => ALLOWED_EMAILS.size === 0 || ALLOWED_EMAILS.has(e);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'messages');
   /**
    * 2026-09-01 (adversarial audit) — RATE LIMIT: this INSERTS a row carrying arbitrary from/to addresses and body text. Unthrottled that is both a spam vector and unbounded table growth.
    * Payload shape was validated; request COUNT was not. [[overstrict-gate-lens]]

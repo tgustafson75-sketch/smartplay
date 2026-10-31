@@ -1,4 +1,5 @@
 import '../services/polyfills';
+import '../services/appKeyFetch';
 import { Stack , router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';

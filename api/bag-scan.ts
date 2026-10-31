@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-07-23 (Tim — Bag Vision) — scan a golfer's bag from a short VIDEO.
  *
@@ -129,6 +130,7 @@ BALLS. The player may deliberately place a golf ball or a sleeve in the frame. R
 type FrameIn = { b64?: unknown; media_type?: unknown };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'bag-scan');
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await allowInference(req, res, 'bag-scan'))) return;

@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * Phase W — Practice Space Assessment (Level 1).
  *
@@ -208,6 +209,7 @@ export interface SpaceAssessment {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'space-scan');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await allowInference(req, res, 'space-scan'))) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {

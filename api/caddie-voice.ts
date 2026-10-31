@@ -1,3 +1,4 @@
+import { noteAppKey } from './_appKey';
 /**
  * 2026-07-30 (Tim — "analyze the photo for my caddie and assign a fitting OpenAI voice"). Given the
  * custom caddie's portrait, pick the best-fitting OpenAI gpt-4o-mini-tts voice (perceived gender,
@@ -34,6 +35,7 @@ const VOICES: { id: string; desc: string }[] = [
 const IDS = VOICES.map((v) => v.id);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  noteAppKey(req, 'caddie-voice');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   /**
    * 2026-08-31 (pre-launch security audit) — THROTTLED. This route spends real money on every call
