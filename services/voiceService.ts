@@ -1997,11 +1997,12 @@ export const speak = async (
   opts?: SpeakOpts,
 ): Promise<void> => enqueueSpeak(async () => {
   /**
-   * 2026-08-24 — mirror the caddie's line to the watch (owner-only, Beta 2 gate).
+   * 2026-08-24 — mirror the caddie's line to the watch. (The owner-only gate was removed
+   * 2026-10-31, f875d999 — every user's watch gets the line.)
    *
    * Deliberately the FIRST thing and deliberately synchronous-void: it must not sit in the audio
-   * path. pushWatchVoicePrompt is owner-gated, wrapped, and no-ops without a registered watch
-   * sender, so on every phone that is not Tim's this is one function call that returns false.
+   * path. pushWatchVoicePrompt is wrapped and no-ops without a registered watch sender, so on a
+   * phone with no watch this is one function call that returns false.
    * The voice path's behaviour is unchanged — this is a side-effect, not a step.
    *
    * DELIBERATELY ABOVE the isVoiceAllowed gate below (checked 2026-08-24, verification pass). With

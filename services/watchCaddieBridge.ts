@@ -351,7 +351,7 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
      * 2026-08-24 — and now something actually goes DOWN the pipe. The header above has claimed since
      * 07-06 that "sendNotification/sendLiveScore/sendVoicePrompt/sendRoundState from anywhere in the
      * app now actually reach the watch". The transport was real; the callers never existed. Score,
-     * hole and spoken line now push through services/watchRoundSync (owner-gated, fire-and-forget).
+     * hole and spoken line now push through services/watchRoundSync (fire-and-forget; owner gate removed 2026-10-31, f875d999).
      */
     try {
       (require('./watchRoundSync') as typeof import('./watchRoundSync')).startWatchRoundSync();
