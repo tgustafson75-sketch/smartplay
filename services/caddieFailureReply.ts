@@ -128,16 +128,23 @@ export async function keepScoreIfProvenOffline(heard: string | null | undefined)
 }
 
 /**
- * The score in the words, written to the CURRENT hole (the hole the question is about; the par resolves named scores).
+ * The score in the words, written to the hole the words NAME, or to the CURRENT hole when none is named (the par
+ * resolves the score for that hole). A named hole outside 1..18 is refused, so the words are kept as a note instead.
  * True only when the store holds that score afterwards, so a write the store refused (no active round, a hole outside
  * 1..18) is never reported as on the card. Never throws.
+ *
+ * 2026-10-31 (Brain recheck r23, BRAIN-PLAYER-1) — "I got a 6 on the 12th, how far to the green?" was written to the
+ * hole he stood on (13), overwriting any real score there, and the hole he named was left blank. The named hole is the
+ * one written. Only the hole is taken from the words here; the score is still the one the words say.
  */
 function writeScoreOffline(q: string): boolean {
   try {
     const rs = require('../store/roundStore') as typeof import('../store/roundStore');
     const round = rs.useRoundStore.getState();
     if (!round.isRoundActive) return false;
-    const hole = round.currentHole;
+    const named = (require('./spokenHole') as typeof import('./spokenHole')).namedSpokenHole(q);
+    if (named != null && !(named >= 1 && named <= 18)) return false;
+    const hole = named ?? round.currentHole;
     const par = (require('./smartFinderService') as typeof import('./smartFinderService')).holePar(hole);
     const strokes = resolveStrokes(undefined, q, par);
     if (strokes == null) return false;

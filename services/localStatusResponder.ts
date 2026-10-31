@@ -483,8 +483,11 @@ export function tryLocalReply(
   // 2026-10-31 (Brain recheck r19, BRAIN-A) — a hazard distance is a question for the brain, not the green
   // yardage. This is the offline route after a failed brain turn, which never reads the precheck, so the
   // same hazard test declines here: null hands the failure owner its honest line.
+  // 2026-10-31 (Brain recheck r23, BRAIN-PLAYER-3) — and a NAMED hole ("how far to the green on the 12th") is not the
+  // hole he stands on. yardageReply reads the current hole and never parses a spoken one, so the same scope test the
+  // precheck and the score branch use declines it here too; the failure owner then gives its honest line.
   if (RX.yardage.test(t)) {
-    return HAZARD_RX.test(t) ? null : yardageReply(t, lang);
+    return HAZARD_RX.test(t) || holeScopedAsk(t, 'distance_to_green') ? null : yardageReply(t, lang);
   }
   // ── CLUB RECOMMENDATION (the caddie's offline decision — check before "what
   //    club am I holding") ──

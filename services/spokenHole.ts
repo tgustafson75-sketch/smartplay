@@ -43,6 +43,20 @@ const tokenToHole = (tok: string): number => {
   return CARDINAL[t] ?? ORDINAL[t] ?? NaN;
 };
 
+/**
+ * 2026-10-31 (Brain recheck r23, BRAIN-PLAYER-1) — the hole the words NAME, whether or not it is a real hole.
+ * parseSpokenHole returns only 1..18, so "I got a 6 on the 19th" read as "no hole named" and the caller fell back
+ * to the hole he stands on. This keeps the number so the caller can refuse a named hole that does not exist.
+ * Null only when no hole is named at all.
+ */
+export function namedSpokenHole(raw: string): number | null {
+  for (const rx of SPOKEN_HOLE_RXS) {
+    const m = raw.match(rx);
+    if (m) return tokenToHole(m[1]);
+  }
+  return null;
+}
+
 export function parseSpokenHole(raw: string): number | null {
   for (const rx of SPOKEN_HOLE_RXS) {
     const m = raw.match(rx);

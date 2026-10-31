@@ -880,7 +880,14 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
      */
     if (hit.intent_type === 'query_status' && topic === 'club_distance') {
       const phrase = String(hit.parameters?.club_phrase ?? '');
-      return DECISION_OR_REASON_RX.test(phrase) || SITUATION_RX.test(phrase)
+      /**
+       * 2026-10-31 (Brain recheck r23, BRAIN-PLAYER-2) — A CARRY OVER A HAZARD IS THE CADDIE'S. "How far do I hit my 7
+       * iron to clear the water" was answered "Your seven iron goes about 165 yards." and the hazard never reached the
+       * brain. HAZARD_RX is tested with the club's own name taken off the front, so "sand wedge" and "3 woods" (which
+       * contain "sand" and "woods") stay the bag read.
+       */
+      const hazardPart = phrase.replace(/^(?:\d\s?)?(?:(?:fairway\s+)?woods?|sand\s+wedge)\b/i, '');
+      return DECISION_OR_REASON_RX.test(phrase) || SITUATION_RX.test(phrase) || HAZARD_RX.test(hazardPart)
         ? intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: 'club_distance' })
         : hit;
     }
@@ -1145,7 +1152,7 @@ function classifyLocalIntent(transcript: string): VoiceIntent | null {
        * A fix that cannot fire is not a fix. [[state-what-you-measured-not-what-you-intended]]
        */
       const loftClub = (require('./clubNormalize') as typeof import('./clubNormalize')).clubFromLoftPhrase(t);
-      if (loftClub || /\b(driver|wood|hybrid|iron|wedge|pitching|sand|lob|gap|approach|utility|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(clubPhrase)) {
+      if (loftClub || /\b(driver|woods?|hybrid|iron|wedge|pitching|sand|lob|gap|approach|utility|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(clubPhrase)) {
         return intent(t, 'query_status', { query_topic: 'club_distance', club_phrase: clubPhrase });
       }
     }
