@@ -56,7 +56,13 @@ export async function followUpBrainTurn(message: string, opts: { language: strin
   const failedTurn = async (): Promise<FollowUpReply> => {
     const failure = require('../caddieFailureReply') as typeof import('../caddieFailureReply');
     const langSafe = failure.safeLang(language);
-    const r = await failure.caddieFailureReply({ heard, language: langSafe })
+    /**
+     * 2026-10-31 (Brain recheck r21, BRAIN-R21-1) — a score said with a question is kept BEFORE the notice, here as on
+     * the caddie-tab mic (R20-1). Without it a proven-offline follow-up "I got a 6, how far to the green?" was told to
+     * say it again, and the 6 was never written.
+     */
+    const kept = await failure.keepScoreIfProvenOffline(heard);
+    const r = await failure.caddieFailureReply({ heard, language: langSafe, kept })
       .catch(() => ({ text: CADDIE_NOTICE_ON_US[langSafe], source: 'on_us' as const, verdict: null }));
     logVoiceSilentFail(r.source === 'local_answer' ? 'local_responder_hit' : 'local_responder_miss', {
       source: r.source,

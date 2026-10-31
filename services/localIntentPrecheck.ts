@@ -140,6 +140,14 @@ const PERSONA_SWITCH_RX = (() => {
   );
 })();
 
+/**
+ * 2026-10-31 (Brain recheck r21, BRAIN-R21-1) — the two score-report rules, named so scoreSaidButNotLogged can ask
+ * whether the words REPORT a score even when a question rule wins the precheck ("I got a 6, how far to the green?"
+ * is a yardage query first, so the precheck never says log_score for it).
+ */
+const SCORE_VERB_RX = /\b(?:(?:i\s+)?(?:got|made|shot|had|carded|scored|took)|put\s+me\s+down\s+for|score\s+me|mark\s+me(?:\s+down)?\s+for|card\s+me)\s+(?:myself\s+)?(?:a\s+|an\s+)?(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|par|bogey|birdie|eagle|double\s*bogey|triple\s*bogey)\b(?!\s*(?:iron|woods?|hybrid|wedge|driver|putter|putts?|putted|degrees?|footer|feet|foot|yards?|holes?))/i;
+const SCORE_NAMED_RX = /\b(?:i\s+)?(?:bogeyed|birdied|eagled|parred|double[\s-]*bogeyed|triple[\s-]*bogeyed)\b/i;
+
 const PATTERNS: Pattern[] = [
   // ── GROUND-TRUTH GREEN MARK (must beat the yardage patterns below, since
   //    "I'm on the MIDDLE of the green" otherwise matches green_middle) ──────
@@ -242,11 +250,11 @@ const PATTERNS: Pattern[] = [
   // lookahead keeps false positives out ("5 iron", "3 putt(ed)", "5 degrees", "5 holes left" never match).
   // The score QUERY rule above wins for "what's my score".
   {
-    rx: /\b(?:(?:i\s+)?(?:got|made|shot|had|carded|scored|took)|put\s+me\s+down\s+for|score\s+me|mark\s+me(?:\s+down)?\s+for|card\s+me)\s+(?:myself\s+)?(?:a\s+|an\s+)?(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|par|bogey|birdie|eagle|double\s*bogey|triple\s*bogey)\b(?!\s*(?:iron|woods?|hybrid|wedge|driver|putter|putts?|putted|degrees?|footer|feet|foot|yards?|holes?))/i,
+    rx: SCORE_VERB_RX,
     build: (raw) => intent(raw, 'log_score', scoreHoleParam(raw)),
   },
   {
-    rx: /\b(?:i\s+)?(?:bogeyed|birdied|eagled|parred|double[\s-]*bogeyed|triple[\s-]*bogeyed)\b/i,
+    rx: SCORE_NAMED_RX,
     build: (raw) => intent(raw, 'log_score', scoreHoleParam(raw)),
   },
   {
@@ -943,7 +951,11 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
 export function scoreSaidButNotLogged(heard: string): boolean {
   const raw = (heard ?? '').trim();
   if (!raw) return false;
-  return classifyLocalIntent(raw)?.intent_type === 'log_score' && isQuestionShaped(raw) && !isAboutSomeoneElse(raw);
+  // The same blockers the precheck applies to a log_score hit (near miss, story, conditional, someone else): a score
+  // that would not have been written as a statement is not kept as one.
+  const reportsScore = (classifyLocalIntent(raw)?.intent_type === 'log_score' || SCORE_VERB_RX.test(raw) || SCORE_NAMED_RX.test(raw))
+    && !NEAR_MISS_RX.test(raw) && !isStoryFramed(raw) && !isConditionalOrFuture(raw);
+  return reportsScore && isQuestionShaped(raw) && !isAboutSomeoneElse(raw);
 }
 
 /** The brain's own tool for a setting, where it has one (api/_brainTools); everything else it cannot change. */

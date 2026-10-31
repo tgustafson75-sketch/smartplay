@@ -31,6 +31,7 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { getApiBaseUrl, isEndpointWarmed, markEndpointWarmed } from './apiBase';
 import { tryAnswerOpenQuestion } from './pendingPuttAsk';
+import { heroSaveIfAsked } from './heroMoment';
 import { isFlagEnabled } from '../store/flagStore';
 import { isAwaitingFollowUp, recordUserTurn, recordKevinTurn } from './conversationState';
 import { carriesYardageCorrection } from './intents/stateYardageHandler';
@@ -1490,6 +1491,31 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
     }
 
     /**
+     * 2026-10-31 (Brain recheck r21, BRAIN-R21-3) — "SAVE THAT" WRITES THE MOMENT ON THIS ROUTE TOO. Only the caddie tab
+     * wrote a hero moment; here the brain answered "Got it. That's yours." (its prompt says so) and nothing was stored.
+     */
+    {
+      const heroRound = useRoundStore.getState();
+      const heroSaid = heroSaveIfAsked(utterance, {
+        hole: heroRound.currentHole,
+        club: heroRound.club ?? '',
+        courseName: heroRound.activeCourse ?? '',
+        isRoundActive: heroRound.isRoundActive,
+        language: settings.language,
+      });
+      if (heroSaid) {
+        if (mine('thinking')) setSessionStateMirror('responding');
+        if (settings.voiceEnabled && mine('responding')) {
+          await stopSpeaking('screen:services-listeningsession').catch(() => {});
+          await speak(heroSaid, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+            .catch((e) => console.log('[listeningSession] hero-save speak failed', e));
+        }
+        endTurn(mySerial);
+        return;
+      }
+    }
+
+    /**
      * 2026-10-27 (Brain review B3 / B4) — THE CADDIE'S QUESTION OWNS THE ANSWER, ON THIS PATH TOO.
      *
      * Only the avatar mic checked whether Kevin had just asked something. Here, "Go for it or lay up
@@ -2187,6 +2213,26 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         try { flashCaption?.(answered.line, 6000); } catch { /* non-fatal */ }
       }
       try { recordKevinTurn(answered.line); } catch { /* non-fatal */ }
+      return;
+    }
+    /**
+     * 2026-10-31 (Brain recheck r21, BRAIN-R21-3) — "SAVE THAT" WRITES THE MOMENT ON THE TYPED AND WATCH ROUTE TOO.
+     * Same as the earbud path: the hero moment is stored and the store's line is what the player is told.
+     */
+    const heroSaid = heroSaveIfAsked(text, {
+      hole: round.currentHole,
+      club: round.club ?? '',
+      courseName: round.activeCourse ?? '',
+      isRoundActive: round.isRoundActive,
+      language: settings.language ?? 'en',
+    });
+    if (heroSaid) {
+      if (settings.voiceEnabled ?? true) {
+        await speak(heroSaid, settings.voiceGender, settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
+      } else {
+        try { flashCaption?.(heroSaid, 6000); } catch { /* non-fatal */ }
+      }
+      try { recordKevinTurn(heroSaid); } catch { /* non-fatal */ }
       return;
     }
     // 2026-07-04 (clean-audit H5) — the watch path went straight to the cloud and

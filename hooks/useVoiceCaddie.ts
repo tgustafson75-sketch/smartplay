@@ -41,6 +41,7 @@ import {
 import { voiceCommandRouter } from '../services/intents';
 import { carriesYardageCorrection } from '../services/intents/stateYardageHandler';
 import { isBrainBlindCommand } from '../services/brainBlindCommand';
+import { routedCommandHit } from '../services/voice/routedCommandHit';
 import { raceHedged } from '../services/voice/hedgedFetch';
 import { openToolHandler } from '../services/intents/openToolHandler';
 import { quickRoundHandler } from '../services/intents/quickRoundHandler';
@@ -53,7 +54,7 @@ import { resolveYardage } from '../services/yardageResolver';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore, primaryHomeCourseName } from '../store/playerProfileStore';
 import { useFamilyStore } from '../store/familyStore';
-import { useRelationshipStore } from '../store/relationshipStore';
+import { saveHeroMoment } from '../services/heroMoment';
 import { recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
 import { warmCourseContext } from '../services/courseContextCache';
 import { preBrainReply, shapeForBrain } from '../services/voice/preBrainTurn';
@@ -573,11 +574,6 @@ export const useVoiceCaddie = ({
    * re-renders when the mental-state or spiral-risk fields change — which it never needed to,
    * because nothing on screen here reads them.
    */
-  // Function refs pulled separately — they're stable across renders
-  // and including them in the shallow selector would cost nothing
-  // either way, but separating clarifies "these are actions, not data."
-  const addHeroMoment = useRelationshipStore((s) => s.addHeroMoment);
-
   const apiUrl = getApiBaseUrl();
   const currentPar = getCurrentPar();
 
@@ -612,6 +608,34 @@ export const useVoiceCaddie = ({
    */
   const releaseMicRef = useRef<() => Promise<MicReleaseVerdict>>(async () => 'none');
 
+  /**
+   * 2026-10-31 (Brain recheck r21, BRAIN-R21-2) — the one app-context snapshot the router reads, for the first turn and
+   * the follow-up loop alike. The follow-up loop's closure is built once per loop, so it reads this through a ref.
+   */
+  const buildAppContext = (): AppContext => ({
+    active_screen: pathnameToSurface(currentPathname),
+    active_round: isRoundActive
+      ? {
+          course: activeCourse,
+          mode: roundMode,
+          holesPlayed: useRoundStore.getState().getHolesPlayed(),
+          totalScore: useRoundStore.getState().getTotalScore(),
+          scoreVsPar: useRoundStore.getState().getScoreVsPar(),
+        }
+      : null,
+    current_hole: currentHole,
+    recent_shots: shots.slice(-5),
+    trust_spectrum_level: 2,
+    active_player_name: activeFamilyMember?.firstName ?? null,
+    active_player_age: activeFamilyMember?.age ?? null,
+    active_player_handicap: activeFamilyMember?.approximate_handicap ?? null,
+    active_group_size: familyMembers.filter(m => !m.archived).length,
+  });
+  const buildAppContextRef = useRef(buildAppContext);
+  useEffect(() => {
+    buildAppContextRef.current = buildAppContext;
+  });
+
   // ── CHECK BYPASS PHRASES ──────────────────
 
   const checkBypasses = (transcript: string): {
@@ -630,14 +654,7 @@ export const useVoiceCaddie = ({
     }
 
     if (kind === 'hero') {
-      const kevinSaid = addHeroMoment({
-        clipUri: null,
-        hole: currentHole,
-        club: club ?? '',
-        courseName: activeCourse ?? '',
-        conditions: '',
-        carlosNote: null,
-      });
+      const kevinSaid = saveHeroMoment({ hole: currentHole, club: club ?? '', courseName: activeCourse ?? '' });
       return { handled: true, response: kevinSaid, triggerHero: true };
     }
 
@@ -850,6 +867,35 @@ export const useVoiceCaddie = ({
         // brain, speak, then check if Kevin asked ANOTHER question —
         // recurse via this same loop so a multi-turn back-and-forth
         // works ("you good?" → "actually one more thing" → ...).
+        /**
+         * 2026-10-31 (Brain recheck r21, BRAIN-R21-2) — a command the brain has no tool for is routed here too. The first
+         * turn sends "undo that", "end the round" and "I had three putts" to the router (R20-3); this loop never did, so
+         * they reached /api/kevin as prose and nothing was written. Same routing and the same hit test; a miss still goes
+         * to the brain below.
+         */
+        if (isBrainBlindCommand(trimmed)) {
+          const routed = await voiceCommandRouter.route(trimmed, buildAppContextRef.current(), apiUrl).catch(() => null);
+          if (routed && routedCommandHit(routed.intent, routed.result)) {
+            const { result } = routed;
+            recordUserTurn(trimmed);
+            if (result.voice_response) {
+              onResponseReceived(result.voice_response);
+              recordKevinTurn(result.voice_response);
+              wrappedOnVoiceStateChange('speaking');
+              await stopSpeaking('screen:hooks-usevoicecaddie');
+              await speakResponse(result.voice_response);
+            }
+            if (result.tool_action) onToolAction?.(result.tool_action);
+            wrappedOnVoiceStateChange('idle');
+            if (result.voice_response && endsAsQuestion(result.voice_response) && voiceEnabled && !userInterruptedRef.current
+              && followUpDepthRef.current < HARD_FOLLOWUP_DEPTH_CAP) {
+              followUpDepthRef.current += 1;
+              await runFollowUpListenLoop();
+            }
+            return;
+          }
+        }
+
         /**
          * 2026-09-28 (1.0.2) — this follow-up turn reached /api/kevin through sendToBrain's own fetch
          * with NO plan gate: a lite player's follow-ups were free caddie turns. Gated like every other
@@ -1275,7 +1321,10 @@ export const useVoiceCaddie = ({
               const heard = await stt.recognizeOnceOnDevice(langSafe, { timeoutMs: 9000 });
               wrappedOnVoiceStateChange('thinking');
               if (heard) {
-                const reply = await failure.caddieFailureReply({ heard, language: langSafe });
+                // 2026-10-31 (Brain recheck r21, BRAIN-R21-1) — a score said with a question is kept before the reply, as on
+                // the caddie-tab mic (R20-1). The phone is proven offline on this branch, so the score is saved here.
+                const kept = await failure.keepScoreIfProvenOffline(heard);
+                const reply = await failure.caddieFailureReply({ heard, language: langSafe, kept });
                 logVoiceSilentFail('ondevice_stt_hit', { source: reply.source, transcriptHead: heard.slice(0, 60) });
                 say(reply.text);
                 return;
@@ -1677,25 +1726,7 @@ export const useVoiceCaddie = ({
         }
       }
 
-      const appContext: AppContext = {
-        active_screen: pathnameToSurface(currentPathname),
-        active_round: isRoundActive
-          ? {
-              course: activeCourse,
-              mode: roundMode,
-              holesPlayed: useRoundStore.getState().getHolesPlayed(),
-              totalScore: useRoundStore.getState().getTotalScore(),
-              scoreVsPar: useRoundStore.getState().getScoreVsPar(),
-            }
-          : null,
-        current_hole: currentHole,
-        recent_shots: shots.slice(-5),
-        trust_spectrum_level: 2,
-        active_player_name: activeFamilyMember?.firstName ?? null,
-        active_player_age: activeFamilyMember?.age ?? null,
-        active_player_handicap: activeFamilyMember?.approximate_handicap ?? null,
-        active_group_size: familyMembers.filter(m => !m.archived).length,
-      };
+      const appContext = buildAppContextRef.current();
 
       const shortcut = tabPreRoundShortcut(transcript, primaryHomeCourseName(usePlayerProfileStore.getState().homeCourses));
       if (shortcut) {
@@ -1936,14 +1967,6 @@ export const useVoiceCaddie = ({
         // offers before opening (and captures the narrative to the CNS). Data
         // capture (log_shot/score/emotional_state) and greetings are NOT gated —
         // they build the database and don't disrupt.
-        const DISRUPTIVE_OPEN_ACTIONS = new Set([
-          'record_swing', 'open_smartvision', 'open_smartfinder', 'open_swinglab',
-          'navigate', 'configure_drill', 'set_angle', 'close_swinglab',
-        ]);
-        const actionType = result.tool_action?.type;
-        const isDisruptiveOpen = typeof actionType === 'string' && DISRUPTIVE_OPEN_ACTIONS.has(actionType);
-        const openGatePassed = !isDisruptiveOpen || intent.confidence === 'high';
-
         // 2026-07-31 (Tim — "make sure no preprogrammed voice is blocking; process everything
         // optimally through the AI"). A greeting / check-in ("how are you", "hey Serena", even
         // "nothing, just testing") was short-circuited to a CANNED per-persona pool line + bundled
@@ -1951,15 +1974,7 @@ export const useVoiceCaddie = ({
         // instead of actually answering. That is a robotic wall in front of the AI. Route social_greeting
         // to the BRAIN like `conversational`, so the caddie gives a real, in-character, varied response.
         // (The brain is kept warm by the heartbeat, so the latency cost is negligible.) [[feels-like-a-real-caddie]]
-        const isCommandHit =
-          intent.intent_type !== 'unknown' &&
-          intent.intent_type !== 'conversational' &&
-          intent.intent_type !== 'social_greeting' &&
-          intent.confidence !== 'low' &&
-          openGatePassed &&
-          (result.success || result.follow_up_needed);
-
-        if (isCommandHit) {
+        if (routedCommandHit(intent, result)) {
           // 2026-06-04 — Order: speak BEFORE onToolAction. Previously
           // navigation fired synchronously and the destination screen
           // (notably SmartFinder → CameraView) mounted + claimed the

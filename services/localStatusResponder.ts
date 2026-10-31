@@ -488,8 +488,11 @@ export function tryLocalReply(
   }
   // ── CLUB RECOMMENDATION (the caddie's offline decision — check before "what
   //    club am I holding") ──
+  // 2026-10-31 (Brain recheck r21, BRAIN-R21-4) — the same hazard test as the yardage branch above. "What club
+  // do I hit to carry the water" is a question about the carry, and a green-middle club call answers a different
+  // one. Declined, so the failure owner gives its honest line.
   if (RX.clubRec.test(t)) {
-    return clubCallReply(lang);
+    return HAZARD_RX.test(t) ? null : clubCallReply(lang);
   }
   // ── LAST SHOT recall ──
   if (RX.lastShot.test(t)) {

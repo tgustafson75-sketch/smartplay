@@ -3748,11 +3748,15 @@ check('Voice: greetings/check-ins route to the BRAIN (no canned pool line blocki
   (() => {
     const idx = read('services/intents/index.ts');
     const vc = read('hooks/useVoiceCaddie.ts');
+    // 2026-10-31 (Brain recheck r21) — the command-hit gate moved to services/voice/routedCommandHit (one owner for the
+    // first turn and the follow-up loop); the hook must use that owner, and the owner must exclude social_greeting.
+    const gate = read('services/voice/routedCommandHit.ts');
     return (
       // the handler is no longer registered (line commented with the rationale)
       /\/\/ voiceCommandRouter\.registerHandler\(socialGreetingHandler\);/.test(idx) &&
       // and the caddie-tab command-hit gate also excludes social_greeting (defensive)
-      /intent\.intent_type !== 'social_greeting'/.test(vc)
+      /intent\.intent_type !== 'social_greeting'/.test(gate) &&
+      /routedCommandHit\(intent, result\)/.test(vc)
     );
   })(),
   'a greeting or check-in is answered by the real brain (in-character, varied) instead of a canned pool line — no preprogrammed voice sits in front of the AI on either voice path');
@@ -6668,7 +6672,7 @@ check('Offline caddie Tier 1: local CLUB CALL + LAST SHOT, grounded + honest (20
     const s = read('services/localStatusResponder.ts');
     return /import \{ bagDistances \} from '\.\/shotStrategy'/.test(s) &&
       /clubRec:\s*\//.test(s) && /lastShot:\s*\//.test(s) &&            // the two new intents
-      /if \(RX\.clubRec\.test\(t\)\) \{\s*return clubCallReply/.test(s) &&
+      /if \(RX\.clubRec\.test\(t\)\) \{\s*return HAZARD_RX\.test\(t\) \? null : clubCallReply/.test(s) &&
       /if \(RX\.lastShot\.test\(t\)\) \{\s*return lastShotReply/.test(s) &&
       // honesty: empty bag → say so (no generic chart numbers), and the call is built
       // from the measured carry (best[1]) + GPS distance, not an invented figure.

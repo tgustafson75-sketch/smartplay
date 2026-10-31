@@ -38,11 +38,15 @@ export function safeLang(language: string | null | undefined): Lang {
   return (['en', 'es', 'zh'] as const).includes(language as Lang) ? (language as Lang) : 'en';
 }
 
-export async function caddieFailureReply(opts: { heard?: string | null; language?: string | null }): Promise<FailureReply> {
+/**
+ * `kept`: the caller already kept the score in `heard` (keepScoreIfProvenOffline), so rule 1 speaks the saved line.
+ * 2026-10-31 (Brain recheck r21, BRAIN-R21-1) — every failure path that has the words passes this through.
+ */
+export async function caddieFailureReply(opts: { heard?: string | null; language?: string | null; kept?: boolean }): Promise<FailureReply> {
   const lang = safeLang(opts.language);
 
   // 1 — the question, answered from real local data.
-  const local = localAnswer(opts.heard, lang);
+  const local = localAnswer(opts.heard, lang, opts.kept);
   if (local) return record({ text: local, source: 'local_answer', verdict: null });
 
   // 2 — why did it fail?
