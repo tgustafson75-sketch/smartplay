@@ -142,7 +142,7 @@ function writeScoreOffline(q: string): boolean {
     const rs = require('../store/roundStore') as typeof import('../store/roundStore');
     const round = rs.useRoundStore.getState();
     if (!round.isRoundActive) return false;
-    const named = (require('./spokenHole') as typeof import('./spokenHole')).namedSpokenHole(q);
+    const named = (require('./spokenHole') as typeof import('./spokenHole')).namedSpokenHole(q, true);
     if (named != null && !(named >= 1 && named <= 18)) return false;
     const hole = named ?? round.currentHole;
     const par = (require('./smartFinderService') as typeof import('./smartFinderService')).holePar(hole);

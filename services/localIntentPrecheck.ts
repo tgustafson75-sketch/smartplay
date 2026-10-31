@@ -119,8 +119,9 @@ const NOT_ABOUT_MY_CLUBS =
 // 2026-10-29 (Brain recheck r15) — "on the 12th", "on 12", "on number 12", "the 2nd" and "hole six" all
 // name a hole too (services/spokenHole). Read only "on hole N" and a score on "the 12th" was written to
 // whatever hole was lowest unscored, not the one he said.
+// 2026-10-31 (Brain recheck r24) — read as a SCORE: a bare word ordinal ("the first bogey") is a count, not hole 1.
 const scoreHoleParam = (raw: string): Record<string, unknown> => {
-  const h = parseSpokenHole(raw);
+  const h = parseSpokenHole(raw, true);
   return h != null ? { hole_number: h } : {};
 };
 

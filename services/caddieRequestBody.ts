@@ -114,6 +114,15 @@ const settingsStore = () => require('../store/settingsStore').useSettingsStore.g
 /** A SmartFinder lock is a number for the shot in front of him; ten minutes covers walking up to hit it. */
 export const SMARTFINDER_LOCK_FRESH_MS = 10 * 60_000;
 
+/**
+ * How far apart the two conversation stores may stamp the SAME turn: the brain answer sits between the words
+ * and the history entry, so this covers a slow round trip. Two minutes is well inside the gap between one
+ * "five" and the next one he says on a later hole.
+ */
+const SAME_TURN_MS = 2 * 60_000;
+/** One store writing the same line twice in one breath is one turn, not a repeat the caddie should hear twice. */
+const SAME_WRITE_MS = 1_000;
+
 export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<string, unknown> {
   const r = safe(() => roundStore(), {} as ReturnType<typeof roundStore>);
   const p = safe(() => profileStore(), {} as ReturnType<typeof profileStore>);
@@ -1688,27 +1697,30 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       let prevAt = 0;
       const fromHistory = (getConversationHistory() ?? []).map((m) => {
         prevAt = typeof m.at === 'number' ? m.at : prevAt;
-        return { role: m.role === 'assistant' ? 'kevin' : 'user', text: m.content, at: prevAt };
+        return { role: m.role === 'assistant' ? 'kevin' : 'user', text: m.content, at: prevAt, from: 'history' as const };
       });
-      const fromBuffer = (getRecentTurns() ?? []).map((t) => ({ role: t.role as string, text: t.text, at: t.timestamp }));
+      const fromBuffer = (getRecentTurns() ?? []).map((t) => ({ role: t.role as string, text: t.text, at: t.timestamp, from: 'buffer' as const }));
 
       const ordered = [...fromHistory, ...fromBuffer]
         .map((t, i) => ({ ...t, i }))
         .sort((a, b) => a.at - b.at || a.i - b.i);
 
       // Same turn can land in both (a mic turn writes conversationState AND caddieBrain writes the
-      // history), so drop role+text repeats rather than telling the caddie twice. conversationState
-      // trims what it stores, so compare trimmed.
-      const seen = new Set<string>();
-      const merged: { role: string; text: string }[] = [];
+      // history), so ONE entry from each store saying the same thing within SAME_TURN_MS is one turn.
+      // 2026-10-31 (Brain recheck r24, BRAIN-ENG-R18-1) — a repeat from the same store, or the same words
+      // said again minutes later ("five" on hole 4), is a turn of its own. Dropping every repeat across the
+      // window kept the FIRST exchange, so RECENT CONVERSATION read a round-old exchange as the latest one.
+      // conversationState trims what it stores, so compare trimmed.
+      const kept: { role: string; text: string; at: number; from: 'history' | 'buffer'; paired: boolean }[] = [];
       for (const t of ordered) {
         const text = t.text?.trim();
-        const key = `${t.role}:${text}`;
-        if (!text || seen.has(key)) continue;
-        seen.add(key);
-        merged.push({ role: t.role, text: t.text });
+        if (!text) continue;
+        const twin = kept.find((k) => !k.paired && k.role === t.role && k.text.trim() === text
+          && Math.abs(k.at - t.at) <= (k.from === t.from ? SAME_WRITE_MS : SAME_TURN_MS));
+        if (twin) { twin.paired = true; continue; }
+        kept.push({ role: t.role, text: t.text, at: t.at, from: t.from, paired: false });
       }
-      return merged.slice(-12);
+      return kept.slice(-12).map(({ role, text }) => ({ role, text }));
     }, []),
 
     // ── the facts that reached NO brain at all ──────────────────────────────
