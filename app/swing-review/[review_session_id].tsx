@@ -21,7 +21,7 @@ import {
 import { saveGeneratedProfile } from '../../services/vocabularyProfile';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { speak, configureAudioForSpeech, configureAudioForRecording, stopSpeaking } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, configureAudioForRecording, stopSpeaking, registerExternalMicCheck } from '../../services/voiceService';
 import type { ReviewSession } from '../../types/practiceReview';
 import type { SwingShot } from '../../store/swingSessionStore';
 import { getApiBaseUrl } from '../../services/apiBase';
@@ -109,6 +109,10 @@ export default function CageReviewInterview() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [review_session_id]);
+
+  // 2026-10-31 (caddie-voice CV-1b) — this screen's answer recorder holds the mic. Registered with the one
+  // mic registry, so an earbud press or a caddie capture sees the mic busy instead of opening over it.
+  useEffect(() => registerExternalMicCheck(() => recordingRef.current !== null), []);
 
   // 2026-06-14 (audit — lifecycle/audio) — if the user navigates away mid-answer,
   // the in-flight Audio.Recording was never stopped, leaving the iOS audio session

@@ -45,7 +45,7 @@ import { playbackSoundOptions } from '../../services/audioPlaybackOptions';
 // configureAudioForSpeech) instead of direct Audio.setAudioModeAsync.
 // Direct calls race the speech queue and can silently downgrade audio
 // when speech is in-flight at record time.
-import { configureAudioForRecording, configureAudioForSpeech } from '../../services/voiceService';
+import { configureAudioForRecording, configureAudioForSpeech, registerExternalMicCheck } from '../../services/voiceService';
 import { router, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -168,6 +168,9 @@ export default function CustomCaddieScreen() {
   const [previewingPhraseId, setPreviewingPhraseId] = useState<string | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const previewSoundRef = useRef<Audio.Sound | null>(null);
+  // 2026-10-31 (caddie-voice CV-1b) — the phrase recorder holds the mic; register it with the mic registry
+  // so a caddie capture or an earbud press cannot open over a clip being recorded.
+  useEffect(() => registerExternalMicCheck(() => recordingRef.current !== null), []);
 
   // Tear down any in-flight recording / preview when the screen
   // unmounts so we don't leak file handles or hold the audio session.
@@ -467,6 +470,9 @@ export default function CustomCaddieScreen() {
       setRecordingPhraseId(null);
       return;
     }
+    // 2026-10-31 (caddie-voice CV-1b) — released before the stop can throw: the mic registry reads this ref,
+    // so a stop that failed here used to leave the mic reported busy until the screen closed.
+    recordingRef.current = null;
     try {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await rec.stopAndUnloadAsync();

@@ -10152,8 +10152,11 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
        * The magic number is the weak part of this check, not the assertions. Kept as a bounded slice
        * rather than the whole file so the four captioners must live inside THIS function, but sized
        * with headroom. If it fails again for length alone, size it again — do not delete assertions.
+       *
+       * 2026-10-31 — 7000 → 7600. The typed-reply speech hook (onSpeechStart, caddie-voice CV-1) sits at the
+       * head of this function and pushed the honest-line captioner ~160 chars past the old cut-off. Length only.
        */
-      const fn = listenSrc.slice(at, at + 7000);
+      const fn = listenSrc.slice(at, at + 7600);
       return (
         // the shared captioner exists and is the muted path's answer
         /const caption = \(line: string, ms: number\): boolean =>/.test(fn) &&

@@ -1227,6 +1227,11 @@ export const getCurrentCaption = (): string | null => currentCaption;
 export const getLastSpokenLine = (): string | null => lastSpokenLine;
 export const getCaptionSeq = (): number => captionSeq;
 
+// 2026-10-31 (caddie-voice CV-2) — the audio of the last line the cloud voice RENDERED, held in memory so a
+// replay plays the clip the player already heard instead of paying for a second render. Keyed by its text:
+// a line the device voice spoke has no clip here, and must never replay an older one in its place.
+let lastRenderedClip: { text: string; bytes?: Uint8Array; base64?: string } | null = null;
+
 export const subscribeToCaption = (
   cb: (text: string | null) => void,
 ): (() => void) => {
@@ -1672,6 +1677,34 @@ export const playLocalFile = async (
   opts?: SpeakOpts,
 ): Promise<void> => enqueueSpeak(() => playLocalFileNow(source, knownDurationMs, opts));
 
+/**
+ * 2026-10-31 (caddie-voice CV-2) — replay the clip of `line` from memory. No network and no conversation-log
+ * entry: the line is already in the log from the turn that spoke it. False when there is no clip for exactly
+ * that line (the device voice, a fixed line, or nothing spoken yet), so the caller can say it another way.
+ */
+export const replayLastRenderedClip = async (line: string): Promise<boolean> => {
+  const clip = lastRenderedClip;
+  if (!clip || !line || clip.text !== line) return false;
+  if (!isVoiceAllowed({ userInitiated: true })) { flashCaption(clip.text, 6500); return true; }
+  const file = new File(Paths.cache, `kevin_voice_replay_${Date.now()}.mp3`);
+  try {
+    if (clip.bytes) file.write(clip.bytes);
+    else if (clip.base64) {
+      const FS = await import('expo-file-system/legacy');
+      await FS.writeAsStringAsync(file.uri, clip.base64, { encoding: FS.EncodingType.Base64 });
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    notifyCaption(clip.text);
+    await playLocalFile(file.uri, undefined, { userInitiated: true });
+  } catch (e) {
+    console.log('[voice] replay of rendered clip failed', e);
+  } finally {
+    if (currentCaption === clip.text) notifyCaption(null);
+    try { file.delete(); } catch { /* the cache sweep takes it */ }
+  }
+  return true;
+};
+
 // ─── SPEAK FROM BASE64 ────────────────────
 
 /**
@@ -1715,6 +1748,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
    * now is: heard or read, the caddie said it.
    */
   logCaddieLine(opts?.caption ?? null);
+  if (opts?.caption) lastRenderedClip = { text: opts.caption, base64 };
 
   // Phase V.7 — guard for parity with speak() / playLocalFile.
   // 2026-07-27 (24h audit + Tim: "always see what the caddie says") — when the SPOKEN path is gated
@@ -2265,6 +2299,7 @@ export const speak = async (
     // boundary after sync write so the audio subsystem sees a consistent
     // FS state when createAsync reads the URI.
     audioFile.write(uint8);
+    lastRenderedClip = { text, bytes: uint8 };
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     if (myId !== currentSpeechId) {
@@ -2347,6 +2382,7 @@ export const speak = async (
             if (retryBuf.byteLength > arrayBuffer.byteLength) {
               const retryFile = new File(Paths.cache, `kevin_voice_${Date.now()}_r.mp3`);
               retryFile.write(new Uint8Array(retryBuf));
+              lastRenderedClip = { text, bytes: new Uint8Array(retryBuf) };
               await new Promise<void>((resolve) => setTimeout(resolve, 0));
               if (myId === currentSpeechId) {
                 const again = await Audio.Sound.createAsync({ uri: retryFile.uri }, playbackSoundOptions({ shouldPlay: true, volume: snapshotVolume }));

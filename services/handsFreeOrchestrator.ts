@@ -33,7 +33,6 @@ import {
 import { subscribeWatchTap, subscribeWatchVoice, subscribeWatchCommand, type WatchCommand } from './watchBridge';
 import { emitSmartMotionCommand, isSmartMotionActive } from './smartMotionRecordBus';
 import { devLog } from './devLog';
-import { getApiBaseUrl } from './apiBase';
 
 // 2026-08-07 (Tim — "record button on the watch to control SmartMotion record + stop"). Act on a watch
 // control command from the phone: open SmartMotion + start/stop the camera. Uses the same record bus the
@@ -222,14 +221,18 @@ async function replayLastCaddieLine(): Promise<void> {
       toast.useToastStore.getState().show('No recent line to replay.');
       return;
     }
+    /**
+     * 2026-10-31 (caddie-voice CV-2) — replay plays the clip the player already heard. Each speak() is a
+     * fresh paid render, and speak() logs the line again, so a replay used to cost a TTS call and append a
+     * second copy of the caddie's line to the log that feeds the recap. A line with no clip in memory (the
+     * device voice, a fixed line) is spoken from the cached persona clips only: still no render, no log.
+     */
+    if (await voice.replayLastRenderedClip?.(last)) {
+      devLog('[handsFree] replayed last caddie clip');
+      return;
+    }
     const settings = (await import('../store/settingsStore')).useSettingsStore.getState();
-    await voice.speak?.(
-      last,
-      settings.voiceGender,
-      settings.language ?? 'en',
-      getApiBaseUrl(),
-      { userInitiated: true },
-    )?.catch?.(() => undefined);
+    await voice.speakDeviceNotice?.(last, settings.language ?? 'en', settings.voiceGender);
     devLog('[handsFree] replayed last caddie line');
   } catch (e) {
     devLog('[handsFree] replay failed: ' + String(e));

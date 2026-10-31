@@ -248,10 +248,14 @@ describe('one earbud press, one owner', () => {
     reply.release();
   });
 
-  it('the watch double still replays the last line from idle', async () => {
+  it('the watch double still replays the last line from idle, without a second render', async () => {
+    // 2026-10-31 (CV-2) — with no clip held for the line, the replay says it from the cached persona clips.
+    // It must not call speak(): that is a fresh paid render, and a second log entry for the same line.
     mockState.watchTap!('double');
     await flush(80);
-    expect(mockState.spoken).toEqual(['Hit the seven.']);
+    const vs = require('../../services/voiceService') as { speakDeviceNotice: jest.Mock };
+    expect(vs.speakDeviceNotice).toHaveBeenCalledWith('Hit the seven.', 'en', 'male');
+    expect(mockState.spoken).toEqual([]);
   });
 
   it('the watch, which has no other path, still opens the mic with one tap', async () => {
