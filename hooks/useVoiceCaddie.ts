@@ -21,6 +21,7 @@ import {
   endCaptureEarly,
   registerExternalMicCheck,
   registerExternalMicRelease,
+  registerUtteranceEndpoint,
   type MicReleaseVerdict,
   RECORDING_OPTIONS,
   speakDeviceNotice,
@@ -381,12 +382,18 @@ export const useVoiceCaddie = ({
     // Hand it over on demand instead of letting the other path talk to a busy microphone.
     // Indirected through a ref so this mount-once effect always calls the CURRENT implementation.
     const leaveMicRelease = registerExternalMicRelease(() => releaseMicRef.current());
+    // 2026-10-31 (caddie-home CAD-R1) — A TAP ON THE BADGE, BAR OR EARBUD ENDS THIS RECORDER TOO. It is
+    // the player's own sentence while he speaks and the caddie's invitation while it is silent, and
+    // the avatar's tap already ends it (handleMicPress). Only the release half was registered, so a
+    // badge tap during a silent auto-opened recording was refused as "held elsewhere" and buzzed for up
+    // to the 18 s ceiling. Heard speech is submitted; silence is discarded and the tap then opens a turn.
+    const leaveUtteranceEndpoint = registerUtteranceEndpoint(() => releaseMicRef.current());
     // Leave the SET with our own check only — register(null) cleared every holder's, so an unmount
     // here made the audio meter and impact detector invisible as mic holders. (2026-09-29 review)
     // 2026-10-28 (recheck VC-R2-2) — the release half still did exactly that: register(null) emptied
     // the release set, so after a tab remount nothing could take the mic back from the impact
     // detector, the audio meter or the auto-listen recorder. Leave with our own release only.
-    return () => { leaveMicCheck(); leaveMicRelease(); };
+    return () => { leaveMicCheck(); leaveMicRelease(); leaveUtteranceEndpoint(); };
   }, []);
   const isProcessingRef = useRef(false);
   /**
