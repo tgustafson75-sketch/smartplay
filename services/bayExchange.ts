@@ -138,7 +138,10 @@ export function parsePlayer(input: unknown): PlayerExport | null {
 
 /** The practice-history label. Named by the fix, never by the instructor. */
 export function bayLessonLabel(x: BayLessonExport): string {
-  return x.lesson.target ? `SmartBay lesson · ${x.lesson.target.label}` : 'SmartBay lesson';
+  const base = x.lesson.target ? `SmartBay lesson · ${x.lesson.target.label}` : 'SmartBay lesson';
+  // Filmed from the front: the side-only faults were not read, so the label says so (the bay exports the view per swing).
+  const front = (x.shots ?? []).some((s) => (s as { view?: string }).view === 'face_on');
+  return front ? `${base} · from the front` : base;
 }
 
 export type BayImportResult =
