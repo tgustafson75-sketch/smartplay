@@ -13,6 +13,11 @@
  * "on the second"); it is a count in a score: "I made a bogey, the first bogey of the day" named hole 1 and
  * overwrote his real hole-1 score. Digits with a suffix ("the 12th") and "hole N" still name a hole. A question
  * keeps the word ordinals ("what's the par on the twelfth" names hole 12).
+ *
+ * 2026-10-31 (Brain recheck r25, BRAIN-R25-1) — the r24 cut was too wide: "I got a 5 on the twelfth" named no hole,
+ * so the score fell to the lowest unscored hole behind him, or overwrote the one he stands on offline. A word
+ * ordinal from tenth up after "on"/"at" is a hole in a score too (no golf count reads that way); "the second shot"
+ * and "the first bogey" are still counts.
  */
 const CARDINAL: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -32,6 +37,11 @@ const ANY_TOKEN = String.raw`(\d{1,2}(?:st|nd|rd|th)?|${ORDINAL_WORDS}|${CARDINA
 const ORDINAL_TOKEN = String.raw`(\d{1,2}(?:st|nd|rd|th)|${ORDINAL_WORDS})`;
 /** An ordinal written with digits and a suffix only ("the 12th"): the one ordinal form a score may use for a hole. */
 const DIGIT_ORDINAL_TOKEN = String.raw`(\d{1,2}(?:st|nd|rd|th))`;
+/**
+ * A word ordinal from tenth up ("on the twelfth"). A score may name a hole by it after "on"/"at" — "on the second
+ * shot" is still a count, and a word ordinal below ten is never read in a score.
+ */
+const LATE_ORDINAL_TOKEN = String.raw`(${Object.keys(ORDINAL).filter((w) => ORDINAL[w] >= 10).join('|')})`;
 /** A golf unit after a bare number means it is a count, not a hole ("on 2 putts", "on 150 yards"). */
 const NOT_A_COUNT = String.raw`(?!\s*(?:putts?|yards?|yds?|feet|foot|ft|strokes?|shots?|irons?|woods?|hybrids?|wedges?|driver|degrees?|times?|%))`;
 
@@ -57,6 +67,7 @@ const SCORE_HOLE_RXS: RegExp[] = [
   EXPLICIT_HOLE_RXS[0],
   EXPLICIT_HOLE_RXS[1],
   new RegExp(String.raw`\b(?:on|at)\s+the\s+${DIGIT_ORDINAL_TOKEN}\b`, 'i'),
+  new RegExp(String.raw`\b(?:on|at)\s+the\s+${LATE_ORDINAL_TOKEN}\b`, 'i'),
   new RegExp(String.raw`\bthe\s+${DIGIT_ORDINAL_TOKEN}\b`, 'i'),
   EXPLICIT_HOLE_RXS[2],
   EXPLICIT_HOLE_RXS[3],
