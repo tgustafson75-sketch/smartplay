@@ -873,6 +873,34 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       };
     }, null),
 
+    /**
+     * 2026-10-31 (Brain ENG-TEEGOAL-1) — THE TEE-BOX GOALS ON THE TEE GOALS SCREEN, ASKABLE.
+     *
+     * "Break 90 from the whites" was evaluated live on app/tee-goals.tsx and read by the round-end
+     * celebration, and by nothing else. So "how am I tracking on my goal?" reached a caddie that had
+     * only the free-text profile goal, and it guessed. Same evaluator, same history, as the screen,
+     * so the number Tim can see and the number Kevin is told cannot drift apart.
+     *
+     * Progress is over completed rounds, exactly as the screen computes it. Null when there are no
+     * goals, so the key is always present and "this path forgot it" stays inexpressible.
+     */
+    teeGoals: safe(() => {
+      const goals = (require('../store/teeGoalStore') as typeof import('../store/teeGoalStore')).useTeeGoalStore.getState().goals;
+      if (!goals.length) return null;
+      const { evaluateTeeGoal, describeTeeGoal } = require('./goals/teeScoreGoal') as typeof import('./goals/teeScoreGoal');
+      const history = r.roundHistory ?? [];
+      return goals.map((g) => {
+        const progress = evaluateTeeGoal(g, history);
+        return {
+          goal: describeTeeGoal(g),
+          achieved: progress.achieved,
+          attempts: progress.attempts,
+          best: progress.best,
+          note: progress.note,
+        };
+      });
+    }, null),
+
     // ─── how they've been playing ───────────────────────────────────────────
     patternInsights,
     /**

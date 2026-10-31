@@ -341,6 +341,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currentStroke = null,
       pendingLieAnalysis = null,
       roundStats = null,
+      /** 2026-10-31 — the tee-box goals and their live progress. Message side: progress moves every round. */
+      teeGoals = null,
       playProfile = null,
       clubCall = null,
       holePlan = null,
@@ -2308,6 +2310,13 @@ Tempo: ${wd.averageTempo}:1 | Fault: ${wd.dominantFault || 'none'} | Early trans
 - Mode: ${modeLabel[_roundMode] ?? _roundMode}
 ${insightLines}
 (shots analyzed: ${pi?.shot_count_analyzed ?? 0})`;
+})()}`,
+`${(() => {
+  // 2026-10-31 (Brain ENG-TEEGOAL-1) — the same progress the Tee Goals screen shows, so "am I going
+  // to break 90 from the blues?" is answered from the number, not guessed.
+  const tg = teeGoals as Array<{ goal: string; note: string }> | null;
+  if (!Array.isArray(tg) || tg.length === 0) return '';
+  return `THEIR TEE-BOX GOALS (computed from their completed rounds — quote these numbers, never estimate):\n${tg.map(g => `- ${g.goal}: ${g.note}`).join('\n')}`;
 })()}`,
 `${_golferModel ? `DERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}`,
 `${_puttingRecord ? _puttingRecord : ''}`,
