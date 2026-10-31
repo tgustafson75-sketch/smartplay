@@ -34,6 +34,7 @@ import { tryAnswerOpenQuestion } from './pendingPuttAsk';
 import { isFlagEnabled } from '../store/flagStore';
 import { isAwaitingFollowUp, recordUserTurn, recordKevinTurn } from './conversationState';
 import { carriesYardageCorrection } from './intents/stateYardageHandler';
+import { isBrainBlindCommand } from './brainBlindCommand';
 import { beginTurnForOffer, isAnsweringOffer } from './voice/pendingOpenOffer';
 import { preBrainReply, shapeForBrain } from './voice/preBrainTurn';
 import { resultWantsBrain } from './voiceCommandRouter';
@@ -971,7 +972,11 @@ async function deliverBrainReply(opts: {
   let localAnswer: string | null = null;
   try {
     // 2026-10-15 — the shared rule 1: a "no data" reply ("No GPS lock yet") is not an answer.
-    localAnswer = (require('./caddieFailureReply') as typeof import('./caddieFailureReply')).localAnswer(utterance, lang);
+    // 2026-10-31 (Brain recheck r20, BRAIN-R20-1) — a score said with a question is kept first when proven
+    // offline, so the saved line leads and the notice does not stand in for the capture.
+    const failure = require('./caddieFailureReply') as typeof import('./caddieFailureReply');
+    const kept = await failure.keepScoreIfProvenOffline(utterance);
+    localAnswer = failure.localAnswer(utterance, lang, kept);
   } catch { /* the local answer is a bonus, never a dependency */ }
   if (localAnswer) {
     if (maySpeak()) {
@@ -1496,7 +1501,7 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
      * Read BEFORE this turn is recorded: the record makes this turn the last one.
      */
     const offeredOpen = beginTurnForOffer(utterance);
-    const answeringCaddie = !offeredOpen && !isAnsweringOffer() && isAwaitingFollowUp() && !carriesYardageCorrection(utterance);
+    const answeringCaddie = !offeredOpen && !isAnsweringOffer() && isAwaitingFollowUp() && !carriesYardageCorrection(utterance) && !isBrainBlindCommand(utterance);
     try { recordUserTurn(utterance); } catch { /* non-fatal */ }
 
     let intent: VoiceIntent | null = offeredOpen
@@ -2160,7 +2165,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   // 2026-10-27 (Brain review B3 / B4) — the caddie's question owns the answer here too; see the
   // earbud path. Read before this turn is recorded, because recording it makes it the last turn.
   const offeredOpen = beginTurnForOffer(text);
-  const answeringCaddie = !offeredOpen && !isAnsweringOffer() && isAwaitingFollowUp() && !carriesYardageCorrection(text);
+  const answeringCaddie = !offeredOpen && !isAnsweringOffer() && isAwaitingFollowUp() && !carriesYardageCorrection(text) && !isBrainBlindCommand(text);
   try { require('../store/conversationLogStore').useConversationLog.getState().logUser(text, Date.now()); } catch { /* non-fatal */ }
   try { recordUserTurn(text); } catch { /* non-fatal */ }
   typedTurnsInFlight += 1;

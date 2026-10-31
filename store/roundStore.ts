@@ -15,6 +15,7 @@ import type { RulesDecision } from '../types/penalty';
 // Switched from require() per the no-anti-pattern refinement pass.
 import { forceHoleReconciliation } from '../services/holeReconciliation';
 import { haversineYards } from '../utils/geoDistance';
+import { knownYardage } from '../utils/knownYardage';
 import { getApiBaseUrl } from '../services/apiBase';
 
 // ─── TYPES ────────────────────────────────
@@ -1545,7 +1546,7 @@ export const useRoundStore = create<RoundState>()(
           currentHole: startHoleResolved,
           roundStartHole: startHoleResolved,
           holeNotes: {},
-          currentYardage: holes[startHoleResolved - 1]?.distance ?? null,
+          currentYardage: knownYardage(holes[startHoleResolved - 1]?.distance),
           // 2026-08-24 — a new round starts with nothing said yet, or round 2 would inherit round 1's
           // briefs on every hole number already played.
           spokenHoleEvents: {},
@@ -2163,7 +2164,7 @@ export const useRoundStore = create<RoundState>()(
           twiceAround: twice,
           recentCourseIds: [next.courseId, ...prev.recentCourseIds.filter((id) => id !== next.courseId && id !== prev.activeCourseId)].slice(0, 5),
           currentHole,
-          currentYardage: holes[currentHole - 1]?.distance ?? null,
+          currentYardage: knownYardage(holes[currentHole - 1]?.distance),
           // Layout-owned: notes and "already said" belong to the other layout's holes; a stated
           // yardage, a pending recommendation and a lie read belong to the other layout's shot.
           holeNotes: {},
@@ -3091,10 +3092,10 @@ export const useRoundStore = create<RoundState>()(
         const clearStated = prevHole !== clamped
           ? { userStatedYardage: null, pendingKevinRec: null, pendingLieAnalysis: null }
           : {};
-        set({ currentHole: clamped, currentYardage: holeData?.distance ?? null, ...clearStated });
+        set({ currentHole: clamped, currentYardage: knownYardage(holeData?.distance), ...clearStated });
         if (prevHole !== clamped) {
           console.log(`[path2:round] hole transition prev=${prevHole} next=${clamped}`);
-          console.log(`[audit:round-active] hole-transition prev=${prevHole} next=${clamped} yardage=${holeData?.distance ?? 'null'}`);
+          console.log(`[audit:round-active] hole-transition prev=${prevHole} next=${clamped} yardage=${knownYardage(holeData?.distance) ?? 'null'}`);
           // 2026-08-06 (Tim — "got double reads on a lot of holes; the user needs to ASK for the briefing,
           // not have it auto-prompted"). Per-hole reads are now PULL-ONLY. Nothing is spoken on a hole
           // change: this auto-intro + M12 briefing was the source of the double/again reads — it fired on

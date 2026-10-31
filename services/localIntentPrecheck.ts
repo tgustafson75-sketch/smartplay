@@ -782,6 +782,17 @@ const HOLE_SCOPED_TOPICS = new Set([
 ]);
 
 /**
+ * 2026-10-31 (Brain recheck r20, BRAIN-R20-2) — the one test for "this topic is about ONE hole the utterance
+ * names or points at". The precheck uses it before the brain, and the offline score answer uses it too: without
+ * it the failure path spoke the round total for "what's my score on this hole". A named hole (HOLE_SCOPED_TOPICS)
+ * or a deictic hole (DEICTIC_HOLE_TOPICS) is an ask the round-total reader must not answer.
+ */
+export function holeScopedAsk(raw: string, topic: string): boolean {
+  if (HOLE_SCOPED_TOPICS.has(topic) && parseSpokenHole(raw) != null) return true;
+  return DEICTIC_HOLE_TOPICS.has(topic) && DEICTIC_HOLE_RX.test(raw);
+}
+
+/**
  * 2026-10-29 (Brain recheck r15) — a score for a PAST round. "What was my score last round" hit the score
  * lookup and the off-round gate deflected it ("You're not in a round yet"), while the putts for that same
  * round were answered from it. The score lookup reads the round in progress, so a past-round marker is the
@@ -845,10 +856,7 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
    */
   if (isStatusLookup(hit)) {
     const raw = transcript.trim();
-    if (HOLE_SCOPED_TOPICS.has(topic) && parseSpokenHole(raw) != null) {
-      return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: topic });
-    }
-    if (DEICTIC_HOLE_TOPICS.has(topic) && DEICTIC_HOLE_RX.test(raw)) {
+    if (holeScopedAsk(raw, topic)) {
       return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: topic });
     }
     if (topic === 'score' && PAST_ROUND_RX.test(raw)) {

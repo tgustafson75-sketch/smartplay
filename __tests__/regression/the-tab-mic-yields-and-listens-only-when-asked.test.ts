@@ -54,6 +54,7 @@ jest.mock('../../store/issueLogStore', () => ({ useIssueLogStore: { getState: ()
 jest.mock('../../store/pointsStore', () => ({ usePointsStore: { getState: () => ({ addPoints: jest.fn() }) } }));
 jest.mock('../../services/caddieFailureReply', () => ({
   localAnswer: () => null,
+  keepScoreIfProvenOffline: jest.fn(async () => false),
   caddieFailureReply: jest.fn(async () => ({
     text: mockState.verdict === 'offline' ? "I can't get online right now — your yardages and score still work." : 'That one got away from me — say it again?',
     source: mockState.verdict === 'offline' ? 'offline' : 'on_us',

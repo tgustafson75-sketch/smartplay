@@ -171,7 +171,7 @@ describe('review fixes (10-15)', () => {
     // 2026-10-28 — `heard` is the player's words, captured BEFORE the plain-speak / sing reshape.
     expect(followUp).toMatch(/const heard = message;\s*const failedTurn = async/);
     expect(code('services/listeningSession.ts')).not.toMatch(/answerOffline\(/);
-    expect(code('services/listeningSession.ts')).toMatch(/\.localAnswer\(utterance, lang\)/);
+    expect(code('services/listeningSession.ts')).toMatch(/\.localAnswer\(utterance, lang, kept\)/);
   });
 
   it('a late failure line never lands on a newer turn', () => {

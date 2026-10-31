@@ -106,6 +106,7 @@ export function getBundledHoles(courseId: string | null | undefined): CourseHole
       return cc.holes.map((h) => ({
         hole: h.hole,
         par: h.par,
+        // 0 = the card did not record a yardage (see knownYardage in utils/knownYardage). Never a real distance.
         distance: h.distance ?? 0,
         front: 0, back: 0,
         teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,

@@ -40,6 +40,7 @@ import {
 } from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
 import { carriesYardageCorrection } from '../services/intents/stateYardageHandler';
+import { isBrainBlindCommand } from '../services/brainBlindCommand';
 import { raceHedged } from '../services/voice/hedgedFetch';
 import { openToolHandler } from '../services/intents/openToolHandler';
 import { quickRoundHandler } from '../services/intents/quickRoundHandler';
@@ -1834,11 +1835,11 @@ export const useVoiceCaddie = ({
        */
       // 2026-10-27 (Brain review B4) — except while "Want me to open that?" is waiting: the router
       // owns that answer, and a "yes" sent to the brain would leave the offer unkept.
-      const skipIntentRouter = answeringCaddie && !carriesYardageCorrection(transcript) && !hasPendingOpenOffer(transcript);
+      const skipIntentRouter = answeringCaddie && !carriesYardageCorrection(transcript) && !hasPendingOpenOffer(transcript) && !isBrainBlindCommand(transcript);
       if (skipIntentRouter) {
         devLog('[voice] follow-up bypass: Kevin asked a question, routing reply straight to brain');
       } else if (answeringCaddie) {
-        devLog('[voice] follow-up carries a yardage — routing it so the correction can land');
+        devLog('[voice] follow-up carries a yardage or a command the brain cannot carry — routing it');
       }
 
       // ── Local-first (AUTO — always on, NOT a user toggle) ─────────────────

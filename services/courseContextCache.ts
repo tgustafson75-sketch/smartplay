@@ -19,6 +19,7 @@
  * retry window, so a dead spot on the first tee does not cost a real course its card for four hours.
  */
 import { useRoundStore } from '../store/roundStore';
+import { knownYardage } from '../utils/knownYardage';
 
 const summaries = new Map<string, string>();
 const warming = new Set<string>();
@@ -48,7 +49,8 @@ function localCard(courseId: string): string | null {
   const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
   const holes = [...(fromRound ? round.courseHoles : getBundledHoles(courseId))].sort((a, b) => a.hole - b.hole);
   if (holes.length === 0) return null;
-  return holes.map((h) => `Hole ${h.hole}: Par ${h.par}, ${h.distance} yds`).join('. ') + '.';
+  // 2026-10-31 (Brain recheck r20, BRAIN-ENG-3) — a hole with no recorded yardage says so; it never prints 0 yds.
+  return holes.map((h) => `Hole ${h.hole}: Par ${h.par}, ${knownYardage(h.distance) != null ? `${h.distance} yds` : 'yardage not recorded'}`).join('. ') + '.';
 }
 
 /**

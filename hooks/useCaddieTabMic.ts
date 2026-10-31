@@ -271,7 +271,12 @@ export function useCaddieTabMic({
          * check decide the line. Nothing waits on the network before 'speaking' is shown (review).
          */
         const failure = await import('../services/caddieFailureReply');
-        const local = failure.localAnswer(transcript, lang);
+        /**
+         * 2026-10-31 (Brain recheck r20, BRAIN-R20-1) — a score said with a question is kept FIRST when the phone
+         * is proven offline, so the saved line (not the "say it again" notice) is what he hears.
+         */
+        const kept = await failure.keepScoreIfProvenOffline(transcript);
+        const local = failure.localAnswer(transcript, lang, kept);
         if (local) {
           if (supersededByNewerTurn()) { yieldLine(local); return; }
           onVoiceStateChange?.('speaking');

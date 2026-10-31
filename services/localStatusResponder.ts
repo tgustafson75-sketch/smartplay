@@ -37,7 +37,7 @@ import { useRoundStore } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useConversationLog } from '../store/conversationLogStore';
 import { routineAsk } from './routineUtterance';
-import { HAZARD_RX } from './localIntentPrecheck';
+import { HAZARD_RX, holeScopedAsk } from './localIntentPrecheck';
 import { getLastFix } from './gpsManager';
 import { haversineYards, bearingDegrees } from '../utils/geoDistance';
 import { resolveGreenCoords, classifyAccuracy , holeData as resolvedHoleData } from './smartFinderService';
@@ -515,8 +515,11 @@ export function tryLocalReply(
     return null;
   }
   // ── SCORE ──
+  // 2026-10-31 (Brain recheck r20, BRAIN-R20-2) — "my score on this hole" / "my score on hole 7" is ONE hole, and
+  // scoreReply sums the round. The brain-bound precheck declines these (BRAIN-4, r15); the offline route must too,
+  // so null hands the failure owner its honest line instead of the round total.
   if (RX.score.test(t)) {
-    return scoreReply(lang);
+    return holeScopedAsk(t, 'score') ? null : scoreReply(lang);
   }
   // ── HOLES LEFT ──
   if (RX.holesLeft.test(t)) {
