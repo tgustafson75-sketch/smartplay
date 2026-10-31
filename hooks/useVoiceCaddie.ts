@@ -667,6 +667,14 @@ export const useVoiceCaddie = ({
     return { handled: false };
   };
 
+  // 2026-10-31 (Brain recheck r18, BRAIN-5) — the follow-up loop's closure is built once per loop
+  // (its deps omit the round state), so it reads the latest bypass check through this ref. Without it a
+  // follow-up penalty would land on the hole the loop started on.
+  const checkBypassesRef = useRef(checkBypasses);
+  useEffect(() => {
+    checkBypassesRef.current = checkBypasses;
+  });
+
   // ── SEND TO BRAIN ─────────────────────────
 
   /**
@@ -794,6 +802,30 @@ export const useVoiceCaddie = ({
           await speakResponse(courseResolved.confirmLine);
           wrappedOnVoiceStateChange('idle');
           return;
+        }
+
+        // 2026-10-31 (Brain recheck r18, BRAIN-5) — the first turn's bypasses run here too, before the
+        // brain, with the same handling. A follow-up "be quiet" went to /api/kevin and its reply was
+        // spoken through the shush; "penalty" went to the brain instead of adding the stroke.
+        {
+          const bypass = checkBypassesRef.current(trimmed);
+          if (bypass.handled) {
+            if (bypass.triggerVision) onVisionTrigger?.();
+            if (bypass.triggerHero) onHeroMoment?.();
+            if (bypass.triggerHeroReelView) onHeroReelView?.();
+            if (bypass.triggerMute) {
+              await stopSpeaking('screen:hooks-usevoicecaddie');
+              wrappedOnVoiceStateChange('idle');
+              return;
+            }
+            if (bypass.response) {
+              onResponseReceived(bypass.response);
+              wrappedOnVoiceStateChange('speaking');
+              await speakResponse(bypass.response);
+            }
+            wrappedOnVoiceStateChange('idle');
+            return;
+          }
         }
 
         // Match the manual-tap pattern: record the user turn, send to

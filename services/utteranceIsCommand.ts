@@ -125,12 +125,19 @@ const CONDITIONAL_OR_FUTURE = new RegExp(
  * half set risk mode while Kevin was never asked. Only a subject-bearing question counts ("should I",
  * "what would you", "is that", "does that", "do you think", "is it") after a comma, semicolon, "and",
  * "but", "or" or "so" — "The pin is short, should be an easy putt" is a statement and stays one.
+ *
+ * 2026-10-31 (Brain recheck r18, BRAIN-7) — a score said with a question: "I got a 4, how far is the
+ * water" and "I got a 5 and I hit it in the water, what's my play" logged the score and dropped the
+ * question, because "how far is" and "what's my" are not in the list above. The question words a
+ * player asks mid-round ("how far", "how many", "how long", "where", "what's", "what is") count after
+ * the same separators.
  */
 const QUESTION_CLAUSE = new RegExp(
   String.raw`(?:[,;]\s*(?:(?:and|but|or|so)\s+)?|\s+(?:and|but|or|so)\s+)`
   + String.raw`(?:(?:should|shall|can|could|is|are|was|would|will|have|has)\s+(?:i|we|you|it|that|this|there|he|she|they)\b`
   + String.raw`|(?:do|does|did)\s+(?:you|that|this)\b`
-  + String.raw`|(?:what|how|why|when|where|which|who)\s+(?:would|should|do|did|is|are|was|will|can|could)\s+(?:i|we|you|it|that|this|there)\b)`,
+  + String.raw`|(?:what|how|why|when|where|which|who)\s+(?:would|should|do|did|is|are|was|will|can|could)\s+(?:i|we|you|it|that|this|there)\b`
+  + String.raw`|(?:how\s+(?:far|many|long|much)|where|what'?s|what\s+is)\b)`,
   'i',
 );
 
