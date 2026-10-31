@@ -79,9 +79,11 @@ function harness() {
 
 describe('a score said with a question, on a proven-offline phone, is kept', () => {
   it('the owner keeps the words and the saved line leads the answer', async () => {
-    expect(await keepScoreIfProvenOffline(SAID)).toBe(true);
+    // 2026-10-31 (Brain recheck r22, BRAIN-AR-1) — no round is active here, so the score cannot reach the card and the words
+    // are kept as a note ('note'). With a round the score is written and the answer is 'on_card' (a-score-said-offline-is-written-to-the-card).
+    expect(await keepScoreIfProvenOffline(SAID)).toBe('note');
     expect(mockCapture).toHaveBeenCalledWith(SAID);
-    expect(localAnswer(SAID, 'en', true)?.startsWith(CADDIE_NOTICE_SAVED_OFFLINE.en)).toBe(true);
+    expect(localAnswer(SAID, 'en', 'note')?.startsWith(CADDIE_NOTICE_SAVED_OFFLINE.en)).toBe(true);
   });
 
   it('the caddie tab captures the score and speaks the saved line, not the "say it again" notice', async () => {

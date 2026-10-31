@@ -23,12 +23,23 @@ const PUTT_COUNT_RX = /\b(?:i\s+)?(?:had|took|got|needed|did|made)\s+(?:\d{1,2}|
 /** "end the round", "finish this round", "wrap up my round". */
 const END_ROUND_RX = /\b(?:end|finish|close|wrap\s+up)\s+(?:the|this|my)\s+round\b/i;
 
+/**
+ * 2026-10-31 (Brain recheck r22, BRAIN-AR-2) — a SETTINGS ORDER after a caddie question is a command too. The brain has no
+ * theme, handedness or cart/ghost tool, so "switch to dark mode" said after "lay up or go for it?" was answered in prose and
+ * nothing changed. Routed like the rest of this set (the router applies it, and the decline note reaches the brain when it
+ * is not an order).
+ *
+ * Risk mode is the exception, and it stays an answer: "go for it" and "play it safe" are how a player answers the caddie's
+ * own lay-up question (2026-10-27 B3/B4). Routing them as an order would set the posture with no club.
+ */
 export function isBrainBlindCommand(raw: string | null | undefined): boolean {
   const text = String(raw ?? '').trim();
   if (!text) return false;
   if (PUTT_COUNT_RX.test(text) || END_ROUND_RX.test(text)) return true;
   try {
-    const type = precheckLocalIntent(text)?.intent_type;
+    const hit = precheckLocalIntent(text);
+    const type = hit?.intent_type;
+    if (type === 'change_setting') return hit?.parameters?.setting_name !== 'risk_mode';
     return !!type && BRAIN_BLIND_INTENTS.has(type);
   } catch {
     return false;

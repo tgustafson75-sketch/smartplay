@@ -97,6 +97,9 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
   signal?.addEventListener('abort', onOuterAbort);
 
   try {
+    // 2026-10-31 (Brain recheck r22, BRAIN-ENG-A) — the offline notes this body carries are read in the same synchronous
+    // step as the instant is taken: a note captured up to that instant was sent, and one captured later is new.
+    const sentAt = Date.now();
     const body = buildCaddieRequestBody(extras);
     if (skipTts) body.skip_tts = true;
 
@@ -157,6 +160,9 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
     // between a caddie who acts and a mic that went dead.
     if (!text && toolActions.length) text = 'Done.';
     if (!text) return noAnswer();
+
+    // 2026-10-31 (Brain recheck r22, BRAIN-ENG-A) — the brain answered, so the offline notes it was sent are delivered.
+    try { (require('./voiceLogService') as typeof import('./voiceLogService')).markOfflineNotesDelivered(sentAt); } catch { /* advisory */ }
 
     /**
      * ONE conversation, whichever surface asked. Written here so no caller can forget it — the reason

@@ -112,6 +112,16 @@ export const CADDIE_NOTICE_SAVED_OFFLINE: Record<'en' | 'es' | 'zh', string> = {
   zh: '我现在连不上网，但我记下了你说的话。连上网后我会接着处理。',
 };
 
+/**
+ * 2026-10-31 (Brain recheck r22, BRAIN-AR-1) — a score said with a question, on a proven-offline phone, is written to the
+ * card right then (services/caddieFailureReply.keepScoreIfProvenOffline). The score is on the card; nothing is promised later.
+ */
+export const CADDIE_NOTICE_SCORE_ON_CARD_OFFLINE: Record<'en' | 'es' | 'zh', string> = {
+  en: "I can't get online right now, but your score is on the card.",
+  es: 'Ahora mismo no tengo conexión, pero tu score ya está en la tarjeta.',
+  zh: '我现在连不上网，但你的成绩已经记在计分卡上了。',
+};
+
 export const ACK_PHRASES: Record<'en' | 'es' | 'zh', string[]> = {
   en: ['Okay, got it.', 'Got it.', 'Alright.', 'Sure thing.', 'On it.', 'Copy that.', 'You got it.', 'Let me take a look.', 'Right, one sec.', 'Gotcha.'],
   es: ['Vale, entendido.', 'Entendido.', 'Muy bien.', 'Claro.', 'En ello.', 'Déjame ver.', 'Un momento.'],

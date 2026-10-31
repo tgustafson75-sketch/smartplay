@@ -21,9 +21,16 @@
  * No persisted flag, nothing to get stuck: the verdict is cached 20s and any success clears it.
  */
 import { probeReachability, isProvenOffline, lastReachability, type NetVerdict } from './reachability';
-import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_SAVED_OFFLINE, CADDIE_NOTICE_SCORE_NOT_LOGGED } from './caddieAckLines';
+import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_SAVED_OFFLINE, CADDIE_NOTICE_SCORE_NOT_LOGGED, CADDIE_NOTICE_SCORE_ON_CARD_OFFLINE } from './caddieAckLines';
+import { resolveStrokes } from './intents/scoreParse';
 
 type Lang = 'en' | 'es' | 'zh';
+
+/**
+ * What keepScoreIfProvenOffline did with a score said with a question: 'on_card' (written to the round, the
+ * scorecard has it), 'note' (no round or no readable score, so the words were kept as an offline note), or false.
+ */
+export type KeptScore = 'on_card' | 'note' | false;
 
 export type FailureReplySource = 'local_answer' | 'round_read' | 'on_us' | 'slow' | 'offline';
 
@@ -39,10 +46,10 @@ export function safeLang(language: string | null | undefined): Lang {
 }
 
 /**
- * `kept`: the caller already kept the score in `heard` (keepScoreIfProvenOffline), so rule 1 speaks the saved line.
+ * `kept`: what the caller did with the score in `heard` (keepScoreIfProvenOffline): 'on_card' or 'note' speaks the matching saved line.
  * 2026-10-31 (Brain recheck r21, BRAIN-R21-1) — every failure path that has the words passes this through.
  */
-export async function caddieFailureReply(opts: { heard?: string | null; language?: string | null; kept?: boolean }): Promise<FailureReply> {
+export async function caddieFailureReply(opts: { heard?: string | null; language?: string | null; kept?: KeptScore }): Promise<FailureReply> {
   const lang = safeLang(opts.language);
 
   // 1 — the question, answered from real local data.
@@ -67,10 +74,10 @@ export async function caddieFailureReply(opts: { heard?: string | null; language
  * green, bundled knowledge), or null. A "no data" reply ("I don't have a wind reading") answers
  * nothing, so it is null too — the caller then says why the turn failed.
  *
- * `kept`: the score in the words was already saved as an offline note (keepScoreIfProvenOffline), so the
- * line is the saved-offline line, not "say it again", with whatever answer is left after it.
+ * `kept`: the score in the words was already written to the card ('on_card') or kept as an offline note ('note')
+ * (keepScoreIfProvenOffline), so the line is the saved line, not "say it again", with whatever answer is left after it.
  */
-export function localAnswer(heard: string | null | undefined, language?: string | null, kept = false): string | null {
+export function localAnswer(heard: string | null | undefined, language?: string | null, kept: KeptScore = false): string | null {
   const q = heard?.trim();
   if (!q) return null;
   const lang = safeLang(language);
@@ -78,7 +85,9 @@ export function localAnswer(heard: string | null | undefined, language?: string 
    * 2026-10-31 (Brain recheck r19, BRAIN-B) — a score said with a question was held for the brain, which is
    * the one turn that failed, so the score is not on the card. Said first, with whatever answer is left.
    */
-  const unlogged = kept ? CADDIE_NOTICE_SAVED_OFFLINE[lang] : scoreNotLoggedLine(q, lang);
+  const unlogged = kept === 'on_card' ? CADDIE_NOTICE_SCORE_ON_CARD_OFFLINE[lang]
+    : kept === 'note' ? CADDIE_NOTICE_SAVED_OFFLINE[lang]
+    : scoreNotLoggedLine(q, lang);
   try {
     const text = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(q, lang)?.text?.trim();
     const answer = text && !(require('./localStatusResponder') as typeof import('./localStatusResponder')).isNoDataReply(text, lang) ? text : null;
@@ -93,17 +102,47 @@ export function localAnswer(heard: string | null | undefined, language?: string 
  *
  * localAnswer returned the "didn't get your score down" notice for this utterance, and both mic paths returned
  * on it, so captureOfflineStatement never ran: a proven-offline "I got a 5, what's my play" lost the 5, and the
- * player was told to repeat it while still offline. When the phone can PROVE it is offline, the words are kept
- * as an offline note first and the caller speaks the saved line (localAnswer(…, true)). Online, nothing is kept
- * and the notice says what is true. Only a score-shaped question probes the network; every other utterance
- * returns false with no wait. Never throws.
+ * player was told to repeat it while still offline. When the phone can PROVE it is offline, the score is kept
+ * before the caller speaks. Only a score-shaped question probes the network; every other utterance returns false
+ * with no wait. Never throws.
+ *
+ * 2026-10-31 (Brain recheck r22, BRAIN-AR-1) — the score is WRITTEN to the round (roundStore.logScore, the one seam
+ * every score path funnels through), not only kept as a note. A note is text the brain reads on a later turn, and
+ * if he never speaks again in the round the score never reaches the card. The notice is 'on_card' only when the
+ * write is read back from the store; otherwise the words are kept as a note, as before.
  */
-export async function keepScoreIfProvenOffline(heard: string | null | undefined): Promise<boolean> {
+export async function keepScoreIfProvenOffline(heard: string | null | undefined): Promise<KeptScore> {
   const q = heard?.trim();
   if (!q || !scoreSaidUnlogged(q)) return false;
   try {
     if (!isProvenOffline((await probeReachability()).verdict)) return false;
-    return (require('./voiceLogService') as typeof import('./voiceLogService')).captureOfflineStatement(q);
+  } catch {
+    return false;
+  }
+  if (writeScoreOffline(q)) return 'on_card';
+  try {
+    return (require('./voiceLogService') as typeof import('./voiceLogService')).captureOfflineStatement(q) ? 'note' : false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The score in the words, written to the CURRENT hole (the hole the question is about; the par resolves named scores).
+ * True only when the store holds that score afterwards, so a write the store refused (no active round, a hole outside
+ * 1..18) is never reported as on the card. Never throws.
+ */
+function writeScoreOffline(q: string): boolean {
+  try {
+    const rs = require('../store/roundStore') as typeof import('../store/roundStore');
+    const round = rs.useRoundStore.getState();
+    if (!round.isRoundActive) return false;
+    const hole = round.currentHole;
+    const par = (require('./smartFinderService') as typeof import('./smartFinderService')).holePar(hole);
+    const strokes = resolveStrokes(undefined, q, par);
+    if (strokes == null) return false;
+    rs.useRoundStore.getState().logScore(hole, strokes);
+    return rs.useRoundStore.getState().scores[hole] === strokes;
   } catch {
     return false;
   }

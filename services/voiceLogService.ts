@@ -33,7 +33,15 @@ export function captureOfflineStatement(transcript: string): boolean {
 export function peekOfflineNotesBlock(): string {
   const round = useRoundStore.getState();
   const roundId = round.currentRoundId ?? null;
-  const pending = useVoiceLogStore.getState().getPending(roundId);
+  /**
+   * 2026-10-31 (Brain recheck r22, BRAIN-ENG-A) — a note the brain has already answered is not news again.
+   * Before this, every later turn of the round re-sent "WHILE OFFLINE…" for a remark from hole 7, labelled as
+   * offline on hole 15. Only notes captured since the last answered brain turn are carried (markOfflineNotesDelivered).
+   * A turn that FAILS never advances the watermark, so its notes ride the next attempt.
+   */
+  const store = useVoiceLogStore.getState();
+  const since = Number(store.deliveredAt) || 0;
+  const pending = store.getPending(roundId).filter((e) => e.capturedAt > since);
   if (pending.length === 0) return '';
   const lines = pending
     .slice(-8)
@@ -42,6 +50,14 @@ export function peekOfflineNotesBlock(): string {
     .map((e) => `- ${e.hole != null ? `hole ${e.hole}: ` : ''}"${e.transcript.slice(0, 160)}"`)
     .join('\n');
   return `WHILE OFFLINE the player said these (captured with no signal — acknowledge naturally + use them, don't re-ask):\n${lines}`;
+}
+
+/**
+ * 2026-10-31 (Brain recheck r22, BRAIN-ENG-A) — called by services/caddieBrain once a brain turn has answered, with the
+ * instant read just before its request body was built. Every note captured up to that instant was in the request.
+ */
+export function markOfflineNotesDelivered(sentAt: number): void {
+  useVoiceLogStore.getState().markDelivered(sentAt);
 }
 
 /** Mark a round's pending notes ingested (called at round end — they persist for recap). */

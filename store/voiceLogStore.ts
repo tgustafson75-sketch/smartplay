@@ -38,6 +38,13 @@ interface VoiceLogState {
   getPending: (roundId?: string | null) => VoiceLogEntry[];
   /** All entries for a round (pending + ingested), oldest first — for recap. */
   forRound: (roundId: string) => VoiceLogEntry[];
+  /**
+   * 2026-10-31 (Brain recheck r22, BRAIN-ENG-A) — the instant read just before the last answered brain turn's body was built.
+   * A note captured after it has not been sent yet; every note captured at or before it was in that body.
+   */
+  deliveredAt: number;
+  /** Advance the watermark after a brain turn that answered. Only ever moves forward. */
+  markDelivered: (at: number) => void;
 }
 
 const MAX_ENTRIES = 200;
@@ -67,13 +74,17 @@ export const useVoiceLogStore = create<VoiceLogState>()(
         get().entries.filter((e) => e.status === 'pending' && (roundId === undefined || e.roundId === roundId)),
       forRound: (roundId) =>
         get().entries.filter((e) => e.roundId === roundId).sort((a, b) => a.capturedAt - b.capturedAt),
+      deliveredAt: 0,
+      markDelivered: (at) => {
+        if (Number.isFinite(at) && at > get().deliveredAt) set({ deliveredAt: at });
+      },
     }),
     {
       name: 'voice-log-v1',
       storage: createJSONStorage(() => getPersistStorage()),
       version: 1,
       migrate: (p) => p as VoiceLogState,
-      partialize: (s) => ({ entries: s.entries }),
+      partialize: (s) => ({ entries: s.entries, deliveredAt: s.deliveredAt }),
     },
   ),
 );

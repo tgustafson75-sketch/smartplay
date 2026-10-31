@@ -14,6 +14,8 @@ import { changeSettingHandler } from '../intents/changeSettingHandler';
 export async function followUpSettingLine(utterance: string): Promise<string | null> {
   const hit = precheckLocalIntent(utterance);
   if (hit?.intent_type !== 'change_setting') return null;
+  // 2026-10-31 (Brain recheck r22, BRAIN-AR-2) — "go for it" / "play it safe" answer the caddie's question (B3/B4); they are not an order here.
+  if (hit.parameters?.setting_name === 'risk_mode') return null;
   // changeSettingHandler.execute takes the router's context and reads none of it, so the follow-up
   // loop, which has no router context in scope, passes none.
   const result = await changeSettingHandler.execute(hit, undefined as unknown as AppContext);
