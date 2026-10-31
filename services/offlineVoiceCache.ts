@@ -74,11 +74,18 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   // the robotic OS voice (north-star defect, heard every turn). Pre-render the ENGLISH set in the persona
   // voice, built from the SAME source listeningSession speaks (caddieAckLines) so they can't drift. es/zh
   // acks stay silent until there are non-English testers.
-  { slug: 'didnt_catch_short', language: 'en', text: CADDIE_NOTICE_DIDNT_CATCH },
+  { slug: 'didnt_catch_short', language: 'en', text: CADDIE_NOTICE_DIDNT_CATCH.en },
+  // 2026-10-31 (CAD-LANG-1) — the es and zh bare notice. Without these a Spanish or Chinese player's
+  // "didn't catch that" resolves to no clip and stays silent (or, before the per-language notice, played
+  // the English clip above).
+  ...(['es', 'zh'] as const).map((language) => ({ slug: `didnt_catch_short_${language}`, language, text: CADDIE_NOTICE_DIDNT_CATCH[language] })),
   // 2026-08-17 — the mic-failed line (spoken instead of "Didn't catch that." when the microphone
   // never opened). Same treatment: it's a line the user hears at a bad moment, so it must not be
   // the moment they also hear the robot voice.
   { slug: 'mic_trouble_en', language: 'en', text: CADDIE_NOTICE_MIC_TROUBLE.en },
+  // 2026-10-31 (CAD-LANG-1) — the es and zh mic-trouble line. It was English-only, so an es or zh player
+  // whose mic never opened got no words at all.
+  ...(['es', 'zh'] as const).map((language) => ({ slug: `mic_trouble_${language}`, language, text: CADDIE_NOTICE_MIC_TROUBLE[language] })),
   // 2026-10-25 — a press while the app was not in the foreground (iOS will not start a recording then).
   ...(['en', 'es', 'zh'] as const).map((language) => ({ slug: `mic_needs_app_${language}`, language, text: CADDIE_NOTICE_MIC_NEEDS_APP[language] })),
   // 2026-10-28 (VOICE-ENG-R2-2) — a press with the microphone permission permanently refused.

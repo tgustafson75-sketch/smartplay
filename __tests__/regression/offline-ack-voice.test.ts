@@ -15,8 +15,9 @@ describe('caddie ack lines (shared source for speech + persona-voice cache)', ()
     expect(new Set(ACK_PHRASES.en).size).toBe(ACK_PHRASES.en.length);
   });
 
-  it('provides the bare "Didn\'t catch that." notice', () => {
-    expect(CADDIE_NOTICE_DIDNT_CATCH).toBe("Didn't catch that.");
+  it('provides the bare "Didn\'t catch that." notice in every language', () => {
+    expect(CADDIE_NOTICE_DIDNT_CATCH.en).toBe("Didn't catch that.");
+    for (const lang of ['es', 'zh'] as const) expect(CADDIE_NOTICE_DIDNT_CATCH[lang].trim().length).toBeGreaterThan(0);
   });
 
   it('covers every localized ack bucket', () => {

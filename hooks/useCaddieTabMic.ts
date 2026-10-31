@@ -483,7 +483,7 @@ export function useCaddieTabMic({
         const failure = require('../services/caddieFailureReply') as typeof import('../services/caddieFailureReply');
         // An empty transcript is not a network failure: the upload worked and nothing was heard.
         line = reason === 'empty_transcript'
-          ? CADDIE_NOTICE_DIDNT_CATCH
+          ? CADDIE_NOTICE_DIDNT_CATCH[useSettingsStore.getState().language]
           : (await failure.caddieFailureReply({ heard: null, language: useSettingsStore.getState().language })).text;
       } catch { /* keep the neutral fallback */ }
       // Review (10-15): the reply waits on the internet check. If the player started a new turn in that

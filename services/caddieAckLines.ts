@@ -5,14 +5,24 @@
  * Single source of truth so the two consumers can't drift:
  *   - services/listeningSession.ts speaks pickAck(lang) + the notice via speakDeviceNotice.
  *   - services/offlineVoiceCache.ts pre-renders the ENGLISH set in the persona's REAL voice (so these
- *     happy-path lines stop playing in the robotic OS voice). English only for now (100% of current
- *     testers); es/zh keep the device-TTS fallback until there are non-English testers.
+ *     happy-path lines stop playing in the robotic OS voice). The ACKS are English only for now (100% of
+ *     current testers); es/zh acks stay silent until there are non-English testers. The bare "didn't
+ *     catch that" notice and the mic-trouble line are per language, and every language is cached.
  *
  * Pure data — NO react-native / expo / store imports — so both a heavy runtime module and a jest test
  * can import it freely. [[feels-like-a-real-caddie]]
  */
 
-export const CADDIE_NOTICE_DIDNT_CATCH = "Didn't catch that.";
+/**
+ * 2026-10-31 (CAD-LANG-1) — the bare "didn't catch that" notice, per language. It was one English
+ * string for every player, so a Spanish or Chinese player who had the mic open and said nothing
+ * (or nothing intelligible) heard English in the caddie's voice. Same shape as the notices below.
+ */
+export const CADDIE_NOTICE_DIDNT_CATCH: Record<'en' | 'es' | 'zh', string> = {
+  en: "Didn't catch that.",
+  es: 'No te escuché bien.',
+  zh: '没听清。',
+};
 
 /**
  * 2026-08-17 (Tim — "I'm here." then instantly "I didn't catch that.") — the line for when the

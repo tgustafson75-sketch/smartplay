@@ -61,7 +61,7 @@ import type { ToolAction } from '../../types/toolAction';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, speakChunked, speakFromBase64, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, isCapturing, isExternalMicActive, primeMicPipeline, speakDeviceNotice } from '../../services/voiceService';
+import { speak, speakChunked, speakFromBase64, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, isCapturing, isExternalMicActive, primeMicPipeline, speakDeviceNotice, isVoiceAllowed } from '../../services/voiceService';
 import { answerOffline } from '../../services/offlineCaddie';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
@@ -1185,6 +1185,11 @@ export default function CaddieTab() {
         const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
         if (voiceEnabled) {
           setVoiceState('proactive');
+          // 2026-10-31 (CAD-HOME-R3-2) — a Quiet or Local Mode player is not spoken to unbidden, so the
+          // opener is only a caption for him. speak() resolves at once in that case, so the hand-off
+          // below must ask the gate, not trust the promise: an open mic with no audible question is a
+          // recorder he never asked for.
+          const openerAudible = isVoiceAllowed({ userInitiated: false });
           speak(opener.text, vg, lang, apiUrl)
             .catch(() => {})
             .finally(() => {
@@ -1192,7 +1197,9 @@ export default function CaddieTab() {
               // Hand the mic to the player so the answer is heard without hunting for a
               // button — hands-free is the product. Best-effort; a failure just means a tap.
               // Yields if he already tapped the badge / bar / earbud to answer (VC-R2-1).
-              try { handMicToPlayer(() => handleMicPressRef.current(), 'get_to_know_opener'); } catch { /* best-effort */ }
+              if (openerAudible) {
+                try { handMicToPlayer(() => handleMicPressRef.current(), 'get_to_know_opener'); } catch { /* best-effort */ }
+              }
             });
         }
         })();

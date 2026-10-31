@@ -1095,7 +1095,12 @@ const applyCustomRate = async (sound: Audio.Sound): Promise<void> => {
   }
 };
 
-const isVoiceAllowed = (opts?: SpeakOpts): boolean => {
+/**
+ * 2026-10-31 (CAD-HOME-R3-2) — exported so a caller can ask, before it speaks, whether the line will
+ * actually be heard. speak() returns at once (caption only) when the gate denies, so a caller that
+ * hands the mic over on speak()'s resolution cannot tell a line that played from one that was muted.
+ */
+export const isVoiceAllowed = (opts?: SpeakOpts): boolean => {
   // 2026-05-26 — Fix CZ: log EVERY denial reason. Tim spent hours
   // chasing silent voice failures because this gate returned false
   // with no breadcrumb. Now any speak() that gets gated leaves a

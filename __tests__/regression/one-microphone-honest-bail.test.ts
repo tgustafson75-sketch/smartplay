@@ -82,7 +82,7 @@ describe('the honest lines exist and are distinct', () => {
   it('has a mic-failure line that owns the failure instead of deflecting it', () => {
     for (const lang of ['en', 'es', 'zh'] as const) {
       expect(CADDIE_NOTICE_MIC_TROUBLE[lang].trim().length).toBeGreaterThan(0);
-      expect(CADDIE_NOTICE_MIC_TROUBLE[lang]).not.toBe(CADDIE_NOTICE_DIDNT_CATCH);
+      expect(CADDIE_NOTICE_MIC_TROUBLE[lang]).not.toBe(CADDIE_NOTICE_DIDNT_CATCH[lang]);
     }
   });
 });

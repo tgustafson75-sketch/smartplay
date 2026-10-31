@@ -795,6 +795,11 @@ function micTroubleFor(lang: 'en' | 'es' | 'zh'): string {
   return CADDIE_NOTICE_MIC_TROUBLE[lang] ?? CADDIE_NOTICE_MIC_TROUBLE.en;
 }
 
+/** 2026-10-31 (CAD-LANG-1) — the bare "didn't catch that" for a language, from the same shared source. */
+function didntCatchFor(lang: 'en' | 'es' | 'zh'): string {
+  return CADDIE_NOTICE_DIDNT_CATCH[lang] ?? CADDIE_NOTICE_DIDNT_CATCH.en;
+}
+
 /**
  * 2026-10-15 — the honest notice is chosen on EVIDENCE (services/caddieFailureReply → reachability):
  * our failure → owned; measured-slow → "trouble connecting"; proven no internet → what still works.
@@ -1444,7 +1449,7 @@ async function openSession(origin: 'tap' | 'auto_reopen' = 'tap') {
           await speakHonestFailure(lang, settingsNow.voiceGender, apiUrl);
         } else {
           const { speakDeviceNotice } = await import('./voiceService');
-          const line = micNeverOpened ? micTroubleFor(lang) : CADDIE_NOTICE_DIDNT_CATCH;
+          const line = micNeverOpened ? micTroubleFor(lang) : didntCatchFor(lang);
           await speakDeviceNotice(line, lang, settingsNow.voiceGender).catch(() => {});
         }
       }

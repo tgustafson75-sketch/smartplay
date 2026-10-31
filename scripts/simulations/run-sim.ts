@@ -12025,7 +12025,7 @@ check('LOCK: "Didn\'t catch that" is spoken ONLY when the mic actually heard not
       /case 'transcribe_failed':[\s\S]{0,60}?return 'connection';/.test(cb);
     const honest = ruleOwned &&
       /const say = responseForCaptureBail\(bail\);/.test(ls) &&
-      /micNeverOpened \? micTroubleFor\(lang\) : CADDIE_NOTICE_DIDNT_CATCH/.test(ls) &&
+      /micNeverOpened \? micTroubleFor\(lang\) : didntCatchFor\(lang\)/.test(ls) &&
       /transcribeFailed[\s\S]{0,200}?speakHonestFailure\(/.test(ls);
     // A deliberate cancel is not a failure and must not mail Tim.
     //
