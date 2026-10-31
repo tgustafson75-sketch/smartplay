@@ -148,7 +148,9 @@ function writeScoreOffline(q: string): boolean {
     if (!round.isRoundActive) return false;
     const named = (require('./spokenHole') as typeof import('./spokenHole')).namedSpokenHole(q, true);
     if (named != null && !(named >= 1 && named <= 18)) return false;
-    const hole = named ?? rs.voiceScoreHole(round);
+    // 2026-10-31 (Brain recheck r27, BRAIN-AR-R27-1) — the hole the words name is the SIGN's number: on a twice-around
+    // second loop "the third" is round hole 12. The online writer (logScoreHandler) maps it the same way.
+    const hole = named != null ? rs.roundHoleForSpoken(round, named) : rs.voiceScoreHole(round);
     const par = (require('./smartFinderService') as typeof import('./smartFinderService')).holePar(hole);
     const strokes = resolveStrokes(undefined, q, par);
     if (strokes == null) return false;

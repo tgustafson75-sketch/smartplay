@@ -38,18 +38,20 @@ export function clearAwaitingPar(): void {
 }
 
 /** A golf hole is a par 3, 4 or 5. Nothing else is an answer to "what's the par here?". */
-const PAR_WORDS: Record<string, number> = { three: 3, four: 4, five: 5, 'par three': 3, 'par four': 4, 'par five': 5 };
+const PAR_WORDS: Record<string, number> = { three: 3, four: 4, five: 5 };
 
+/**
+ * 2026-10-31 (Brain recheck r27, BRAIN-AR-R27-2) — an answer is the WHOLE utterance. A word or digit that happens to sit
+ * inside a sentence ("what's the five iron good for", "about three hundred yards") is a question, not a par, so the open
+ * question closes and the sentence falls through to the brain. "it's a five", "par five" and "par 5" stay accepted.
+ */
 export function parseParAnswer(raw: string): number | null {
   const s = String(raw ?? '').trim().toLowerCase().replace(/[.!?]+$/, '');
   if (!s) return null;
-  const direct = /^(?:it(?:'s| is)?\s+a?\s*|a\s+|par\s+)?(3|4|5)$/.exec(s);
-  if (direct) return Number(direct[1]);
-  for (const [word, n] of Object.entries(PAR_WORDS)) {
-    if (new RegExp(`\\b${word}\\b`).test(s)) return n;
-  }
-  const m = /\bpar\s*(3|4|5)\b/.exec(s);
-  return m ? Number(m[1]) : null;
+  const direct = /^(?:it(?:'s| is)?\s+a?\s*|a\s+|par\s*)?(3|4|5|three|four|five)$/.exec(s);
+  if (!direct) return null;
+  const token = direct[1];
+  return /^\d$/.test(token) ? Number(token) : PAR_WORDS[token];
 }
 
 /**
