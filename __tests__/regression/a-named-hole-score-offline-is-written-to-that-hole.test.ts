@@ -53,7 +53,8 @@ describe('a score said for a named hole on a proven-offline phone is written to 
 
 describe('control: a score said with no hole named still goes to the hole he stands on', () => {
   it('no hole named: the current hole is written', async () => {
-    useRoundStore.setState({ scores: {} } as never);
+    // Holes 1..12 are scored, so hole 13 is the gap a bare score targets (voiceScoreHole, r26).
+    useRoundStore.setState({ scores: { 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4, 9: 4, 10: 4, 11: 4, 12: 4 } } as never);
     expect(await keepScoreIfProvenOffline('I got a 6, how far to the green?')).toBe('on_card');
     expect(useRoundStore.getState().scores[13]).toBe(6);
   });

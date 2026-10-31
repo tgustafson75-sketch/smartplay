@@ -23,8 +23,11 @@ import { useRoundStore } from '../../store/roundStore';
 
 const SAID = 'I got a 6, how far to the green?';
 
+/** Holes before the current one are scored: a bare score targets the current hole only when it is the gap (r26, voiceScoreHole). */
 function inRound(hole = 6) {
-  useRoundStore.setState({ isRoundActive: true, currentRoundId: 'r-ar1', currentHole: hole, scores: {} } as never);
+  const scores: Record<number, number> = {};
+  for (let h = 1; h < hole; h++) scores[h] = 4;
+  useRoundStore.setState({ isRoundActive: true, currentRoundId: 'r-ar1', currentHole: hole, scores } as never);
 }
 
 beforeEach(() => {

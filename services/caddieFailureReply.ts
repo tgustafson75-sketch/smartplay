@@ -128,14 +128,18 @@ export async function keepScoreIfProvenOffline(heard: string | null | undefined)
 }
 
 /**
- * The score in the words, written to the hole the words NAME, or to the CURRENT hole when none is named (the par
- * resolves the score for that hole). A named hole outside 1..18 is refused, so the words are kept as a note instead.
+ * The score in the words, written to the hole the words NAME, or to the hole a bare score targets when none is named (the
+ * par resolves the score for that hole). A named hole outside 1..18 is refused, so the words are kept as a note instead.
  * True only when the store holds that score afterwards, so a write the store refused (no active round, a hole outside
  * 1..18) is never reported as on the card. Never throws.
  *
  * 2026-10-31 (Brain recheck r23, BRAIN-PLAYER-1) — "I got a 6 on the 12th, how far to the green?" was written to the
  * hole he stood on (13), overwriting any real score there, and the hole he named was left blank. The named hole is the
  * one written. Only the hole is taken from the words here; the score is still the one the words say.
+ *
+ * 2026-10-31 (Brain recheck r26, BRAIN-R26-1) — a bare score said with a question went to the NAV hole (currentHole), which
+ * GPS moves over an unscored hole at the tee: "I got a 5, how far to the water?" with 5 unscored and currentHole 6 wrote
+ * the 5 onto 6 and left 5 blank. A bare score takes the same hole as logScoreHandler (voiceScoreHole, the 08-09 C1/C2 rule).
  */
 function writeScoreOffline(q: string): boolean {
   try {
@@ -144,7 +148,7 @@ function writeScoreOffline(q: string): boolean {
     if (!round.isRoundActive) return false;
     const named = (require('./spokenHole') as typeof import('./spokenHole')).namedSpokenHole(q, true);
     if (named != null && !(named >= 1 && named <= 18)) return false;
-    const hole = named ?? round.currentHole;
+    const hole = named ?? rs.voiceScoreHole(round);
     const par = (require('./smartFinderService') as typeof import('./smartFinderService')).holePar(hole);
     const strokes = resolveStrokes(undefined, q, par);
     if (strokes == null) return false;

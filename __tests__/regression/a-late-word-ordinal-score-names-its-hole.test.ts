@@ -39,3 +39,29 @@ describe('a score on a word-ordinal hole of tenth or higher names that hole (r25
     expect(namedSpokenHole(utterance, true)).toBeNull();
   });
 });
+
+/**
+ * 2026-10-31 (Brain recheck r26, BRAIN-R26-2) — a sub-tenth word ordinal after "on"/"at" ends the clause in a score,
+ * so it names the hole too. A count noun after it ("the second shot", "the first try") still reads as a count.
+ */
+describe('a score on a word-ordinal hole below tenth names that hole (r26)', () => {
+  it.each([
+    ['I got a 5 on the eighth', 8],
+    ['I got a 5 on the fifth', 5],
+    ['I made a 6 at the second, how far to the green?', 2],
+    ['I shot a 4 on the ninth.', 9],
+  ])('"%s" names hole %i for a score', (utterance, hole) => {
+    expect(parseSpokenHole(utterance, true)).toBe(hole);
+    expect(namedSpokenHole(utterance, true)).toBe(hole);
+  });
+
+  it.each([
+    'I got a 4 on the second shot',
+    'I got a 6 on the first try',
+    'I made a 5 on the third putt',
+    'I made a bogey on the first bogey of the day',
+  ])('"%s" still names no hole for a score (a count, not a hole)', (utterance) => {
+    expect(parseSpokenHole(utterance, true)).toBeNull();
+    expect(namedSpokenHole(utterance, true)).toBeNull();
+  });
+});

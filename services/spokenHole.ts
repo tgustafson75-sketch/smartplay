@@ -42,6 +42,13 @@ const DIGIT_ORDINAL_TOKEN = String.raw`(\d{1,2}(?:st|nd|rd|th))`;
  * shot" is still a count, and a word ordinal below ten is never read in a score.
  */
 const LATE_ORDINAL_TOKEN = String.raw`(${Object.keys(ORDINAL).filter((w) => ORDINAL[w] >= 10).join('|')})`;
+/**
+ * 2026-10-31 (Brain recheck r26, BRAIN-R26-2) — a word ordinal below tenth after "on"/"at" names the hole when the clause
+ * ends at it ("I got a 5 on the eighth", "...on the fifth, how far?"). A count noun after it keeps it a count ("on the
+ * second shot", "the first try", "the first bogey of the day").
+ */
+const EARLY_ORDINAL_TOKEN = String.raw`(${Object.keys(ORDINAL).filter((w) => ORDINAL[w] < 10).join('|')})`;
+const COUNT_NOUN_AFTER = String.raw`(?!\s+(?:shots?|tries|try|attempts?|bogeys?|pars?|putts?|strokes?|times?|swings?|hits?|drives?|ones?)\b)`;
 /** A golf unit after a bare number means it is a count, not a hole ("on 2 putts", "on 150 yards"). */
 const NOT_A_COUNT = String.raw`(?!\s*(?:putts?|yards?|yds?|feet|foot|ft|strokes?|shots?|irons?|woods?|hybrids?|wedges?|driver|degrees?|times?|%))`;
 
@@ -68,6 +75,7 @@ const SCORE_HOLE_RXS: RegExp[] = [
   EXPLICIT_HOLE_RXS[1],
   new RegExp(String.raw`\b(?:on|at)\s+the\s+${DIGIT_ORDINAL_TOKEN}\b`, 'i'),
   new RegExp(String.raw`\b(?:on|at)\s+the\s+${LATE_ORDINAL_TOKEN}\b`, 'i'),
+  new RegExp(String.raw`\b(?:on|at)\s+the\s+${EARLY_ORDINAL_TOKEN}\b${COUNT_NOUN_AFTER}`, 'i'),
   new RegExp(String.raw`\bthe\s+${DIGIT_ORDINAL_TOKEN}\b`, 'i'),
   EXPLICIT_HOLE_RXS[2],
   EXPLICIT_HOLE_RXS[3],
