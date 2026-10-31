@@ -692,7 +692,11 @@ const PLAYER_SUBJECT_INTENTS = new Set(['log_score', 'change_setting', 'set_club
  * frame and "almost" is not one. Kept to log_score alone: STORY_FRAME is shared with the brain's shot and
  * mood fallbacks, and a near miss only changes what may be written to the card.
  */
-const NEAR_MISS_RX = /\b(?:almost|nearly|just\s+missed|so\s+close|close\s+to|came\s+(?:so\s+)?close|barely\s+missed)\b/i;
+const NEAR_MISS_RX = new RegExp(
+  String.raw`\b(?:(?:almost|nearly|just\s+missed|barely\s+missed)\s+(?:a\s+|an\s+|the\s+)?(?:birdi\w*|bogey\w*|par\w*|eagle\w*|double\w*|triple\w*|make|made|making|sink\w*|hol\w*|get|got|getting|\d)`
+  + String.raw`|(?:came|was|were|got)\s+(?:so\s+)?close\s+to\s+(?:a\s+|an\s+)?(?:birdi\w*|bogey\w*|par\w*|eagle\w*|double\w*|triple\w*|make|made|making|sink\w*|hol\w*))\b`,
+  'i',
+);
 
 const ROUTINE_ASK: Record<string, 'save' | 'recall'> = { routine_save: 'save', routine_recall: 'recall' };
 
@@ -756,7 +760,7 @@ const DISTANCE_TOPICS = new Set(['green_front', 'green_back', 'green_middle', 'd
  * (or a carry over one) makes a distance question conditional on the shot, the same as wind or slope.
  * "Tree line" is left out: it is a landmark the green-distance tests pin as the green's, not a hazard.
  */
-const HAZARD_RX = /\b(?:water|creeks?|streams?|ponds?|lakes?|trees?(?!\s+line)|woods|hazards?|bunkers?|sand|out\s+of\s+bounds|carry|carrying|clear|clearing|cross|crossing)\b/i;
+export const HAZARD_RX = /\b(?:water|creeks?|streams?|ponds?|lakes?|trees?(?!\s+line)|woods|hazards?|bunkers?|sand|out\s+of\s+bounds|carry|carrying|clear|clearing|cross|crossing)\b/i;
 
 /**
  * 2026-10-31 (Brain recheck r18, BRAIN-4) — A DEICTIC HOLE. "What's my score on this hole" and "how many
@@ -764,7 +768,7 @@ const HAZARD_RX = /\b(?:water|creeks?|streams?|ponds?|lakes?|trees?(?!\s+line)|w
  * answered the ROUND total as if it were this hole. Only the topics that read the round total need this:
  * par and the distances already answer for the current hole, and a bare "par on this hole" stays local.
  */
-const DEICTIC_HOLE_RX = /\b(?:this|that|the\s+(?:current|last|previous|present))\s+(?:hole|one)\b/i;
+const DEICTIC_HOLE_RX = /\b(?:(?:this|that|the\s+(?:current|last|previous|present))\s+(?:hole|one)|the\s+(?:hole|one))\b/i;
 const DEICTIC_HOLE_TOPICS = new Set(['score', 'putt_stats', 'gir']);
 
 /**
@@ -919,6 +923,19 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     });
   }
   return hit;
+}
+
+/**
+ * 2026-10-31 (Brain recheck r19, BRAIN-B) — THE SCORE HALF OF A QUESTION, WHEN THE BRAIN IS DOWN. "I got a 4,
+ * how far is the water" is sent to the brain only (r17), so the 4 is written by the brain's own log_score
+ * tool. When that turn fails, nothing writes it, and the failure owner must say so instead of answering the
+ * question as if the score were on the card. True only for a score said with a question, not a near miss
+ * (which is narration) and not a score about someone else.
+ */
+export function scoreSaidButNotLogged(heard: string): boolean {
+  const raw = (heard ?? '').trim();
+  if (!raw) return false;
+  return classifyLocalIntent(raw)?.intent_type === 'log_score' && isQuestionShaped(raw) && !isAboutSomeoneElse(raw);
 }
 
 /** The brain's own tool for a setting, where it has one (api/_brainTools); everything else it cannot change. */

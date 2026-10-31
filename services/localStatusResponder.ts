@@ -37,6 +37,7 @@ import { useRoundStore } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useConversationLog } from '../store/conversationLogStore';
 import { routineAsk } from './routineUtterance';
+import { HAZARD_RX } from './localIntentPrecheck';
 import { getLastFix } from './gpsManager';
 import { haversineYards, bearingDegrees } from '../utils/geoDistance';
 import { resolveGreenCoords, classifyAccuracy , holeData as resolvedHoleData } from './smartFinderService';
@@ -479,8 +480,11 @@ export function tryLocalReply(
     return windReply(lang);
   }
   // ── YARDAGE (must check first; "yards" appears in other phrases) ──
+  // 2026-10-31 (Brain recheck r19, BRAIN-A) — a hazard distance is a question for the brain, not the green
+  // yardage. This is the offline route after a failed brain turn, which never reads the precheck, so the
+  // same hazard test declines here: null hands the failure owner its honest line.
   if (RX.yardage.test(t)) {
-    return yardageReply(t, lang);
+    return HAZARD_RX.test(t) ? null : yardageReply(t, lang);
   }
   // ── CLUB RECOMMENDATION (the caddie's offline decision — check before "what
   //    club am I holding") ──

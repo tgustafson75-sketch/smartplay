@@ -57,6 +57,7 @@ import { recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services
 import { warmCourseContext } from '../services/courseContextCache';
 import { preBrainReply, shapeForBrain } from '../services/voice/preBrainTurn';
 import { followUpBrainTurn } from '../services/voice/followUpBrainTurn';
+import { followUpSettingLine } from '../services/voice/followUpSetting';
 import { hasPendingOpenOffer } from '../services/voice/pendingOpenOffer';
 import { answerToClarification } from '../services/voice/clarifiedTurn';
 import { resolvePendingCourseUtterance } from '../services/pendingDisambiguation';
@@ -802,6 +803,22 @@ export const useVoiceCaddie = ({
           await speakResponse(courseResolved.confirmLine);
           wrappedOnVoiceStateChange('idle');
           return;
+        }
+
+        // 2026-10-31 (Brain recheck r19, BRAIN-C) — a settings order said in the follow-up loop is applied here,
+        // the same as the first turn, because the brain has no tool for it and the loop never reaches the router.
+        {
+          const settingLine = await followUpSettingLine(trimmed);
+          if (settingLine) {
+            recordUserTurn(trimmed);
+            onResponseReceived(settingLine);
+            recordKevinTurn(settingLine);
+            wrappedOnVoiceStateChange('speaking');
+            await stopSpeaking('screen:hooks-usevoicecaddie');
+            await speakResponse(settingLine);
+            wrappedOnVoiceStateChange('idle');
+            return;
+          }
         }
 
         // 2026-10-31 (Brain recheck r18, BRAIN-5) — the first turn's bypasses run here too, before the

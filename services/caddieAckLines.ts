@@ -72,6 +72,16 @@ export const CADDIE_NOTICE_CONNECTION: Record<'en' | 'es' | 'zh', string> = {
   es: 'Tengo problemas para conectarme — inténtalo de nuevo.',
   zh: '我连接遇到问题——请再试一次。',
 };
+/**
+ * 2026-10-31 (Brain recheck r19, BRAIN-B) — the player said a score with a question and the brain did not
+ * answer, so the score was not written. Said first, before whatever answer the phone could give: a
+ * question answered without the score on the card is the defect.
+ */
+export const CADDIE_NOTICE_SCORE_NOT_LOGGED: Record<'en' | 'es' | 'zh', string> = {
+  en: "I didn't get your score down — say it again.",
+  es: 'No anoté tu score — dímelo otra vez.',
+  zh: '你的成绩我没记下——请再说一次。',
+};
 export const CADDIE_NOTICE_ON_US: Record<'en' | 'es' | 'zh', string> = {
   en: 'That one got away from me — say it again?',
   es: 'Esa se me escapó — ¿me lo repites?',

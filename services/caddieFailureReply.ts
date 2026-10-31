@@ -21,7 +21,7 @@
  * No persisted flag, nothing to get stuck: the verdict is cached 20s and any success clears it.
  */
 import { probeReachability, isProvenOffline, lastReachability, type NetVerdict } from './reachability';
-import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US } from './caddieAckLines';
+import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_OFFLINE, CADDIE_NOTICE_ON_US, CADDIE_NOTICE_SCORE_NOT_LOGGED } from './caddieAckLines';
 
 type Lang = 'en' | 'es' | 'zh';
 
@@ -67,12 +67,26 @@ export function localAnswer(heard: string | null | undefined, language?: string 
   const q = heard?.trim();
   if (!q) return null;
   const lang = safeLang(language);
+  /**
+   * 2026-10-31 (Brain recheck r19, BRAIN-B) — a score said with a question was held for the brain, which is
+   * the one turn that failed, so the score is not on the card. Said first, with whatever answer is left.
+   */
+  const unlogged = scoreNotLoggedLine(q, lang);
   try {
     const text = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(q, lang)?.text?.trim();
-    if (!text) return null;
-    return (require('./localStatusResponder') as typeof import('./localStatusResponder')).isNoDataReply(text, lang) ? null : text;
+    const answer = text && !(require('./localStatusResponder') as typeof import('./localStatusResponder')).isNoDataReply(text, lang) ? text : null;
+    return [unlogged, answer].filter((x): x is string => !!x).join(' ') || null;
   } catch {
-    return null; // the local answer is a bonus, never a dependency
+    return unlogged; // the local answer is a bonus, never a dependency
+  }
+}
+
+function scoreNotLoggedLine(q: string, lang: Lang): string | null {
+  try {
+    const flagged = (require('./localIntentPrecheck') as typeof import('./localIntentPrecheck')).scoreSaidButNotLogged(q);
+    return flagged ? CADDIE_NOTICE_SCORE_NOT_LOGGED[lang] : null;
+  } catch {
+    return null;
   }
 }
 
