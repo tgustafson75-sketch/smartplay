@@ -37,6 +37,8 @@ const ANY_TOKEN = String.raw`(\d{1,2}(?:st|nd|rd|th)?|${ORDINAL_WORDS}|${CARDINA
 const ORDINAL_TOKEN = String.raw`(\d{1,2}(?:st|nd|rd|th)|${ORDINAL_WORDS})`;
 /** An ordinal written with digits and a suffix only ("the 12th"): the one ordinal form a score may use for a hole. */
 const DIGIT_ORDINAL_TOKEN = String.raw`(\d{1,2}(?:st|nd|rd|th))`;
+/** Any word ordinal, first to eighteenth ("the twelfth"). */
+const ORDINAL_WORD_TOKEN = String.raw`(${ORDINAL_WORDS})`;
 /**
  * A word ordinal from tenth up ("on the twelfth"). A score may name a hole by it after "on"/"at" — "on the second
  * shot" is still a count, and a word ordinal below ten is never read in a score.
@@ -48,7 +50,7 @@ const LATE_ORDINAL_TOKEN = String.raw`(${Object.keys(ORDINAL).filter((w) => ORDI
  * second shot", "the first try", "the first bogey of the day").
  */
 const EARLY_ORDINAL_TOKEN = String.raw`(${Object.keys(ORDINAL).filter((w) => ORDINAL[w] < 10).join('|')})`;
-const COUNT_NOUN_AFTER = String.raw`(?!\s+(?:shots?|tries|try|attempts?|bogeys?|pars?|putts?|strokes?|times?|swings?|hits?|drives?|ones?)\b)`;
+const COUNT_NOUN_AFTER = String.raw`(?!\s+(?:shots?|tries|try|attempts?|bogeys?|pars?|birdies?|eagles?|doubles?|triples?|putts?|strokes?|times?|swings?|hits?|drives?|ones?|rounds?|nines?|halves|halfs?)\b)`;
 /** A golf unit after a bare number means it is a count, not a hole ("on 2 putts", "on 150 yards"). */
 const NOT_A_COUNT = String.raw`(?!\s*(?:putts?|yards?|yds?|feet|foot|ft|strokes?|shots?|irons?|woods?|hybrids?|wedges?|driver|degrees?|times?|%))`;
 
@@ -79,6 +81,10 @@ const SCORE_HOLE_RXS: RegExp[] = [
   new RegExp(String.raw`\bthe\s+${DIGIT_ORDINAL_TOKEN}\b`, 'i'),
   EXPLICIT_HOLE_RXS[2],
   EXPLICIT_HOLE_RXS[3],
+  // 2026-10-31 (Brain recheck r28, BRAIN-R27-A) — "I bogeyed the twelfth" names hole 12. A count noun after it keeps it
+  // a count ("the first bogey of the day"), so the guard lists every score noun a count can take. "the second best" is a
+  // ranking, not a hole, so a superlative after it is refused too.
+  new RegExp(String.raw`\bthe\s+${ORDINAL_WORD_TOKEN}\b${COUNT_NOUN_AFTER}(?![\s-]+(?:best|worst|ever|since|all)\b)`, 'i'),
 ];
 
 const tokenToHole = (tok: string): number => {
