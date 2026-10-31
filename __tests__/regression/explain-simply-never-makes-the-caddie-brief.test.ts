@@ -100,6 +100,7 @@ describe('the avatar mic: the caddie-tab turn keeps his words for everything but
     const issue: string[] = [];
     const asked: { message: string; heard?: string }[] = [];
     jest.doMock('react', () => ({ useRef: <T,>(v: T) => ({ current: v }), useCallback: <T,>(fn: T) => fn }));
+    jest.doMock('../../services/intents', () => ({ voiceCommandRouter: { getHandler: jest.fn(() => null) } }));
     jest.doMock('../../services/voiceService', () => ({
       speak: jest.fn(async () => undefined), speakFromBase64: jest.fn(async () => undefined), speakDeviceNotice: jest.fn(async () => undefined),
       isCapturing: () => false, isExternalMicActive: () => false, getStopGeneration: () => 0,

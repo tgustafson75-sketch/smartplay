@@ -40,6 +40,7 @@ jest.mock('../../services/voiceService', () => ({
   isExternalMicActive: () => false,
   getStopGeneration: () => mockState.stopGen,
 }));
+jest.mock('../../services/intents', () => ({ voiceCommandRouter: { getHandler: jest.fn(() => null) } }));
 jest.mock('../../hooks/useVoiceCaddie', () => ({
   endsAsQuestion: (t: string) => /\?\s*$/.test(t),
   isCloseIntent: () => false,
@@ -73,7 +74,7 @@ beforeEach(() => {
   mockCapture.mockClear();
 });
 
-function harness() {
+function useTabHarness() {
   return useCaddieTabMic({ onKevinSpoke: () => undefined, onVoiceStateChange: () => undefined, onReadyToListen: jest.fn(), onSuperseded: jest.fn() });
 }
 
@@ -87,7 +88,7 @@ describe('a score said with a question, on a proven-offline phone, is kept', () 
   });
 
   it('the caddie tab captures the score and speaks the saved line, not the "say it again" notice', async () => {
-    await harness().processTurn(SAID);
+    await useTabHarness().processTurn(SAID);
     expect(mockCapture).toHaveBeenCalledWith(SAID);
     expect(mockState.spoken[0].startsWith(CADDIE_NOTICE_SAVED_OFFLINE.en)).toBe(true);
     expect(mockState.spoken.join(' ')).not.toContain(CADDIE_NOTICE_SCORE_NOT_LOGGED.en);
@@ -98,7 +99,7 @@ describe('control: the same words on a phone that is online are not kept, and th
   it('nothing is captured and the score-not-logged notice is spoken', async () => {
     mockVerdict.v = 'internet_ok';
     expect(await keepScoreIfProvenOffline(SAID)).toBe(false);
-    await harness().processTurn(SAID);
+    await useTabHarness().processTurn(SAID);
     expect(mockCapture).not.toHaveBeenCalled();
     expect(mockState.spoken.join(' ')).toContain(CADDIE_NOTICE_SCORE_NOT_LOGGED.en);
   });

@@ -51,6 +51,7 @@ jest.mock('../../services/voiceService', () => ({
   getLastSpokenLine: jest.fn(() => 'Hit the seven.'),
   isCapturing: jest.fn(() => false),
   isExternalMicActive: jest.fn(() => mockState.externalMicHeld),
+  endHeldUtterance: jest.fn(async () => 'none'),
   speakDeviceNotice: jest.fn(async () => undefined),
   isSpeaking: jest.fn(() => mockState.speaking),
   isSpeakingUserInitiated: jest.fn(() => mockState.speaking),

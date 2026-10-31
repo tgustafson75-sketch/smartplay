@@ -32,6 +32,7 @@ jest.mock('../../services/voiceService', () => ({
   isExternalMicActive: () => false,
   getStopGeneration: () => mockState.stopGen,
 }));
+jest.mock('../../services/intents', () => ({ voiceCommandRouter: { getHandler: jest.fn(() => null) } }));
 jest.mock('../../hooks/useVoiceCaddie', () => ({
   endsAsQuestion: (t: string) => /\?\s*$/.test(t),
   isCloseIntent: () => false,
@@ -71,7 +72,7 @@ const CADDIE_NOTICE_SAVED_OFFLINE = ((require('../../services/caddieAckLines') a
 
 jest.setTimeout(60_000);
 
-function harness() {
+function useTabHarness() {
   const states: string[] = [];
   const shown: string[] = [];
   const onReadyToListen = jest.fn();
@@ -92,7 +93,7 @@ beforeEach(() => {
 
 describe('finding 4 — a late failure line yields to a newer live turn', () => {
   it('the player is recording again when the failure lands: caption only, no speech, no state', async () => {
-    const h = harness();
+    const h = useTabHarness();
     const askCaddie = (require('../../services/caddieBrain') as { askCaddie: jest.Mock }).askCaddie;
     askCaddie.mockImplementationOnce(async () => {
       // While the turn waited, the player started another one and the mic is live.
@@ -112,7 +113,7 @@ describe('finding 4 — a late failure line yields to a newer live turn', () => 
 
 describe('finding 3 — a shushed question does not reopen the tab mic', () => {
   it('reply cut off mid-question → no auto-listen', async () => {
-    const h = harness();
+    const h = useTabHarness();
     mockState.turn = { text: 'Want the hole-by-hole?', audioBase64: null, toolActions: [] };
     mockState.onSpeak = () => { mockState.stopGen += 1; }; // the player tapped: stopSpeaking ran
     await h.mic.processTurn('how am I doing');
@@ -120,7 +121,7 @@ describe('finding 3 — a shushed question does not reopen the tab mic', () => {
   });
 
   it('control: the same question heard to the end → listens for the answer', async () => {
-    const h = harness();
+    const h = useTabHarness();
     mockState.turn = { text: 'Want the hole-by-hole?', audioBase64: null, toolActions: [] };
     await h.mic.processTurn('how am I doing');
     expect(h.onReadyToListen).toHaveBeenCalledTimes(1);
@@ -130,7 +131,7 @@ describe('finding 3 — a shushed question does not reopen the tab mic', () => {
 describe('finding 8 — "I saved what you said" only when the phone is proven offline', () => {
   it('our failure on a working connection: nothing saved as an offline note; the verdict line is said', async () => {
     mockState.verdict = 'internet_ok';
-    const h = harness();
+    const h = useTabHarness();
     await h.mic.processTurn('I am pulling everything left');
     expect(mockCapture).not.toHaveBeenCalled();
     expect(mockState.notices).toEqual(['That one got away from me — say it again?']);
@@ -138,7 +139,7 @@ describe('finding 8 — "I saved what you said" only when the phone is proven of
 
   it('proven offline: the words are kept and the caddie says so, in a recorded line', async () => {
     mockState.verdict = 'offline';
-    const h = harness();
+    const h = useTabHarness();
     await h.mic.processTurn('I am pulling everything left');
     expect(mockCapture).toHaveBeenCalledWith('I am pulling everything left');
     expect(mockState.notices).toEqual([CADDIE_NOTICE_SAVED_OFFLINE.en]);

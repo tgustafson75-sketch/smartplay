@@ -4,9 +4,8 @@ import { Audio } from 'expo-av';
 // 2026-06-08 (audit M1) — route audio-mode writes through the serial queue
 // so an Auto-Listen mic restart can't race a TTS playback mode write and
 // flip routing / silent-mode mid-utterance.
-import { setAudioModeSerial, registerExternalMicCheck, registerExternalMicRelease, type MicReleaseVerdict } from '../services/voiceService';
+import { setAudioModeSerial, registerExternalMicCheck, registerExternalMicRelease, registerUtteranceEndpoint, type MicReleaseVerdict } from '../services/voiceService';
 import { getSessionState, isSessionInFlight } from '../services/listeningSession';
-import { useSettingsStore } from '../store/settingsStore';
 import { isSmartMotionActive, isSmartMotionRecording } from '../services/smartMotionRecordBus';
 import { createSpeechOnsetGate } from '../services/voice/speechOnset';
 
@@ -308,7 +307,7 @@ export function useVoiceActivityDetection({
    */
   useEffect(() => {
     const leaveCheck = registerExternalMicCheck(() => recordingRef.current !== null && vadStateRef.current !== 'IDLE');
-    const leaveRelease = registerExternalMicRelease(async (): Promise<MicReleaseVerdict> => {
+    const endUtterance = async (): Promise<MicReleaseVerdict> => {
       if (!recordingRef.current && !startingRef.current) return 'none';
       const heard = recordingRef.current !== null && vadStateRef.current !== 'IDLE'
         && Date.now() - speakStartRef.current >= MIN_SPEECH_DURATION_MS;
@@ -319,8 +318,11 @@ export function useVoiceActivityDetection({
       }
       await stopRecording();
       return 'discarded';
-    });
-    return () => { leaveCheck(); leaveRelease(); };
+    };
+    const leaveRelease = registerExternalMicRelease(endUtterance);
+    // 2026-10-31 (caddie-home CAD-HOME-2) — a badge or earbud tap is this utterance's endpoint (toggle()).
+    const leaveEndpoint = registerUtteranceEndpoint(endUtterance);
+    return () => { leaveCheck(); leaveRelease(); leaveEndpoint(); };
   }, []);
 
   useEffect(() => {

@@ -20,6 +20,7 @@ import { askCaddie } from '../services/caddieBrain';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak, isCapturing, isExternalMicActive, getStopGeneration } from '../services/voiceService';
+import { beginHeldTurn, isOtherHeldTurnAnswering, type HeldTurn } from '../services/listeningSession';
 import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { devLog } from '../services/devLog';
 import { CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_SAVED_OFFLINE } from '../services/caddieAckLines';
@@ -148,6 +149,14 @@ export function useCaddieTabMic({
       return;
     }
     turnInFlightRef.current = true;
+    /**
+     * 2026-10-31 (caddie-home CAD-HOME-1) — THIS TURN HOLDS THE SAME SIGNAL A TYPED TURN DOES. The badge,
+     * the bottom bar and toggle() read the shared listening store and its counter, not this hook's own
+     * voiceState, so until now a tab turn in 'thinking' left the mic bright and a tap opened a second turn
+     * over the first answer. Ended in the finally below (and before the auto-listen hand-off, which the
+     * counter would otherwise refuse).
+     */
+    const held: HeldTurn = beginHeldTurn();
     // 2026-09-28 — a real turn (typed, SmartMotion, or the voice path's hand-off): stamp it so a late
     // proactive line stands down, and hand the warmups' connections to it.
     noteUserTurn();
@@ -163,7 +172,10 @@ export function useCaddieTabMic({
      * 35s plus an internet check, and used to play over a new recording with no check at all.
      */
     const supersededByNewerTurn = (): boolean =>
-      getUserTurnEpoch() !== turnEpoch && (pendingTurnRef.current !== null || isCapturing() || isExternalMicActive());
+      (getUserTurnEpoch() !== turnEpoch && (pendingTurnRef.current !== null || isCapturing() || isExternalMicActive()))
+      // 2026-10-31 (CAD-HOME-1) — a typed or watch turn answering at the same time is the newer turn too.
+      // Its reply is spoken; this one stays caption-only, so the two never talk over each other.
+      || isOtherHeldTurnAnswering();
     /** Show the line, say nothing, leave the state to the newer turn (see onSuperseded). */
     const yieldLine = (line: string): void => {
       devLog('[caddie] line superseded by a newer turn — caption only');
@@ -193,10 +205,12 @@ export function useCaddieTabMic({
         onVoiceStateChange?.('speaking');
         const s0 = useSettingsStore.getState();
         if (s0.voiceEnabled) {
+          held.speaking();
           await speak(answered.line, s0.voiceGender, s0.language, getApiBaseUrl(), { userInitiated: true })
             .catch(() => { /* spoken best-effort — the putt is already logged */ });
         }
         onVoiceStateChange?.('idle');
+        held.end();
         turnInFlightRef.current = false;
         // 2026-09-29 (review) — this early return sits outside the try/finally that drains the queue, so
         // a question asked during the putt reply was stranded (and ran stale after the NEXT turn).
@@ -254,6 +268,7 @@ export function useCaddieTabMic({
             onVoiceStateChange?.('speaking');
             onKevinSpoke?.(CADDIE_PAYWALL_DEFERRED_LINE);
             if (s0.voiceEnabled) {
+              held.speaking();
               await speak(CADDIE_PAYWALL_DEFERRED_LINE, s0.voiceGender, s0.language, getApiBaseUrl(), { userInitiated: true }).catch(() => undefined);
             }
           }
@@ -282,6 +297,7 @@ export function useCaddieTabMic({
           onVoiceStateChange?.('speaking');
           onKevinSpoke?.(local);
           if (settings.voiceEnabled) {
+            held.speaking();
             await speak(local, settings.voiceGender, lang, getApiBaseUrl(), { userInitiated: true }).catch(() => undefined);
           }
           onVoiceStateChange?.('idle');
@@ -305,6 +321,7 @@ export function useCaddieTabMic({
         if (supersededByNewerTurn()) { yieldLine(line); return; }
         onVoiceStateChange?.('speaking');
         onKevinSpoke?.(line);
+        held.speaking();
         const { speakDeviceNotice } = await import('../services/voiceService');
         await speakDeviceNotice(line, lang, settings.voiceGender).catch(() => {});
         onVoiceStateChange?.('idle');
@@ -350,6 +367,7 @@ export function useCaddieTabMic({
         return;
       }
       onVoiceStateChange?.('speaking');
+      held.speaking();
       // Review G2 (finding 3) — snapshot so a shush during the reply is visible after it.
       const stopGenAtReply = getStopGeneration();
       try {
@@ -370,6 +388,7 @@ export function useCaddieTabMic({
       }
 
       onVoiceStateChange?.('idle');
+      held.end();
 
       // Auto-listen: always in continuous mode; on any question otherwise.
       // 2026-09-29 (review) — a queued question answers next; opening the mic here would put its reply
@@ -400,6 +419,7 @@ export function useCaddieTabMic({
     } finally {
       // 2026-07-06 (voice-parity F2) — always release so the NEXT tap/turn works.
       turnInFlightRef.current = false;
+      held.end();
       const next = pendingTurnRef.current;
       pendingTurnRef.current = null;
       if (next) void processTurnRef.current?.(next.transcript, next.brainMessage);

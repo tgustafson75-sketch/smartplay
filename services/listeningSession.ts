@@ -3,7 +3,7 @@ import { Vibration } from 'react-native';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS, COLD_BRAIN_FETCH_TIMEOUT_MS as COLD_KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { raceHedged, type HedgeAttempt } from './voice/hedgedFetch';
-import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, isCapturing, isExternalMicActive, isSpeaking, isSpeakingUserInitiated, type CaptureBail, type CaptureResult } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, endHeldUtterance, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, isCapturing, isExternalMicActive, isSpeaking, isSpeakingUserInitiated, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
 import { noteTurnState, noteTurnIntent, noteTurnClosing, noteTurnActed } from './voice/turnAnswerWatch';
 import { adviceIsStillWorthSaying, captureShotEpoch, currentTurnEpoch } from './adviceFreshness';
@@ -647,7 +647,7 @@ export async function toggle(): Promise<void> {
    * 2026-10-31 (caddie-voice CV-1) — WHILE A TYPED ANSWER IS SPOKEN, A TAP SHUSHES IT. The typed turn
    * stays in flight through its playback, so the drop above used to cover the whole spoken answer: the
    * badge dimmed for 30-40 s and a tap buzzed and did nothing, while a voice reply in 'responding' shushes.
-   * The store reads 'responding' during that speech (see replyIsSpeaking), so the badge is live; this
+   * The store reads 'responding' during that speech (see held.speaking), so the badge is live; this
    * is the same tap, meaning the same thing.
    */
   if (state === 'idle' && typedTurnsInFlight > 0 && typedReplySpeaking > 0) {
@@ -664,7 +664,26 @@ export async function toggle(): Promise<void> {
    * screen's recorder and cut the player's answer short. The registry is the one place every mic holder
    * says so; a tap while it is busy is dropped the way a typed turn's is, with the same buzz and log.
    */
-  if (state === 'idle' && isExternalMicActive()) { swallowedTap('mic_held_elsewhere'); return; }
+  /**
+   * 2026-10-31 (caddie-home CAD-HOME-2) — A TAP THAT ENDS THE PLAYER'S OWN HELD UTTERANCE. The VAD recorder
+   * holds the mic while he is mid-sentence (it reports itself as a holder only while speech is in progress).
+   * This tap is the endpoint of that sentence: submit it, as a handover does. Refused before, so a long
+   * question outdoors ran on to the 18 s ceiling. Only the utterance's own owners are asked
+   * (endHeldUtterance); a screen that holds the mic for another reason still owns the tap.
+   */
+  if (state === 'idle' && isExternalMicActive()) {
+    if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) { swallowedTap('close_tap_echo', { msSinceClose: Date.now() - sessionCloseTapAt }, { echo: true }); return; }
+    // Claimed before the endpoint answers, so a second tap during it is this tap's echo, not a new endpoint.
+    sessionCloseTapAt = Date.now();
+    void endHeldUtterance().then((verdict) => {
+      if (verdict === 'submitted') { logVoiceDiag('tap_ended_utterance', { source: 'listeningSession' }); return; }
+      if (isExternalMicActive()) { swallowedTap('mic_held_elsewhere'); return; }
+      // The holder let go without a sentence (nothing was heard), so the tap is a turn after all.
+      sessionCloseTapAt = 0;
+      void toggle();
+    });
+    return;
+  }
   // 2026-07-06 (voice-lifecycle audit #2) — same double-fire as the recording-stop
   // branch, on the CLOSE side: one physical tap could reach toggle() twice (until 2026-10-28 the
   // orchestrator's pattern sub re-toggled ~350ms later; iOS still sends two commands for one press).
@@ -2184,6 +2203,65 @@ function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
 }
 
 /**
+ * 2026-10-31 (caddie-home CAD-HOME-1) — ONE OWNER FOR "A TURN IS ANSWERING" OFF THE MIC SESSION.
+ *
+ * A typed or watch turn counts itself here and drives the shared store: 'thinking' while its answer is
+ * awaited, 'responding' while it is SPOKEN (a tap shushes it), 'idle' once nothing is in flight. The
+ * Caddie tab's own turns (the avatar and VAD path, useCaddieTabMic.processTurn) did none of that — the
+ * badge and the bottom bar stayed bright and said "Tap to talk" for the whole brain wait, and a tap
+ * opened a second turn over the first answer. Every turn source now takes this same held turn, so
+ * toggle(), the badge, the bar and the status strip read one signal.
+ */
+export interface HeldTurn {
+  /** The answer is reaching the speaker. Idempotent. */
+  speaking(): void;
+  /** The turn is over, for any reason. Idempotent — call before anything that needs the mic free. */
+  end(): void;
+}
+
+function setSharedListeningState(s: 'thinking' | 'responding' | 'idle'): void {
+  try { require('../store/listeningSessionStore').useListeningSessionStore.getState().setState(s); } catch { /* non-fatal */ }
+}
+
+export function beginHeldTurn(): HeldTurn {
+  // 2026-10-30 (caddie-voice-1) — counted, so toggle() drops taps for as long as any turn is answering.
+  // Only a turn that starts from idle owns the shared state: a turn during a live voice session must not
+  // overwrite that session's state, nor write 'idle' over it.
+  const drivesStore = state === 'idle' && !sessionInFlight;
+  let replySpoken = false;
+  let ended = false;
+  const syncStore = (): void => {
+    if (drivesStore) setSharedListeningState(typedTurnsInFlight === 0 ? 'idle' : typedReplySpeaking > 0 ? 'responding' : 'thinking');
+  };
+  typedTurnsInFlight += 1;
+  // 2026-07-25 — the status strip shows "Thinking…" the moment the turn starts.
+  if (drivesStore) setSharedListeningState(typedReplySpeaking > 0 ? 'responding' : 'thinking');
+  return {
+    speaking() {
+      if (ended || replySpoken) return;
+      replySpoken = true;
+      typedReplySpeaking += 1;
+      syncStore();
+    },
+    end() {
+      if (ended) return;
+      ended = true;
+      typedTurnsInFlight -= 1;
+      if (replySpoken) typedReplySpeaking -= 1;
+      syncStore();
+    },
+  };
+}
+
+/**
+ * True while a held turn OTHER than the caller's is still answering. A caller that is itself a held turn
+ * is counted, so the test is "more than one".
+ */
+export function isOtherHeldTurnAnswering(): boolean {
+  return typedTurnsInFlight > 1;
+}
+
+/**
  * 2026-05-22 — Hands-Free path: classify + route a pre-transcribed
  * utterance WITHOUT opening the phone's listening session (no mic
  * recording, no opener, no filler — just classify → handler → speak).
@@ -2201,34 +2279,6 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   noteUserTurn();
   abortVoiceWarmup();
   noteCaddieTurn('typed'); // 1.0.2 funnel: first_caddie_turn (fires once)
-  // 2026-07-25 (Tim — "give all mics a universal state display; not sure he's going to answer") — this
-  // TYPED / watch path never drove the shared listening state, so the universal status strip showed
-  // nothing after you hit send. Set 'thinking' now (strip shows "Thinking…" immediately) and reset to
-  // idle in finally; the caddie's ANSWER shows via the voiceService caption while it speaks. Drive the
-  // store directly (not the session-machine mirror, which arms voice-session watchdogs).
-  const setSharedState = (s: 'thinking' | 'responding' | 'idle') => {
-    try { require('../store/listeningSessionStore').useListeningSessionStore.getState().setState(s); } catch { /* non-fatal */ }
-  };
-  // 2026-10-30 (caddie-voice-1) — typed turns are counted, so toggle() drops taps for as long as any of
-  // them is answering. Only a turn that starts from idle owns the shared state: a typed turn during a
-  // live voice session must not overwrite that session's state, nor write 'idle' over it.
-  // 2026-10-31 (caddie-voice CV-1) — the store follows the counters: 'thinking' while a reply is awaited,
-  // 'responding' while one is being SPOKEN (a tap shushes it), 'idle' once nothing is in flight.
-  const drivesStore = state === 'idle' && !sessionInFlight;
-  let replySpoken = false;
-  const syncTypedStore = (): void => {
-    if (drivesStore) setSharedState(typedTurnsInFlight === 0 ? 'idle' : typedReplySpeaking > 0 ? 'responding' : 'thinking');
-  };
-  // Called the moment a typed answer reaches the speaker. The turn is still in flight until the speech
-  // ends (its finally below), so the counters stay honest for the whole reply.
-  const replyIsSpeaking = (): void => {
-    if (!replySpoken) {
-      replySpoken = true;
-      typedReplySpeaking += 1;
-      syncTypedStore();
-    }
-  };
-  if (drivesStore) setSharedState(typedReplySpeaking > 0 ? 'responding' : 'thinking');
   /**
    * 2026-08-26 — RECORD THE PLAYER'S TURN. This function is what the global bottom bar sends a
    * TYPED question to, what the watch sends a dictated one to, and what handsFreeOrchestrator
@@ -2252,7 +2302,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   const answeringCaddie = !offeredOpen && !isAnsweringOffer() && isAwaitingFollowUp() && !carriesYardageCorrection(text) && !isBrainBlindCommand(text);
   try { require('../store/conversationLogStore').useConversationLog.getState().logUser(text, Date.now()); } catch { /* non-fatal */ }
   try { recordUserTurn(text); } catch { /* non-fatal */ }
-  typedTurnsInFlight += 1;
+  const held = beginHeldTurn();
   try {
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
@@ -2266,7 +2316,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     const answered = tryAnswerOpenQuestion(text);
     if (answered) {
       if (settings.voiceEnabled ?? true) {
-        replyIsSpeaking();
+        held.speaking();
         await speak(answered.line, settings.voiceGender, settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
       } else {
         try { flashCaption?.(answered.line, 6000); } catch { /* non-fatal */ }
@@ -2287,7 +2337,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     });
     if (heroSaid) {
       if (settings.voiceEnabled ?? true) {
-        replyIsSpeaking();
+        held.speaking();
         await speak(heroSaid, settings.voiceGender, settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
       } else {
         try { flashCaption?.(heroSaid, 6000); } catch { /* non-fatal */ }
@@ -2381,7 +2431,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
          * captions this one lacked. One function, one contract, no drift. See deliverBrainReply.
          */
         await deliverBrainReply({
-          onSpeechStart: replyIsSpeaking,
+          onSpeechStart: () => held.speaking(),
           reply: r,
           utterance: text,
           language: intent.language ?? settings.language,
@@ -2396,7 +2446,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         console.log('[handsFree-route] conversational fallback failed:', e);
         logVoiceSilentFail('handsfree_conversational_threw', { source: 'handsFree-route', error: describeError(e) });
         await deliverBrainReply({
-          onSpeechStart: replyIsSpeaking,
+          onSpeechStart: () => held.speaking(),
           reply: { text: null, audioBase64: null },
           utterance: text,
           language: intent.language ?? settings.language,
@@ -2451,7 +2501,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
          * one, so a fix lands on all of them or on none.
          */
         await deliverBrainReply({
-          onSpeechStart: replyIsSpeaking,
+          onSpeechStart: () => held.speaking(),
           reply: r,
           utterance: text,
           language: intent.language ?? settings.language,
@@ -2465,7 +2515,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         console.log('[handsFree-route] route_to_brain failed:', e);
         logVoiceSilentFail('handsfree_route_to_brain_threw', { source: 'handsFree-route', error: describeError(e) });
         await deliverBrainReply({
-          onSpeechStart: replyIsSpeaking,
+          onSpeechStart: () => held.speaking(),
           reply: { text: null, audioBase64: null },
           utterance: text,
           language: intent.language ?? settings.language,
@@ -2479,12 +2529,12 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       return;
     }
     // 2026-10-31 (caddie-voice-1 / CV-B) — a handler's voice_response is a typed answer that is SPOKEN, so it
-    // counts as one: replyIsSpeaking() keeps the store 'responding' and a tap shushes it, and the speech is
+    // counts as one: held.speaking() keeps the store 'responding' and a tap shushes it, and the speech is
     // awaited (below the tool dispatch, so the action still fires as soon as the line starts) so the turn does
     // not end and drop the counters while the answer is still playing. Every other typed speech branch does this.
     let handlerSpeech: Promise<unknown> | undefined;
     if (result?.voice_response) {
-      replyIsSpeaking();
+      held.speaking();
       handlerSpeech = speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
         ?.catch?.(() => undefined);
       try { recordKevinTurn(result.voice_response); } catch { /* non-fatal */ }
@@ -2504,8 +2554,6 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   } finally {
     // Clear "Thinking…"; the response text keeps showing via the caption/speaking signals while the
     // caddie is talking, then the strip hides once speech ends.
-    typedTurnsInFlight -= 1;
-    if (replySpoken) typedReplySpeaking -= 1;
-    syncTypedStore();
+    held.end();
   }
 }

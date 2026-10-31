@@ -262,6 +262,39 @@ export const registerExternalMicRelease = (fn: (() => Promise<MicReleaseVerdict>
 };
 
 /**
+ * 2026-10-31 (caddie-home CAD-HOME-2) — THE TAP THAT ENDS A HELD UTTERANCE.
+ *
+ * The VAD recorder holds the mic while the player is mid-sentence. A tap on the badge or an earbud while
+ * that is happening is the player's endpoint for the sentence — submit it. It used to be refused as "the
+ * mic is held elsewhere", so the sentence ran on to the 18 s ceiling (or to the silence the wind never
+ * gave). Only the utterance's OWN owners are asked here. A screen that holds the mic for another reason,
+ * and the metering owners (whose release tears the recorder down), still own the tap as before.
+ */
+const utteranceEndpoints = new Set<() => Promise<MicReleaseVerdict>>();
+export const registerUtteranceEndpoint = (fn: (() => Promise<MicReleaseVerdict>) | null): (() => void) => {
+  if (!fn) { utteranceEndpoints.clear(); return () => {}; }
+  utteranceEndpoints.add(fn);
+  return () => { utteranceEndpoints.delete(fn); };
+};
+/**
+ * Ends the player's held utterance as the tap's endpoint. 'submitted' = the sentence is being answered
+ * (the tap was its endpoint); 'discarded' = nothing was heard and the mic is free; 'none' = nothing held.
+ */
+export const endHeldUtterance = async (): Promise<MicReleaseVerdict> => {
+  let verdict: MicReleaseVerdict = 'none';
+  for (const end of utteranceEndpoints) {
+    try {
+      const ownerVerdict = await end();
+      if (ownerVerdict === 'submitted') return 'submitted';
+      if (ownerVerdict === 'discarded') verdict = 'discarded';
+    } catch (e) {
+      console.log('[voice] utterance endpoint failed for one owner', e);
+    }
+  }
+  return verdict;
+};
+
+/**
  * Release whatever holds the mic so a user-initiated turn can own it.
  *
  * 2026-08-17 (second pass — [[run-the-second-pass-yourself]]) — the first version only knew about

@@ -32,6 +32,7 @@ function setup(opts: { duringAsk: (clock: typeof import('../../services/userTurn
     useCallback: <T,>(fn: T) => fn,
   }));
   jest.doMock('../../services/voiceService', () => voice);
+  jest.doMock('../../services/intents', () => ({ voiceCommandRouter: { getHandler: jest.fn(() => null) } }));
   jest.doMock('../../hooks/useVoiceCaddie', () => ({ endsAsQuestion: () => false, isCloseIntent: () => false }));
   jest.doMock('../../services/conversationState', () => ({ recordKevinTurn: () => undefined }));
   jest.doMock('../../services/funnelEvents', () => ({ noteCaddieTurn: () => undefined }));
