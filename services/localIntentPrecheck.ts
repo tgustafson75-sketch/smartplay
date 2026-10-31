@@ -686,6 +686,14 @@ const ACTING_TOPICS = new Set(['routine_save']);
  */
 const PLAYER_SUBJECT_INTENTS = new Set(['log_score', 'change_setting', 'set_club_distance', 'correct_last_shot']);
 
+/**
+ * 2026-10-31 (Brain recheck r18, BRAIN-2) — A NEAR MISS IS NOT A SCORE. "I almost birdied that hole" and
+ * "I nearly bogeyed it" wrote a birdie and a bogey onto the card, because the score words carry no story
+ * frame and "almost" is not one. Kept to log_score alone: STORY_FRAME is shared with the brain's shot and
+ * mood fallbacks, and a near miss only changes what may be written to the card.
+ */
+const NEAR_MISS_RX = /\b(?:almost|nearly|just\s+missed|so\s+close|close\s+to|came\s+(?:so\s+)?close|barely\s+missed)\b/i;
+
 const ROUTINE_ASK: Record<string, 'save' | 'recall'> = { routine_save: 'save', routine_recall: 'recall' };
 
 /**
@@ -740,6 +748,24 @@ const LOOKUP_NEGATED = /\b(?:not|don'?t|do\s+not|doesn'?t|does\s+not)\b/i;
  */
 const SITUATION_RX = /\b(?:wind|windy|downhill|uphill|sidehill|sloping|slope|rough|bunker|trouble|lie|if|behind\s+me|against\s+me)\b/i;
 const DISTANCE_TOPICS = new Set(['green_front', 'green_back', 'green_middle', 'distance_to_green']);
+
+/**
+ * 2026-10-31 (Brain recheck r18, BRAIN-1) — A HAZARD IS A QUESTION, NOT A YARDAGE. "How far to the water",
+ * "how far is it to the trees" and "how far to clear the creek" matched the generic yardage rule, and the
+ * answer was the green yardage: the caddie never heard that the question was about the hazard. A hazard
+ * (or a carry over one) makes a distance question conditional on the shot, the same as wind or slope.
+ * "Tree line" is left out: it is a landmark the green-distance tests pin as the green's, not a hazard.
+ */
+const HAZARD_RX = /\b(?:water|creeks?|streams?|ponds?|lakes?|trees?(?!\s+line)|woods|hazards?|bunkers?|sand|out\s+of\s+bounds|carry|carrying|clear|clearing|cross|crossing)\b/i;
+
+/**
+ * 2026-10-31 (Brain recheck r18, BRAIN-4) — A DEICTIC HOLE. "What's my score on this hole" and "how many
+ * putts on that hole" named no hole, so HOLE_SCOPED_TOPICS let them through, and queryStatusHandler
+ * answered the ROUND total as if it were this hole. Only the topics that read the round total need this:
+ * par and the distances already answer for the current hole, and a bare "par on this hole" stays local.
+ */
+const DEICTIC_HOLE_RX = /\b(?:this|that|the\s+(?:current|last|previous|present))\s+(?:hole|one)\b/i;
+const DEICTIC_HOLE_TOPICS = new Set(['score', 'putt_stats', 'gir']);
 
 /**
  * 2026-10-29 (Brain recheck r15) — a NAMED hole. queryStatusHandler answers score, putts, par, GIR and the
@@ -818,6 +844,9 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     if (HOLE_SCOPED_TOPICS.has(topic) && parseSpokenHole(raw) != null) {
       return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: topic });
     }
+    if (DEICTIC_HOLE_TOPICS.has(topic) && DEICTIC_HOLE_RX.test(raw)) {
+      return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: topic });
+    }
     if (topic === 'score' && PAST_ROUND_RX.test(raw)) {
       return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: topic });
     }
@@ -841,7 +870,7 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     // last time"), so its own past framing is the ask, not a story.
     const toldAsStory = topic !== 'last_round_here' && isStoryFramed(withoutCounts);
     const statement = (FIRST_PERSON_STATEMENT.test(withoutCounts) && !ASKS.test(withoutCounts)) || LOOKUP_NEGATED.test(withoutCounts);
-    const conditioned = DISTANCE_TOPICS.has(topic) && SITUATION_RX.test(withoutCounts);
+    const conditioned = DISTANCE_TOPICS.has(topic) && (SITUATION_RX.test(withoutCounts) || HAZARD_RX.test(withoutCounts));
     if (DECISION_OR_REASON_RX.test(withoutCounts) || GOAL_OR_TREND_RX.test(withoutCounts) || toldAsStory || statement || conditioned) {
       return intent(raw, 'conversational', { raw_utterance: raw, not_a_lookup: String(hit.parameters?.query_topic ?? hit.intent_type) });
     }
@@ -880,6 +909,7 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     : isQuestionShaped(raw)
       || (!VERB_ANCHORED_OPENS.has(hit.intent_type) && isStoryFramed(raw))
       || (PLAYER_SUBJECT_INTENTS.has(hit.intent_type) && isAboutSomeoneElse(raw))
+      || (hit.intent_type === 'log_score' && NEAR_MISS_RX.test(raw))
       || isConditionalOrFuture(raw)
       || (INTENTION_RX.test(raw) && !isPoliteRequest(raw) && !isRiskCall(hit, raw));
   if (blocked) {

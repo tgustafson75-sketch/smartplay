@@ -20,11 +20,20 @@ const REQUEST_LEAD = /^(?:(?:hey|ok|okay|yo)\s+)?(?:(?!(?:i|we|you|they|he|she|i
  * piece of the hole, the ball, a lie, a provisional, a local rule ("play it as it lies", "play it
  * down", "play two clubs more", "play winter rules", "play preferred lies").
  */
-const GOLF_TARGET = /^(?:(?:a|an|the|my|your|this|that|it|one|another)\s+)?(?:\d|one|two|three|four|five|half|driver|wood|woods|hybrid|hybrids|iron|irons|wedge|wedges|putter|pw|gw|sw|lw|club|clubs|ball|balls|lie|lies|provisional|preferred|winter|lift|percentages|position|stance|front|back|left|right|short|long|high|low|up|down|as|where|aggressive|conservative|draw|fade|cut|hook|slice|punch|bump|chip|lay|layup|hole|shot|tee|green|fairway|pin|flag|wind|break|line|off|for|to|from|into|over|under|around|at)\b/i;
+const GOLF_TARGET = /^(?:(?:a|an|the|my|your|this|that|it|one|another)\s+)?(?:\d|one|two|three|four|five|half|driver|wood|woods|hybrid|hybrids|iron|irons|wedge|wedges|putter|pw|gw|sw|lw|club|clubs|ball|balls|lie|lies|provisional|preferred|winter|lift|percentages|position|stance|front|back|left|right|short|long|high|low|up|down|as|where|aggressive|conservative|draw|fade|cut|hook|slice|punch|bump|chip|lay|layup|hole|shot|tee|fairway|pin|flag|wind|break|line|off|for|to|from|into|over|under|around|at)\b/i;
 /** Asked politely ("can you play …?") — the one request form that legitimately ends in '?'. */
 const POLITE_ASK = /\b(?:can|could|will|would)\s+you\s+(?:please\s+)?(?:play|put\s+on)\b/i;
 /** A song-shaped object: a quoted title, or "<title> by <artist>". */
 const SONG_SHAPE = /["“][^"”]{2,}["”]|\S\s+by\s+[a-z]/i;
+/**
+ * 2026-10-31 (Brain recheck r18, BRAIN-3) — a SHOT SHAPE anywhere in the object. "play a little fade",
+ * "play away from the water", "put on a little draw" and "play it smart" have no golf word at the front
+ * for GOLF_TARGET to catch, so each opened the jukebox mid-round. Without a music word or a song shape,
+ * the shape of the shot decides: a bare title ("play Hotel California") still reaches the search. The
+ * list is the shot's own words only — a place on the course ("green", "water") is also a band or a song
+ * title ("Green Day", "Water"), so it is left to GOLF_TARGET, which reads it only in front.
+ */
+const SHOT_SHAPE = /\b(?:fade|draw|cut|hook|slice|straight|left|right|short|long|away|smart|aggressive|conservative|safe|lay\s*up|layup)\b/i;
 
 export function detectPlaySongRequest(raw: string): { query: string } | null {
   const t = (raw ?? '').trim();
@@ -68,5 +77,6 @@ export function detectPlaySongRequest(raw: string): { query: string } | null {
   if (query.length < 2) return null;
   // A named song ("Down Under by Men at Work", a quoted title) is a song even when its first word is golf.
   if (!MUSIC_CUE.test(t) && GOLF_TARGET.test(query) && !SONG_SHAPE.test(query)) return null;
+  if (!MUSIC_CUE.test(t) && SHOT_SHAPE.test(query) && !SONG_SHAPE.test(query)) return null;
   return { query };
 }
