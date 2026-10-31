@@ -14196,7 +14196,7 @@ check('LOCK: ONE working number — the club is computed from the yardage the ca
   })(),
   'one resolver-first working number feeds the payload and the plays-like model, so a rangefinder read cannot be quoted while a card number picks the club');
 
-check('LOCK: the watch pipe has something going down it — owner-gated, and it cannot block the phone',
+check('LOCK: the watch pipe has something going down it — reaches every user, and it cannot block the phone',
   (() => {
     /**
      * 2026-08-24 (Tim: "wire them owner-only"). services/watchCaddieBridge has registered the
@@ -14220,29 +14220,15 @@ check('LOCK: the watch pipe has something going down it — owner-gated, and it 
     // All four senders actually consumed.
     const allFour = ['sendRoundState', 'sendLiveScore', 'sendVoicePrompt', 'sendNotification']
       .every(fn => new RegExp(`${fn}\\(`).test(sync));
-    // Owner gate, and it is the gate every push goes through.
-    const gated = /function ownerOnly\(\): boolean/.test(sync) &&
-      /prof\.isOwnerBuild\(\)/.test(sync) &&
-      /if \(!ownerOnly\(\)\) return;/.test(sync) &&
-      /**
-       * 2026-08-24 (triple-check pass C) — PIN THE GATE TO THE PUSH PATH. A break test removed the
-       * gate from `fire` — the function EVERY send goes through — and this stayed green, because the
-       * bare string still existed in two other places. "The gate appears somewhere in the file" is
-       * not the property; "no push happens without it" is.
-       */
-      /function fire\([^)]*\)[^{]*\{\s*if \(!ownerOnly\(\)\) return;/.test(sync);
     /**
-     * 2026-08-24 (verification pass) — the gate must be evaluated PER PUSH, never decided once at
-     * start. playerProfileStore is async-persisted and the watch bridge initialises off a DIFFERENT
-     * store's hydration flag, so an early one-shot check could read a null email on a cold boot and
-     * silence the watch for the whole session with no retry.
-     *
-     * And the dedupe must not record a push it did not make: the seed ran while unhydrated, wrote
-     * lastState, sent nothing, and the state then looked already-delivered when the owner arrived.
+     * 2026-10-31 (Tim: "watch: round sync reaches every user") — the owner gate was REMOVED. The
+     * contract now is: no owner check anywhere in the sync, so every user's pushes run, and every
+     * push still goes through the one fire() wrapper.
      */
-    const hydrationProof = /^  if \(unsubscribe\) return;$/m.test(sync) &&
-      /if \(!ownerOnly\(\)\) return;\n    let s;/.test(sync) &&      // bail BEFORE the keys are written
-      /usePlayerProfileStore\.subscribe\(\(\) => \{/.test(sync);     // and seed when hydration lands
+    const ownerFree = !/ownerOnly|isOwnerBuild|EXPO_PUBLIC_OWNER_EMAIL/.test(sync.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')) &&
+      /function fire\([^)]*\)[^{]*\{\s*try \{/.test(sync);
+    // Nothing decided once at start: no hydration subscription that could silence the watch.
+    const hydrationProof = !/usePlayerProfileStore/.test(sync);
     // Fire-and-forget: a sleeping watch must never delay a hole transition or a spoken line.
     const cannotBlock = /void run\(\)\.catch\(/.test(sync) &&
       /export function pushWatchVoicePrompt/.test(sync);
@@ -14250,9 +14236,9 @@ check('LOCK: the watch pipe has something going down it — owner-gated, and it 
     const lifecycle = /startWatchRoundSync\(\)/.test(bridge) && /stopWatchRoundSync\(\)/.test(bridge);
     const speechMirrored = /pushWatchVoicePrompt\(text\)/.test(voice);
     const toastSourced = /useToastStore\.subscribe/.test(sync);
-    return allFour && gated && hydrationProof && cannotBlock && lifecycle && speechMirrored && toastSourced;
+    return allFour && ownerFree && hydrationProof && cannotBlock && lifecycle && speechMirrored && toastSourced;
   })(),
-  'all four watch senders are consumed by one owner-gated subscriber, wired to the bridge lifecycle, the spoken line and the toast stream — and no push can block or throw into a caller');
+  'all four watch senders are consumed by one ungated subscriber, wired to the bridge lifecycle, the spoken line and the toast stream — and no push can block or throw into a caller');
 
 check('LOCK: the SmartVision strategy layer is DRAWN, owner-gated, and cannot emit a NaN',
   (() => {
