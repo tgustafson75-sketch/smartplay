@@ -183,6 +183,15 @@ const ALL_APP_FEATURES: AppFeature[] = [
     whenToUse: 'they are warming up before teeing off',
   },
   {
+    id: 'golf-workout',
+    name: 'Golf Workout',
+    aliases: ['golf workout', 'golf program', 'long game', 'long game workout', 'swing rx', 'golf strength', 'golf gym'],
+    route: '/golf-workout',
+    category: 'practice',
+    blurb: 'The Long Game strength block, plus the Swing Rx built from your Caddie swing analysis',
+    whenToUse: 'they want their golf-specific strength or mobility work, or to log it',
+  },
+  {
     id: 'range-import',
     name: 'Import Range Session',
     aliases: ['import range session', 'range import', 'import toptracer', 'scan my range numbers'],

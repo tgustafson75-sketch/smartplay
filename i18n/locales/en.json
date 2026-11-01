@@ -1583,6 +1583,27 @@
       "one_club": "{{pct}}% one club"
     }
   },
+  "golf_workout": {
+    "title": "Golf Workout",
+    "subtitle": "The Long Game block: three phases of power, strength and stability. Log each working set; a finished session lands in your workouts.",
+    "locked": "The golf workout is not available yet.",
+    "loads_note": "Loads assume 175 lb until your bodyweight is set.",
+    "warmup": "Warm-up",
+    "session_logged": "Golf workout logged.",
+    "already_logged": "Already logged.",
+    "rx_title": "SWING RX",
+    "rx_progress": "{{logged}} of {{target}} sets logged",
+    "rx_none": "Import a swing analysis from SmartPlay Caddie to build a block around your fault.",
+    "rx_import": "Import swing analysis",
+    "rx_importing": "Importing...",
+    "rx_imported": "Swing analysis imported.",
+    "rx_rejected": "That file is not a swing analysis export.",
+    "rx_no_picker": "File import is not available on this device.",
+    "rx_read_failed": "Could not read that file.",
+    "rx_start": "Log Rx session",
+    "quality_title": "WHAT YOU'VE TRAINED",
+    "quality_sets": "{{count}} sets logged"
+  },
   "practice_preround": {
     "preround_warm_up": {
       "pre_round_warm_up": "Pre-Round Warm Up",

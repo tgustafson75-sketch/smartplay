@@ -45,7 +45,7 @@ export interface WorkoutRecord {
    * Warm-ups are tagged separately from training because they answer a different question: not "does
    * training volume track scoring over weeks" but "did I score better on the rounds I warmed up for".
    */
-  source: 'smartpump' | 'manual' | 'in_app_exercise' | 'preround_warmup';
+  source: 'smartpump' | 'manual' | 'in_app_exercise' | 'preround_warmup' | 'golf_workout';
 }
 
 /**
@@ -73,7 +73,7 @@ interface WorkoutState {
   clear: () => void;
   /** Record something the player completed IN THE APP. True when stored (false = deduped). */
   logCompleted: (entry: {
-    kind: 'in_app_exercise' | 'preround_warmup';
+    kind: 'in_app_exercise' | 'preround_warmup' | 'golf_workout';
     title: string;
     exercises?: string[];
     durationMin?: number | null;
@@ -101,7 +101,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           const title = (r.title ?? '').trim();
           if (!title) continue;
           const src: WorkoutRecord['source'] =
-            r.source === 'manual' || r.source === 'in_app_exercise' || r.source === 'preround_warmup'
+            r.source === 'manual' || r.source === 'in_app_exercise' || r.source === 'preround_warmup' || r.source === 'golf_workout'
               ? r.source : 'smartpump';
           const key = dedupeKey(r.date, title, src);
           if (seen.has(key)) continue;
@@ -138,7 +138,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           date: stamp,
           title: title.trim(),
           durationMin: typeof durationMin === 'number' && durationMin > 0 ? durationMin : null,
-          focus: kind === 'preround_warmup' ? 'warmup' : 'swing-fault',
+          focus: kind === 'preround_warmup' ? 'warmup' : kind === 'golf_workout' ? 'strength' : 'swing-fault',
           exercises: exercises ?? [],
           intensity: null,
           source: kind,

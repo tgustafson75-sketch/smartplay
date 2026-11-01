@@ -126,6 +126,7 @@ export const BACKED_UP_STORE_KEYS: string[] = [
   'points-store-v1',
   'points-baseline',
   'workout-store-v1',      // imported SmartPump golf-workout history (third rail)
+  'golf-workout-v1',       // in-app golf workout: prescriptions + logged sets (2026-11-01)
   'bay-lessons-v1',        // imported SmartBay lessons (services/bayExchange)
   'coach-knowledge-v1',
   // 2026-07-24 (full-app audit) — added: both created after this allowlist was curated and were

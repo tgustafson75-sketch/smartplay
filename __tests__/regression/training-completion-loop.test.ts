@@ -112,7 +112,7 @@ describe('the write that was missing', () => {
   const store = read('store/workoutStore.ts');
 
   it('the ledger accepts in-app completions, not just imports', () => {
-    expect(store).toContain("source: 'smartpump' | 'manual' | 'in_app_exercise' | 'preround_warmup';");
+    expect(store).toContain("source: 'smartpump' | 'manual' | 'in_app_exercise' | 'preround_warmup' | 'golf_workout';");
     expect(store).toContain('logCompleted: (entry: {');
   });
 

@@ -266,7 +266,14 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     }, null);
 
     const suffix = extras.contextSuffix?.trim();
-    const tail = [offline, notApplied, suffix].filter((x): x is string => !!x && x.trim().length > 0).join('\n\n');
+    // 2026-11-01 — the golf program, so Kevin can answer "how's my Rx going?". Per-turn tail, self-gating.
+    const golf = safe(() => {
+      const { useGolfWorkoutStore } = require('../store/golfWorkoutStore') as typeof import('../store/golfWorkoutStore');
+      const { golfProgramLine } = require('./golf/golfProgramLine') as typeof import('./golf/golfProgramLine');
+      const st = useGolfWorkoutStore.getState();
+      return golfProgramLine(st.activePrescription(), st.loggedSets);
+    }, null);
+    const tail = [offline, notApplied, suffix, golf].filter((x): x is string => !!x && x.trim().length > 0).join('\n\n');
     if (!tail) return merged;
     return merged ? `${merged}\n\n${tail}` : tail;
   }, extras.liveBlock ?? null);

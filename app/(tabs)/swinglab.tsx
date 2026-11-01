@@ -275,6 +275,14 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     route: '/practice/preround',
     tag: 'WARM UP',
   },
+  {
+    key: 'golf-workout',
+    icon: 'barbell-outline',
+    title: 'Golf Workout',
+    sub: 'Long Game strength block, plus Swing Rx from your Caddie analysis',
+    route: '/golf-workout',
+    tag: 'STRENGTH',
+  },
 ];
 
 // 2026-07-10 (Tim — "break the three sections into three cards, one primary drill each,
