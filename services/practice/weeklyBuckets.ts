@@ -26,6 +26,24 @@ export const WEEKS = 6;
 /** How many recent rounds the trend maths reads (NOT the chart's x-axis). */
 export const ROUNDS = 8;
 export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * 2026-11-01 (Tim — "the data bar needs to scroll left and right so you can see all history
+ * timelines; there will be drop offs in activity but those tell a story too").
+ *
+ * The DRAWN timeline reaches back to the player's first activity, so the chart scrolls through all of
+ * it; an idle stretch stays on the axis as empty weeks instead of being cut off. WEEKS above is still
+ * the window every VERDICT reads ("is the work helping lately") — the history is for looking, the
+ * window is for judging, so a long history cannot change what a verdict means. Capped at three years.
+ */
+export const HISTORY_MAX_WEEKS = 156;
+export function historyWeeks(timestamps: Iterable<number | null | undefined>, nowMs: number): number {
+  let oldest = nowMs;
+  for (const t of timestamps) {
+    if (typeof t === 'number' && Number.isFinite(t) && t < oldest) oldest = t;
+  }
+  const span = Math.floor((nowMs - oldest) / WEEK_MS) + 1;
+  return Math.min(HISTORY_MAX_WEEKS, Math.max(WEEKS, span));
+}
 
 /** Newest bucket is last. Returns null when the timestamp falls outside the window. */
 export function weekIndexFor(ts: number, nowMs: number, weeks = WEEKS): number | null {

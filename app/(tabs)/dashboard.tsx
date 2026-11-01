@@ -20,7 +20,8 @@
  * useCurrentWeather, services/kevinReadService.
  */
 
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { WEEKS } from '../../services/practice/weeklyBuckets';
 import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import {
   View,
@@ -543,14 +544,16 @@ export default function Dashboard() {
      * 2026-08-22 — TRAINING vs STRIKE, owner-only. Plotted on the same graph as everything else so it
      * is read the way a player would read it, not as a separate text readout.
      *
-     * Only the weeks that carry a strike rate are plotted, and the training line is filtered to the
-     * SAME weeks so the two stay index-aligned. A week with no range time is not a 0% strike week,
-     * and drawing it as one would invent a collapse that never happened.
+     * A week with no range time is not a 0% strike week, and drawing it as one would invent a collapse
+     * that never happened — so it is a GAP on the strike line (null keeps the slot; TrendChart breaks
+     * the path there). 2026-11-01 (Tim: "drop offs in activity… tell a story too"): the week itself
+     * stays on the timeline. It used to be filtered out of both lines, which closed the gap up and hid
+     * the drop-off. The training line keeps its real value for that week, zero included.
      */
     if (isOwner && workoutHistory.length > 0) {
       const keep = workoutSwing.strikeWeekHasData;
-      const strike = workoutSwing.strikeSeries.filter((_, i) => keep[i]);
-      const train = workoutSwing.workoutSeries.filter((_, i) => keep[i]);
+      const strike = workoutSwing.strikeSeries.map((v, i) => (keep[i] ? v : null));
+      const train = workoutSwing.workoutSeries;
       list.push({
         key: 'strike', tab: 'Strike',
         effort: train,
@@ -584,10 +587,10 @@ export default function Dashboard() {
       const keep = lead.weekHasData;
       list.push({
         key: 'swing', tab: 'Swing',
-        effort: swingTrend.swingsPerWeek.filter((_, i) => keep[i]),
+        effort: swingTrend.swingsPerWeek,   // every week, a quiet one included (2026-11-01)
         effortLabel: 'SWINGS / WK',
         deltaUnit: 'swings',
-        score: lead.bandScoreSeries.filter((_, i) => keep[i]),
+        score: lead.bandScoreSeries.map((v, i) => (keep[i] ? v : null)),   // a gap, not a fabricated value
         hasEnough: true,
         headline: lead.headline,
         markers: [],
@@ -634,6 +637,8 @@ export default function Dashboard() {
 
   const [progressSourceKey, setProgressSourceKey] = useState<'practice' | 'points' | 'training' | 'strike' | 'swing'>('practice');
   const activeProgress = progressSources.find((s) => s.key === progressSourceKey) ?? progressSources[0] ?? null;
+  // The progress chart scrolls through the whole history; it opens on this week (2026-11-01).
+  const progressScrollRef = useRef<ScrollView>(null);
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
   // IN-APP rounds that predate the recap feature (Golfshot imports excluded).
@@ -1486,6 +1491,16 @@ export default function Dashboard() {
               </View>
             )}
             {activeProgress.hasEnough && (
+              /* 2026-11-01 (Tim: "the data bar needs to scroll left and right so you can see all history
+                 timelines; drop offs in activity tell a story too"). Every week keeps the spacing six
+                 weeks had across the card, so the whole history is wider than the screen: it opens on
+                 this week and scrolls back. Idle weeks stay on the axis as gaps. */
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator
+                ref={progressScrollRef}
+                onContentSizeChange={() => progressScrollRef.current?.scrollToEnd({ animated: false })}
+              >
               <TrendChart
                 // Primary = the OUTCOME (score vs par, lower is better → green when dropping). Overlay = the
                 // selected effort line (own scale). Warm-ups marked on the practice line. ONE graph.
@@ -1520,7 +1535,7 @@ export default function Dashboard() {
                 markerIndices={activeProgress.markers}
                 markerColor="#f9a8d4"
                 markerLabel={activeProgress.markers.length ? 'warm-up' : undefined}
-                width={chartW}
+                width={Math.max(chartW, Math.round((chartW / WEEKS) * activeProgress.score.length))}
                 height={112}
                 color="#a3e635"
                 legendDotColor="#a3e635"
@@ -1530,6 +1545,7 @@ export default function Dashboard() {
                 higherIsBetter={activeProgress.scoreHigherIsBetter}
                 emptyText="—"
               />
+              </ScrollView>
             )}
             {/* 2026-08-06 (Tim — "track stretching, warmup... as metrics to judge progress"). Warmed-vs-cold
                 scoring split — a real progress metric, shown only on the Practice view once there are ≥2

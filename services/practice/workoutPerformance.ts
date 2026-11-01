@@ -65,7 +65,7 @@ export interface WorkoutPerformance {
 
 // 2026-09-11 — WEEKS / ROUNDS / WEEK_MS were declared identically in three files. One owner now,
 // so the cards the dashboard renders together cannot drift onto different buckets.
-const { WEEKS, ROUNDS, WEEK_MS, weeklyScoreSeries } = require('./weeklyBuckets') as typeof import('./weeklyBuckets');
+const { WEEKS, ROUNDS, WEEK_MS, weeklyScoreSeries, historyWeeks } = require('./weeklyBuckets') as typeof import('./weeklyBuckets');
 const MIN_WORKOUTS = 3;
 const MIN_ROUNDS = 4;
 
@@ -95,7 +95,9 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
   // instead of presenting a synthesized number as fact (illustration-honesty rule).
   const minutesEstimated = metric === 'minutes' && withDuration < valid.length;
 
-  const workoutSeries = new Array(WEEKS).fill(0) as number[];
+  // Training per week across the whole history (the chart scrolls); the verdict reads the last WEEKS.
+  const H = historyWeeks([...valid.map((w) => w.date), ...(rounds ?? []).map((r) => r.endedAt)], nowMs);
+  const workoutSeries = new Array(H).fill(0) as number[];
   let totalWorkouts = 0;
   let totalMinutes = 0;
   for (const w of valid) {
@@ -103,8 +105,8 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
     const mins = typeof w.durationMin === 'number' && w.durationMin > 0 ? w.durationMin : ASSUMED_SESSION_MIN;
     totalMinutes += mins;
     const ageWeeks = Math.floor((nowMs - w.date) / WEEK_MS);
-    if (ageWeeks < 0 || ageWeeks >= WEEKS) continue; // counts toward totals, not the 6wk chart
-    workoutSeries[WEEKS - 1 - ageWeeks] += metric === 'minutes' ? mins : 1;
+    if (ageWeeks < 0 || ageWeeks >= H) continue;
+    workoutSeries[H - 1 - ageWeeks] += metric === 'minutes' ? mins : 1;
   }
 
   const scoreSeries = (rounds ?? [])
@@ -118,7 +120,7 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
    * true for both lines and point `i` of each is the same week. `null` for a week with no round;
    * a zero on a vs-par axis would read as level par, which is the opposite of "did not play".
    */
-  const scoreWeekly = weeklyScoreSeries(rounds as never, nowMs, WEEKS);
+  const scoreWeekly = weeklyScoreSeries(rounds as never, nowMs, H);
   const roundsCounted = scoreSeries.length;
   const hasEnough = totalWorkouts >= MIN_WORKOUTS && roundsCounted >= MIN_ROUNDS;
 
@@ -126,8 +128,9 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
   // services/caddieRequestBody both read this.
   let connection: WorkoutPerformance['connection'] = null;
   if (hasEnough) {
-    const firstHalf = workoutSeries.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
-    const lastHalf = workoutSeries.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
+    const recent = workoutSeries.slice(-WEEKS);   // the verdict window, not the whole history
+    const firstHalf = recent.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
+    const lastHalf = recent.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
     const half = Math.ceil(scoreSeries.length / 2);
     const earlyAvg = scoreSeries.slice(0, half).reduce((a, b) => a + b, 0) / half;
     const lateAvg = scoreSeries.slice(half).reduce((a, b) => a + b, 0) / (scoreSeries.length - half);

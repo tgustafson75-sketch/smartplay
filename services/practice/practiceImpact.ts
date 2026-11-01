@@ -76,7 +76,7 @@ export interface PracticeImpact {
 
 // 2026-09-11 — WEEKS / ROUNDS / WEEK_MS were declared identically in three files. One owner now,
 // so the cards the dashboard renders together cannot drift onto different buckets.
-const { WEEKS, ROUNDS, WEEK_MS, weeklyScoreSeries } = require('./weeklyBuckets') as typeof import('./weeklyBuckets');
+const { WEEKS, ROUNDS, WEEK_MS, weeklyScoreSeries, historyWeeks } = require('./weeklyBuckets') as typeof import('./weeklyBuckets');
 const MIN_SESSIONS = 3;
 const MIN_ROUNDS = 4;
 
@@ -94,15 +94,20 @@ export const PRACTICE_FLOOR = { sessions: MIN_SESSIONS, rounds: MIN_ROUNDS } as 
 export function computePracticeImpact(input: PracticeImpactInput): PracticeImpact {
   const { sessions, rounds, nowMs } = input;
 
-  // Practice balls bucketed into the last WEEKS weekly buckets (oldest→newest).
-  const practiceSeries = new Array(WEEKS).fill(0) as number[];
+  // Practice balls per week across the whole history (oldest→newest): the chart scrolls through it.
+  // The verdict below still reads only the last WEEKS of it, and only those weeks count as sessions.
+  const H = historyWeeks([
+    ...(sessions ?? []).map((s) => s.startedAt), ...(input.warmups ?? []).map((w) => w.startedAt),
+    ...(rounds ?? []).map((r) => r.endedAt ?? r.startedAt),
+  ], nowMs);
+  const practiceSeries = new Array(H).fill(0) as number[];
   let practiceSessions = 0;
   for (const s of sessions ?? []) {
     if (typeof s.startedAt !== 'number') continue;
     const ageWeeks = Math.floor((nowMs - s.startedAt) / WEEK_MS);
-    if (ageWeeks < 0 || ageWeeks >= WEEKS) continue;
-    practiceSeries[WEEKS - 1 - ageWeeks] += Math.max(0, s.balls || 0);
-    practiceSessions += 1;
+    if (ageWeeks < 0 || ageWeeks >= H) continue;
+    practiceSeries[H - 1 - ageWeeks] += Math.max(0, s.balls || 0);
+    if (ageWeeks < WEEKS) practiceSessions += 1;
   }
 
   // 2026-08-06 (Tim) — which weekly buckets contained a warm-up / pre-round session (same bucketing as
@@ -111,8 +116,8 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
   for (const w of input.warmups ?? []) {
     if (typeof w.startedAt !== 'number') continue;
     const ageWeeks = Math.floor((nowMs - w.startedAt) / WEEK_MS);
-    if (ageWeeks < 0 || ageWeeks >= WEEKS) continue;
-    warmupWeeks.add(WEEKS - 1 - ageWeeks);
+    if (ageWeeks < 0 || ageWeeks >= H) continue;
+    warmupWeeks.add(H - 1 - ageWeeks);
   }
   const warmupWeekIndices = [...warmupWeeks].sort((a, b) => a - b);
 
@@ -150,7 +155,7 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
    * true for both lines and point `i` of each is the same week. `null` for a week with no round;
    * a zero on a vs-par axis would read as level par, which is the opposite of "did not play".
    */
-  const scoreWeekly = weeklyScoreSeries(rounds as never, nowMs, WEEKS);
+  const scoreWeekly = weeklyScoreSeries(rounds as never, nowMs, H);
   const roundsCounted = scoreSeries.length;
   const hasEnough = practiceSessions >= MIN_SESSIONS && roundsCounted >= MIN_ROUNDS;
 
@@ -158,8 +163,9 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
   // context block in services/caddieRequestBody both read it.
   let connection: PracticeImpact['connection'] = null;
   if (hasEnough) {
-    const firstHalfP = practiceSeries.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
-    const lastHalfP = practiceSeries.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
+    const recent = practiceSeries.slice(-WEEKS);   // the verdict window, not the whole history
+    const firstHalfP = recent.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
+    const lastHalfP = recent.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
     const half = Math.ceil(scoreSeries.length / 2);
     const earlyAvg = scoreSeries.slice(0, half).reduce((a, b) => a + b, 0) / half;
     const lateAvg = scoreSeries.slice(half).reduce((a, b) => a + b, 0) / (scoreSeries.length - half);

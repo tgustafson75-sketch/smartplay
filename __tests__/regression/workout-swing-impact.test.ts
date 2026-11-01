@@ -159,11 +159,13 @@ describe('it is a GRAPH, owner-only, read the way a player reads it', () => {
     expect(dash).not.toMatch(/scoreHigherIsBetter: false,\s*\n\s*\}\);\s*\n\s*\}\s*\n\s*return list/);
   });
 
-  it('plots only weeks that carry a strike rate, and aligns training to the SAME weeks', () => {
+  it('a week with no strike rate is a GAP, never 0% — and it stays on the timeline', () => {
     // A week with no range time is not a 0% strike week; drawing it as one invents a collapse.
+    // 2026-11-01 (Tim: drop-offs tell a story) — the week keeps its slot (null) instead of being
+    // filtered out, and the training line keeps every week, so the two stay index-aligned.
     expect(dash).toMatch(/const keep = workoutSwing\.strikeWeekHasData;/);
-    expect(dash).toMatch(/strikeSeries\.filter\(\(_, i\) => keep\[i\]\)/);
-    expect(dash).toMatch(/workoutSeries\.filter\(\(_, i\) => keep\[i\]\)/);
+    expect(dash).toMatch(/strikeSeries\.map\(\(v, i\) => \(keep\[i\] \? v : null\)\)/);
+    expect(dash).not.toMatch(/strikeSeries\.filter|workoutSeries\.filter|swingsPerWeek\.filter|bandScoreSeries\.filter/);
   });
 
   it('counts only the account holder’s own swings', () => {

@@ -7010,7 +7010,7 @@ check('Practice→performance: honest connection card (association, gated, no fa
     // The graph self-labels (distinct legend colors + trend) and marks warm-up weeks on the practice line.
     const graphSmartOk =
       /warmupWeekIndices: number\[\]/.test(svc) &&                    // service surfaces warm-up weeks
-      /warmupWeeks\.add\(WEEKS - 1 - ageWeeks\)/.test(svc) &&          // bucketed like practiceSeries
+      /warmupWeeks\.add\(H - 1 - ageWeeks\)/.test(svc) &&              // bucketed like practiceSeries (full history, 2026-11-01)
       // 2026-09-11 — was `/warmups: practiceHistory/`, which pinned the dashboard's own inline
       // filter. That filter was HALF the warm-up events: the sibling card counted pre-round
       // WORKOUTS, so the two cards disagreed about whether a round was warmed. One list feeds both

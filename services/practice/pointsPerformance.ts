@@ -61,14 +61,19 @@ export interface PointsPerformance {
 
 // 2026-09-11 — WEEKS / ROUNDS / WEEK_MS were declared identically in three files. One owner now,
 // so the cards the dashboard renders together cannot drift onto different buckets.
-const { WEEKS, ROUNDS, WEEK_MS, weeklyScoreSeries } = require('./weeklyBuckets') as typeof import('./weeklyBuckets');
+const { WEEKS, ROUNDS, WEEK_MS, weeklyScoreSeries, historyWeeks } = require('./weeklyBuckets') as typeof import('./weeklyBuckets');
 const MIN_SESSIONS = 3;
 const MIN_ROUNDS = 4;
 
 export function computePointsPerformance(input: PointsPerformanceInput): PointsPerformance {
   const { sessions, rounds, nowMs, sinceMs = 0 } = input;
 
-  const pointsSeries = new Array(WEEKS).fill(0) as number[];
+  // Points per week across the whole history (the chart scrolls); the verdict reads the last WEEKS.
+  const H = historyWeeks([
+    ...(sessions ?? []).filter((s) => typeof s.startedAt === 'number' && s.startedAt >= sinceMs).map((s) => s.startedAt),
+    ...(rounds ?? []).map((r) => r.endedAt),
+  ], nowMs);
+  const pointsSeries = new Array(H).fill(0) as number[];
   let totalEstimatedPoints = 0;
   let sessionsCounted = 0;
   for (const s of sessions ?? []) {
@@ -78,8 +83,8 @@ export function computePointsPerformance(input: PointsPerformanceInput): PointsP
     totalEstimatedPoints += pts;
     sessionsCounted += 1;
     const ageWeeks = Math.floor((nowMs - s.startedAt) / WEEK_MS);
-    if (ageWeeks < 0 || ageWeeks >= WEEKS) continue; // counts toward total, not the 6wk chart
-    pointsSeries[WEEKS - 1 - ageWeeks] += pts;
+    if (ageWeeks < 0 || ageWeeks >= H) continue;
+    pointsSeries[H - 1 - ageWeeks] += pts;
   }
 
   const scoreSeries = (rounds ?? [])
@@ -93,7 +98,7 @@ export function computePointsPerformance(input: PointsPerformanceInput): PointsP
    * true for both lines and point `i` of each is the same week. `null` for a week with no round;
    * a zero on a vs-par axis would read as level par, which is the opposite of "did not play".
    */
-  const scoreWeekly = weeklyScoreSeries(rounds as never, nowMs, WEEKS);
+  const scoreWeekly = weeklyScoreSeries(rounds as never, nowMs, H);
   const roundsCounted = scoreSeries.length;
   const hasEnough = sessionsCounted >= MIN_SESSIONS && roundsCounted >= MIN_ROUNDS;
 
@@ -101,8 +106,9 @@ export function computePointsPerformance(input: PointsPerformanceInput): PointsP
   if (!hasEnough) {
     headline = 'Keep practicing and logging rounds — once there\'s enough, I\'ll show how your points track your scoring.';
   } else {
-    const firstHalf = pointsSeries.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
-    const lastHalf = pointsSeries.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
+    const recent = pointsSeries.slice(-WEEKS);   // the verdict window, not the whole history
+    const firstHalf = recent.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
+    const lastHalf = recent.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
     const half = Math.ceil(scoreSeries.length / 2);
     const earlyAvg = scoreSeries.slice(0, half).reduce((a, b) => a + b, 0) / half;
     const lateAvg = scoreSeries.slice(half).reduce((a, b) => a + b, 0) / (scoreSeries.length - half);
