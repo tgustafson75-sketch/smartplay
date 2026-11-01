@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800&family=Inter:wght@500&display=block" rel="stylesheet">
+<style>
+:root{--w:1080px;--h:1920px}
+html,body{margin:0;width:var(--w);height:var(--h);overflow:hidden}
+body{background:linear-gradient(180deg,#0B1F13 0%,#102A1A 55%,#16351F 100%);color:#F3F1E3;font-family:Inter,sans-serif;
+  display:flex;flex-direction:column;align-items:center;box-sizing:border-box;padding-top:calc(var(--h)*.06)}
+.eyebrow{font:500 calc(var(--w)*.03)/1 Inter;letter-spacing:.16em;text-transform:uppercase;color:#4FB477;margin-bottom:calc(var(--w)*.03)}
+h1{font:800 calc(var(--w)*.078)/1.06 Archivo;text-align:center;margin:0 calc(var(--w)*.07);letter-spacing:-.01em}
+h1 b{color:#4FB477}
+.shot{margin-top:calc(var(--h)*.04);margin-bottom:calc(var(--h)*.045);flex:1;min-height:0;width:100%;display:flex;justify-content:center;align-items:flex-start}
+.shot img{height:100%;max-width:84%;width:auto;object-fit:contain;border-radius:calc(var(--w)*.05);border:3px solid #1E4429;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+</style></head><body>
+<div class="eyebrow" id="e"></div><h1 id="t"></h1><div class="shot"><img id="i"></div>
+<script>
+const q=new URLSearchParams(location.search);
+document.documentElement.style.setProperty('--w',q.get('w')+'px');document.documentElement.style.setProperty('--h',q.get('h')+'px');
+document.getElementById('e').textContent=q.get('eyebrow')||'';
+document.getElementById('t').innerHTML=(q.get('title')||'').replace(/\*(.+?)\*/g,'<b>$1</b>').replace(/\|/g,'<br>');
+document.getElementById('i').src=q.get('img');
+</script></body></html>
