@@ -12,3 +12,9 @@
 3. `python3 render.py <that folder> out` → `out/play/` (1080×1920) and `out/apple/` (1290×2796, no alpha).
 
 Captions live in `CAPTIONS` in `render.py`. Requires Google Chrome and Pillow.
+
+## Apple product page (Asset Library, App Store Connect)
+- `apple-header-3840x1646.png` (21:9, Product Page Header) — from `header.html` at 1920×823, scale 2.
+- `apple-search-3840x2560.png` (3:2, Search Results) — from `search.html` at 1920×1280, scale 2.
+Both submitted to Asset Library review on 2026-11-01. Once approved, select them in the version's
+"Header and Search Results" section.
