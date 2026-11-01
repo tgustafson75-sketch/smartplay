@@ -16,6 +16,8 @@ import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { composePreroundPlan, preroundReadiness, type PreroundFocus, type PreroundStep } from '../../services/practice/preroundPlan';
+import { GOLF_PRE_ROUND_ROUTINE, golfRoutineComplete } from '../../services/practice/golfRoutine';
+import { GolfRoutineCard } from '../../components/practice/GolfRoutineCard';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
@@ -45,6 +47,8 @@ export default function PreroundWarmUp() {
   const [minutes, setMinutes] = useState<number>(20);
   const [focus, setFocus] = useState<PreroundFocus>('tempo');
   const [completed, setCompleted] = useState<Set<string>>(new Set());
+  const [routineOpen, setRoutineOpen] = useState(false);
+  const [routineDone, setRoutineDone] = useState<Set<string>>(new Set());
   const [briefOpen, setBriefOpen] = useState(false);
   const [briefText, setBriefText] = useState<string | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -56,7 +60,19 @@ export default function PreroundWarmUp() {
 
   // The set of steps changes when the budget/focus changes → reset progress so
   // readiness always reflects THIS plan honestly.
-  useEffect(() => { setCompleted(new Set()); }, [minutes, focus]);
+  useEffect(() => { setCompleted(new Set()); setRoutineDone(new Set()); }, [minutes, focus]);
+
+  // The Loosen Up step is complete when every routine move is checked — derived from the moves, not a
+  // separate tick. Unchecking a move un-completes the step again.
+  useEffect(() => {
+    const routineFinished = golfRoutineComplete(routineDone);
+    setCompleted((prev) => {
+      if (prev.has('stretch') === routineFinished) return prev;
+      const next = new Set(prev);
+      if (routineFinished) next.add('stretch'); else next.delete('stretch');
+      return next;
+    });
+  }, [routineDone]);
 
   const readiness = preroundReadiness(plan.steps.length, completed.size);
   const allDone = completed.size >= plan.steps.length && plan.steps.length > 0;
@@ -134,10 +150,18 @@ export default function PreroundWarmUp() {
     }
   }, [briefText, briefLoading, firstName, caddiePersonality]);
 
+  const toggleRoutineMove = useCallback((id: string) => {
+    setRoutineDone((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
   const doStep = useCallback((step: PreroundStep) => {
     switch (step.kind) {
       case 'stretch':
-        goToTab('caddie'); // health-aware stretch lives with the caddie
+        setRoutineOpen((o) => !o); // the routine runs inline; the caddie stays one tap away below it
         break;
       case 'setup':
         router.push('/swinglab/setup-check' as never);
@@ -243,10 +267,23 @@ export default function PreroundWarmUp() {
                   </View>
                 ) : null}
 
+                {step.kind === 'stretch' && routineOpen ? (
+                  <>
+                    <GolfRoutineCard moves={GOLF_PRE_ROUND_ROUTINE} done={routineDone} onToggle={toggleRoutineMove} />
+                    <TouchableOpacity style={styles.askCaddieBtn} onPress={() => goToTab('caddie')} accessibilityRole="button">
+                      <Text style={[styles.askCaddieText, { color: colors.text_muted }]}>{t('practice_preround.golf_routine.ask_caddie')}</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+
                 <View style={styles.stepActions}>
                   <TouchableOpacity style={[styles.doBtn, { borderColor: step.accent }]} onPress={() => doStep(step)} accessibilityRole="button">
                     <Text style={[styles.doBtnText, { color: step.accent }]}>
-                      {step.kind === 'brief' ? (briefOpen ? 'Hide' : 'Read it') : step.kind === 'stretch' ? 'Ask caddie' : 'Do it'}
+                      {step.kind === 'brief'
+                        ? (briefOpen ? 'Hide' : 'Read it')
+                        : step.kind === 'stretch'
+                          ? (routineOpen ? t('practice_preround.golf_routine.hide') : t('practice_preround.golf_routine.start'))
+                          : 'Do it'}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.doneBtn} onPress={() => toggleDone(step.id)} accessibilityRole="button" accessibilityState={{ checked: done }}>
@@ -306,6 +343,8 @@ const styles = StyleSheet.create({
   stepActions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 },
   doBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 999, borderWidth: 1.5 },
   doBtnText: { fontSize: 13, fontWeight: '800' },
+  askCaddieBtn: { alignSelf: 'flex-start', marginTop: 10, paddingVertical: 4 },
+  askCaddieText: { fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
   doneBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   doneText: { fontSize: 13, fontWeight: '700' },
 });

@@ -1592,6 +1592,13 @@
       "readiness": "READINESS",
       "you_re_ready_go_play": "You're ready — go play.",
       "of_min": "{{size}} of {{length}} · ~{{allocated}} min"
+    },
+    "golf_routine": {
+      "group_mobility": "MOBILITY",
+      "group_activation": "ACTIVATION",
+      "start": "Start routine",
+      "hide": "Hide routine",
+      "ask_caddie": "Ask the caddie instead"
     }
   },
   "practice_shot_shapes": {

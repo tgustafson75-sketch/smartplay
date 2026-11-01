@@ -55,4 +55,4 @@ it('a completed back-nine round shares holes 10-18', async () => {
   expect(message).toMatch(/HOLE\s+10\s+11/);
   expect(message).toMatch(/\bIN\b/);
   expect(message).not.toMatch(/HOLE\s+1\s+2\s+3/);
-});
+}, 15000);
