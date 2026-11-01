@@ -131,6 +131,7 @@ describe('the avatar mic: the caddie-tab turn keeps his words for everything but
 
   it('useVoiceCaddie hands processTranscriptOverride BOTH the words and the shaped message', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../hooks/useVoiceCaddie.ts'), 'utf-8');
-    expect(src).toMatch(/await processTranscriptOverride\(brainBase, brainTranscript\)/);
+    // a third argument (the brain-hold release, 2026-11-01) may follow; the words + shaped message must still lead
+    expect(src).toMatch(/await processTranscriptOverride\(brainBase, brainTranscript(?:, [^)]+)?\)/);
   });
 });

@@ -2079,7 +2079,11 @@ export const speak = async (
   let customClipUri: string | null = null;
   try {
     const profile = require('../store/playerProfileStore').usePlayerProfileStore.getState();
-    if (profile?.useCustomCaddie) {
+    // 2026-10-31 (CAD-VOICE-2) — the recorded clips are the CUSTOM caddie's voice, so they play only when the
+    // custom caddie is the one speaking. useCustomCaddie is true whenever the global caddie is the custom one,
+    // but a pillar can assign Serena or Kevin while it stays on, and their lines must keep their own voice.
+    // Same resolver the persona read below uses (activeVoice), so the clip and the voice cannot disagree.
+    if (profile?.useCustomCaddie && activeVoice().persona === 'custom') {
       const clipLookup = require('./customCaddieClips') as typeof import('./customCaddieClips');
       const maybeUri = clipLookup.lookupClipUri(text, profile.customCaddieClips ?? null);
       // 2026-05-27 — Fix EC: verify the file ACTUALLY exists before

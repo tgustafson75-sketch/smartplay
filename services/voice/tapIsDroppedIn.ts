@@ -30,10 +30,15 @@ export function tapIsDroppedIn(s: string): boolean {
  * to it. 'force_close' is kept for the one case toggle() cannot reach — a session still marked in
  * flight with its state back at 'idle', i.e. hung — so the face can never be trapped (07-30). 'tab'
  * means no session: the tab's own tap-to-talk runs.
+ *
+ * 2026-10-31 (caddie-voice CAD-VOICE-3) — A HELD TURN IS A SESSION TOO. A typed, watch or tab turn that is
+ * still answering holds the shared mic signal without raising sessionInFlight, so the face read it as "no
+ * session" and started the tab's recorder over the answer. toggle() already drops or shushes a tap in that
+ * window with its own haptic, so the face defers to it as well.
  */
 export type AvatarTapRoute = 'session' | 'force_close' | 'tab';
-export function avatarTapRoute(state: string, inFlight: boolean): AvatarTapRoute {
-  if (state !== 'idle') return 'session';
+export function avatarTapRoute(state: string, inFlight: boolean, heldTurnInFlight = false): AvatarTapRoute {
+  if (state !== 'idle' || heldTurnInFlight) return 'session';
   return inFlight ? 'force_close' : 'tab';
 }
 

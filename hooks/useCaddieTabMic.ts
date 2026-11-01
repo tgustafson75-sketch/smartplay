@@ -139,13 +139,15 @@ export function useCaddieTabMic({
    * words for everything else — the log, the putt answer, the sign-off check, the history and the
    * style learner (2026-10-28, Brain review r2: the reshape read as his words made Kevin brief for good).
    */
-  const processTurn = useCallback(async (transcript: string, brainMessage?: string): Promise<void> => {
+  const processTurn = useCallback(async (transcript: string, brainMessage?: string, hold?: HeldTurn): Promise<void> => {
     // 2026-07-06 (voice-parity F2) — block a re-entrant turn. If one is already in
     // flight, drop this call rather than start a second that races history/points.
     if (turnInFlightRef.current) {
       devLog('[pipecat] turn already in flight — queued behind it');
       pendingTurnRef.current = { transcript, brainMessage };
       noteUserTurn();
+      // The queued transcript is answered by the turn in flight, which holds the signal for itself.
+      hold?.end();
       return;
     }
     turnInFlightRef.current = true;
@@ -155,8 +157,12 @@ export function useCaddieTabMic({
      * voiceState, so until now a tab turn in 'thinking' left the mic bright and a tap opened a second turn
      * over the first answer. Ended in the finally below (and before the auto-listen hand-off, which the
      * counter would otherwise refuse).
+     *
+     * 2026-10-31 (caddie-voice CAD-VOICE-1) — a voice utterance hands over the hold it took at submit (see
+     * useVoiceCaddie's takeTurnHold), so transcribe and the pre-brain steps never left the signal idle. One
+     * turn, one hold: it is taken here only for a turn that arrives without one.
      */
-    const held: HeldTurn = beginHeldTurn();
+    const held: HeldTurn = hold ?? beginHeldTurn();
     // 2026-09-28 — a real turn (typed, SmartMotion, or the voice path's hand-off): stamp it so a late
     // proactive line stands down, and hand the warmups' connections to it.
     noteUserTurn();

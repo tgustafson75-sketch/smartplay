@@ -7729,7 +7729,8 @@ check('Pre-response conversational filler removed from the main voice path',
     // name of the thing passed to it. Fourth guard today pinned to a spelling rather than a
     // behaviour. [[break-test-every-guard-you-write]]
     // 2026-10-28 — and it now carries the player's words beside the reshaped message.
-    /await processTranscriptOverride\(\w+(?:, \w+)?\)/.test(vcWarmSrc),
+    // 2026-10-31 (CAD-VOICE-1) — the call may carry the utterance's mic hold as a third argument.
+    /await processTranscriptOverride\(\w+(?:, \w+)?(?:, [^)]*)?\)/.test(vcWarmSrc),
   "the 'Let me see...' bridge no longer fires before the reply (it conflicted with the now-fast brain that already opens conversationally); the conversational turn is handed straight to the pipecat brain (processTranscriptOverride) — the legacy /api/kevin fallthrough was deleted 2026-07-23");
 
 // 2026-06-11 — Environment mode phase 1: range gets a longer window AND now keeps
@@ -12093,8 +12094,9 @@ check('LOCK: a second tap means the same thing on the avatar and on the caddie m
     // which is the asymmetry: same two taps, answered or binned depending on which icon you touched.
     // 2026-10-28 (VC-R2-3) — the deferral is avatarTapRoute: every live session state goes to toggle().
     const defersFirst = iSubmit > -1 && iForceClose > iSubmit && /toggleListeningSession\(\)/.test(h) &&
-      /const sessionRoute = avatarTapRoute\(getSessionState\(\), isSessionInFlight\(\)\);/.test(h) &&
-      avatarTapRoute('listening', true) === 'session' && avatarTapRoute('opening', true) === 'session';
+      /const sessionRoute = avatarTapRoute\(getSessionState\(\), isSessionInFlight\(\), isHeldTurnInFlight\(\)\);/.test(h) &&
+      avatarTapRoute('listening', true) === 'session' && avatarTapRoute('opening', true) === 'session' &&
+      avatarTapRoute('idle', false, true) === 'session';
     // And the reverse direction: a handover of a capture that heard speech submits it.
     const submitsSpeech = /if \(heardSpeech && uri\)[\s\S]{0,300}?processAudioUri\(uri\)[\s\S]{0,80}?return 'submitted';/.test(v);
     // ALL THREE mic owners must be releasable. The follow-up-listen loop holds the mic through
@@ -16553,7 +16555,8 @@ check(
       /message = buildPlainSpeakPrefix\(\) \+ message/.test(pre) &&
       // 2026-10-28 (Brain review r2) — the reshape goes to the brain beside his own words, which the
       // history and the style learner keep (a shaped "keep it brief" had made him brief for good).
-      /await processTranscriptOverride\(brainBase, brainTranscript\)/.test(vc),
+      // 2026-10-31 (CAD-VOICE-1) — and the third argument is the utterance's mic hold, handed to processTurn.
+      /await processTranscriptOverride\(brainBase, brainTranscript(?:, [^)]*)?\)/.test(vc),
     'these rewrite what the brain is ASKED rather than short-circuiting, so applying them only in sendToBrain meant an unshaped first turn — a refusal instead of the playful attempt, and plain-speak silently ignored',
   );
   check(

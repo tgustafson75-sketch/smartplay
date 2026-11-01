@@ -197,7 +197,7 @@ describe("VC-R2-3 — a face tap means what the badge's tap means", () => {
 
   it('is the rule handleMicPress runs', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../hooks/useVoiceCaddie.ts'), 'utf8');
-    expect(src).toMatch(/const sessionRoute = avatarTapRoute\(getSessionState\(\), isSessionInFlight\(\)\);\s*if \(sessionRoute === 'session'\) \{\s*try \{ void toggleListeningSession\(\);/);
+    expect(src).toMatch(/const sessionRoute = avatarTapRoute\(getSessionState\(\), isSessionInFlight\(\), isHeldTurnInFlight\(\)\);\s*if \(sessionRoute === 'session'\) \{\s*try \{ void toggleListeningSession\(\);/);
     expect(src).toMatch(/if \(sessionRoute === 'force_close'\) \{\s*try \{ forceCloseSession\(\);/);
   });
 });

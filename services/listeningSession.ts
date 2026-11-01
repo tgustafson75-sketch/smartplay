@@ -2267,6 +2267,14 @@ export function isOtherHeldTurnAnswering(): boolean {
 }
 
 /**
+ * 2026-10-31 (caddie-voice CAD-VOICE-3) — any held turn (typed, watch, or a tab turn) is still answering.
+ * The face's tap route reads it so a tap during such a turn reaches toggle(), which drops or shushes it.
+ */
+export function isHeldTurnInFlight(): boolean {
+  return typedTurnsInFlight > 0;
+}
+
+/**
  * 2026-05-22 — Hands-Free path: classify + route a pre-transcribed
  * utterance WITHOUT opening the phone's listening session (no mic
  * recording, no opener, no filler — just classify → handler → speak).

@@ -38,6 +38,7 @@ import {
   getSessionState,
   toggle as toggleListeningSession,
   avatarTapRoute,
+  isHeldTurnInFlight,
 } from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
 import { carriesYardageCorrection } from '../services/intents/stateYardageHandler';
@@ -74,6 +75,7 @@ import { tabBypassKind } from '../services/tabVoiceBypass';
 import { tabPreRoundShortcut } from '../services/tabPreRoundShortcut';
 import { createMeterTracker } from '../services/micStanddown';
 import { createEndpointer } from '../services/voice/endpointer';
+import { beginHeldTurn, type HeldTurn } from '../services/listeningSession';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -313,6 +315,26 @@ let micBlockedPromptShown = false;
 
 // ─── HOOK ─────────────────────────────────
 
+/**
+ * 2026-10-31 (caddie-voice CAD-VOICE-1) — A SUBMITTED TAB UTTERANCE HOLDS THE SHARED MIC SIGNAL.
+ *
+ * The badge, the bottom bar and toggle() read the shared listening store and its held-turn count, not this
+ * hook's voiceState. Until the reply reached useCaddieTabMic.processTurn, a submitted utterance (silence
+ * auto-stop, tap, or the mic handover) showed the mic as idle for its whole transcribe and pre-brain wait, so
+ * a badge or earbud tap opened a second turn over the first. This hold is taken where the utterance is
+ * submitted and handed to processTurn, which then owns it. Anything that leaves the turn earlier releases it
+ * through the state setter below, and the finally of processAudioUri is the last word.
+ */
+function takeTurnHold(ref: { current: HeldTurn | null }): HeldTurn {
+  if (!ref.current) ref.current = beginHeldTurn();
+  return ref.current;
+}
+function dropTurnHold(ref: { current: HeldTurn | null }): void {
+  const held = ref.current;
+  ref.current = null;
+  held?.end();
+}
+
 interface UseVoiceCaddieOptions {
   onVoiceStateChange: (state: VoiceState) => void;
   onResponseReceived: (text: string) => void;
@@ -328,7 +350,7 @@ interface UseVoiceCaddieOptions {
   // When set, bypasses the intent router + Kevin API entirely.
   // Called with the raw transcript; caller owns TTS and tool dispatch.
   // Always supplied by the sole mount (app/(tabs)/caddie.tsx); there is no second processor.
-  processTranscriptOverride?: (transcript: string, brainMessage?: string) => Promise<void>;
+  processTranscriptOverride?: (transcript: string, brainMessage?: string, hold?: HeldTurn) => Promise<void>;
 }
 
 /**
@@ -396,6 +418,9 @@ export const useVoiceCaddie = ({
     return () => { leaveMicCheck(); leaveMicRelease(); leaveUtteranceEndpoint(); };
   }, []);
   const isProcessingRef = useRef(false);
+  // The submitted utterance's hold on the shared mic signal (see takeTurnHold). Taken at submit, handed to
+  // processTurn at the brain hand-off, released by the state setter's listen/idle and by processAudioUri's finally.
+  const micTurnHoldRef = useRef<HeldTurn | null>(null);
   /**
    * 2026-08-10 (Tim — "preventing and clearing things such as voice races or bumps in the voice
    * logic… so that if you hit a bump we can logically clear it").
@@ -438,6 +463,11 @@ export const useVoiceCaddie = ({
   const { setIsThinking } = useKevinPresence();
   const wrappedOnVoiceStateChange = useCallback((state: VoiceState) => {
     setIsThinking(state === 'thinking');
+    // CAD-VOICE-1 — the submitted utterance's hold follows the turn it is part of. A reply spoken before the
+    // brain (a local answer, a notice) reads as answering, so a tap shushes it; a listen hand-off (a follow-up
+    // capture) and every idle exit give the mic back. The brain hand-off gives the hold to processTurn instead.
+    if (state === 'speaking') micTurnHoldRef.current?.speaking();
+    else if (state === 'idle' || state === 'listening') dropTurnHold(micTurnHoldRef);
     onVoiceStateChange(state);
   }, [setIsThinking, onVoiceStateChange]);
 
@@ -1054,6 +1084,8 @@ export const useVoiceCaddie = ({
       }
     }
     const source = opts?.source ?? 'manual';
+    // CAD-VOICE-1 — the utterance is submitted: it holds the mic signal from here until the brain or the end.
+    takeTurnHold(micTurnHoldRef);
     // 2026-09-28 — a turn is about to hit the network: THIS is where warmups hand back their
     // connection slots. It also covers the VAD auto-listen, which never goes through handleMicPress.
     noteUserTurn();
@@ -2094,10 +2126,13 @@ export const useVoiceCaddie = ({
         // (the "asks but doesn't listen" regression), and do NOT force 'idle' after
         // — processTurn sets the final state.
         isProcessingRef.current = false;
+        // The hold travels with the turn: processTurn ends it when the reply is done (or queued).
+        const brainHold = micTurnHoldRef.current;
+        micTurnHoldRef.current = null;
         try {
           // The player's words AND what the brain is asked: the reshape is for the model only, so the
           // history, the logs and the style learner keep what he said (2026-10-28, Brain review r2).
-          await processTranscriptOverride(brainBase, brainTranscript);
+          await processTranscriptOverride(brainBase, brainTranscript, brainHold ?? undefined);
         } catch (e) {
           console.log('[voice] pipecat override error:', e);
           wrappedOnVoiceStateChange('idle');
@@ -2159,6 +2194,7 @@ export const useVoiceCaddie = ({
     } finally {
       isProcessingRef.current = false;
       processingSinceRef.current = 0;
+      dropTurnHold(micTurnHoldRef);
     }
   }, [language, voiceEnabled, voiceGender, currentYardage, currentHole, club, isRoundActive, roundMode, courseHoles, currentPar]);
 
@@ -2188,6 +2224,8 @@ export const useVoiceCaddie = ({
     clearAutoStop();
     recordingRef.current = null;
     micHasSpokenRef.current = false;
+    // CAD-VOICE-1 — speech that is about to be submitted holds the mic signal through the unload below.
+    if (heardSpeech) takeTurnHold(micTurnHoldRef);
 
     let uri: string | null = null;
     try {
@@ -2205,6 +2243,7 @@ export const useVoiceCaddie = ({
       return 'submitted';
     }
 
+    dropTurnHold(micTurnHoldRef);
     isProcessingRef.current = false;
     wrappedOnVoiceStateChange('idle');
     return 'discarded';
@@ -2290,7 +2329,9 @@ export const useVoiceCaddie = ({
      * the badge's own tap means "I'm ready". toggle() now owns every state of its session; only a hung
      * one (in flight, state back at idle) is force-closed here. See avatarTapRoute.
      */
-    const sessionRoute = avatarTapRoute(getSessionState(), isSessionInFlight());
+    // 2026-10-31 (CAD-VOICE-3) — a typed, watch or tab turn still answering is a session too: toggle() shushes or
+    // swallows the tap, so the face never opens a recorder over a reply that is still coming back.
+    const sessionRoute = avatarTapRoute(getSessionState(), isSessionInFlight(), isHeldTurnInFlight());
     if (sessionRoute === 'session') {
       try { void toggleListeningSession(); } catch { /* toggle guards itself */ }
       return;
@@ -2407,6 +2448,8 @@ export const useVoiceCaddie = ({
      */
     if (recordingRef.current) {
       clearAutoStop();
+      // CAD-VOICE-1 — the stop submits the utterance, and the recorder is already gone from recordingRef.
+      takeTurnHold(micTurnHoldRef);
       // Set when this stop turns out to be a false one; we then fall through to START a real capture.
       let restartFresh = false;
       // Flip state to 'thinking' IMMEDIATELY so the badge's listening
@@ -2525,6 +2568,7 @@ export const useVoiceCaddie = ({
         recordingRef.current = null;
         // 2026-08-12 — and the tap that found the dead recording must still DO something. Going
         // idle here is why the first tap "did nothing" and the second one worked.
+        dropTurnHold(micTurnHoldRef);
         restartFresh = true;
       }
       if (!restartFresh) return;
@@ -2705,6 +2749,8 @@ export const useVoiceCaddie = ({
         const rec = recordingRef.current;
         if (!rec) return;
         recordingRef.current = null;
+        // CAD-VOICE-1 — the auto-stop submits the utterance; hold the mic signal through the stop.
+        takeTurnHold(micTurnHoldRef);
         wrappedOnVoiceStateChange('thinking');
         let uri: string | null = null;
         try {
