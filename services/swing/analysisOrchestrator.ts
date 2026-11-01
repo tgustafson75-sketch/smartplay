@@ -101,6 +101,43 @@ export async function pickSwingBurst(
   return null;
 }
 
+/** How many motion bursts to confirm in one upload: a long clip has a handful of swings, not dozens. */
+export const MAX_SWING_CANDIDATES = 12;
+
+/**
+ * Every swing in a clip, not the first one (Tim 11-01: "upload a long swing and it finds the shots"). The same
+ * motion-then-pose confirmation as pickSwingBurst, run on each burst: strongest first, a burst that overlaps a swing
+ * already found is the same swing and is skipped, and the answer comes back in time order. Stops at the budget and
+ * returns what it has confirmed so far, never nothing when some swings were already seen.
+ */
+export async function pickAllSwingBursts(
+  clipUri: string,
+  bursts: { startMs: number; endMs: number; peakMs: number; peak: number }[],
+  read: PoseReader = readHandsHigh,
+  budgetMs = PICK_BUDGET_MS,
+  clock: () => number = Date.now,
+): Promise<{ startMs: number; endMs: number; peakMs: number }[]> {
+  const ranked = [...bursts].sort((a, b) => b.peak - a.peak).slice(0, MAX_SWING_CANDIDATES);
+  const deadline = clock() + budgetMs;
+  const found: { startMs: number; endMs: number; peakMs: number }[] = [];
+  const inTime = () => found.sort((a, b) => a.peakMs - b.peakMs);
+  for (const b of ranked) {
+    if (found.some((f) => b.startMs < f.endMs && b.endMs > f.startMs)) continue;
+    let hit = false;
+    for (const t of [b.peakMs - 350, b.peakMs, b.peakMs + 350]) {
+      if (clock() > deadline) return inTime();
+      const left = Math.max(1, deadline - clock());
+      const r = await Promise.race([read(clipUri, t), new Promise<null>((res) => setTimeout(() => res(null), left))]);
+      if (r?.handsHigh) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) found.push({ startMs: b.startMs, endMs: b.endMs, peakMs: b.peakMs });
+  }
+  return inTime();
+}
+
 /**
  * 2026-10-04 (sweep) — every answer inside the clip and the right way round. A duration that
  * under-reports (an upload's metadata) could put a motion window's start past its clamped end.
