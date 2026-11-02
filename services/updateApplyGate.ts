@@ -13,25 +13,15 @@
 export const AUTO_APPLY_WINDOW_MS = 20_000;
 
 /**
- * 2026-10-13 (Sentry SMARTPLAY-CADDIE-MOBILE-J8) — iOS NEVER RELOADS ITS JS.
+ * 2026-11-01 — the reload is safe on every platform, because the runtime pins it.
  *
- * On iOS, `Updates.reloadAsync()` runs expo-modules-core's SharedObjectRegistry.clear(), which in SDK 54
- * (3.0.30) releases JS weak objects on a dispatch-queue thread: EXC_BAD_ACCESS in
- * -[EXJavaScriptWeakObject .cxx_destruct]. It fired on an iPhone 13, 4s into a cold start, the moment
- * the auto-apply reloaded into a fresh OTA. Every iOS binary in the field and in review has it.
- * (Branch native/expo-modules-core-reload-fix backports the upstream fix, expo/expo#43937, for the next
- * native build. JS cannot tell which binary it is running in, so iOS stays off.)
- *
- * Nothing is lost but timing: a downloaded update still applies — expo-updates launches it on the next
- * cold start by itself. One launch later, instead of a crash now.
+ * On iOS, `Updates.reloadAsync()` ran expo-modules-core's SharedObjectRegistry.clear() on a dispatch queue,
+ * which crashed on reload (Sentry J8, 2026-10-13). The 1.0.4 binary carries the lock backport
+ * (patches/expo-modules-core+3.0.30.patch), and runtimeVersion is "1.0.4", so only 1.0.4+ binaries
+ * receive this JS. JS therefore never reloads into a binary that still has the crash.
  */
 export function reloadIsSafe(): boolean {
-  try {
-    const { Platform } = require('react-native') as typeof import('react-native');
-    return Platform.OS !== 'ios';
-  } catch {
-    return false;
-  }
+  return true;
 }
 
 export interface AutoApplyInputs {

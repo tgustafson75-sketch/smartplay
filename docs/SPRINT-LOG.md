@@ -5491,3 +5491,21 @@ not seed a coarse/cached fix · SmartVision shows the resolver's number when GPS
 - S2j: REVERTED the practice-swing drop rule (could delete real swings) and the arc jump filter (could delete impact).
 **Gates:** tsc, lint, jest, sim 1077/1077 at 4502f930.
 **Open:** hybrid clip's swing at 27.5s missed by the range locator (deterministic; a half-step second pass catches it but adds a practice swing; Tim to decide). Practice swings → demote, never delete (needs clips with audio). Ship on Tim's go.
+
+## Day 146 — 2026-11-01 — 1.0.4 native bundle (one build; no native until 2.0)
+### Shipped (committed on swing-review-2026-10-10, NOT pushed to main)
+- iOS registry lock backport: `patches/expo-modules-core+3.0.30.patch` rewritten to the one file (was 56k lines of Android build output). Guard `an-ios-reload-never-crashes-the-app.native.test.ts` break-tested.
+- runtimeVersion `1.0.2` → `1.0.4`; iOS reload gate reverted (`updateApplyGate.reloadIsSafe` always true). Premise pinned by a test; baseline marked `pendingRuntimeVersion` until 1.0.4 is live.
+- Apple Watch: yardage/state via `updateApplicationContext`; unit + estimate/live flags. Audio session held while a round is live (earbud tap, phone locked).
+- Wear OS: unit + estimate/live flags; versionCode 1033; `npm run wear:build` → release AAB.
+- Android: mic foreground service (round-scoped); expo-av VOICE_RECOGNITION patch (wind).
+- Removed `pickAllSwingBursts` + its test: a second multi-swing owner, duplicating the video swing locator (`segmentsFromVideoSwings`). Sim is green (1065/0).
+### Verified
+- tsc, sim, jest 842/842 suites (8514 tests), lint clean on touched files. iOS prebuild (scratch copy): watch embed phase present, watch version 1.0.4/34 matches app.
+### Not verified on device
+- Watch flags on a real watch; locked-phone earbud tap; mic FGS surviving lock; Android 14+ start restrictions.
+### Open / for Tim
+- Play Console: foreground-service declaration (microphone); background location + Health Connect forms (NATIVE-BUILD-PACKET).
+- Run the EAS production builds yourself (iOS 34, Android 33). Then `npm run ota:baseline` — OTAs are refused until then (by design).
+- 1.0.3 installs stop receiving OTAs until they update to 1.0.4.
+- Kokoro offline voice deferred to 2.0.

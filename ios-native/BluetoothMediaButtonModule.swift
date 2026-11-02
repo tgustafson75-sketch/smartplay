@@ -56,6 +56,7 @@ class BluetoothMediaButton: RCTEventEmitter {
     private var isActive = false
     private var hasListeners = false
     private var routeWatching = false
+    private var audioHeld = false
 
     override static func requiresMainQueueSetup() -> Bool { return true }
 
@@ -160,6 +161,65 @@ class BluetoothMediaButton: RCTEventEmitter {
     func getStatus(_ resolve: @escaping RCTPromiseResolveBlock,
                    rejecter reject: @escaping RCTPromiseRejectBlock) {
         resolve(["active": self.isActive, "sessionTag": self.isActive ? "SmartPlayBTButton" : ""])
+    }
+
+    /**
+     * 2026-11-01 — KEEP A RECORDING SESSION ALIVE WHILE A ROUND IS LIVE.
+     *
+     * An earbud tap with the phone LOCKED can only record if the shared AVAudioSession is already
+     * in a play-and-record category. Nothing held it between tap and listen, so iOS released it on
+     * lock and the tap landed on an inactive session. expo-av also writes this session, so the
+     * category here is the one that survives its later reconfiguration: playAndRecord with Bluetooth
+     * input allowed and mixWithOthers so the player's music is not interrupted.
+     *
+     * Idempotent. JS calls it on round start and releases it on round end. Not verified on hardware
+     * yet: the lock-screen tap has to be tried on an iPhone with earbuds before this is trusted.
+     */
+    @objc(holdAudioSession:rejecter:)
+    func holdAudioSession(_ resolve: @escaping RCTPromiseResolveBlock,
+                          rejecter reject: @escaping RCTPromiseRejectBlock) {
+        DispatchQueue.main.async {
+            if self.audioHeld {
+                resolve(true)
+                return
+            }
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(
+                    .playAndRecord,
+                    mode: .default,
+                    options: [.allowBluetoothHFP, .mixWithOthers, .defaultToSpeaker]
+                )
+                try session.setActive(true, options: [])
+                self.audioHeld = true
+                resolve(true)
+            } catch {
+                NSLog("[BTMediaButton] holdAudioSession failed: \(error)")
+                reject("BT_AUDIO_HOLD_FAILED",
+                       "holdAudioSession failed: \(error.localizedDescription)",
+                       error)
+            }
+        }
+    }
+
+    /// Release the hold taken by holdAudioSession. Idempotent; never tears down a session it did not hold.
+    @objc(releaseAudioSession:rejecter:)
+    func releaseAudioSession(_ resolve: @escaping RCTPromiseResolveBlock,
+                             rejecter reject: @escaping RCTPromiseRejectBlock) {
+        DispatchQueue.main.async {
+            guard self.audioHeld else {
+                resolve(false)
+                return
+            }
+            self.audioHeld = false
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            } catch {
+                // Non-fatal, same as deactivate(): another audio owner may already have it.
+                NSLog("[BTMediaButton] releaseAudioSession note: \(error)")
+            }
+            resolve(true)
+        }
     }
 
     /**

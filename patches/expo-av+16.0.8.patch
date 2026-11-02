@@ -1,0 +1,13 @@
+diff --git a/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java b/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
+index 964af5d..d5ad34c 100644
+--- a/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
++++ b/node_modules/expo-av/android/src/main/java/expo/modules/av/AVManager.java
+@@ -708,7 +708,7 @@ public class AVManager implements LifecycleEventListener, AudioManager.OnAudioFo
+     }
+ 
+     mAudioRecorder = new MediaRecorder();
+-    mAudioRecorder.setAudioSource(MediaRecorder.AudioSource.DEFAULT);
++    mAudioRecorder.setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION);
+ 
+     mAudioRecorder.setOutputFormat(androidOptions.getInt(RECORDING_OPTION_OUTPUT_FORMAT_KEY));
+     mAudioRecorder.setAudioEncoder(androidOptions.getInt(RECORDING_OPTION_AUDIO_ENCODER_KEY));

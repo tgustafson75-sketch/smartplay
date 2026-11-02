@@ -2,7 +2,7 @@
   "expo": {
     "name": "SmartPlay Caddie",
     "slug": "smartplay-caddie",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "default",
     "icon": "./assets/images/icon-1024-appstore.png",
     "scheme": "smartplay",
@@ -26,7 +26,7 @@
         "NSMotionUsageDescription": "SmartPlay Caddie reads your phone's motion sensors to measure your swing tempo and to steady SmartFinder's aim when you point the phone at a target.",
         "NSLocationAlwaysUsageDescription": "SmartPlay Caddie tracks your round in the background so hole transitions, shot tracking, and yardages keep working when your phone is in your pocket."
       },
-      "buildNumber": "33",
+      "buildNumber": "34",
       "appleTeamId": "B6KTPCWF7A"
     },
     "android": {
@@ -51,7 +51,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "versionCode": 32,
+      "versionCode": 33,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -137,6 +137,7 @@
       "./plugins/withMediaPipePose.js",
       "./plugins/withBluetoothMediaButton.js",
       "./plugins/withWearSwingBridge.js",
+      "./plugins/withMicCaptureService.js",
       "./plugins/withWatchSwingBridgeIOS.js",
       [
         "@bacons/apple-targets",
@@ -175,7 +176,7 @@
       }
     },
     "owner": "tgustafson76",
-    "runtimeVersion": "1.0.2",
+    "runtimeVersion": "1.0.4",
     "updates": {
       "url": "https://u.expo.dev/60b7ee0e-0165-4971-a9c8-219960fed645",
       "fallbackToCacheTimeout": 0

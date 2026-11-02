@@ -42,6 +42,9 @@ import android.os.Build
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.style.RelativeSizeSpan
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -512,7 +515,20 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
                 val front = if (json.isNull("front")) null else json.optInt("front")
                 val back = if (json.isNull("back")) null else json.optInt("back")
                 val hole = if (json.isNull("hole")) null else json.optInt("hole")
-                yardageBig.text = mid?.toString() ?: "—"
+                val unit = json.optString("unit", "yd")
+                // Flags from the phone (watchCaddieBridge): `estimate` = a tee/club estimate, not a
+                // measured read; `live` = measured right now. A stale read dims exactly like an
+                // estimate, so the hero never looks current when it is not. Absent keys (an older
+                // phone build) read as live, which is what they always meant.
+                val estimate = json.optBoolean("estimate", false)
+                val live = json.optBoolean("live", true)
+                val hero = if (mid == null) "—" else "${if (estimate) "~" else ""}$mid $unit"
+                yardageBig.text = SpannableString(hero).apply {
+                    if (mid != null) {
+                        setSpan(RelativeSizeSpan(0.45f), hero.length - unit.length, hero.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+                yardageBig.alpha = if (mid != null && (estimate || !live)) 0.45f else 1f
                 holeLabel.text = if (hole != null) "HOLE $hole" else "TO THE GREEN"
                 frontTv.text = if (front != null) "F $front" else ""
                 backTv.text = if (back != null) "B $back" else ""
@@ -540,6 +556,7 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
                     exitFeedbackMode() // round resumed → yardage view
                 } else {
                     yardageBig.text = "—"
+                    yardageBig.alpha = 1f
                     holeLabel.text = "—"
                     frontTv.text = ""
                     backTv.text = ""
