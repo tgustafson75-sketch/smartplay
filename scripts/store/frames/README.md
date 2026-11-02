@@ -18,3 +18,9 @@ Captions live in `CAPTIONS` in `render.py`. Requires Google Chrome and Pillow.
 - `apple-search-3840x2560.png` (3:2, Search Results) — from `search.html` at 1920×1280, scale 2.
 Both submitted to Asset Library review on 2026-11-01. Once approved, select them in the version's
 "Header and Search Results" section.
+
+## v2 (2026-11-01, evening): replaces the morning header and search assets
+- `apple-header-v2-3840x1646.png` from `header-v2.html` (Kevin on course, "Your intelligent golf partner.", spoken club call, veteran badge).
+- `apple-search-v2-3840x2560.png` from `search-v2.html` (two real app screens; the v1 search image was upscaled from a 556px crop).
+Render both at 1920×823 / 1920×1280 with device scale 2, then save as RGB (no alpha). Shots are copied from the smartplaycaddie.com site repo.
+To be placed on iOS 1.0.4 → Header and Search Results.
