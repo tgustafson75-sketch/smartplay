@@ -542,12 +542,15 @@ function AppNavigator() {
         // 2026-07-06 — same watch, second half: pin-yardage push + watch-mic → caddie.
         const c = await import('../services/watchCaddieBridge');
         if (active && c.isWatchCaddieBridgeAvailable()) await c.initWatchCaddieBridge();
+        // 2026-11-01 — the Android mic foreground service follows the round (services/micCaptureService).
+        if (active) (await import('../services/micCaptureService')).startMicCaptureOnRound();
       } catch { /* non-fatal — bridge absent on this build */ }
     })();
     return () => {
       active = false;
       void import('../services/watchSwingBridge').then(m => m.stopWatchSwingBridge()).catch(() => {});
       void import('../services/watchCaddieBridge').then(m => m.stopWatchCaddieBridge()).catch(() => {});
+      void import('../services/micCaptureService').then(m => m.stopMicCaptureOnRound()).catch(() => {});
     };
   }, [settingsHydratedForBoot]);
 

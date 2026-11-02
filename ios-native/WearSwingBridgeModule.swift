@@ -17,9 +17,11 @@
  * lets the watch apps stay near-identical and the JS stay ignorant of which one is attached.
  *
  * REACHABILITY. WCSession.isReachable is only true when the watch app is foregrounded, so
- * sendToWatch falls back to transferUserInfo (queued, delivered when the app wakes). Live yardage
- * is useless late, so yardage uses sendMessage when reachable and simply drops otherwise — the
- * next 18s refresh supersedes it anyway. Notifications and prompts queue.
+ * sendToWatch falls back when it is not. Yardage and round state are LATEST-WINS: they go through
+ * updateApplicationContext, a single slot the watch reads on wake, so a watch that wakes after a
+ * hole change sees the current number and never a queue of old ones. (2026-11-01 — this used to be
+ * transferUserInfo, which queued every yardage push and replayed the stale ones on wake.)
+ * Notifications and spoken prompts still queue with transferUserInfo, because each one matters.
  */
 
 import Foundation
@@ -95,14 +97,29 @@ class WearSwingBridgeModule: RCTEventEmitter {
       s.sendMessage(msg, replyHandler: nil, errorHandler: { _ in /* best-effort, same as Android */ })
       resolve(true)
     } else if path == "/smartplay/caddie" {
-      // Queue anything that still matters when the watch wakes. Live yardage is superseded by the
-      // next refresh, so a queued stale number would be worse than nothing — but the payload's own
-      // `kind` decides that on the watch, which keeps this rule in ONE place (the watch app).
-      s.transferUserInfo(msg)
+      // The payload's own `kind` decides how it waits. Yardage and state replace each other, so
+      // only the newest one is kept; everything else is a discrete event and queues in order.
+      if Self.isLatestWins(data) {
+        do {
+          try s.updateApplicationContext(["caddie": msg])
+        } catch {
+          // Non-fatal: the next refresh (18s tick or hole change) replaces it anyway.
+          NSLog("[WearSwingBridge] updateApplicationContext failed: \(error)")
+        }
+      } else {
+        s.transferUserInfo(msg)
+      }
       resolve(true)
     } else {
       resolve(false)
     }
+  }
+
+  /// Yardage and round state describe the moment they were sent, so only the newest one matters.
+  private static func isLatestWins(_ data: String) -> Bool {
+    guard let obj = (try? JSONSerialization.jsonObject(with: Data(data.utf8))) as? [String: Any],
+          let kind = obj["kind"] as? String else { return false }
+    return kind == "yardage" || kind == "state"
   }
 
   /**

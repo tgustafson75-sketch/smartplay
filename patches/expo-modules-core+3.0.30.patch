@@ -1,0 +1,128 @@
+diff --git a/node_modules/expo-modules-core/ios/Core/SharedObjects/SharedObjectRegistry.swift b/node_modules/expo-modules-core/ios/Core/SharedObjects/SharedObjectRegistry.swift
+index ac04246..49c519a 100644
+--- a/node_modules/expo-modules-core/ios/Core/SharedObjects/SharedObjectRegistry.swift
++++ b/node_modules/expo-modules-core/ios/Core/SharedObjects/SharedObjectRegistry.swift
+@@ -1,5 +1,7 @@
+ // Copyright 2022-present 650 Industries. All rights reserved.
+ 
++import Foundation
++
+ /**
+  Type of the IDs of shared objects.
+  */
+@@ -37,15 +39,25 @@ public final class SharedObjectRegistry {
+   internal var pairs = [SharedObjectId: SharedObjectPair]()
+ 
+   /**
+-   The lock queue to keep thread safety for internal data structures.
++   Guards the internal data structures. A lock rather than a dispatch queue: `clear()` releases JS weak
++   objects, and on a queue that release ran off the JS thread and crashed on iOS during reload.
+    */
+-  private static let lockQueue = DispatchQueue(label: "expo.modules.core.SharedObjectRegistry")
++  private let lock = NSLock()
++
++  /**
++   Runs the body while holding the lock. Callers must not nest, since NSLock is not recursive.
++   */
++  private func locked<T>(_ body: () -> T) -> T {
++    lock.lock()
++    defer { lock.unlock() }
++    return body()
++  }
+ 
+   /**
+    A number of all pairs stored in the registry.
+    */
+   internal var size: Int {
+-    return Self.lockQueue.sync {
++    return locked {
+       return pairs.count
+     }
+   }
+@@ -69,7 +81,7 @@ public final class SharedObjectRegistry {
+    */
+   @discardableResult
+   internal func pullNextId() -> SharedObjectId {
+-    return Self.lockQueue.sync {
++    return locked {
+       let id = nextId
+       nextId += 1
+       return id
+@@ -80,7 +92,7 @@ public final class SharedObjectRegistry {
+    Returns a pair of shared objects with given ID or `nil` when there is no such pair in the registry.
+    */
+   internal func get(_ id: SharedObjectId) -> SharedObjectPair? {
+-    return Self.lockQueue.sync {
++    return locked {
+       return pairs[id]
+     }
+   }
+@@ -117,7 +129,7 @@ public final class SharedObjectRegistry {
+ 
+     // Save the pair in the dictionary.
+     let jsWeakObject = jsObject.createWeak()
+-    Self.lockQueue.async {
++    locked {
+       self.pairs[id] = (native: nativeObject, javaScript: jsWeakObject)
+     }
+ 
+@@ -126,19 +138,22 @@ public final class SharedObjectRegistry {
+ 
+   /**
+    Deletes the shared objects pair with a given ID.
++   The pair leaves the registry under the lock, but the release callbacks run outside it, so a callback
++   that reaches back into the registry cannot deadlock.
+    */
+   internal func delete(_ id: SharedObjectId) {
+-    Self.lockQueue.async {
+-      if let pair = self.pairs[id] {
+-        pair.native.sharedObjectWillRelease()
+-        // Reset an ID on the objects.
+-        pair.native.sharedObjectId = 0
+-
+-        // Delete the pair from the dictionary.
+-        self.pairs[id] = nil
+-        pair.native.sharedObjectDidRelease()
+-      }
++    let removed = locked { () -> SharedObjectPair? in
++      let pair = pairs[id]
++      pairs[id] = nil
++      return pair
++    }
++    guard let pair = removed else {
++      return
+     }
++    pair.native.sharedObjectWillRelease()
++    // Reset an ID on the objects.
++    pair.native.sharedObjectId = 0
++    pair.native.sharedObjectDidRelease()
+   }
+ 
+   /**
+@@ -146,7 +161,7 @@ public final class SharedObjectRegistry {
+    */
+   internal func toNativeObject(_ jsObject: JavaScriptObject) -> SharedObject? {
+     if let objectId = try? jsObject.getProperty(sharedObjectIdPropertyName).asInt() {
+-      return Self.lockQueue.sync {
++      return locked {
+         return pairs[objectId]?.native
+       }
+     }
+@@ -158,7 +173,7 @@ public final class SharedObjectRegistry {
+    */
+   internal func toJavaScriptObject(_ nativeObject: SharedObject) -> JavaScriptObject? {
+     let objectId = nativeObject.sharedObjectId
+-    return Self.lockQueue.sync {
++    return locked {
+       return pairs[objectId]?.javaScript.lock()
+     }
+   }
+@@ -184,7 +199,7 @@ public final class SharedObjectRegistry {
+   }
+ 
+   internal func clear() {
+-    Self.lockQueue.async {
++    locked {
+       self.pairs.removeAll()
+     }
+   }

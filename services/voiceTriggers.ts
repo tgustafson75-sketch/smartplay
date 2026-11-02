@@ -47,6 +47,7 @@ import { onBluetoothMediaEvent } from './bluetoothMediaEvents';
 import { notifyEarbudTap } from './earbudControl';
 import { devLog } from './devLog';
 import { shouldForwardTap, type TapDevice } from './tapCoalescer';
+import { useRoundStore } from '../store/roundStore';
 
 /**
  * 2026-10-28 (VOICE-ENG-1) — ONE PRESS, ONE TAP, ON THIS PATH TOO. iOS answers one button press with
@@ -115,10 +116,17 @@ export function initVoiceTriggers(): () => void {
   // feature turned off.
   void syncBluetoothMediaButtonState(btEnabled);
 
+  // 3. Round live → hold a recording audio session so a locked-phone earbud tap can record.
+  //    Mirrors the round's own isRoundActive; the native side is iOS-only, so Android no-ops.
+  const unsubRound = useRoundStore.subscribe((s) => syncAudioHoldToRound(!!s.isRoundActive));
+  subscriptions.push({ remove: unsubRound });
+  syncAudioHoldToRound(!!useRoundStore.getState().isRoundActive);
+
   devLog(`[voiceTriggers] inited (platform=${Platform.OS})`);
 
   activeTeardown = () => {
     subscriptions.forEach((s) => { try { s.remove(); } catch { /* ignore */ } });
+    releaseAudioHold();
     const m = getBTModule();
     if (m) {
       m.deactivate().catch(() => { /* ignore */ });
@@ -148,6 +156,34 @@ export async function syncBluetoothMediaButtonState(enabled: boolean): Promise<v
   } catch (e) {
     devLog('[voiceTriggers] BT module sync failed: ' + String(e));
   }
+}
+
+/**
+ * 2026-11-01 — HOLD THE AUDIO SESSION WHILE A ROUND IS LIVE.
+ *
+ * Without a live recording session iOS drops the shared AVAudioSession on lock, so an earbud tap
+ * with the phone locked has nothing to record into. The hold is taken on round start and released
+ * on round end. The native method only exists in builds from 1.0.4 on, so an older binary is
+ * guarded by the typeof check and simply keeps today's behaviour.
+ */
+let audioHeld = false;
+
+type AudioHoldModule = {
+  holdAudioSession?: () => Promise<boolean>;
+  releaseAudioSession?: () => Promise<boolean>;
+};
+
+export function syncAudioHoldToRound(roundActive: boolean): void {
+  if (roundActive === audioHeld) return;
+  const mod = NativeModules.BluetoothMediaButton as AudioHoldModule | undefined;
+  if (typeof mod?.holdAudioSession !== 'function' || typeof mod.releaseAudioSession !== 'function') return;
+  audioHeld = roundActive;
+  const call = roundActive ? mod.holdAudioSession() : mod.releaseAudioSession();
+  call.catch((e) => devLog(`[voiceTriggers] audio ${roundActive ? 'hold' : 'release'} failed: ${String(e)}`));
+}
+
+function releaseAudioHold(): void {
+  if (audioHeld) syncAudioHoldToRound(false);
 }
 
 /** Test helper — manual trigger from a debug button, etc. */

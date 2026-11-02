@@ -32,6 +32,12 @@ final class CaddieState: NSObject, ObservableObject, WCSessionDelegate {
   @Published var middle: Int? = nil
   @Published var front: Int? = nil
   @Published var back: Int? = nil
+  /// "yd" or "m", as the phone sends it. Shown beside the hero number so metres are never read as yards.
+  @Published var unit: String = "yd"
+  /// The number is measured right now. False with `estimate` false means it is the last read, dimmed.
+  @Published var live: Bool = true
+  /// The number is a tee or fallback estimate, not a measured distance. Shown with a marker.
+  @Published var estimate: Bool = false
   @Published var status: String = "Open a round on your phone"
   /// Set when the phone pushes a spoken prompt or notification; shown briefly in place of status.
   @Published var message: String? = nil
@@ -66,6 +72,12 @@ final class CaddieState: NSObject, ObservableObject, WCSessionDelegate {
 
   func session(_ session: WCSession, didReceiveMessage message: [String: Any]) { apply(message) }
   func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) { apply(userInfo) }
+  /// 2026-11-01 — the phone's latest yardage / round state waiting for this watch, delivered on wake.
+  /// Latest-wins, so this is at most one stale-free value, never a replay of old pushes.
+  func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+    guard let msg = applicationContext["caddie"] as? [String: Any] else { return }
+    apply(msg)
+  }
 
   private func apply(_ message: [String: Any]) {
     guard let raw = message["data"] as? String,
@@ -79,6 +91,11 @@ final class CaddieState: NSObject, ObservableObject, WCSessionDelegate {
         self.middle = obj["middle"] as? Int
         self.front = obj["front"] as? Int
         self.back = obj["back"] as? Int
+        // Flags from the phone (services/watchCaddieBridge). A watch on an old payload has none, so
+        // every default is the honest-but-unmarked reading: yards, live, measured.
+        self.unit = (obj["unit"] as? String) ?? "yd"
+        self.live = (obj["live"] as? Bool) ?? true
+        self.estimate = (obj["estimate"] as? Bool) ?? false
         self.status = ""
       case "notification", "voice_prompt":
         self.message = obj["text"] as? String
@@ -96,6 +113,7 @@ final class CaddieState: NSObject, ObservableObject, WCSessionDelegate {
         let roundActive = (obj["round_active"] as? Bool) ?? (obj["active"] as? Bool)
         if roundActive == false {
           self.hole = nil; self.middle = nil; self.front = nil; self.back = nil
+          self.live = true; self.estimate = false
           self.status = "No round in play"
         }
       default:
@@ -122,11 +140,20 @@ struct CaddieFace: View {
         .foregroundColor(.gray)
 
       // The hero number. A dash when the phone has not sent a fix — never a stale yardage.
-      Text(state.middle.map(String.init) ?? "—")
-        .font(.system(size: 46, weight: .bold, design: .rounded))
-        .foregroundColor(.white)
-        .minimumScaleFactor(0.6)
-        .lineLimit(1)
+      // Estimates and last-known reads stay visible but are marked: "~" for an estimate, a dimmed
+      // number for a read that is no longer live. Unit sits beside it so metres are never read as yards.
+      HStack(alignment: .firstTextBaseline, spacing: 2) {
+        Text(state.middle.map(String.init) ?? "—")
+          .font(.system(size: 46, weight: .bold, design: .rounded))
+          .foregroundColor(state.live || state.estimate ? .white : .gray)
+          .minimumScaleFactor(0.6)
+          .lineLimit(1)
+        if state.middle != nil {
+          Text(state.estimate ? "~\(state.unit)" : state.unit)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(state.estimate ? neon : .gray)
+        }
+      }
 
       HStack(spacing: 14) {
         Text(state.front.map { "F \($0)" } ?? "F —").foregroundColor(.gray)

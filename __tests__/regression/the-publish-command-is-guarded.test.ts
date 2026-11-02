@@ -92,7 +92,7 @@ describe('the preflight watches the whole native surface', () => {
 
 describe('the recorded baseline is real and current', () => {
   const baseline = JSON.parse(read('.ota-native-baseline.json')) as {
-    runtimeVersion: string; hash: string; fileCount: number;
+    runtimeVersion: string; pendingRuntimeVersion?: string; hash: string; fileCount: number;
   };
 
   it('exists, or the preflight refuses every publish until someone records one', () => {
@@ -102,6 +102,13 @@ describe('the recorded baseline is real and current', () => {
 
   it('names the runtimeVersion it belongs to — the comparison is meaningless without it', () => {
     const app = JSON.parse(read('app.json')) as { expo: { runtimeVersion: unknown } };
-    expect(baseline.runtimeVersion).toBe(app.expo.runtimeVersion);
+    // A moved runtime is honest only while it is declared pending: the baseline still describes the
+    // shell in the stores, so the preflight refuses OTAs until the store build is live and re-recorded.
+    if (baseline.pendingRuntimeVersion !== undefined) {
+      expect(app.expo.runtimeVersion).toBe(baseline.pendingRuntimeVersion);
+      expect(baseline.runtimeVersion).not.toBe(baseline.pendingRuntimeVersion);
+    } else {
+      expect(baseline.runtimeVersion).toBe(app.expo.runtimeVersion);
+    }
   });
 });

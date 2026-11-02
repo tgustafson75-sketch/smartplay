@@ -118,8 +118,8 @@ export function UpdateAvailableBanner() {
   // keep the manual banner down — it would flash and then vanish under the reload overlay.
   const autoStillPossible = !autoAppliedRef.current && msSinceUserTurn() === null
     && Date.now() - mountedAtRef.current < AUTO_APPLY_WINDOW_MS;
-  // An iOS binary whose reload crashes (updateApplyGate.reloadIsSafe) never offers one: the update
-  // applies by itself on the next launch.
+  // reloadIsSafe() is the one place that decides reloads; the runtimeVersion pin keeps it true only for
+  // binaries that carry the iOS registry fix (updateApplyGate.ts).
   const visible = status?.ready === true && !dismissed && !inRound && !voiceActive
     && (!autoAppliedRef.current || autoCancelled) && !autoStillPossible && reloadIsSafe();
 

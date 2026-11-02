@@ -46,9 +46,12 @@ const appJson = JSON.parse(
 ) as { expo: { runtimeVersion: unknown; updates?: Record<string, unknown> } };
 
 describe('runtimeVersion is a literal, not a policy', () => {
-  it('is the string "1.0.2" — the value the 1.0.2 store binaries carry', () => {
+  // 2026-11-01 (Tim: "go with your recommendations") — MOVED DELIBERATELY, AS A STORE RELEASE. 1.0.4
+  // carries the iOS SharedObjectRegistry lock; OTAs now reach 1.0.4 binaries only, and 1.0.3 installs
+  // update from the store to receive them again. The reload gate in updateApplyGate depends on this pin.
+  it('is the string "1.0.4" — the value the 1.0.4 store binaries carry', () => {
     expect(typeof appJson.expo.runtimeVersion).toBe('string');
-    expect(appJson.expo.runtimeVersion).toBe('1.0.2');
+    expect(appJson.expo.runtimeVersion).toBe('1.0.4');
   });
 
   it('is NOT a policy object — a fingerprint policy silently reaches zero users', () => {

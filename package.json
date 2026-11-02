@@ -1,7 +1,7 @@
 {
   "name": "smartplaycaddie",
   "main": "index.js",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "scripts": {
     "postinstall": "patch-package --error-on-fail",
     "start": "expo start",
@@ -25,6 +25,7 @@
     "ios:ship": "node scripts/ota-owner-guard.mjs && eas build --profile production --platform ios --auto-submit-with-profile production",
     "course:check": "node scripts/course-integrity.mjs",
     "ota:baseline": "node scripts/ota-preflight.mjs --write",
+    "wear:build": "node scripts/wear-build.mjs",
     "ota:preview": "node scripts/ota-preflight.mjs && eas update --branch preview",
     "ota:production": "node scripts/ota-preflight.mjs && node scripts/ota-owner-guard.mjs && eas update --branch production",
     "postota:production": "node scripts/ota-sourcemaps.mjs",
