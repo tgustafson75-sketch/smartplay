@@ -41,36 +41,43 @@ export function readCallerId(req: VercelRequest): string | null {
   return v ? v : null;
 }
 
-async function askRevenueCat(appUserId: string): Promise<CallerVerdict> {
+/** A verdict plus, for 'unverified' only, why RevenueCat could not answer — logged, never acted on. */
+type Verdict = { verdict: CallerVerdict; reason?: string };
+
+async function askRevenueCat(appUserId: string): Promise<Verdict> {
   const key = process.env.REVENUECAT_SECRET_KEY;
-  if (!key) return 'unverified';
+  if (!key) return { verdict: 'unverified', reason: 'no_key' };
   try {
     const res = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(appUserId)}`, {
       headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(RC_TIMEOUT_MS),
     });
-    if (!res.ok) return res.status === 404 ? 'no_entitlement' : 'unverified';
+    if (!res.ok) return res.status === 404 ? { verdict: 'no_entitlement' } : { verdict: 'unverified', reason: `rc_status=${res.status}` };
     const body = (await res.json()) as { subscriber?: { entitlements?: Record<string, { expires_date?: string | null }> } };
     const ent = body.subscriber?.entitlements?.[PRO_ENTITLEMENT];
-    if (!ent) return 'no_entitlement';
+    if (!ent) return { verdict: 'no_entitlement' };
     const exp = ent.expires_date ? Date.parse(ent.expires_date) : null;
-    return exp == null || exp > Date.now() ? 'pro' : 'no_entitlement';
-  } catch {
-    return 'unverified';
+    return { verdict: exp == null || exp > Date.now() ? 'pro' : 'no_entitlement' };
+  } catch (e) {
+    return { verdict: 'unverified', reason: `rc_error=${e instanceof Error ? e.name : 'unknown'}` };
   }
+}
+
+async function verifyCallerDetailed(req: VercelRequest): Promise<Verdict> {
+  const id = readCallerId(req);
+  if (!id) return { verdict: 'missing_id' };
+  if (!plausibleId(id)) return { verdict: 'invalid_id' };
+  const hit = cache.get(id);
+  if (hit && Date.now() - hit.at < CACHE_MS) return { verdict: hit.verdict };
+  const asked = await askRevenueCat(id);
+  // An 'unverified' answer is not cached, so the next call retries once RevenueCat is reachable.
+  if (asked.verdict !== 'unverified') cache.set(id, { verdict: asked.verdict, at: Date.now() });
+  return asked;
 }
 
 /** The verdict for this request (cached 5 min per id). Never throws. */
 export async function verifyCaller(req: VercelRequest): Promise<CallerVerdict> {
-  const id = readCallerId(req);
-  if (!id) return 'missing_id';
-  if (!plausibleId(id)) return 'invalid_id';
-  const hit = cache.get(id);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.verdict;
-  const verdict = await askRevenueCat(id);
-  // An 'unverified' answer is not cached, so the next call retries once RevenueCat is reachable.
-  if (verdict !== 'unverified') cache.set(id, { verdict, at: Date.now() });
-  return verdict;
+  return (await verifyCallerDetailed(req)).verdict;
 }
 
 /** One Sentry event per (route, verdict, id) per cache window per instance, so free traffic cannot flood it. */
@@ -104,9 +111,9 @@ function reportToSentry(route: string, verdict: CallerVerdict, idPresent: boolea
 
 /** Verify and LOG the caller. Returns the verdict; the caller decides whether it matters. */
 export async function checkCaller(req: VercelRequest, route: string): Promise<CallerVerdict> {
-  const verdict = await verifyCaller(req);
+  const { verdict, reason } = await verifyCallerDetailed(req);
   const id = readCallerId(req);
-  console.log(`[caller-identity] ${route} verdict=${verdict} id=${id ? 'present' : 'absent'} enforce=${ENFORCE_CALLER_IDENTITY}`);
+  console.log(`[caller-identity] ${route} verdict=${verdict}${reason ? ` reason=${reason}` : ''} id=${id ? 'present' : 'absent'} enforce=${ENFORCE_CALLER_IDENTITY}`);
   const key = `${route}|${verdict}|${id ?? '-'}`;
   const last = reported.get(key);
   if (last == null || Date.now() - last > CACHE_MS) {
