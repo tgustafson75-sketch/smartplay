@@ -204,6 +204,12 @@ export function findOrphanExports(): string[] {
  * you still remember what it was for — which is the entire point of this file.
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
+  // ── 2026-11-05: multi-swing upload ────────────────────────────────────────────────────────
+  'services/swing/analysisOrchestrator.ts :: pickAllSwingBursts':
+    'WIRE. Added in b0491fef to find EVERY swing in an upload, not only the first. Its only callers are the ' +
+    'tests in __tests__/logic/pick-all-swing-bursts.test.ts. The upload read still takes one window from ' +
+    'findUploadSwingWindow, so a clip with two swings reads one. Wiring it changes which swing the upload ' +
+    'reads and needs a device check on the swing path (Path 3 CAGE) before it ships. Not wired yet.',
   // ── 2026-10-27: SmartMotion talk button is the badge's tap (capture audit C7) ────────────────
   'services/smartMotionRecordBus.ts :: emitSmartMotionUtterance':
     'DUPE. Its only emitter was SmartMotion\'s talk button, which ran a private captureUtterance and ' +
