@@ -367,6 +367,13 @@
       }
     },
     {
+      "src": "api/owner-verify.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 10
+      }
+    },
+    {
       "src": "api/*.ts",
       "use": "@vercel/node"
     },
@@ -534,6 +541,10 @@
     {
       "src": "/api/owner-usage",
       "dest": "/api/owner-usage.ts"
+    },
+    {
+      "src": "/api/owner-verify",
+      "dest": "/api/owner-verify.ts"
     },
     {
       "src": "/r/([A-Za-z0-9]+)",
