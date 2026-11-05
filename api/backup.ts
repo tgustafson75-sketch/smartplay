@@ -140,7 +140,7 @@ function mergeSnapshots(prev: Record<string, unknown>, next: Record<string, unkn
 
 /** The storage key is a hash of the (lower-cased) email + the passphrase. Email
  *  alone can't derive it, so there's no enumeration/overwrite without the secret. */
-function storageKey(email: string, secret: string): string {
+export function storageKey(email: string, secret: string): string {
   return createHash('sha256').update(`${email.toLowerCase()}::${secret}`).digest('hex');
 }
 
@@ -157,7 +157,7 @@ const IP_LIMIT_PER_MIN = 40;    // requests from one IP / minute / instance
 
 /** True if the request should be throttled. Combines a spoof-resistant in-memory per-email
  *  + per-IP layer (always on) with the cross-instance DB per-IP counter (fail-open). */
-async function isRateLimited(
+export async function isRateLimited(
   db: ReturnType<typeof getSmartPlaySupabase>,
   req: VercelRequest,
   email: string,

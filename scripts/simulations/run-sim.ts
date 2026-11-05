@@ -652,10 +652,10 @@ check('SubscriptionStatus includes lifetime',
   /SubscriptionStatus\s*=\s*[^;]*'lifetime'/.test(profileSrc),
   'lifetime tier defined');
 // 2026-10-27 (security audit Critical #1) — owner is the BUILD, never a typed email, and nothing grants lifetime.
-check('LOCK: owner is the build — no email allow-list, no lifetime grant',
-  /export function isOwnerBuild\(\): boolean \{\s*return \(process\.env\.EXPO_PUBLIC_OWNER_EMAIL \?\? ''\)\.trim\(\)\.length > 0;\s*\}/.test(profileSrc) &&
+check('LOCK: owner is the server-verified backup identity — no email allow-list, no lifetime grant',
+  /export function isOwnerBuild\(\): boolean \{\s*return useOwnerFlag\.getState\(\)\.owner;\s*\}/.test(profileSrc) &&
     !/OWNER_EMAILS|isOwnerEmail|grantLifetime/.test(profileSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')),
-  'owner comes only from the build env (dev/preview); a typed email grants nothing and no lifetime is ever written');
+  'owner is the server verdict for this launch (api/owner-verify on sha256(email::passphrase)); a typed email grants nothing and no lifetime is ever written');
 
 const featurePath = path.resolve(__dirname, '../../services/featureAccess.ts');
 const featureSrc = fs.readFileSync(featurePath, 'utf-8');

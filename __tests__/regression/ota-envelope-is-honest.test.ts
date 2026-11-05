@@ -105,15 +105,15 @@ describe('owner mode after an OTA', () => {
     }
   });
 
-  it('owner mode depends on a BUILD-TIME value, which is why it cannot leak through an update', () => {
+  it('owner mode is the server-verified flag for this launch, never a build-time or typed value', () => {
     /**
      * `EXPO_PUBLIC_*` is inlined at export. That is precisely why removing the runtime
      * OWNER_EMAILS.length === 1 fallback was the right fix: privilege now comes from the artifact it
      * was built into, not from a list whose length an unrelated edit could change.
      */
-    // 2026-10-27 — owner is ONLY the build: isOwnerBuild reads the inlined env var and nothing else.
+    // 2026-11-05 — owner is the server's yes for this launch (api/owner-verify), held in memory only.
     const store = code('store/playerProfileStore.ts');
-    expect(store).toMatch(/export function isOwnerBuild\(\): boolean \{\s*return \(process\.env\.EXPO_PUBLIC_OWNER_EMAIL \?\? ''\)\.trim\(\)\.length > 0;\s*\}/);
+    expect(store).toMatch(/export function isOwnerBuild\(\): boolean \{\s*return useOwnerFlag\.getState\(\)\.owner;\s*\}/);
     expect(store).not.toMatch(/OWNER_EMAILS/);
   });
 });

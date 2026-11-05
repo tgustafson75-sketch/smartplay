@@ -1,4 +1,7 @@
 import '../services/polyfills';
+import { verifyOwnerIdentity } from '../services/ownerVerify';
+import { useOwnerFlag } from '../services/ownerFlag';
+import { useServerBackupStore } from '../services/cloudSync/serverBackup';
 import '../services/appKeyFetch';
 import { Stack , router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -1996,6 +1999,15 @@ function RoundActiveDevIndicator(): React.ReactElement | null {
 }
 
 export default function RootLayout() {
+  // Owner tools follow the server's verdict on this launch's backup identity (services/ownerVerify).
+  // Re-render when it lands so owner screens appear without a restart. Waits for the persisted backup
+  // identity to load first, so the check never runs against an empty store.
+  useOwnerFlag((s) => s.owner);
+  useEffect(() => {
+    const go = () => { void verifyOwnerIdentity(); };
+    if (useServerBackupStore.persist.hasHydrated()) go();
+    else return useServerBackupStore.persist.onFinishHydration(go);
+  }, []);
   // Custom ErrorBoundary replaces Sentry.ErrorBoundary. The Sentry variant
   // renders `null` when no `fallback` prop is provided AND no DSN is set —
   // which produces a visually-indistinguishable white screen and was the

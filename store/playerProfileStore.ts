@@ -1,3 +1,4 @@
+import { useOwnerFlag } from '../services/ownerFlag';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
@@ -21,7 +22,7 @@ export type SubscriptionStatus = 'trial' | 'expired' | 'active' | 'free' | 'life
  * production does not, and scripts/ota-owner-guard.mjs refuses a production OTA while it is set.
  */
 export function isOwnerBuild(): boolean {
-  return (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().length > 0;
+  return useOwnerFlag.getState().owner;
 }
 
 /**

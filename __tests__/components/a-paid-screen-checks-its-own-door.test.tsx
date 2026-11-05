@@ -108,16 +108,17 @@ describe.each(['smartfinder', 'smartvision'] as const)('%s — the screen checks
     r.unmount();
   });
 
-  // 2026-10-27 — owner is the BUILD (dev/preview), never a typed email.
-  it('an owner BUILD is never gated, whatever the status says', async () => {
+  // 2026-11-05 — owner is the server-verified identity for this launch, never a typed email.
+  it('a verified OWNER is never gated, whatever the status says', async () => {
     const { usePlayerProfileStore } = require('../../store/playerProfileStore');
-    process.env.EXPO_PUBLIC_OWNER_EMAIL = 'owner@build';
+    const { useOwnerFlag } = require('../../services/ownerFlag');
+    useOwnerFlag.getState().set(true);
     try {
       usePlayerProfileStore.setState({ subscription_status: 'free', email: '' });
       const r = await mount(route);
       expect(pushedPaywall()).toBe(false);
       r.unmount();
-    } finally { delete process.env.EXPO_PUBLIC_OWNER_EMAIL; }
+    } finally { useOwnerFlag.getState().set(false); }
   });
 
   it('a TYPED owner email on a player build is gated like anyone else', async () => {
