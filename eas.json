@@ -128,6 +128,13 @@
         "releaseStatus": "draft",
         "serviceAccountKeyPath": "/Users/timothyg/.config/smartplay/play-service-account.json"
       }
+    },
+    "production-draft": {
+      "android": {
+        "track": "production",
+        "releaseStatus": "draft",
+        "serviceAccountKeyPath": "/Users/timothyg/.config/smartplay/play-service-account.json"
+      }
     }
   }
 }
