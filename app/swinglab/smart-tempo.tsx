@@ -26,6 +26,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useFrameCoalescer } from '../../hooks/useFrameCoalescer';
 import {
   View, Text, Pressable, StyleSheet, ScrollView,
   ActivityIndicator, Modal, TextInput, Image,
@@ -265,25 +266,33 @@ export default function SmartTempoScreen() {
   // "Maximum update depth" pattern). Position commits on a ≥20ms move, duration once (±50ms), isPlaying on
   // a real flip. Setters + refs are stable → empty deps.
   const tempoEmitRef = useRef<{ pos: number; dur: number; playing: boolean | null }>({ pos: -1, dur: -1, playing: null });
+  // 2026-11-08 (Sentry SMARTPLAY-CADDIE-MOBILE-8, swept) — status ticks never setState inside the native event;
+  // they mark what changed and hooks/useFrameCoalescer commits the ref values once per frame.
+  const tempoUi = useFrameCoalescer<{ pos: true; dur: true; playing: true }>((p) => {
+    const e = tempoEmitRef.current;
+    if (p.pos) setPosition(e.pos);
+    if (p.dur) setDuration(e.dur);
+    if (p.playing) setIsPlaying(e.playing === true);
+  });
   const onStatus = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
     const s = status as AVPlaybackStatusSuccess;
     const posSec = (s.positionMillis ?? 0) / 1000;
     if (s.positionMillis != null && Math.abs(posSec - tempoEmitRef.current.pos) >= 0.02) {
-      tempoEmitRef.current.pos = posSec; setPosition(posSec);
+      tempoEmitRef.current.pos = posSec; tempoUi.queue({ pos: true });
     }
     if (s.durationMillis != null) {
       const d = s.durationMillis / 1000;
-      if (tempoEmitRef.current.dur < 0 || Math.abs(d - tempoEmitRef.current.dur) > 0.05) { tempoEmitRef.current.dur = d; setDuration(d); }
+      if (tempoEmitRef.current.dur < 0 || Math.abs(d - tempoEmitRef.current.dur) > 0.05) { tempoEmitRef.current.dur = d; tempoUi.queue({ dur: true }); }
     }
     const playing = s.isPlaying === true;
-    if (tempoEmitRef.current.playing !== playing) { tempoEmitRef.current.playing = playing; setIsPlaying(playing); }
+    if (tempoEmitRef.current.playing !== playing) { tempoEmitRef.current.playing = playing; tempoUi.queue({ playing: true }); }
     // Replay-tempo loop: when we pass the marked impact, snap back to the marked backswing-start.
     const r = replayRef.current;
     if (r && s.isPlaying && posSec >= r.endSec) {
       void videoRef.current?.setPositionAsync(r.startSec * 1000)?.catch(() => undefined); // an interrupted seek is not an error (Sentry C)
     }
-  }, []);
+  }, [tempoUi]);
   const onTempoVideoLoad = useCallback(async () => {
     setVideoError(null);
     try { await videoRef.current?.pauseAsync(); } catch { /* */ }

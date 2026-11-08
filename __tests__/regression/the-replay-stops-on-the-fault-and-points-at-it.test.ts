@@ -123,7 +123,10 @@ describe('the swing screen stops, rings and names it — the skeleton stays opt-
     expect(sd).toMatch(/selfSeeking: Date\.now\(\) <= selfSeekUntilRef\.current/);
     // the overlay draws at the fault frame, not the overshoot tick
     // 2026-10-27 — the hold says why it is held ('stop' = the replay), so a jump can ring regardless of Highlight.
-    expect(sd).toMatch(/playbackEmitRef\.current\.pos = f;\s*playbackEmitRef\.current\.lastPosAt = Date\.now\(\);\s*setPosition\(f\);\s*issueHoldRef\.current = 'stop'; setIssueHoldState\('stop'\);/);
+    // 2026-11-08 (SMARTPLAY-CADDIE-MOBILE-8): the stop commits through the per-frame coalescer, whose flush
+    // reads these refs — never a setState inside the native status event.
+    expect(sd).toMatch(/playbackEmitRef\.current\.pos = f;\s*playbackEmitRef\.current\.lastPosAt = Date\.now\(\);\s*issueHoldRef\.current = 'stop';\s*statusUi\.queue\(\{ pos: true, hold: true \}\);/);
+    expect(sd).toMatch(/if \(p\.pos\) setPosition\(e\.pos\);[\s\S]{0,200}if \(p\.hold\) setIssueHoldState\(issueHoldRef\.current\);/);
     // every scrub lands on its frame
     expect(sd).toMatch(/await videoRef\.current\?\.setPositionAsync\(sec \* 1000, \{ toleranceMillisBefore: 0, toleranceMillisAfter: 0 \}\);/);
     expect(sd).toMatch(/faultSecRef\.current = faultMoment\?\.sec \?\? null;/);

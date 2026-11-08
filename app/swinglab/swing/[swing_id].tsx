@@ -94,6 +94,7 @@ import { swingOnScreenFromShotMap } from '../../../services/swing/swingOnScreen'
 import { useCaptureEngineStore } from '../../../store/captureEngineStore';
 import { useTranslation } from 'react-i18next';
 import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
+import { useFrameCoalescer } from '../../../hooks/useFrameCoalescer';
 
 
 // 2026-06-12 — shared Smart Motion control badges, so Library video controls match
@@ -566,6 +567,17 @@ export default function SwingDetail() {
   const [issueHold, setIssueHoldState] = useState<IssueHold>(null);
   const issueHoldRef = useRef<IssueHold>(null);
   const setIssueHold = useCallback((h: IssueHold) => { issueHoldRef.current = h; setIssueHoldState(h); }, []);
+  // 2026-11-08 (Sentry SMARTPLAY-CADDIE-MOBILE-8) — onPlaybackStatusUpdate never calls setState itself; it
+  // marks which values changed and this commits them once per frame (services/frameCoalescer). The flush
+  // reads the REFS (playbackEmitRef / issueHoldRef), which every writer updates synchronously, so a user
+  // jump or hold-clear landing between a tick and its frame is never overwritten by the stale tick.
+  const statusUi = useFrameCoalescer<{ pos: true; dur: true; playing: true; hold: true }>((p) => {
+    const e = playbackEmitRef.current;
+    if (p.pos) setPosition(e.pos);
+    if (p.dur && e.dur >= 0) setDuration(e.dur);
+    if (p.playing) setIsPlaying(e.playing === true);
+    if (p.hold) setIssueHoldState(issueHoldRef.current);
+  });
   const atIssue = issueHold !== null;
   /**
    * 2026-10-27 (Tim: "Tapping Issue did not highlight the area") — the player asked to see this swing's
@@ -1149,8 +1161,8 @@ export default function SwingDetail() {
           // below would otherwise drop the paused seek's report and leave the ring on a later frame).
           playbackEmitRef.current.pos = f;
           playbackEmitRef.current.lastPosAt = Date.now();
-          setPosition(f);
-          issueHoldRef.current = 'stop'; setIssueHoldState('stop');   // (stable setters: this callback is created once)
+          issueHoldRef.current = 'stop';
+          statusUi.queue({ pos: true, hold: true });
           // Stopped there with Highlight on: the ring is wanted, so the body read is too.
           if (highlightIssueRef.current) markIssueAsked();
         }
@@ -1169,17 +1181,17 @@ export default function SwingDetail() {
       if (Math.abs(p - playbackEmitRef.current.pos) >= 0.02 && nowMs - playbackEmitRef.current.lastPosAt >= minGapMs) {
         playbackEmitRef.current.pos = p;
         playbackEmitRef.current.lastPosAt = nowMs;
-        setPosition(p);
+        statusUi.queue({ pos: true });
       }
     }
     if (s.durationMillis != null) {
       const d = s.durationMillis / 1000;
       if (playbackEmitRef.current.dur < 0 || Math.abs(d - playbackEmitRef.current.dur) > 0.05) {
-        playbackEmitRef.current.dur = d; setDuration(d);
+        playbackEmitRef.current.dur = d; statusUi.queue({ dur: true });
       }
     }
     const playing = s.isPlaying === true;
-    if (playbackEmitRef.current.playing !== playing) { playbackEmitRef.current.playing = playing; setIsPlaying(playing); }
+    if (playbackEmitRef.current.playing !== playing) { playbackEmitRef.current.playing = playing; statusUi.queue({ playing: true }); }
     // 2026-07-30 (Tim — "crop out the not swing part") — while PLAYING, loop straight back to the swing
     // start the instant we reach the located swing END, so the post-swing dead air never plays. One
     // seek per crossing (tailLoopRef guard) — a bare setPositionAsync, no setState, so it can't feed
@@ -1198,7 +1210,7 @@ export default function SwingDetail() {
     // top when at end). Autoplay was also what left the controls dead — it ran
     // the clip to the end on open, so the user's first tap hit a finished video
     // and did nothing.
-  }, [faultSecRef, markIssueAsked]);   // both stable (hooks/useIssueAsk): still created once
+  }, [faultSecRef, markIssueAsked, statusUi]);   // all stable (hooks/useIssueAsk): still created once
 
   // 2026-08-07 (Tim — the video-loop crash keeps coming back). ROOT CAUSE, made structural: EVERY prop
   // passed to the native <Video> must be referentially STABLE, or a re-render (the position updates 25×/s

@@ -22,6 +22,7 @@
 
 import { getDialog } from '../../services/dialogEngine';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFrameCoalescer } from '../../hooks/useFrameCoalescer';
 import {
   View,
   Text,
@@ -1286,6 +1287,9 @@ export default function SmartMotion() {
   const [playbackMs, setPlaybackMs] = useState(0);
   // Last-committed playback ms (synchronous) so the 25×/s status callback only setStates on a real move.
   const playbackMsEmitRef = useRef(-1);
+  // 2026-11-08 (Sentry SMARTPLAY-CADDIE-MOBILE-8, swept) — status ticks never setState inside the native event;
+  // they mark what changed and hooks/useFrameCoalescer commits the ref values once per frame.
+  const playbackUi = useFrameCoalescer<{ ms: true }>(() => setPlaybackMs(playbackMsEmitRef.current));
   // 2026-06-09 — "Motion overlay" is now a SEPARATE on-demand step (off by
   // default). Default review = watch the swing + Kevin's feedback only, with a
   // clean video. Turning Motion on computes + shows the skeletal overlay, body
@@ -4986,7 +4990,8 @@ export default function SmartMotion() {
     setReviewIssueHold('jump');
     try { await videoRef.current?.pauseAsync(); } catch { /* released */ }
     try { await videoRef.current?.setPositionAsync(Math.round(f * 1000), { toleranceMillisBefore: 0, toleranceMillisAfter: 0 }); } catch { /* released */ }
-    setPlaybackMs(Math.round(f * 1000));
+    playbackMsEmitRef.current = Math.round(f * 1000);
+    setPlaybackMs(playbackMsEmitRef.current);
   }, []);
   const onReviewVideoLoad = useCallback(async (s: AVPlaybackStatus) => {
     if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis);
@@ -5043,7 +5048,7 @@ export default function SmartMotion() {
     if ('positionMillis' in s && typeof s.positionMillis === 'number'
         && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
       playbackMsEmitRef.current = s.positionMillis;
-      setPlaybackMs(s.positionMillis);
+      playbackUi.queue({ ms: true });
     }
     if ('positionMillis' in s && typeof s.positionMillis === 'number' && !videoPaused) {
       const seg = segments[selectedSwingRef.current];
@@ -5056,7 +5061,7 @@ export default function SmartMotion() {
           .finally(() => { loopSeekGuardRef.current = false; });
       }
     }
-  }, [segments, videoPaused]);
+  }, [segments, videoPaused, playbackUi]);
   const onReviewVideoError = useCallback((e: unknown) => {
     console.log('[smartmotion] video load error:', JSON.stringify(e));
     setAnalysisError('Video failed to load — try re-recording');
@@ -6340,7 +6345,7 @@ export default function SmartMotion() {
               positionMs={playbackMs}
               durationMs={videoDurationMs}
               moments={scrubMoments}
-              onSeek={(ms) => { void videoRef.current?.setPositionAsync(ms)?.catch(() => undefined); setPlaybackMs(ms); }}
+              onSeek={(ms) => { void videoRef.current?.setPositionAsync(ms)?.catch(() => undefined); playbackMsEmitRef.current = ms; setPlaybackMs(ms); }}
               onScrubStart={() => { setVideoPaused(true); void videoRef.current?.pauseAsync(); }}
             />
           ) : null}
