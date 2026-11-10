@@ -10,11 +10,10 @@ import {
   keysMatch,
   getMessagingKey,
   getMessagingServerKey,
-  MESSAGING_APP_KEY_DEFAULT,
 } from '../../services/appAuth';
 
 describe('keysMatch — the messages auth gate (H4)', () => {
-  const secret = MESSAGING_APP_KEY_DEFAULT;
+  const secret = 'test-only-messaging-secret-0000000000';
   it('accepts the exact key', () => {
     expect(keysMatch(secret, secret)).toBe(true);
   });
@@ -33,21 +32,19 @@ describe('keysMatch — the messages auth gate (H4)', () => {
   });
 });
 
-describe('client and server agree on a key by default (non-breaking)', () => {
-  it('client key == server key when no env is configured', () => {
-    // In this test env neither EXPO_PUBLIC_MESSAGING_KEY nor MESSAGING_APP_SECRET is set.
-    expect(getMessagingKey()).toBe(MESSAGING_APP_KEY_DEFAULT);
-    expect(getMessagingServerKey()).toBe(MESSAGING_APP_KEY_DEFAULT);
-    expect(keysMatch(getMessagingKey(), getMessagingServerKey())).toBe(true);
+describe('no key works until the server secret is set (2026-11-09 messages leak)', () => {
+  it('with no env configured, both keys are empty and nothing matches', () => {
+    expect(getMessagingKey()).toBe('');
+    expect(getMessagingServerKey()).toBe('');
+    expect(keysMatch(getMessagingKey(), getMessagingServerKey())).toBe(false);
   });
 
-  it('server honors a rotated MESSAGING_APP_SECRET', () => {
+  it('server honors MESSAGING_APP_SECRET', () => {
     const prev = process.env.MESSAGING_APP_SECRET;
     process.env.MESSAGING_APP_SECRET = 'rotated-strong-secret';
     try {
       expect(getMessagingServerKey()).toBe('rotated-strong-secret');
-      // A client still on the default no longer matches — as intended after rotation.
-      expect(keysMatch(MESSAGING_APP_KEY_DEFAULT, getMessagingServerKey())).toBe(false);
+      expect(keysMatch('rotated-strong-secret', getMessagingServerKey())).toBe(true);
     } finally {
       if (prev === undefined) delete process.env.MESSAGING_APP_SECRET;
       else process.env.MESSAGING_APP_SECRET = prev;

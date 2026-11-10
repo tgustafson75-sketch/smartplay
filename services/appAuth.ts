@@ -14,28 +14,26 @@
  * a substitute for real auth. Follow-up (tracked in QA_REPORT.md): bind messaging identity to
  * the hardened backup passphrase, or issue email-verified per-user tokens.
  *
- * Mirrors the apiBase pattern: honor EXPO_PUBLIC_MESSAGING_KEY when set (inlined at build or
- * provided in dev), otherwise fall back to a fixed default so OTA bundles — where EXPO_PUBLIC_*
- * are empty — still work. Set MESSAGING_APP_SECRET on the server to the same value to rotate.
+ * 2026-11-09 (Report Card blocker, "messages leak"): the fixed default key that used to live here was
+ * public (this repo is public), and production accepted it, so anyone could read an allow-listed
+ * participant's thread. The default is removed: the server accepts only MESSAGING_APP_SECRET and
+ * refuses everything while it is unset. Messaging is off in store builds (MESSAGING_RELEASED=false),
+ * so no player loses anything. Real per-user identity is the remaining follow-up before release.
  */
 
-/** Fixed default so client and server agree even when neither env var is configured. */
-export const MESSAGING_APP_KEY_DEFAULT = 'spc_msg_k1_a7f39c2e5b8140d6b3e1c9f0aa47d2e8';
-
-/** The key the CLIENT sends (EXPO_PUBLIC override → default). */
+/** The key the CLIENT sends: EXPO_PUBLIC_MESSAGING_KEY, or '' (no key -> the server refuses). */
 export function getMessagingKey(): string {
-  return (process.env.EXPO_PUBLIC_MESSAGING_KEY ?? '').trim() || MESSAGING_APP_KEY_DEFAULT;
+  return (process.env.EXPO_PUBLIC_MESSAGING_KEY ?? '').trim();
 }
 
-/** The key the SERVER accepts (server secret → default). Kept separate so the server can be
- *  rotated to a strong secret via MESSAGING_APP_SECRET without shipping it in the bundle. */
+/** The key the SERVER accepts: MESSAGING_APP_SECRET only. Unset -> '' -> every request is refused. */
 export function getMessagingServerKey(): string {
-  return (process.env.MESSAGING_APP_SECRET ?? '').trim() || MESSAGING_APP_KEY_DEFAULT;
+  return (process.env.MESSAGING_APP_SECRET ?? '').trim();
 }
 
 /** Length-safe constant-time-ish comparison (avoids leaking the key length via early return). */
 export function keysMatch(provided: unknown, expected: string): boolean {
-  if (typeof provided !== 'string' || provided.length !== expected.length) return false;
+  if (!expected || typeof provided !== 'string' || provided.length !== expected.length) return false;
   let diff = 0;
   for (let i = 0; i < expected.length; i++) diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
   return diff === 0;

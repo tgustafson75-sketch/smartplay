@@ -44,8 +44,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 2026-07-21 (QA audit, H4) — require the shared app-key so this is no longer an open,
   // unauthenticated read/forge API for anyone who knows an email. The client sends it as
-  // x-app-key (services/appAuth.ts); the server accepts MESSAGING_APP_SECRET or the shared
-  // default. Rejecting here closes the IDOR at the door before any DB access.
+  // x-app-key (services/appAuth.ts); the server accepts MESSAGING_APP_SECRET only (unset = refuse all).
+  // Rejecting here closes the door before any DB access.
   if (!keysMatch(req.headers['x-app-key'], getMessagingServerKey())) {
     return res.status(401).json({ ok: false, reason: 'unauthorized', messages: [] });
   }
