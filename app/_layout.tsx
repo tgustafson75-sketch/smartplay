@@ -845,6 +845,14 @@ function AppNavigator() {
   // gated + server-idempotent inside autoSendIssues) guarantees a recorded crash reaches the team.
   useEffect(() => { void autoSendIssues(); }, []);
 
+  // 2026-11-10 — Self-Heal v1 startup health check (services/startupHealth). An effect, so it runs
+  // after the first screen has mounted; fire-and-forget, so it cannot delay or block boot. Not
+  // InteractionManager: a looping Animated interaction would hold it off indefinitely. Failures go
+  // to Sentry only — no UI.
+  useEffect(() => {
+    void import('../services/startupHealth').then(m => m.runStartupHealthCheck()).catch(() => undefined);
+  }, []);
+
   // Phase BH — silent OTA on app start. checkForUpdateAsync + fetch happen in the background.
   //
   // 2026-09-21 — THIS COMMENT WAS WRONG AND HAD BEEN SINCE JUNE. It said the bundle "applies on the

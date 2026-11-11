@@ -10,6 +10,7 @@ import {
   Alert,
   Linking,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
@@ -17,6 +18,7 @@ import { MESSAGING_ENABLED } from '../constants/featureFlags';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
+import { sendProblemReport } from '../services/issueLogExport';
 import { displayCaddieName } from '../services/caddieResolver';
 import type { Persona } from '../services/caddieResolver';
 // 2026-05-21 — Consolidation 1 / Merge C: watch-connected display
@@ -262,6 +264,24 @@ export default function Settings() {
   const shareDiagnostics = useSettingsStore(s => s.shareDiagnostics);
   const setShareDiagnostics = useSettingsStore(s => s.setShareDiagnostics);
   const setHasAskedHealthPermission = useSettingsStore(s => s.setHasAskedHealthPermission);
+
+  // Self-Heal v1 "Report a problem" — the flag stops a second tap sending a second report while the
+  // first (diagnostic snapshot + POST) is in flight.
+  const [reportingProblem, setReportingProblem] = useState(false);
+  const onReportProblem = async () => {
+    if (reportingProblem) return;
+    setReportingProblem(true);
+    try {
+      const sent = await sendProblemReport();
+      Alert.alert(
+        t(sent ? 'settings.alert.report_sent' : 'settings.alert.report_failed'),
+        t(sent ? 'settings.alert.report_sent_body' : 'settings.alert.report_failed_body'),
+        [{ text: 'OK' }],
+      );
+    } finally {
+      setReportingProblem(false);
+    }
+  };
 
   const {
     name,
@@ -1732,6 +1752,24 @@ export default function Settings() {
               <Text style={[styles.rowSub, { color: colors.text_muted }]}>{t('settings.settings.say_log_this_to_capture', { caddieName })}</Text>
             </View>
             <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
+          </TouchableOpacity>
+
+          {/* 2026-11-10 — Self-Heal v1 "Report a problem": one tap, every player, anonymous.
+              services/issueLogExport.sendProblemReport owns what is sent. */}
+          <TouchableOpacity
+            style={styles.resetRow}
+            onPress={onReportProblem}
+            disabled={reportingProblem}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.accessibility_label.report_a_problem')}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.report_a_problem')}</Text>
+              <Text style={[styles.rowSub, { color: colors.text_muted }]}>{t('settings.text.report_a_problem_sub')}</Text>
+            </View>
+            {reportingProblem
+              ? <ActivityIndicator size="small" color={colors.text_muted} />
+              : <Ionicons name="paper-plane-outline" size={20} color={colors.text_muted} />}
           </TouchableOpacity>
 
           {/* 2026-05-25 — Fix AI: Coach Knowledge entry. Same Beta Feedback section so a
