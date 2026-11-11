@@ -10,6 +10,8 @@
  *
  * Signing: wear-os-app/keystore.properties must point at the EAS-managed keystore, or the Data Layer
  * will not pair with the phone. Without it Gradle falls back to the debug key and the script says so.
+ *
+ * Freshness: the AAB-not-older-than-source check now runs here at release time, not in the commit hook.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -58,5 +60,18 @@ if (!existsSync(aab)) {
   console.error(`[wear-build] expected ${aab} and it is missing`);
   process.exit(1);
 }
+// The freshness check (is the AAB older than the wear source?) runs here, at release, not on every
+// commit: a checkout or pull makes source newer than a local AAB, which blocked unrelated commits.
+// It runs after bundleRelease because a check before it would block the rebuild that fixes it.
+const fresh = spawnSync('npx', ['jest', '--config', JSON.stringify({
+  rootDir: root,
+  testEnvironment: 'node',
+  modulePathIgnorePatterns: ['<rootDir>/.claude/'],
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/'],
+  testMatch: ['<rootDir>/__tests__/release/**/*.test.ts'],
+  transform: { '^.+\\.tsx?$': ['ts-jest', { tsconfig: { strict: false, esModuleInterop: true } }] },
+})], { cwd: root, stdio: 'inherit' });
+if (fresh.status !== 0) process.exit(fresh.status ?? 1);
+
 console.log(`[wear-build] AAB: ${aab}`);
 console.log('[wear-build] upload to the wear:production track (separate from production)');
