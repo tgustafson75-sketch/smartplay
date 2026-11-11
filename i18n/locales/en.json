@@ -87,7 +87,11 @@
       "reset_complete": "Reset complete",
       "force_close_the_app_swipe": "Force-close the app (swipe out of recents) and reopen to start fresh.",
       "reset_failed": "Reset failed",
-      "reset_voice_hit_rate": "Reset voice hit-rate?"
+      "reset_voice_hit_rate": "Reset voice hit-rate?",
+      "report_sent": "Report sent",
+      "report_sent_body": "Thanks. The team has your app version and recent errors.",
+      "report_failed": "Couldn't send",
+      "report_failed_body": "Check your connection and try again, or email support@smartplaycaddie.com."
     },
     "text": {
       "back": "‹ Back",
@@ -234,7 +238,9 @@
       "import_smartbay_lesson": "Import SmartBay lesson",
       "import_smartbay_lesson_sub": "Pick the lesson file you saved from your SmartBay report. It goes into your practice history with the fix, the drill and your before and after.",
       "export_player_for_smartbay": "Export player for SmartBay",
-      "export_player_for_smartbay_sub": "Share your handedness, handicap index, miss and most frequent faults as a file for a SmartBay bay."
+      "export_player_for_smartbay_sub": "Share your handedness, handicap index, miss and most frequent faults as a file for a SmartBay bay.",
+      "report_a_problem": "Report a problem",
+      "report_a_problem_sub": "Sends the app version and recent errors to the team. No name or email."
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -302,7 +308,8 @@
       "view_subscription_plans": "View subscription plans and restore purchases",
       "redeem_code": "Redeem a promo or founding code",
       "import_smartbay_lesson": "Import SmartBay lesson",
-      "export_player_for_smartbay": "Export player for SmartBay"
+      "export_player_for_smartbay": "Export player for SmartBay",
+      "report_a_problem": "Report a problem"
     },
     "label": {
       "handedness": "Handedness",

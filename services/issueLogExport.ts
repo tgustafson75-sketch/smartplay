@@ -9,7 +9,7 @@
  */
 
 import { Linking, Platform, Share } from 'react-native';
-import { useIssueLogStore, type IssueLogEntry } from '../store/issueLogStore';
+import { useIssueLogStore, selfContext, type IssueLogEntry } from '../store/issueLogStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { getApiBaseUrl, appKeyHeaders } from './apiBase';
@@ -273,7 +273,7 @@ async function autoSendIssuesInner(): Promise<boolean> {
    * no migration and cannot break the insert. The reporting path was verified working end-to-end today
    * and is not worth risking for a field.
    */
-  const installId = await getInstallId();
+  const { installId, reporter } = await anonymousSender();
   /**
    * 2026-09-12 — the sender's identity, for an AUTOMATIC send.
    *
@@ -283,7 +283,6 @@ async function autoSendIssuesInner(): Promise<boolean> {
    * triage needs ("same device as the last three reports?") and is random, local and tied to
    * nothing. The MANUAL export still carries the email: there the act is the consent.
    */
-  const reporter = installId ?? 'unknown-install';
   /**
    * 2026-09-21 — THE AUTOMATIC CHANNEL CARRIES THE SAME DIAGNOSTICS AS THE MANUAL ONE.
    *
@@ -335,16 +334,7 @@ async function autoSendIssuesInner(): Promise<boolean> {
     })),
   };
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(`${base.replace(/\/+$/, '')}/api/issue-report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
-      body: JSON.stringify(payload),
-      signal: ctrl.signal,
-    });
-    clearTimeout(timer);
-    if (res.ok) {
+    if (await postIssueEntries(base, payload)) {
       for (const e of unsent) sentIds.add(e.id);
       void persistSentIds();
       /**
@@ -381,6 +371,92 @@ async function autoSendIssuesInner(): Promise<boolean> {
     return false;
   } catch (e) {
     console.log('[issueLogExport] auto-send failed (non-fatal):', e instanceof Error ? e.message : String(e));
+    return false;
+  }
+}
+
+/**
+ * The ONE place an anonymous sender identity is resolved: the install id, never the email. Both
+ * channels that leave the device without a mail composer — the automatic send and Report a problem —
+ * call this, so neither can drift back to the email on its own.
+ */
+async function anonymousSender(): Promise<{ installId: string | null; reporter: string }> {
+  const installId = await getInstallId();
+  const reporter = installId ?? 'unknown-install';
+  return { installId, reporter };
+}
+
+/** The one POST to /api/issue-report shared by the automatic send and Report a problem. */
+async function postIssueEntries(base: string, payload: { entries: unknown[] }): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, '')}/api/issue-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+    return res.ok;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Error kinds whose entry text is a machine message, safe to carry. Excludes 'user' notes and
+ *  voice misses (spoken words) and analysis traces. */
+const PROBLEM_REPORT_ERROR_KINDS = new Set([
+  'app_error', 'voice_error', 'voice_silent_fail', 'transcribe_error', 'gps_error', 'analysis_error',
+]);
+const PROBLEM_REPORT_MAX_ERRORS = 10;
+
+/**
+ * 2026-11-10 — SELF-HEAL v1: REPORT A PROBLEM (smartplay-gate docs/SELF-HEAL-STANDARD.md).
+ *
+ * "One tap in the app sends a report with the version and the last errors. No personal, health or
+ * page content." Settings → Help & About → Report a problem, for EVERY player.
+ *
+ * Not gated on `shareDiagnostics`: that consent governs what leaves the device WITHOUT a tap, and
+ * this is the tap. It is anonymous like the automatic channel (install id, never the email), carries
+ * the diagnostic snapshot (no PII by construction — see the-issue-log-carries-its-diagnostics) and
+ * the last error entries as kind/stage/time/message only. Same endpoint and same Sentry mirror as
+ * autoSendIssues, through the same helpers.
+ */
+export async function sendProblemReport(route = '/settings'): Promise<boolean> {
+  if (isTestRunner()) return false;
+  const base = getApiBaseUrl();
+  if (!base) return false;
+  const now = Date.now();
+  const lastErrors = useIssueLogStore.getState().entries
+    .filter(e => e.kind != null && PROBLEM_REPORT_ERROR_KINDS.has(e.kind))
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, PROBLEM_REPORT_MAX_ERRORS)
+    .map(e => ({ kind: e.kind, stage: e.stage ?? null, at: e.timestamp, text: e.text.slice(0, 300) }));
+  const { installId, reporter } = await anonymousSender();
+  const snapshot = await collectDiagnosticSnapshot().catch(() => null);
+  const context = {
+    ...selfContext(route),
+    ...(installId ? { installId } : {}),
+    ...(snapshot ? { diag: snapshot } : {}),
+  };
+  const entry = {
+    id: `${now}_report_problem`,
+    text: 'Report a problem (tapped in Settings)',
+    reporter,
+    platform: Platform.OS,
+    context,
+    details: { source: 'report_a_problem', lastErrors },
+    timestamp: now,
+  };
+  try {
+    if (!(await postIssueEntries(base, { entries: [entry] }))) return false;
+    sendIssueFeedback(
+      { text: entry.text, details: entry.details, kind: 'report_a_problem', context },
+      { reporter, installId: installId ?? null },
+    );
+    return true;
+  } catch (e) {
+    console.log('[issueLogExport] report a problem failed:', e instanceof Error ? e.message : String(e));
     return false;
   }
 }

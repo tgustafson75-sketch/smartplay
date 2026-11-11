@@ -45,6 +45,26 @@ describe('automatic sends carry no email', () => {
     expect(body.slice(0, 1400)).not.toMatch(/getState\(\)\.email/);
   });
 
+  /**
+   * 2026-11-10 — Report a problem (Self-Heal v1) is a second sender with no mail composer, so it is
+   * anonymous too. Both resolve the sender through `anonymousSender`, the one function holding the
+   * derivation above; this pins that each sender actually calls it.
+   */
+  it('the automatic send and Report a problem both take the anonymous sender', () => {
+    const fnBody = (name: string) => {
+      const at = EXPORT.indexOf(name);
+      expect(at).toBeGreaterThan(-1);
+      return EXPORT.slice(at, at + 2500);
+    };
+    for (const sender of ['async function autoSendIssuesInner', 'export async function sendProblemReport']) {
+      const body = fnBody(sender);
+      expect(body).toMatch(/const \{ installId, reporter \} = await anonymousSender\(\);/);
+      expect(body).not.toMatch(/getState\(\)\.email/);
+    }
+    const helper = fnBody('async function anonymousSender');
+    expect(helper).toMatch(/const installId = await getInstallId\(\);\s*const reporter = installId \?\? 'unknown-install';/);
+  });
+
   it('the round trace does too', () => {
     expect(ROUND).toMatch(/getInstallId\(\)/);
     const at = ROUND.indexOf('sendRoundTrace');
