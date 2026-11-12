@@ -1716,6 +1716,12 @@ export default function Settings() {
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.built_by')}</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>{t('settings.text.smartplay_ai')}</Text>
           </View>
+          {/* 2026-11-12 — brand line (SmartPlay AI standard), text-only under Built by. */}
+          <View style={styles.aboutRow}>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]} testID="veteran-line">
+              {t('settings.text.veteran_owned')}
+            </Text>
+          </View>
           {/* 2026-08-25 — the fourth glasses surface: one-time Meta View setup instructions in
               Help & About. Shelved with the rest, from the same owner, so the release does not
               document a feature it no longer offers. */}
